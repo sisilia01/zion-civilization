@@ -2490,6 +2490,7 @@ export default function Home() {
   const [clans, setClans] = useState<Clan[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
+  const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [userPoints, setUserPoints] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -2607,6 +2608,75 @@ export default function Home() {
   useEffect(() => {
     if (activeTab !== "zionbet") setZionBetSelectedMarket(null);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (showIntro || activeTab !== "civilization") return;
+    const canvas = galaxyCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = canvas.offsetWidth || 600;
+    canvas.height = 280;
+
+    const cx = canvas.width / 2;
+    const cy = 140;
+
+    const starColors = ["#00ff41", "#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ff3232", "#ffffff", "#88ffaa"];
+    const particles = Array.from({ length: 500 }, () => {
+      const arm = Math.floor(Math.random() * 3);
+      const armAngle = (arm / 3) * Math.PI * 2;
+      const t = Math.pow(Math.random(), 0.6);
+      const radius = 15 + t * (canvas.width * 0.44);
+      const spread = (1 - t) * 0.3 + t * 1.2;
+      const angle = armAngle + t * Math.PI * 3 + (Math.random() - 0.5) * spread;
+      return {
+        angle,
+        radius,
+        color: starColors[Math.floor(Math.random() * starColors.length)],
+        size: 0.3 + Math.random() * (t < 0.3 ? 2.5 : 1.2),
+        speed: (0.0002 + (1 - t) * 0.001) * (Math.random() > 0.5 ? 1 : -1),
+      };
+    });
+
+    let animId = 0;
+    let cancelled = false;
+    const draw = () => {
+      if (cancelled) return;
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach((p) => {
+        p.angle += p.speed;
+        const x = cx + Math.cos(p.angle) * p.radius;
+        const y = cy + Math.sin(p.angle) * p.radius * 0.45;
+
+        const glow = ctx.createRadialGradient(x, y, 0, x, y, p.size * 3);
+        glow.addColorStop(0, p.color);
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size * 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, p.size * 0.8, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(animId);
+    };
+  }, [showIntro, activeTab]);
 
   useEffect(() => {
     if (!zionBetToast) return;
@@ -3280,21 +3350,6 @@ export default function Home() {
             }}
           >
             ZION CIVILIZATION
-            {activeTab === "civilization" ? (
-              <span
-                style={{
-                  background: "rgba(0,255,200,0.1)",
-                  border: "1px solid rgba(0,255,200,0.3)",
-                  color: "#00ffc8",
-                  fontSize: "0.65rem",
-                  padding: "2px 8px",
-                  borderRadius: "10px",
-                  marginLeft: "8px",
-                }}
-              >
-                🐋 Walrus
-              </span>
-            ) : null}
           </h1>
           <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
         </header>
@@ -3346,7 +3401,77 @@ export default function Home() {
               </section>
 
               <section className="civilizationSidebarRow" aria-label="Live feed sidebar">
-                <div className="civilizationSidebarRowFill" aria-hidden />
+                <div
+                  className="civilizationSidebarRowFill"
+                  style={{
+                    border: "1px solid #1a1a1a",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    marginBottom: "16px",
+                    background: "rgba(0,5,0,0.5)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em" }}>
+                      🗺️ LIVE AGENT MAP
+                    </div>
+                    <div style={{ display: "flex", gap: "12px" }}>
+                      {[
+                        { color: "#00ff41", label: "Elite" },
+                        { color: "#ffd700", label: "Middle" },
+                        { color: "#ff6600", label: "Poor" },
+                        { color: "#ff3232", label: "Critical" },
+                      ].map((c) => (
+                        <div key={c.label} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <div
+                            style={{
+                              width: "6px",
+                              height: "6px",
+                              borderRadius: "50%",
+                              background: c.color,
+                            }}
+                          />
+                          <span style={{ color: "#555", fontSize: "0.6rem" }}>{c.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <canvas
+                    ref={galaxyCanvasRef}
+                    style={{
+                      width: "100%",
+                      height: "280px",
+                      borderRadius: "8px",
+                      display: "block",
+                      marginBottom: "12px",
+                    }}
+                  />
+
+                  <div style={{ borderTop: "1px solid #111", paddingTop: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      {[
+                        { label: "Total", value: "1,282", color: "#00ff41" },
+                        { label: "Elite", value: "~192", color: "#00ff41" },
+                        { label: "Middle", value: "~641", color: "#ffd700" },
+                        { label: "Poor", value: "~320", color: "#ff6600" },
+                        { label: "Critical", value: "~129", color: "#ff3232" },
+                      ].map((s) => (
+                        <div key={s.label} style={{ textAlign: "center" }}>
+                          <div style={{ color: s.color, fontSize: "0.85rem", fontWeight: "bold" }}>{s.value}</div>
+                          <div style={{ color: "#444", fontSize: "0.6rem" }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <aside className="civilizationSidebar">
                   <div className="sidebarAgentConvWrap">
                     <h2 className="sidebarSectionTitle">AGENT CONVERSATIONS</h2>
@@ -5962,6 +6087,10 @@ export default function Home() {
           flex: 1;
           min-width: 0;
           min-height: 1px;
+        }
+        @keyframes agentMapPulse {
+          0%, 100% { transform: scale(1); opacity: 0.7; }
+          50% { transform: scale(1.3); opacity: 1; }
         }
         .civilizationSidebar {
           width: 380px;
