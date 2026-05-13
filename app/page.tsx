@@ -2491,6 +2491,7 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
+  const aliveAgents = stats?.alive ?? agents.length;
 
   const [userPoints, setUserPoints] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -2623,7 +2624,8 @@ export default function Home() {
     const cy = 140;
 
     const starColors = ["#00ff41", "#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ff3232", "#ffffff", "#88ffaa"];
-    const particles = Array.from({ length: 500 }, () => {
+    const starCount = Math.min(Math.max(aliveAgents || 500, 100), 2000);
+    const particles = Array.from({ length: starCount }, () => {
       const arm = Math.floor(Math.random() * 3);
       const armAngle = (arm / 3) * Math.PI * 2;
       const t = Math.pow(Math.random(), 0.6);
@@ -2676,7 +2678,7 @@ export default function Home() {
       cancelled = true;
       cancelAnimationFrame(animId);
     };
-  }, [showIntro, activeTab]);
+  }, [showIntro, activeTab, aliveAgents]);
 
   useEffect(() => {
     if (!zionBetToast) return;
