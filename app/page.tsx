@@ -2501,6 +2501,7 @@ export default function Home() {
   const [chatAgentsFiltered, setChatAgentsFiltered] = useState<Agent[]>([]);
   const [faucetBusy, setFaucetBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("civilization");
+  const [bridgeToChain, setBridgeToChain] = useState<string>("Ethereum");
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [chronicleEvents, setChronicleEvents] = useState<EventItem[]>([]);
@@ -4409,7 +4410,6 @@ export default function Home() {
                     >
                       <option>SUI</option>
                       <option>USDC</option>
-                      <option>ZION</option>
                     </select>
                   </div>
                 </div>
@@ -4447,6 +4447,202 @@ export default function Home() {
                 </button>
                 <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
                   Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
+                </div>
+              </div>
+
+              {/* Cross-chain — ZION Bridge */}
+              <div
+                style={{
+                  border: "1px solid rgba(100,160,255,0.3)",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  marginTop: "20px",
+                  marginBottom: "20px",
+                  background: "rgba(100,160,255,0.02)",
+                }}
+              >
+                <div style={{ color: "#64a0ff", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "4px" }}>
+                  🌉 COMING SOON — ZION BRIDGE
+                </div>
+                <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: "bold", marginBottom: "4px" }}>
+                  Private Cross-Chain Transfers
+                </div>
+                <div style={{ color: "#555", fontSize: "0.8rem", marginBottom: "20px" }}>
+                  Send privately across chains · Powered by Wormhole + Sui ETH Bridge
+                </div>
+
+                {/* Chain flow diagram */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    marginBottom: "24px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {[
+                    { chain: "Sui", color: "#64a0ff", icon: "🔵" },
+                    { chain: "Ethereum", color: "#9945ff", icon: "💎" },
+                    { chain: "Solana", color: "#00ff94", icon: "◎" },
+                    { chain: "Arbitrum", color: "#28a0f0", icon: "🔷" },
+                    { chain: "Base", color: "#0052ff", icon: "🔵" },
+                  ].map((c) => (
+                    <div
+                      key={c.chain}
+                      onClick={() => {
+                        if (c.chain !== "Sui") setBridgeToChain(c.chain);
+                      }}
+                      style={{
+                        padding: "10px 16px",
+                        border:
+                          bridgeToChain === c.chain || c.chain === "Sui"
+                            ? `2px solid ${c.color}`
+                            : `1px solid ${c.color}44`,
+                        borderRadius: "10px",
+                        background: bridgeToChain === c.chain ? `${c.color}22` : `${c.color}08`,
+                        textAlign: "center",
+                        minWidth: "80px",
+                        cursor: c.chain === "Sui" ? "default" : "pointer",
+                        transition: "all 0.2s ease",
+                        opacity: c.chain === "Sui" ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{ fontSize: "1.2rem" }}>{c.icon}</div>
+                      <div style={{ color: c.color, fontSize: "0.72rem", fontWeight: "bold" }}>{c.chain}</div>
+                      {c.chain === "Sui" && (
+                        <div style={{ color: c.color, fontSize: "0.6rem", opacity: 0.7 }}>FROM</div>
+                      )}
+                      {bridgeToChain === c.chain && c.chain !== "Sui" && (
+                        <div style={{ color: c.color, fontSize: "0.6rem" }}>TO ✓</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* How it works steps */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+                  {[
+                    { step: "1", title: "Send on Sui", desc: "Send USDC privately on Sui blockchain", color: "#64a0ff" },
+                    {
+                      step: "2",
+                      title: "Wormhole Bridge",
+                      desc: "Automatic cross-chain transfer via Wormhole protocol",
+                      color: "#9945ff",
+                    },
+                    { step: "3", title: "Receive anywhere", desc: "Get USDC on ETH, SOL, Arbitrum or Base", color: "#00ff94" },
+                  ].map((s) => (
+                    <div
+                      key={s.step}
+                      style={{
+                        padding: "14px",
+                        border: `1px solid ${s.color}33`,
+                        borderRadius: "10px",
+                        background: `${s.color}08`,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "50%",
+                          background: `${s.color}22`,
+                          border: `1px solid ${s.color}`,
+                          color: s.color,
+                          fontSize: "0.85rem",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          margin: "0 auto 8px",
+                        }}
+                      >
+                        {s.step}
+                      </div>
+                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
+                        {s.title}
+                      </div>
+                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Coming soon form preview */}
+                <div style={{ opacity: 0.4, pointerEvents: "none" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <div>
+                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                        FROM NETWORK
+                      </label>
+                      <select
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          background: "rgba(0,0,0,0.4)",
+                          border: "1px solid #333",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        <option>🔵 Sui (Private)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                        TO NETWORK
+                      </label>
+                      <div
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          background: "rgba(0,0,0,0.4)",
+                          border: "1px solid #64a0ff",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          fontSize: "0.85rem",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        {bridgeToChain === "Ethereum" && "💎 Ethereum"}
+                        {bridgeToChain === "Solana" && "◎ Solana"}
+                        {bridgeToChain === "Arbitrum" && "🔷 Arbitrum"}
+                        {bridgeToChain === "Base" && "🔵 Base"}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      width: "100%",
+                      padding: "14px",
+                      background: "rgba(100,160,255,0.1)",
+                      border: "1px solid #64a0ff",
+                      borderRadius: "8px",
+                      color: "#64a0ff",
+                      fontSize: "1rem",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    🌉 Bridge Privately
+                  </button>
+                </div>
+
+                <div style={{ textAlign: "center", marginTop: "12px" }}>
+                  <span
+                    style={{
+                      background: "rgba(100,160,255,0.1)",
+                      border: "1px solid rgba(100,160,255,0.3)",
+                      color: "#64a0ff",
+                      fontSize: "0.7rem",
+                      padding: "4px 16px",
+                      borderRadius: "20px",
+                    }}
+                  >
+                    🚀 Launching with Sui ETH Bridge · Powered by Wormhole
+                  </span>
                 </div>
               </div>
 
