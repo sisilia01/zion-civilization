@@ -2641,6 +2641,14 @@ export default function Home() {
       };
     });
 
+    const neo = {
+      angle: Math.random() * Math.PI * 2,
+      radius: 30 + Math.random() * (canvas.width * 0.35),
+      size: 2.5,
+      speed: -0.0008,
+      trail: [] as { x: number; y: number }[],
+    };
+
     let animId = 0;
     let cancelled = false;
     const draw = () => {
@@ -2668,6 +2676,35 @@ export default function Home() {
         ctx.fill();
         ctx.globalAlpha = 1;
       });
+
+      neo.angle += neo.speed;
+      const neoX = cx + Math.cos(neo.angle) * neo.radius;
+      const neoY = cy + Math.sin(neo.angle) * neo.radius * 0.45;
+
+      neo.trail.push({ x: neoX, y: neoY });
+      if (neo.trail.length > 20) neo.trail.shift();
+      neo.trail.forEach((point, i) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180,0,255,${(i / neo.trail.length) * 0.5})`;
+        ctx.fill();
+      });
+
+      const neoGlow = ctx.createRadialGradient(neoX, neoY, 0, neoX, neoY, 8);
+      neoGlow.addColorStop(0, "#cc00ff");
+      neoGlow.addColorStop(0.5, "rgba(180,0,255,0.4)");
+      neoGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = neoGlow;
+      ctx.beginPath();
+      ctx.arc(neoX, neoY, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(neoX, neoY, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = 0.9 + Math.random() * 0.1;
+      ctx.fill();
+      ctx.globalAlpha = 1;
 
       animId = requestAnimationFrame(draw);
     };
