@@ -774,7 +774,7 @@ function AgentTile({
   );
 }
 
-type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "stats" | "faucet" | "press";
+type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "stats" | "faucet" | "press" | "bank";
 
 const STATS_CLAN_NAMES = ["Iron Fist", "Golden Dawn", "Shadow Order"] as const;
 const POP_HISTORY_LS = "zion_pop_history";
@@ -3304,6 +3304,7 @@ export default function Home() {
               ["civilization", "🌍 CIVILIZATION"],
               ["chat", "💬 CHAT"],
               ["zionbet", "🎰 ZIONBET"],
+              ["bank", "🏦 BANK"],
               ["leaderboard", "🏆 LEADERBOARD"],
               ["stats", "📊 STATS"],
               ["faucet", "🚰 FAUCET"],
@@ -4242,6 +4243,244 @@ export default function Home() {
               <h2>📰 PRESS</h2>
               <p>Press kit and coverage — coming soon.</p>
             </section>
+          )}
+
+          {activeTab === "bank" && (
+            <div style={{ padding: "24px" }}>
+              {/* Header */}
+              <div style={{ marginBottom: "24px" }}>
+                <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
+                  🏦 ZION Bank — Private Transactions
+                </h2>
+                <p style={{ color: "#555", fontSize: "0.8rem", margin: 0 }}>
+                  Send SUI or USDC privately · Powered by Sui Protocol Privacy · Viewing key for compliance
+                </p>
+              </div>
+
+              {/* How it works */}
+              <div
+                style={{
+                  border: "1px solid rgba(255,215,0,0.2)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginBottom: "20px",
+                  background: "rgba(255,215,0,0.03)",
+                }}
+              >
+                <div style={{ color: "#ffd700", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  🔐 HOW IT WORKS
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px" }}>
+                  {[
+                    { icon: "💸", title: "Send", desc: "Send SUI or USDC to any address" },
+                    { icon: "🔐", title: "Encrypt", desc: "Amount & recipient encrypted on-chain" },
+                    { icon: "🔑", title: "Key", desc: "Only you hold the viewing key" },
+                    { icon: "📋", title: "Audit", desc: "Reveal details to tax authority if needed" },
+                  ].map((step) => (
+                    <div
+                      key={step.title}
+                      style={{ textAlign: "center", padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "8px" }}
+                    >
+                      <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{step.icon}</div>
+                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
+                        {step.title}
+                      </div>
+                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{step.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* vs Tornado Cash */}
+              <div
+                style={{
+                  border: "1px solid rgba(0,255,65,0.2)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginBottom: "20px",
+                  background: "rgba(0,255,65,0.02)",
+                }}
+              >
+                <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  ✅ WHY ZION BANK IS LEGAL
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <div style={{ color: "#ff3232", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "8px" }}>
+                      ❌ Tornado Cash (illegal)
+                    </div>
+                    {[
+                      "Money goes through shared pool",
+                      "Thousands of users mixed",
+                      "No audit trail possible",
+                      "Developers prosecuted",
+                    ].map((t) => (
+                      <div key={t} style={{ color: "#555", fontSize: "0.72rem", marginBottom: "4px" }}>
+                        • {t}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div style={{ color: "#00ff41", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "8px" }}>
+                      ✅ ZION Bank (legal)
+                    </div>
+                    {[
+                      "Money goes directly to recipient",
+                      "One-to-one transaction",
+                      "Viewing key for full audit",
+                      "Built on Sui Protocol Privacy",
+                    ].map((t) => (
+                      <div key={t} style={{ color: "#888", fontSize: "0.72rem", marginBottom: "4px" }}>
+                        • {t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Send form */}
+              <div
+                style={{
+                  border: "1px solid #333",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div style={{ color: "#fff", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "16px" }}>
+                  💸 Send Private Transaction
+                </div>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                    RECIPIENT ADDRESS
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="0x..."
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      background: "rgba(0,0,0,0.4)",
+                      border: "1px solid #333",
+                      borderRadius: "8px",
+                      color: "#fff",
+                      fontSize: "0.85rem",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                      AMOUNT
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        background: "rgba(0,0,0,0.4)",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontSize: "0.85rem",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                      TOKEN
+                    </label>
+                    <select
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        background: "rgba(0,0,0,0.8)",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontSize: "0.85rem",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <option>SUI</option>
+                      <option>USDC</option>
+                      <option>ZION</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    padding: "10px 12px",
+                    background: "rgba(255,215,0,0.05)",
+                    border: "1px solid rgba(255,215,0,0.2)",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div style={{ color: "#ffd700", fontSize: "0.72rem" }}>
+                    💰 Fee: 10 ZION + $0.01 gas · Transaction will be encrypted on Sui blockchain
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => alert("ZION Bank launches with Sui Protocol Privacy mainnet. Coming soon!")}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    background: "linear-gradient(90deg, rgba(255,215,0,0.2), rgba(0,255,65,0.2))",
+                    border: "1px solid #ffd700",
+                    borderRadius: "8px",
+                    color: "#ffd700",
+                    fontSize: "1rem",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                  }}
+                >
+                  🔐 Send Private Transaction
+                </button>
+                <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
+                  Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
+                </div>
+              </div>
+
+              {/* Tech stack */}
+              <div style={{ border: "1px solid #222", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ color: "#555", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  ⚙️ TECHNICAL STACK
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {[
+                    "sui::ristretto255",
+                    "Pedersen commitments",
+                    "zk-SNARK on-chain",
+                    "Stealth addresses",
+                    "Viewing key",
+                    "XChaCha20-Poly1305",
+                  ].map((tech) => (
+                    <span
+                      key={tech}
+                      style={{
+                        background: "rgba(0,255,65,0.05)",
+                        border: "1px solid rgba(0,255,65,0.2)",
+                        color: "#00ff41",
+                        fontSize: "0.7rem",
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                      }}
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
