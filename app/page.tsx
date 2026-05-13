@@ -2484,6 +2484,7 @@ export default function Home() {
   const walletAddress = account?.address ?? "";
 
   const [showIntro, setShowIntro] = useState(true);
+  const [introFading, setIntroFading] = useState(false);
   const [dashboardVisible, setDashboardVisible] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -2917,141 +2918,16 @@ export default function Home() {
   }, [dashboardVisible, showIntro]);
 
   useEffect(() => {
-    if (!showIntro) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let mounted = true;
-    const startTime = Date.now();
-
-    const RAIN_MS = 2500;
-    const FADE_BLACK_MS = 1000;
-    const ZION_FADE_MS = 900;
-    const HOLD_MS = 2000;
-    const ZION_PHASE_START = RAIN_MS + FADE_BLACK_MS;
-    const INTRO_TOTAL_MS = ZION_PHASE_START + ZION_FADE_MS + HOLD_MS;
-    const TICK_MS = 50;
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-
-    resize();
-    window.addEventListener("resize", resize);
-
-    const fontSize = 14;
-    const columns = Math.floor(window.innerWidth / fontSize);
-    const drops = Array(columns).fill(0).map(() => Math.floor(Math.random() * -50));
-
-    const terminalGreen = "#00CC33";
-
-    const drawRain = (t = 0) => {
-      const fade = Math.min(1, Math.max(0, t));
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.09 + fade * 0.3})`;
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-      ctx.font = `${fontSize}px monospace`;
-      ctx.fillStyle = `rgba(0, 255, 65, ${1 - fade * 0.45})`;
-      for (let i = 0; i < drops.length; i++) {
-        const char = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]!;
-        const x = i * fontSize;
-        const y = drops[i]! * fontSize;
-        ctx.fillText(char, x, y);
-        // Extra stream head in same column for denser rain.
-        if (Math.random() < 0.7) {
-          const char2 = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]!;
-          const y2 = y - fontSize * (2 + Math.floor(Math.random() * 6));
-          ctx.fillText(char2, x, y2);
-        }
-        if (y > window.innerHeight + fontSize && Math.random() > 0.975) {
-          drops[i] = Math.floor(Math.random() * -20);
-        }
-        drops[i]! += 1;
-      }
-    };
-
-    const drawZionForeground = (alpha: number) => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const cx = w / 2;
-      const cy = h / 2;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      ctx.fillStyle = terminalGreen;
-      ctx.shadowColor = terminalGreen;
-      ctx.shadowBlur = 40;
-      ctx.font = "bold 140px Orbitron, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("ZION", cx, cy);
-
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalAlpha = 0.8 * alpha;
-      ctx.font = "bold 13px Arial, sans-serif";
-      ctx.fillStyle = "#4DA2FF";
-      ctx.shadowColor = "#4DA2FF";
-      ctx.shadowBlur = 8;
-      ctx.textAlign = "right";
-      ctx.fillText("◈ SUI", canvas.width / dpr - 15, canvas.height / dpr - 15);
-      ctx.restore();
-
-      ctx.globalAlpha = 1;
-    };
-
-    const runIntroTick = () => {
-      if (!mounted) return;
-      const elapsed = Date.now() - startTime;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-
-      if (elapsed >= INTRO_TOTAL_MS) {
-        window.clearInterval(intervalHandle);
-        setShowIntro(false);
-        setDashboardVisible(true);
-        return;
-      }
-
-      drawRain(0);
-
-      if (elapsed >= RAIN_MS && elapsed < ZION_PHASE_START) {
-        const ft = Math.min(1, (elapsed - RAIN_MS) / FADE_BLACK_MS);
-        ctx.save();
-        ctx.fillStyle = "#000";
-        ctx.globalAlpha = ft;
-        ctx.fillRect(0, 0, w, h);
-        ctx.restore();
-      } else if (elapsed >= ZION_PHASE_START) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-        ctx.fillRect(0, 0, w, h);
-        const zionAlpha =
-          elapsed < ZION_PHASE_START + ZION_FADE_MS
-            ? Math.min(1, (elapsed - ZION_PHASE_START) / ZION_FADE_MS)
-            : 1;
-        drawZionForeground(zionAlpha);
-      }
-    };
-
-    let intervalHandle = 0;
-    runIntroTick();
-    intervalHandle = window.setInterval(runIntroTick, TICK_MS);
-
+    const fadeTimer = setTimeout(() => {
+      setIntroFading(true);
+      setDashboardVisible(true);
+    }, 5200);
+    const hideTimer = setTimeout(() => setShowIntro(false), 6000);
     return () => {
-      mounted = false;
-      window.clearInterval(intervalHandle);
-      window.removeEventListener("resize", resize);
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
     };
-  }, [showIntro]);
+  }, []);
 
   useEffect(() => {
     if (showIntro) return;
@@ -3370,8 +3246,147 @@ export default function Home() {
       <div className="bg-grid" />
 
       {showIntro && (
-        <div className="introLayer">
-          <canvas ref={canvasRef} className="introCanvas" />
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000",
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            opacity: introFading ? 0 : 1,
+            transition: "opacity 0.8s ease",
+          }}
+        >
+          <canvas
+            ref={(canvas) => {
+              if (!canvas) return;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) return;
+              canvas.width = window.innerWidth;
+              canvas.height = window.innerHeight;
+              const cx = canvas.width / 2;
+              const cy = canvas.height / 2;
+
+              const introColors = ["#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ffffff"];
+              const particles = Array.from({ length: 800 }, () => ({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                targetAngle: Math.random() * Math.PI * 2,
+                targetRadius: 20 + Math.pow(Math.random(), 0.5) * 280,
+                color: introColors[Math.floor(Math.random() * introColors.length)],
+                size: 0.5 + Math.random() * 1.5,
+                speed: 0.001 + Math.random() * 0.002,
+                angle: Math.random() * Math.PI * 2,
+                progress: 0,
+              }));
+
+              let frame = 0;
+              const animate = () => {
+                ctx.fillStyle = "rgba(0,0,0,0.12)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                frame++;
+                const convergence = Math.min(frame / 120, 1);
+
+                particles.forEach((p) => {
+                  const tx = cx + Math.cos(p.targetAngle) * p.targetRadius;
+                  const ty = cy + Math.sin(p.targetAngle) * p.targetRadius * 0.4;
+
+                  p.x += (tx - p.x) * 0.02 * convergence;
+                  p.y += (ty - p.y) * 0.02 * convergence;
+
+                  if (convergence > 0.5) {
+                    p.targetAngle += p.speed;
+                  }
+
+                  ctx.beginPath();
+                  ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                  ctx.fillStyle = p.color;
+                  ctx.globalAlpha = 0.4 + Math.random() * 0.6;
+                  ctx.fill();
+                  ctx.globalAlpha = 1;
+                });
+
+                requestAnimationFrame(animate);
+              };
+              animate();
+            }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+          />
+
+          <div style={{ position: "relative", zIndex: 2, textAlign: "center" }}>
+            <div
+              style={{
+                fontSize: "4rem",
+                fontWeight: 900,
+                fontFamily: "monospace",
+                color: "#00ff41",
+                letterSpacing: "0.15em",
+                textShadow: "0 0 30px rgba(0,255,65,0.8), 0 0 60px rgba(0,255,65,0.4)",
+                animation: "fadeInUp 0.8s ease forwards",
+                marginBottom: "8px",
+                opacity: 0,
+                animationDelay: "0.5s",
+                animationFillMode: "forwards",
+              }}
+            >
+              ZION
+            </div>
+
+            <div
+              style={{
+                fontSize: "1rem",
+                color: "#ffd700",
+                letterSpacing: "0.4em",
+                fontFamily: "monospace",
+                animation: "fadeInUp 0.8s ease forwards",
+                animationDelay: "1s",
+                opacity: 0,
+                animationFillMode: "forwards",
+                marginBottom: "32px",
+              }}
+            >
+              CIVILIZATION
+            </div>
+
+            <div
+              style={{
+                animation: "fadeInUp 0.8s ease forwards",
+                animationDelay: "1.8s",
+                opacity: 0,
+                animationFillMode: "forwards",
+                fontFamily: "monospace",
+                fontSize: "0.75rem",
+                color: "#333",
+                lineHeight: 2,
+              }}
+            >
+              <div style={{ color: "#00ff41" }}>✓ Connected to Sui testnet</div>
+              <div style={{ color: "#00ff41" }}>✓ Loading 1,282 agents...</div>
+              <div style={{ color: "#ffd700" }}>✓ ZionBet markets: 14 active</div>
+              <div style={{ color: "#555" }}>✓ Walrus · DeepBook · Seal online</div>
+            </div>
+
+            <div
+              style={{
+                marginTop: "24px",
+                animation: "fadeInUp 0.8s ease forwards",
+                animationDelay: "2.5s",
+                opacity: 0,
+                animationFillMode: "forwards",
+                color: "#333",
+                fontSize: "0.7rem",
+                letterSpacing: "0.2em",
+                fontFamily: "monospace",
+              }}
+            >
+              WORLD&apos;S FIRST AUTONOMOUS AI CIVILIZATION ON SUI
+            </div>
+          </div>
         </div>
       )}
 
@@ -6130,6 +6145,10 @@ export default function Home() {
         @keyframes agentMapPulse {
           0%, 100% { transform: scale(1); opacity: 0.7; }
           50% { transform: scale(1.3); opacity: 1; }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         .civilizationSidebar {
           width: 380px;
