@@ -1206,18 +1206,21 @@ function ZionBetTradingControls({
   walletConnected,
   busyYes,
   busyNo,
+  suiPrice,
   onPlace: _onPlace,
 }: {
   bet: ZionBetMarket;
   walletConnected: boolean;
   busyYes: boolean;
   busyNo: boolean;
+  suiPrice?: number;
   onPlace: (bet: ZionBetMarket, prediction: boolean, amount: number) => void;
 }) {
   const account = useCurrentAccount();
   const walletAddress = account?.address || "";
   const { mutate: signAndExecute, isPending: signAndExecutePending } = useSignAndExecuteTransaction();
   const [betAmount, setBetAmount] = useState(1);
+  const [currency, setCurrency] = useState<"ZION" | "SUI" | "USDC">("ZION");
   const [selectedSide, setSelectedSide] = useState<"yes" | "no" | null>(null);
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -1251,27 +1254,41 @@ function ZionBetTradingControls({
 
     try {
       const tx = new Transaction();
-
       const betAmountRaw = BigInt(betAmount) * BigInt(1_000_000_000);
 
-      const zionCoinType =
-        "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::CIVILIZATION";
-      const coins = await suiClient.getCoins({ owner: w, coinType: zionCoinType });
-      if (!coins.data.length) {
-        alert("No ZION tokens! Get some from the Faucet tab.");
+      if (currency === "SUI") {
+        const [betCoin] = tx.splitCoins(tx.gas, [betAmountRaw]);
+        tx.moveCall({
+          target: "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::place_bet",
+          arguments: [
+            tx.object("0xa85e751b386a1f3e7a5df97663d6ff125d8f410960724ca61bf222b694302fab"),
+            tx.pure.bool(selectedSide === "yes"),
+            betCoin,
+          ],
+        });
+      } else if (currency === "USDC") {
+        alert("USDC betting coming soon! Use ZION or SUI for now.");
         return;
-      }
-      const zionCoin = tx.object(coins.data[0].coinObjectId);
-      const [betCoin] = tx.splitCoins(zionCoin, [betAmountRaw]);
+      } else {
+        const zionCoinType =
+          "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::CIVILIZATION";
+        const coins = await suiClient.getCoins({ owner: w, coinType: zionCoinType });
+        if (!coins.data.length) {
+          alert("No ZION tokens! Get some from the Faucet tab.");
+          return;
+        }
+        const zionCoin = tx.object(coins.data[0].coinObjectId);
+        const [betCoin] = tx.splitCoins(zionCoin, [betAmountRaw]);
 
-      tx.moveCall({
-        target: "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::place_bet",
-        arguments: [
-          tx.object("0xa85e751b386a1f3e7a5df97663d6ff125d8f410960724ca61bf222b694302fab"),
-          tx.pure.bool(selectedSide === "yes"),
-          betCoin,
-        ],
-      });
+        tx.moveCall({
+          target: "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::place_bet",
+          arguments: [
+            tx.object("0xa85e751b386a1f3e7a5df97663d6ff125d8f410960724ca61bf222b694302fab"),
+            tx.pure.bool(selectedSide === "yes"),
+            betCoin,
+          ],
+        });
+      }
 
       if (!account) {
         alert("Please connect your Sui wallet first!");
@@ -1497,6 +1514,61 @@ function ZionBetTradingControls({
         </p>
       ) : (
         <>
+          <div style={{ display: "flex", gap: "6px", margin: "12px 0" }}>
+            <button
+              type="button"
+              onClick={() => setCurrency("ZION")}
+              style={{
+                flex: 1,
+                padding: "5px",
+                background: currency === "ZION" ? "rgba(0,255,65,0.2)" : "transparent",
+                border: currency === "ZION" ? "1px solid #00ff41" : "1px solid #333",
+                borderRadius: "6px",
+                color: currency === "ZION" ? "#00ff41" : "#555",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              ⚡ ZION
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrency("SUI")}
+              style={{
+                flex: 1,
+                padding: "5px",
+                background: currency === "SUI" ? "rgba(100,160,255,0.2)" : "transparent",
+                border: currency === "SUI" ? "1px solid #64a0ff" : "1px solid #333",
+                borderRadius: "6px",
+                color: currency === "SUI" ? "#64a0ff" : "#555",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              🔵 SUI
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrency("USDC")}
+              style={{
+                flex: 1,
+                padding: "5px",
+                background: currency === "USDC" ? "rgba(100,200,255,0.2)" : "transparent",
+                border: currency === "USDC" ? "1px solid #64c8ff" : "1px solid #333",
+                borderRadius: "6px",
+                color: currency === "USDC" ? "#64c8ff" : "#555",
+                fontSize: "0.75rem",
+                cursor: "pointer",
+              }}
+            >
+              💵 USDC
+            </button>
+          </div>
+          <div style={{ fontSize: "0.65rem", color: "#555", marginBottom: "8px" }}>
+            {currency === "ZION" && "⚡ ZION — Native civilization token"}
+            {currency === "SUI" && `🔵 SUI — $${suiPrice != null ? suiPrice.toFixed(4) : "..."} · Sui native coin`}
+            {currency === "USDC" && "💵 USDC — $1.0000 · USD Coin on Sui"}
+          </div>
           <div className="zbPmAmountBlock">
             <span
               style={{
@@ -1509,7 +1581,7 @@ function ZionBetTradingControls({
               Amount
             </span>
             <span style={{ fontSize: "1.8rem", color: "#fff", fontWeight: "bold", display: "block" }}>
-              {betAmount} ZION
+              {betAmount} {currency}
             </span>
             <div style={{ display: "flex", gap: "8px", margin: "8px 0", flexWrap: "wrap" }}>
               {[1, 5, 10, 100].map((n) => (
@@ -1527,7 +1599,7 @@ function ZionBetTradingControls({
           </div>
 
           <p style={{ color: "rgba(0,255,65,0.7)", fontSize: "0.85rem", margin: "4px 0 0" }}>
-            Potential win: {(betAmount * 1.98).toFixed(2)} ZION
+            Potential win: {(betAmount * 1.98).toFixed(2)} {currency}
           </p>
         </>
       )}
@@ -1951,6 +2023,7 @@ function ZionBetMarketDetail({
   onPlace,
   onClose,
   myBetsOnMarket,
+  suiPrice,
 }: {
   market: ZionBetMarket;
   badgeBorder: string;
@@ -1961,6 +2034,7 @@ function ZionBetMarketDetail({
   onPlace: (bet: ZionBetMarket, prediction: boolean, amount: number, bracketIndex?: number) => void;
   onClose: () => void;
   myBetsOnMarket: ZionMyBetRow[];
+  suiPrice?: number;
 }) {
   const syntheticChartData = useMemo(() => buildYesPriceChartData(market), [market]);
   const [activity, setActivity] = useState<ZionBetActivityRow[]>([]);
@@ -2377,6 +2451,7 @@ function ZionBetMarketDetail({
                 walletConnected={walletConnected}
                 busyYes={placingKey === `${market.id}-true`}
                 busyNo={placingKey === `${market.id}-false`}
+                suiPrice={suiPrice}
                 onPlace={(b, pred, amt) => onPlace(b, pred, amt)}
               />
             )}
@@ -3539,6 +3614,7 @@ export default function Home() {
                   walletConnected={Boolean(walletAddress.trim())}
                   walletAddress={walletAddress}
                   placingKey={zionBetPlacing}
+                  suiPrice={zionBetCgUsd.SUI}
                   onPlace={(b, prediction, amt, bracketIdx) => void placeZionBet(b, prediction, amt, bracketIdx)}
                   myBetsOnMarket={zionBetMyBets.filter((r) => {
                     if (r.event_type !== zionBetSelectedMarket.event_type) return false;
