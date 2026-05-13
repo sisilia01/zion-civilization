@@ -3541,6 +3541,164 @@ export default function Home() {
                   );
                 })}
               </div>
+
+              <div style={{ marginTop: "24px" }}>
+                <h3
+                  style={{
+                    color: "#00ffc8",
+                    fontSize: "0.8rem",
+                    letterSpacing: "0.1em",
+                    marginBottom: "12px",
+                  }}
+                >
+                  ⚙️ NAUTILUS — AI AGENTS OFF-CHAIN COMPUTE
+                </h3>
+
+                {/* Explanation */}
+                <div
+                  style={{
+                    border: "1px solid rgba(0,255,200,0.2)",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    marginBottom: "12px",
+                    background: "rgba(0,255,200,0.02)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto 1fr",
+                      gap: "12px",
+                      alignItems: "center",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "12px",
+                        background: "rgba(0,0,0,0.3)",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <div style={{ fontSize: "1.5rem", marginBottom: "4px" }}>🤖</div>
+                      <div style={{ color: "#00ffc8", fontSize: "0.75rem", fontWeight: "bold" }}>AI Agent</div>
+                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Thinks OFF-chain</div>
+                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Nautilus Engine</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ color: "#00ffc8", fontSize: "1.5rem" }}>→</div>
+                      <div style={{ color: "#555", fontSize: "0.6rem" }}>proof</div>
+                    </div>
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "12px",
+                        background: "rgba(0,0,0,0.3)",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <div style={{ fontSize: "1.5rem", marginBottom: "4px" }}>⛓️</div>
+                      <div style={{ color: "#00ffc8", fontSize: "0.75rem", fontWeight: "bold" }}>Sui Blockchain</div>
+                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Result ON-chain</div>
+                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Verifiable & honest</div>
+                    </div>
+                  </div>
+                  <div style={{ color: "#555", fontSize: "0.72rem", textAlign: "center" }}>
+                    Agents make complex decisions off-chain for free → Nautilus proves the computation was honest →
+                    Result recorded on Sui
+                  </div>
+                </div>
+
+                {/* Live agent decisions */}
+                <div
+                  style={{
+                    color: "#00ffc8",
+                    fontSize: "0.7rem",
+                    marginBottom: "8px",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  🔴 LIVE AGENT DECISIONS — POWERED BY NAUTILUS
+                </div>
+                {[
+                  {
+                    agent: "Agent Drake",
+                    action: "Decided to raise death tax from 5% to 8%",
+                    model: "Nautilus AI",
+                    time: "2m ago",
+                    status: "verified",
+                    hash: "0x3f9a...",
+                  },
+                  {
+                    agent: "Agent Luna",
+                    action: "Chose to join Golden Dawn clan after analyzing wealth distribution",
+                    model: "Nautilus AI",
+                    time: "7m ago",
+                    status: "verified",
+                    hash: "0x7c2b...",
+                  },
+                  {
+                    agent: "Agent Marcus",
+                    action: "Placed 450 ZION bet on clan war outcome",
+                    model: "Nautilus AI",
+                    time: "12m ago",
+                    status: "verified",
+                    hash: "0x1d4e...",
+                  },
+                  {
+                    agent: "Agent Zara",
+                    action: "Declared war on Iron Fist clan after treasury analysis",
+                    model: "Nautilus AI",
+                    time: "18m ago",
+                    status: "verified",
+                    hash: "0x9f3c...",
+                  },
+                ].map((d) => (
+                  <div
+                    key={d.agent}
+                    style={{
+                      border: "1px solid rgba(0,255,200,0.15)",
+                      borderRadius: "8px",
+                      padding: "10px 14px",
+                      marginBottom: "6px",
+                      background: "rgba(0,0,0,0.3)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
+                        <span style={{ color: "#00ffc8", fontSize: "0.8rem", fontWeight: "bold" }}>{d.agent}</span>
+                        <span
+                          style={{
+                            background: "rgba(0,255,200,0.1)",
+                            border: "1px solid rgba(0,255,200,0.3)",
+                            color: "#00ffc8",
+                            fontSize: "0.6rem",
+                            padding: "1px 6px",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          ✓ {d.status}
+                        </span>
+                        <span style={{ color: "#333", fontSize: "0.65rem" }}>{d.model}</span>
+                      </div>
+                      <div style={{ color: "#888", fontSize: "0.75rem" }}>{d.action}</div>
+                      <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "2px" }}>
+                        TX: {d.hash} · {d.time}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div style={{ textAlign: "center", marginTop: "8px" }}>
+                  <span style={{ color: "#333", fontSize: "0.65rem" }}>
+                    ⚙️ Powered by Nautilus · Off-chain compute with on-chain proof
+                  </span>
+                </div>
+              </div>
             </>
           )}
 
