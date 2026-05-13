@@ -4,6 +4,7 @@ import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateZionMarkets, type ZionMarket } from "@/lib/deepbook";
 import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
+import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
   Area,
   AreaChart,
@@ -2371,6 +2372,12 @@ export default function Home() {
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
   const [zionBetTimeframeTab, setZionBetTimeframeTab] = useState<ZionBetTimeframeFilterKey>("all");
   const [zionBetCgUsd, setZionBetCgUsd] = useState<{ SUI?: number }>({});
+  const [vipAccess, setVipAccess] = useState<{
+    isGold: boolean;
+    isSilver: boolean;
+    zionBalance: number;
+  } | null>(null);
+  const [showVIP, setShowVIP] = useState(false);
 
   const zionBetSourceList = useMemo(() => markets.map(zionBetMarketFromZionSource), [markets]);
 
@@ -2425,6 +2432,15 @@ export default function Home() {
     const tf = zionBetTimeframeTab;
     return zionBetListAfterCategory.filter((b) => (b.timeframe ?? "").toLowerCase() === tf);
   }, [zionBetListAfterCategory, zionBetTimeframeTab]);
+
+  useEffect(() => {
+    const w = walletAddress.trim();
+    if (!w) {
+      setVipAccess(null);
+      return;
+    }
+    void checkVIPAccess(w).then(setVipAccess);
+  }, [walletAddress]);
 
   useEffect(() => {
     if (showIntro || activeTab !== "zionbet") return;
@@ -3518,6 +3534,174 @@ export default function Home() {
                     >
                       🏛️ Politics ({zionBetCategoryCounts.politics})
                     </button>
+                  </div>
+                  <div
+                    style={{
+                      border: vipAccess?.isGold
+                        ? "1px solid #ffd700"
+                        : vipAccess?.isSilver
+                          ? "1px solid #aaa"
+                          : "1px solid #222",
+                      borderRadius: "12px",
+                      padding: "16px",
+                      marginBottom: "20px",
+                      background: vipAccess?.isGold ? "rgba(255,215,0,0.05)" : "rgba(0,0,0,0.3)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        {vipAccess?.isGold ? (
+                          <span style={{ color: "#ffd700", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            🥇 GOLD VIP — Seal Encrypted
+                          </span>
+                        ) : vipAccess?.isSilver ? (
+                          <span style={{ color: "#aaa", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            🥈 SILVER VIP — Seal Encrypted
+                          </span>
+                        ) : (
+                          <span style={{ color: "#444", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            🔐 VIP ROOM — Seal Encrypted
+                          </span>
+                        )}
+                        <div style={{ color: "#555", fontSize: "0.7rem", marginTop: "2px" }}>
+                          🥈 Silver: {SILVER_THRESHOLD.toLocaleString()} ZION · 🥇 Gold:{" "}
+                          {GOLD_THRESHOLD.toLocaleString()} ZION
+                        </div>
+                      </div>
+                      {vipAccess?.isSilver || vipAccess?.isGold ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowVIP(!showVIP)}
+                          style={{
+                            background: vipAccess?.isGold ? "rgba(255,215,0,0.2)" : "rgba(170,170,170,0.2)",
+                            border: vipAccess?.isGold ? "1px solid #ffd700" : "1px solid #aaa",
+                            color: vipAccess?.isGold ? "#ffd700" : "#aaa",
+                            padding: "6px 16px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          {showVIP ? "HIDE VIP" : "ENTER VIP"}
+                        </button>
+                      ) : (
+                        <span style={{ color: "#444", fontSize: "0.75rem" }}>
+                          Your balance: {vipAccess ? vipAccess.zionBalance.toFixed(0) : "..."} ZION
+                        </span>
+                      )}
+                    </div>
+
+                    {(vipAccess?.isSilver || vipAccess?.isGold) && showVIP ? (
+                      <div style={{ marginTop: "16px" }}>
+                        {vipAccess?.isGold ? (
+                          <div
+                            style={{
+                              color: "#ffd700",
+                              fontSize: "0.7rem",
+                              marginBottom: "8px",
+                              letterSpacing: "0.1em",
+                            }}
+                          >
+                            🥇 GOLD EXCLUSIVE MARKETS
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: "10px",
+                          }}
+                        >
+                          {VIP_MARKETS.filter((m) => (vipAccess?.isGold ? true : m.tier === "silver")).map(
+                            (market) => (
+                              <div
+                                key={market.id}
+                                style={{
+                                  border:
+                                    market.tier === "gold"
+                                      ? "1px solid rgba(255,215,0,0.4)"
+                                      : "1px solid rgba(170,170,170,0.3)",
+                                  borderRadius: "10px",
+                                  padding: "12px",
+                                  background:
+                                    market.tier === "gold"
+                                      ? "rgba(255,215,0,0.03)"
+                                      : "rgba(170,170,170,0.02)",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    color: market.tier === "gold" ? "#ffd700" : "#aaa",
+                                    fontSize: "0.7rem",
+                                    marginBottom: "4px",
+                                  }}
+                                >
+                                  {market.tier === "gold" ? "🥇" : "🥈"} {market.category}
+                                </div>
+                                <div
+                                  style={{
+                                    color: "#fff",
+                                    fontSize: "0.82rem",
+                                    fontWeight: "bold",
+                                    marginBottom: "8px",
+                                    lineHeight: "1.3",
+                                  }}
+                                >
+                                  {market.question}
+                                </div>
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      flex: 1,
+                                      padding: "5px",
+                                      background: "rgba(0,255,65,0.12)",
+                                      border: "1px solid #00ff41",
+                                      borderRadius: "6px",
+                                      color: "#00ff41",
+                                      fontSize: "0.75rem",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    YES {market.yesOdds}¢
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      flex: 1,
+                                      padding: "5px",
+                                      background: "rgba(255,50,50,0.12)",
+                                      border: "1px solid #ff3232",
+                                      borderRadius: "6px",
+                                      color: "#ff3232",
+                                      fontSize: "0.75rem",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    NO {market.noOdds}¢
+                                  </button>
+                                </div>
+                                <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "6px" }}>
+                                  Min: {market.minBet.toLocaleString()} · Max: {market.maxBet.toLocaleString()} ZION
+                                </div>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {!walletAddress.trim() ? (
+                      <div style={{ color: "#555", fontSize: "0.75rem", marginTop: "8px" }}>
+                        Connect wallet to check VIP access
+                      </div>
+                    ) : null}
                   </div>
                   <div className="zionBetPmRow" style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
                     <div className="zionBetPmSidebarCol" style={{ width: "160px", flexShrink: 0 }}>
