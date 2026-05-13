@@ -1,8 +1,9 @@
 "use client";
 
-import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
+import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { generateZionMarkets, type ZionMarket } from "@/lib/deepbook";
+import { generateZionMarkets, suiClient, type ZionMarket } from "@/lib/deepbook";
 import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
@@ -1205,7 +1206,7 @@ function ZionBetTradingControls({
   walletConnected,
   busyYes,
   busyNo,
-  onPlace,
+  onPlace: _onPlace,
 }: {
   bet: ZionBetMarket;
   walletConnected: boolean;
@@ -1213,7 +1214,10 @@ function ZionBetTradingControls({
   busyNo: boolean;
   onPlace: (bet: ZionBetMarket, prediction: boolean, amount: number) => void;
 }) {
-  const [amount, setAmount] = useState(1);
+  const account = useCurrentAccount();
+  const walletAddress = account?.address || "";
+  const { mutate: signAndExecute, isPending: signAndExecutePending } = useSignAndExecuteTransaction();
+  const [betAmount, setBetAmount] = useState(1);
   const [selectedSide, setSelectedSide] = useState<"yes" | "no" | null>(null);
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -1225,11 +1229,76 @@ function ZionBetTradingControls({
   const { yes: yesDisp, no: noDisp } = zionBetDisplayOdds(bet);
   const placing =
     selectedSide === "yes" ? busyYes : selectedSide === "no" ? busyNo : false;
-  const anyBusy = busyYes || busyNo;
+  const anyBusy = busyYes || busyNo || signAndExecutePending;
   const buyMarket = tradeMode === "buy" && orderType === "market";
   /** Place order only for Buy+Market; wallet + not busy. Amount checked in onClick. */
   const placeButtonDisabled =
     !walletConnected || anyBusy || !buyMarket || selectedSide === null;
+
+  const handlePlaceBet = async () => {
+    console.log("walletAddress:", walletAddress);
+    console.log("selectedSide:", selectedSide);
+    console.log("betAmount:", betAmount);
+    const w = walletAddress.trim();
+    if (!w) {
+      alert("Connect wallet first!");
+      return;
+    }
+    if (selectedSide == null) {
+      alert("Select YES or NO first!");
+      return;
+    }
+
+    try {
+      const tx = new Transaction();
+
+      const betAmountRaw = BigInt(betAmount) * BigInt(1_000_000_000);
+
+      const zionCoinType =
+        "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::CIVILIZATION";
+      const coins = await suiClient.getCoins({ owner: w, coinType: zionCoinType });
+      if (!coins.data.length) {
+        alert("No ZION tokens! Get some from the Faucet tab.");
+        return;
+      }
+      const zionCoin = tx.object(coins.data[0].coinObjectId);
+      const [betCoin] = tx.splitCoins(zionCoin, [betAmountRaw]);
+
+      tx.moveCall({
+        target: "0xfadbe56d6891baf0715fd9a61e4cc46e826882ecb3cc04719ff7046ed999bd81::civilization::place_bet",
+        arguments: [
+          tx.object("0xa85e751b386a1f3e7a5df97663d6ff125d8f410960724ca61bf222b694302fab"),
+          tx.pure.bool(selectedSide === "yes"),
+          betCoin,
+        ],
+      });
+
+      if (!account) {
+        alert("Please connect your Sui wallet first!");
+        return;
+      }
+
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: (result) => {
+            console.log("Bet placed!", result);
+            const digest =
+              result && typeof result === "object" && "digest" in result && typeof result.digest === "string"
+                ? result.digest
+                : "";
+            alert(`✅ Bet placed on-chain! TX: ${digest ? `${digest.slice(0, 8)}...` : "(pending)"}`);
+          },
+          onError: (error) => {
+            console.error("Bet error:", error);
+            alert(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+          },
+        }
+      );
+    } catch (error: unknown) {
+      alert(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
 
   const outcomeBtnBase: CSSProperties = {
     fontSize: "1.1rem",
@@ -1440,7 +1509,7 @@ function ZionBetTradingControls({
               Amount
             </span>
             <span style={{ fontSize: "1.8rem", color: "#fff", fontWeight: "bold", display: "block" }}>
-              {amount} ZION
+              {betAmount} ZION
             </span>
             <div style={{ display: "flex", gap: "8px", margin: "8px 0", flexWrap: "wrap" }}>
               {[1, 5, 10, 100].map((n) => (
@@ -1448,7 +1517,7 @@ function ZionBetTradingControls({
                   key={n}
                   type="button"
                   style={presetBtnStyle}
-                  onClick={() => setAmount((a) => a + n)}
+                  onClick={() => setBetAmount((a) => a + n)}
                   disabled={anyBusy}
                 >
                   +{n}
@@ -1458,7 +1527,7 @@ function ZionBetTradingControls({
           </div>
 
           <p style={{ color: "rgba(0,255,65,0.7)", fontSize: "0.85rem", margin: "4px 0 0" }}>
-            Potential win: {(amount * 1.98).toFixed(2)} ZION
+            Potential win: {(betAmount * 1.98).toFixed(2)} ZION
           </p>
         </>
       )}
@@ -1488,8 +1557,8 @@ function ZionBetTradingControls({
           disabled={placeButtonDisabled}
           onClick={() => {
             if (!walletConnected || anyBusy || !buyMarket || selectedSide === null) return;
-            if (amount < 1) return;
-            onPlace(bet, selectedSide === "yes", amount);
+            if (betAmount < 1) return;
+            void handlePlaceBet();
           }}
         >
           {placing ? "…" : selectedSide === "no" ? "Place NO order" : "Place YES order"}
