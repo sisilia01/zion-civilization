@@ -3,6 +3,7 @@
 import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateZionMarkets, type ZionMarket } from "@/lib/deepbook";
+import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
 import {
   Area,
   AreaChart,
@@ -2359,6 +2360,7 @@ export default function Home() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [chronicleEvents, setChronicleEvents] = useState<EventItem[]>([]);
   const [chronicleNow, setChronicleNow] = useState(() => Date.now());
+  const [civEvents, setCivEvents] = useState<CivilizationEvent[]>([]);
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [popHistory, setPopHistory] = useState<PopHistoryPoint[]>([]);
   const [markets, setMarkets] = useState<ZionMarket[]>([]);
@@ -2457,6 +2459,11 @@ export default function Home() {
       void generateZionMarkets().then(setMarkets);
     }, 60000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const events = generateSampleEvents();
+    setCivEvents(events);
   }, []);
 
   useEffect(() => {
@@ -3103,7 +3110,31 @@ export default function Home() {
           <div style={{ position: "absolute", top: "20px", right: "20px" }}>
             <ConnectButton />
           </div>
-          <h1>ZION CIVILIZATION</h1>
+          <h1
+            style={{
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "8px",
+            }}
+          >
+            ZION CIVILIZATION
+            {activeTab === "civilization" ? (
+              <span
+                style={{
+                  background: "rgba(0,255,200,0.1)",
+                  border: "1px solid rgba(0,255,200,0.3)",
+                  color: "#00ffc8",
+                  fontSize: "0.65rem",
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  marginLeft: "8px",
+                }}
+              >
+                🐋 Walrus
+              </span>
+            ) : null}
+          </h1>
           <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
         </header>
 
@@ -3270,6 +3301,84 @@ export default function Home() {
                   ))}
                 </div>
               </section>
+
+              <div style={{ marginTop: "24px" }}>
+                <h3
+                  style={{
+                    color: "#ffd700",
+                    fontSize: "0.8rem",
+                    letterSpacing: "0.1em",
+                    marginBottom: "12px",
+                  }}
+                >
+                  📡 LIVE EVENTS — STORED ON WALRUS
+                </h3>
+                {civEvents.map((event) => {
+                  const icons = {
+                    death: "💀",
+                    war: "⚔️",
+                    election: "👑",
+                    catastrophe: "🌋",
+                    trade: "📊",
+                    birth: "🌱",
+                  };
+                  const colors = {
+                    death: "#ff3232",
+                    war: "#ff6600",
+                    election: "#ffd700",
+                    catastrophe: "#ff00ff",
+                    trade: "#00ff41",
+                    birth: "#00ffff",
+                  };
+                  return (
+                    <div
+                      key={event.id}
+                      style={{
+                        border: `1px solid ${colors[event.type]}33`,
+                        borderLeft: `3px solid ${colors[event.type]}`,
+                        borderRadius: "8px",
+                        padding: "10px 14px",
+                        marginBottom: "8px",
+                        background: "rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: colors[event.type],
+                            fontSize: "0.85rem",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {icons[event.type]} {event.title}
+                        </span>
+                        <span style={{ color: "#444", fontSize: "0.7rem" }}>
+                          {new Date(event.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p
+                        style={{
+                          color: "#888",
+                          fontSize: "0.75rem",
+                          margin: "4px 0 0 0",
+                          lineHeight: "1.4",
+                        }}
+                      >
+                        {event.description}
+                      </p>
+                      <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "4px" }}>
+                        🐋 Walrus testnet · agents: {event.agents.join(", ")}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </>
           )}
 
