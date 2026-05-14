@@ -94,6 +94,8 @@ interface ZcoDecision {
   agent_class?: string;
   class?: string;
   decision?: string;
+  event_description?: string;
+  event_type?: string;
   consensus?: ZcoConsensusBlock;
   votes?: ZcoVote[];
   consensus_hash?: string;
@@ -121,7 +123,7 @@ function zcoAgreementPercent(d: ZcoDecision): number {
   return Math.round(Math.min(1, Math.max(0, x)) * 100);
 }
 
-function zcoAgreementBarColor(pct: number): string {
+function zcoAgreementDisplayColor(pct: number): string {
   if (pct >= 85) return "#22c55e";
   if (pct >= 50) return ZCO_ACCENT;
   if (pct >= 25) return "#f59e0b";
@@ -4418,17 +4420,27 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                     <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No ZCO rounds yet. Try refresh.</p>
                   ) : (
                     zcoDecisions.map((decision, zidx) => {
+                      const judgeLabel = (name: string) =>
+                        name === "DeepSeek" ? "Judge I" : name === "Gemini" ? "Judge II" : "Judge III";
                       const finalText = (decision.decision || "").trim() || "—";
+                      const eventDesc = (decision.event_description || "").trim();
+                      const eventTypeRaw = (decision.event_type || "").trim();
+                      const eventBadge = eventTypeRaw
+                        ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
+                        : "";
+                      const headline = eventDesc ? eventDesc : finalText;
                       const consensus = zcoConsensusLine(decision);
                       const agreementPct = zcoAgreementPercent(decision);
-                      const barColor = zcoAgreementBarColor(agreementPct);
                       const cls = (decision.agent_class || decision.class || "").trim();
+                      const clsUpper = cls.replace(/_/g, " ").toUpperCase();
                       const hash = decision.consensus_hash || "";
                       const votes = decision.votes ?? [];
                       const judgeSlots = ZCO_JUDGE_ORDER.map((name) => ({
-                        label: name,
+                        apiName: name,
+                        label: judgeLabel(name),
                         vote: votes.find((v) => v.judge === name),
                       }));
+                      const agentName = (decision.agent || "").trim() || "—";
                       return (
                         <div
                           key={`zco-${hash || decision.agent}-${zidx}`}
@@ -4440,34 +4452,56 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                             background: "rgba(167,139,250,0.04)",
                           }}
                         >
-                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "8px", marginBottom: "8px" }}>
-                            <span style={{ color: ZCO_ACCENT, fontSize: "0.82rem", fontWeight: "bold" }}>
-                              {decision.agent || "Agent"}
-                            </span>
-                            {cls ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "flex-start",
+                              gap: "8px",
+                              marginBottom: "10px",
+                            }}
+                          >
+                            {eventBadge ? (
                               <span
                                 style={{
-                                  color: "#888",
-                                  fontSize: "0.68rem",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.06em",
+                                  flexShrink: 0,
+                                  color: ZCO_ACCENT,
+                                  fontSize: "0.65rem",
+                                  fontWeight: 700,
+                                  letterSpacing: "0.08em",
+                                  padding: "3px 8px",
+                                  borderRadius: "6px",
+                                  border: "1px solid rgba(167,139,250,0.45)",
+                                  background: "rgba(167,139,250,0.1)",
                                 }}
                               >
-                                {cls}
+                                [{eventBadge}]
                               </span>
                             ) : null}
+                            <div
+                              style={{
+                                color: ZCO_ACCENT,
+                                fontSize: "1.05rem",
+                                fontWeight: 700,
+                                lineHeight: 1.3,
+                                wordBreak: "break-word",
+                                flex: "1 1 160px",
+                                minWidth: 0,
+                              }}
+                            >
+                              {headline}
+                            </div>
                           </div>
                           <div
                             style={{
-                              color: ZCO_ACCENT,
-                              fontSize: "1.05rem",
-                              fontWeight: 700,
+                              color: "#888",
+                              fontSize: "0.72rem",
                               marginBottom: "10px",
-                              lineHeight: 1.25,
-                              wordBreak: "break-word",
+                              lineHeight: 1.35,
                             }}
                           >
-                            {finalText}
+                            Verified for: {agentName}
+                            {clsUpper ? ` · ${clsUpper}` : ""}
                           </div>
                           <div
                             style={{
@@ -4479,13 +4513,13 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                               fontSize: "0.62rem",
                             }}
                           >
-                            {judgeSlots.map(({ label, vote: v }, ji) => {
+                            {judgeSlots.map(({ apiName, label, vote: v }, ji) => {
                               const voted = v?.status === "voted";
                               return (
-                                <span key={`${label}-${ji}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <span key={`${apiName}-${ji}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                                   {ji > 0 ? (
-                                    <span style={{ color: "#444", userSelect: "none" }} aria-hidden>
-                                      |
+                                    <span style={{ color: "#444", userSelect: "none", margin: "0 2px" }} aria-hidden>
+                                      {" | "}
                                     </span>
                                   ) : null}
                                   <span style={{ color: "#777" }}>{label}</span>
@@ -4530,55 +4564,64 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                               );
                             })}
                           </div>
-                          <div style={{ color: "#9ca3af", fontSize: "0.68rem", marginBottom: "6px" }}>
-                            Consensus:{" "}
-                            <span style={{ color: consensus === "DEADLOCK" ? "#ef4444" : ZCO_ACCENT, fontWeight: 600 }}>
-                              {consensus}
-                            </span>
-                          </div>
-                          <div style={{ color: "#555", fontSize: "0.62rem", marginBottom: "8px", wordBreak: "break-all" }}>
-                            ZCO hash: <span style={{ color: "#888" }}>{hash || "—"}</span>
-                          </div>
-                          {decision.tx_hash ? (
-                            <div style={{ marginBottom: "8px" }}>
-                              {decision.explorer_url ? (
-                                <a
-                                  href={decision.explorer_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}
-                                >
-                                  ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
-                                </a>
-                              ) : (
-                                <span style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}>
-                                  ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
-                                </span>
-                              )}
-                            </div>
-                          ) : null}
-                          <div style={{ marginBottom: "4px", display: "flex", justifyContent: "space-between", fontSize: "0.62rem" }}>
-                            <span style={{ color: "#666" }}>Agreement</span>
-                            <span style={{ color: barColor, fontWeight: 600 }}>{agreementPct}%</span>
+                          <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginBottom: "8px", fontWeight: 600 }}>
+                            <span style={{ color: consensus === "DEADLOCK" ? "#ef4444" : ZCO_ACCENT }}>{consensus}</span>
                           </div>
                           <div
                             style={{
-                              height: "6px",
-                              borderRadius: "4px",
-                              background: "rgba(0,0,0,0.45)",
-                              overflow: "hidden",
-                              border: "1px solid rgba(167,139,250,0.2)",
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginBottom: "8px",
+                              fontSize: "0.72rem",
+                              lineHeight: 1.4,
                             }}
                           >
-                            <div
+                            <span style={{ color: "#888", wordBreak: "break-all", fontFamily: "monospace" }}>
+                              {hash || "—"}
+                            </span>
+                            {decision.tx_hash ? (
+                              <>
+                                <span style={{ color: "#555", userSelect: "none" }} aria-hidden>
+                                  |
+                                </span>
+                                {decision.explorer_url ? (
+                                  <a
+                                    href={decision.explorer_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}
+                                  >
+                                    ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
+                                  </a>
+                                ) : (
+                                  <span style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}>
+                                    ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
+                                  </span>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
+                          <div
+                            style={{
+                              marginBottom: "10px",
+                              textAlign: "right",
+                            }}
+                          >
+                            <span
                               style={{
-                                height: "100%",
-                                width: `${agreementPct}%`,
-                                background: `linear-gradient(90deg, ${barColor}, ${ZCO_ACCENT})`,
-                                borderRadius: "3px",
-                                transition: "width 0.35s ease",
+                                display: "inline-block",
+                                fontSize: "1rem",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                fontVariantNumeric: "tabular-nums",
+                                color: zcoAgreementDisplayColor(agreementPct),
+                                textShadow: "0 0 12px rgba(167,139,250,0.35)",
                               }}
-                            />
+                            >
+                              {agreementPct}%
+                            </span>
                           </div>
                         </div>
                       );
