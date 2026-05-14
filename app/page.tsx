@@ -82,6 +82,59 @@ interface NautilusDecision {
   explorer_url: string;
 }
 
+interface ZcoVote {
+  judge: string;
+  decision: string;
+  confidence?: number;
+  status: string;
+}
+
+interface ZcoConsensusBlock {
+  decision?: string;
+  method?: string;
+  agreement?: number;
+  avg_confidence?: number;
+  votes_for?: number;
+  total_votes?: number;
+}
+
+interface ZcoDecision {
+  agent?: string;
+  agent_class?: string;
+  class?: string;
+  decision?: string;
+  consensus?: ZcoConsensusBlock;
+  votes?: ZcoVote[];
+  consensus_hash?: string;
+  powered_by?: string;
+}
+
+const ZCO_ACCENT = "#a78bfa";
+
+const ZCO_JUDGE_ORDER = ["DeepSeek", "Gemini", "Qwen"] as const;
+
+function zcoConsensusLine(d: ZcoDecision): string {
+  const c = d.consensus;
+  if (c?.method === "consensus" && c.votes_for != null && c.total_votes != null) {
+    return `CONSENSUS ${c.votes_for}/${c.total_votes}`;
+  }
+  return "DEADLOCK";
+}
+
+function zcoAgreementPercent(d: ZcoDecision): number {
+  const a = d.consensus?.agreement;
+  if (a == null || Number.isNaN(Number(a))) return 0;
+  const x = Number(a);
+  return Math.round(Math.min(1, Math.max(0, x)) * 100);
+}
+
+function zcoAgreementBarColor(pct: number): string {
+  if (pct >= 85) return "#22c55e";
+  if (pct >= 50) return ZCO_ACCENT;
+  if (pct >= 25) return "#f59e0b";
+  return "#ef4444";
+}
+
 const MATRIX_CHARS =
   "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ";
 
@@ -2711,6 +2764,22 @@ export default function Home() {
     }
   }, []);
 
+  const [zcoDecisions, setZcoDecisions] = useState<ZcoDecision[]>([]);
+  const [zcoLoading, setZcoLoading] = useState(false);
+
+  const fetchZcoDecisions = useCallback(async () => {
+    setZcoLoading(true);
+    try {
+      const res = await fetch("/api/zco");
+      const data = (await res.json()) as { decisions?: ZcoDecision[] };
+      if (data.decisions) setZcoDecisions(data.decisions);
+    } catch {
+      /* ignore */
+    } finally {
+      setZcoLoading(false);
+    }
+  }, []);
+
   const checkVipStatus = useCallback(async () => {
     if (!account?.address) return;
     try {
@@ -2980,6 +3049,10 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
   useEffect(() => {
     if (activeTab === "civilization") void fetchNautilusDecisions();
   }, [activeTab, fetchNautilusDecisions]);
+
+  useEffect(() => {
+    if (activeTab === "civilization") void fetchZcoDecisions();
+  }, [activeTab, fetchZcoDecisions]);
 
   useEffect(() => {
     if (showIntro || activeTab !== "civilization") return;
@@ -4436,6 +4509,201 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                   <span style={{ color: "#333", fontSize: "0.65rem" }}>
                     ⚙️ Powered by Nautilus · Off-chain compute with on-chain proof
                   </span>
+                </div>
+
+                {/* ZION CONSENSUS ORACLE */}
+                <div style={{ marginTop: "28px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: ZCO_ACCENT,
+                        fontSize: "0.7rem",
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      ⚖️ ZION CONSENSUS ORACLE — ZCO v1.0
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void fetchZcoDecisions()}
+                      disabled={zcoLoading}
+                      style={{
+                        flexShrink: 0,
+                        background: "rgba(167,139,250,0.12)",
+                        border: "1px solid rgba(167,139,250,0.4)",
+                        color: ZCO_ACCENT,
+                        fontSize: "0.65rem",
+                        padding: "4px 10px",
+                        borderRadius: "8px",
+                        cursor: zcoLoading ? "wait" : "pointer",
+                        opacity: zcoLoading ? 0.6 : 1,
+                      }}
+                    >
+                      {zcoLoading ? "…" : "Refresh"}
+                    </button>
+                  </div>
+                  {zcoLoading && zcoDecisions.length === 0 ? (
+                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>Loading ZCO decisions…</p>
+                  ) : zcoDecisions.length === 0 ? (
+                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No ZCO rounds yet. Try refresh.</p>
+                  ) : (
+                    zcoDecisions.map((decision, zidx) => {
+                      const finalText = (decision.decision || "").trim() || "—";
+                      const consensus = zcoConsensusLine(decision);
+                      const agreementPct = zcoAgreementPercent(decision);
+                      const barColor = zcoAgreementBarColor(agreementPct);
+                      const cls = (decision.agent_class || decision.class || "").trim();
+                      const hash = decision.consensus_hash || "";
+                      const votes = decision.votes ?? [];
+                      const judgeSlots = ZCO_JUDGE_ORDER.map((name) => ({
+                        label: name,
+                        vote: votes.find((v) => v.judge === name),
+                      }));
+                      return (
+                        <div
+                          key={`zco-${hash || decision.agent}-${zidx}`}
+                          style={{
+                            border: "1px solid rgba(167,139,250,0.25)",
+                            borderRadius: "8px",
+                            padding: "12px 14px",
+                            marginBottom: "8px",
+                            background: "rgba(167,139,250,0.04)",
+                          }}
+                        >
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "8px", marginBottom: "8px" }}>
+                            <span style={{ color: ZCO_ACCENT, fontSize: "0.82rem", fontWeight: "bold" }}>
+                              {decision.agent || "Agent"}
+                            </span>
+                            {cls ? (
+                              <span
+                                style={{
+                                  color: "#888",
+                                  fontSize: "0.68rem",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.06em",
+                                }}
+                              >
+                                {cls}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div
+                            style={{
+                              color: ZCO_ACCENT,
+                              fontSize: "1.05rem",
+                              fontWeight: 700,
+                              marginBottom: "10px",
+                              lineHeight: 1.25,
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {finalText}
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginBottom: "10px",
+                              fontSize: "0.62rem",
+                            }}
+                          >
+                            {judgeSlots.map(({ label, vote: v }, ji) => {
+                              const voted = v?.status === "voted";
+                              return (
+                                <span key={`${label}-${ji}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                  {ji > 0 ? (
+                                    <span style={{ color: "#444", userSelect: "none" }} aria-hidden>
+                                      |
+                                    </span>
+                                  ) : null}
+                                  <span style={{ color: "#777" }}>{label}</span>
+                                  {!v ? (
+                                    <span
+                                      style={{
+                                        background: "rgba(80,80,80,0.25)",
+                                        border: "1px solid rgba(120,120,120,0.35)",
+                                        color: "#666",
+                                        padding: "2px 6px",
+                                        borderRadius: "6px",
+                                      }}
+                                    >
+                                      […]
+                                    </span>
+                                  ) : voted ? (
+                                    <span
+                                      style={{
+                                        background: "rgba(34,197,94,0.12)",
+                                        border: "1px solid rgba(34,197,94,0.45)",
+                                        color: "#22c55e",
+                                        padding: "2px 6px",
+                                        borderRadius: "6px",
+                                      }}
+                                    >
+                                      [{v.decision} ✓]
+                                    </span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        background: "rgba(239,68,68,0.12)",
+                                        border: "1px solid rgba(239,68,68,0.45)",
+                                        color: "#ef4444",
+                                        padding: "2px 6px",
+                                        borderRadius: "6px",
+                                      }}
+                                    >
+                                      [failed ✗]
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <div style={{ color: "#9ca3af", fontSize: "0.68rem", marginBottom: "6px" }}>
+                            Consensus:{" "}
+                            <span style={{ color: consensus === "DEADLOCK" ? "#ef4444" : ZCO_ACCENT, fontWeight: 600 }}>
+                              {consensus}
+                            </span>
+                          </div>
+                          <div style={{ color: "#555", fontSize: "0.62rem", marginBottom: "8px", wordBreak: "break-all" }}>
+                            ZCO hash: <span style={{ color: "#888" }}>{hash || "—"}</span>
+                          </div>
+                          <div style={{ marginBottom: "4px", display: "flex", justifyContent: "space-between", fontSize: "0.62rem" }}>
+                            <span style={{ color: "#666" }}>Agreement</span>
+                            <span style={{ color: barColor, fontWeight: 600 }}>{agreementPct}%</span>
+                          </div>
+                          <div
+                            style={{
+                              height: "6px",
+                              borderRadius: "4px",
+                              background: "rgba(0,0,0,0.45)",
+                              overflow: "hidden",
+                              border: "1px solid rgba(167,139,250,0.2)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${agreementPct}%`,
+                                background: `linear-gradient(90deg, ${barColor}, ${ZCO_ACCENT})`,
+                                borderRadius: "3px",
+                                transition: "width 0.35s ease",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </>
