@@ -120,12 +120,10 @@ Available actions: work, pray, join_clan, place_bet, rest, rebel
 Respond ONLY as JSON:
 {{"decision": "work", "confidence": 0.85, "reasoning": "brief reason"}}"""
 
-    # Параллельное голосование
+    # Последовательное голосование
     votes = []
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(ask_judge, judge, prompt): judge for judge in JUDGES}
-        for future in as_completed(futures):
-            votes.append(future.result())
+    for judge in JUDGES:
+        votes.append(ask_judge(judge, prompt))
 
     # Консенсус
     consensus = reach_consensus(votes)
