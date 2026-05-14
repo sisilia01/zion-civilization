@@ -14,7 +14,7 @@ SUI_COIN_ID = "0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce5
 JUDGES = [
     {"name": "DeepSeek", "model": "deepseek/deepseek-chat-v3-0324"},
     {"name": "Gemini", "model": "google/gemini-2.0-flash-lite-001"},
-    {"name": "Qwen", "model": "qwen/qwen-2.5-72b-instruct"},
+    {"name": "Gemma", "model": "google/gemma-3-12b-it"},
 ]
 
 def ask_judge(judge: dict, prompt: str) -> dict:
@@ -36,7 +36,7 @@ def ask_judge(judge: dict, prompt: str) -> dict:
                 "X-Title": "ZION Consensus Oracle"
             }
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=45) as resp:
             result = json.loads(resp.read())
             content = result["choices"][0]["message"]["content"]
             match = re.search(r'\{.*?\}', content, re.DOTALL)
@@ -97,7 +97,7 @@ def record_onchain(agent_name: str, decision: str, consensus_hash: str) -> str:
             "--amount", "1000000",
             "--gas-budget", "10000000",
             "--json"
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, timeout=45)
 
         if result.returncode == 0:
             data = json.loads(result.stdout)
