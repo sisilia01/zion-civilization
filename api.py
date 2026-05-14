@@ -1220,3 +1220,40 @@ def get_zco_decisions():
         return {"decisions": results, "oracle": "ZION Consensus Oracle v1.0"}
     except Exception as e:
         return {"error": str(e), "decisions": []}
+
+@app.get("/zco/events")
+def get_zco_events():
+    """ZCO verifies significant civilization events"""
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        # Берём только значимые события
+        cur.execute("""
+            SELECT e.description, e.event_type, e.zion_amount, a.name, a.class, a.balance
+            FROM events e
+            LEFT JOIN agents a ON e.agent_id = a.id
+            WHERE e.event_type IN ('election', 'catastrophe', 'clan_war', 'rebellion', 
+                           'prayer', 'lottery', 'birth', 'clan_war', 'blessing')
+            AND e.zion_amount > 0
+            ORDER BY e.id DESC LIMIT 3
+        """)
+        events = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        results = []
+        for event in events:
+            context = f"Event: {event['description']}. Amount: {event['zion_amount']} ZION."
+            result = zco_decide(
+                agent_name=event['name'] or 'ZION System',
+                agent_class=event['class'] or 'system',
+                balance=float(event['balance'] or 0),
+                context=context
+            )
+            result['event_type'] = event['event_type']
+            result['event_description'] = event['description']
+            results.append(result)
+
+        return {"decisions": results, "oracle": "ZION Consensus Oracle v1.0"}
+    except Exception as e:
+        return {"error": str(e), "decisions": []}
