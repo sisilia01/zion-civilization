@@ -2359,7 +2359,7 @@ function ZionBetMarketDetail({
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
-  const [zkLoginUser, setZkLoginUser] = useState<string | null>(null);
+  const [zkLoginUser, setZkLoginUser] = useState<{ address: string; email: string } | null>(null);
 
   const [showIntro, setShowIntro] = useState(true);
   const [introFading, setIntroFading] = useState(false);
@@ -2457,6 +2457,26 @@ export default function Home() {
     const tf = zionBetTimeframeTab;
     return zionBetListAfterCategory.filter((b) => (b.timeframe ?? "").toLowerCase() === tf);
   }, [zionBetListAfterCategory, zionBetTimeframeTab]);
+
+  useEffect(() => {
+    console.log('JWT found:', localStorage.getItem('zklogin_jwt')?.substring(0, 50));
+    const jwt = localStorage.getItem("zklogin_jwt");
+    if (!jwt) return;
+    try {
+      const parts = jwt.split(".");
+      if (parts.length < 2) return;
+      const payload = parts[1];
+      const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+      const json = atob(padded);
+      const claims = JSON.parse(json) as { email?: string };
+      const email = typeof claims.email === "string" ? claims.email : "";
+      if (!email) return;
+      setZkLoginUser({ address: `zk_${email}`, email });
+    } catch {
+      /* ignore invalid JWT */
+    }
+  }, []);
 
   useEffect(() => {
     const w = walletAddress.trim();
@@ -3021,6 +3041,86 @@ export default function Home() {
 
   return (
     <main className="page">
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          display: "flex",
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "8px",
+          padding: "12px",
+          zIndex: 100,
+          background: "rgba(0,0,0,0.8)",
+        }}
+        aria-label="Sign in"
+      >
+        {!zkLoginUser ? (
+          <button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                try {
+                  const randomness = generateRandomness();
+                  const ephemeralKeypair = Ed25519Keypair.generate();
+                  const system = await suiClient.getLatestSuiSystemState({});
+                  const epoch = Number(system.epoch);
+                  const maxEpoch = epoch + 10;
+                  const nonce = generateNonce(ephemeralKeypair.getPublicKey(), maxEpoch, randomness);
+                  localStorage.setItem("zklogin_randomness", randomness);
+                  localStorage.setItem("zklogin_max_epoch", String(maxEpoch));
+                  localStorage.setItem("zklogin_ephemeral_secret", ephemeralKeypair.getSecretKey());
+                  const params = new URLSearchParams({
+                    client_id: "920459249916-5n0cheppacdv3e1l3de5rpl6b13dkdvn.apps.googleusercontent.com",
+                    redirect_uri: "https://zionciv.com/auth/callback",
+                    response_type: "id_token",
+                    scope: "openid email",
+                    nonce,
+                  });
+                  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+                } catch (e) {
+                  console.error(e);
+                }
+              })();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 16px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "8px",
+              color: "#fff",
+              fontSize: "0.8rem",
+              cursor: "pointer",
+            }}
+          >
+            <span>🔑</span>
+            <span>Sign in with Google</span>
+          </button>
+        ) : null}
+        <ConnectButton />
+        {zkLoginUser ? (
+          <div
+            style={{
+              color: "#00ff41",
+              fontSize: "0.7rem",
+              whiteSpace: "nowrap",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 2,
+            }}
+          >
+            <span>zkLogin: {zkLoginUser.email}</span>
+            <span style={{ color: "rgba(0,255,65,0.75)", fontSize: "0.65rem" }}>{zkLoginUser.address}</span>
+          </div>
+        ) : null}
+      </div>
       <canvas
         ref={bgCanvasRef}
         style={{ position: "fixed", inset: 0, zIndex: 0, opacity: 0.22, pointerEvents: "none" }}
@@ -3177,71 +3277,7 @@ export default function Home() {
       )}
 
       <div className={`dashboard ${dashboardVisible ? "show" : ""}`}>
-        <header className="header" style={{ position: "relative" }}>
-          <div
-            style={{
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: "6px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      const randomness = generateRandomness();
-                      const ephemeralKeypair = Ed25519Keypair.generate();
-                      const system = await suiClient.getLatestSuiSystemState({});
-                      const epoch = Number(system.epoch);
-                      const maxEpoch = epoch + 10;
-                      const nonce = generateNonce(ephemeralKeypair.getPublicKey(), maxEpoch, randomness);
-                      localStorage.setItem("zklogin_randomness", randomness);
-                      localStorage.setItem("zklogin_max_epoch", String(maxEpoch));
-                      localStorage.setItem("zklogin_ephemeral_secret", ephemeralKeypair.getSecretKey());
-                      const params = new URLSearchParams({
-                        client_id: "YOUR_GOOGLE_CLIENT_ID",
-                        redirect_uri: "http://142.132.189.45:4002/auth/callback",
-                        response_type: "id_token",
-                        scope: "openid email",
-                        nonce,
-                      });
-                      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  })();
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 16px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  borderRadius: "8px",
-                  color: "#fff",
-                  fontSize: "0.8rem",
-                  cursor: "pointer",
-                  marginRight: "8px",
-                }}
-              >
-                <span>🔑</span>
-                <span>Sign in with Google</span>
-              </button>
-              <ConnectButton />
-            </div>
-            {zkLoginUser && (
-              <div style={{ color: "#00ff41", fontSize: "0.7rem" }}>
-                zkLogin: {zkLoginUser.slice(0, 8)}...
-              </div>
-            )}
-          </div>
+        <header className="header">
           <h1
             style={{
               display: "flex",
@@ -4813,7 +4849,7 @@ export default function Home() {
           z-index: 5;
           max-width: 1500px;
           margin: 0 auto;
-          padding: 26px;
+          padding: 56px 26px 26px;
           opacity: 0;
           transition: opacity 0.8s ease;
         }
