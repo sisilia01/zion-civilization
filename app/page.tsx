@@ -1,6 +1,12 @@
 "use client";
 
-import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import {
+  useConnectWallet,
+  useCurrentAccount,
+  useDisconnectWallet,
+  useSignAndExecuteTransaction,
+  useWallets,
+} from "@mysten/dapp-kit";
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
@@ -2359,7 +2365,16 @@ function ZionBetMarketDetail({
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
+  const wallets = useWallets();
+  const { mutate: connectWallet } = useConnectWallet();
+  const { mutate: disconnect } = useDisconnectWallet();
+  const connect = () => {
+    const w = wallets[0];
+    if (w) connectWallet({ wallet: w });
+  };
   const [zkLoginUser, setZkLoginUser] = useState<{ address: string; email: string } | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showWalletMenu, setShowWalletMenu] = useState(false);
 
   const [showIntro, setShowIntro] = useState(true);
   const [introFading, setIntroFading] = useState(false);
@@ -3041,6 +3056,16 @@ export default function Home() {
 
   return (
     <main className="page">
+      {(showWalletMenu || showUserMenu) && (
+        <div
+          onClick={() => {
+            setShowWalletMenu(false);
+            setShowUserMenu(false);
+          }}
+          style={{ position: "fixed", inset: 0, zIndex: 150 }}
+          aria-hidden
+        />
+      )}
       <div
         style={{
           position: "fixed",
@@ -3053,7 +3078,7 @@ export default function Home() {
           justifyContent: "flex-end",
           gap: "8px",
           padding: "12px",
-          zIndex: 100,
+          zIndex: showWalletMenu || showUserMenu ? 200 : 100,
           background: "rgba(0,0,0,0.8)",
         }}
         aria-label="Sign in"
@@ -3089,35 +3114,204 @@ export default function Home() {
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               gap: "6px",
-              padding: "8px 16px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: "8px",
-              color: "#fff",
-              fontSize: "0.8rem",
+              height: "36px",
+              boxSizing: "border-box",
+              padding: "0 16px",
+              background: "transparent",
+              border: "1px solid #00ff41",
+              borderRadius: "6px",
+              color: "#00ff41",
               cursor: "pointer",
+              fontFamily: "monospace",
+              fontSize: "0.8rem",
+              letterSpacing: "1px",
             }}
           >
             <span>🔑</span>
             <span>Sign in with Google</span>
           </button>
         ) : null}
-        <ConnectButton />
-        {zkLoginUser ? (
-          <div
+        {!walletAddress.trim() ? (
+          <button
+            type="button"
+            onClick={() => connect()}
             style={{
+              background: "transparent",
+              border: "1px solid #00ff41",
               color: "#00ff41",
-              fontSize: "0.7rem",
-              whiteSpace: "nowrap",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontFamily: "monospace",
+              fontSize: "0.8rem",
+              letterSpacing: "1px",
+              height: "36px",
+              boxSizing: "border-box",
               display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: 2,
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <span>zkLogin: {zkLoginUser.email}</span>
-            <span style={{ color: "rgba(0,255,65,0.75)", fontSize: "0.65rem" }}>{zkLoginUser.address}</span>
+            ⚡ CONNECT WALLET
+          </button>
+        ) : (
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowWalletMenu(!showWalletMenu);
+                setShowUserMenu(false);
+              }}
+              style={{
+                background: "transparent",
+                border: "1px solid #00ff41",
+                color: "#00ff41",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontFamily: "monospace",
+                fontSize: "0.78rem",
+                letterSpacing: "0.5px",
+                height: "36px",
+              }}
+            >
+              {`⚡ ${walletAddress.trim().slice(0, 6)}...${walletAddress.trim().slice(-4)} ▾`}
+            </button>
+
+            {showWalletMenu ? (
+              <div
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "40px",
+                  background: "#0a0a0a",
+                  border: "1px solid #00ff41",
+                  borderRadius: "6px",
+                  minWidth: "200px",
+                  zIndex: 200,
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    color: "#555",
+                    fontFamily: "monospace",
+                    fontSize: "0.7rem",
+                    borderBottom: "1px solid #111",
+                  }}
+                >
+                  {`${walletAddress.trim().slice(0, 16)}...`}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    disconnect();
+                    setShowWalletMenu(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: "none",
+                    color: "#ff4141",
+                    padding: "10px 14px",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.78rem",
+                    textAlign: "left",
+                  }}
+                >
+                  ⏻ Disconnect Wallet
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {zkLoginUser ? (
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowUserMenu(!showUserMenu);
+                setShowWalletMenu(false);
+              }}
+              style={{
+                background: "transparent",
+                border: "1px solid #00ff41",
+                color: "#00ff41",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontFamily: "monospace",
+                fontSize: "0.78rem",
+                letterSpacing: "0.5px",
+                height: "36px",
+              }}
+            >
+              ⚡ {zkLoginUser.email.split("@")[0]} ▾
+            </button>
+
+            {showUserMenu ? (
+              <div
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "40px",
+                  background: "#0a0a0a",
+                  border: "1px solid #00ff41",
+                  borderRadius: "6px",
+                  minWidth: "200px",
+                  zIndex: 200,
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    color: "#555",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    borderBottom: "1px solid #111",
+                  }}
+                >
+                  {zkLoginUser.email}
+                </div>
+                <div
+                  style={{
+                    padding: "8px 14px",
+                    color: "#555",
+                    fontFamily: "monospace",
+                    fontSize: "0.7rem",
+                    borderBottom: "1px solid #111",
+                  }}
+                >
+                  {zkLoginUser.address.substring(0, 10)}...
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem("zklogin_jwt");
+                    setZkLoginUser(null);
+                    setShowUserMenu(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: "none",
+                    color: "#ff4141",
+                    padding: "10px 14px",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.78rem",
+                    textAlign: "left",
+                  }}
+                >
+                  ⏻ Logout
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
