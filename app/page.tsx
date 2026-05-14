@@ -7,24 +7,13 @@ import { generateZionMarkets, suiClient, type ZionMarket } from "@/lib/deepbook"
 import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  usePlotArea,
-  useXAxisScale,
-  useYAxisScale,
-  type PieLabelRenderProps,
 } from "recharts";
 
 interface Agent {
@@ -774,80 +763,7 @@ function AgentTile({
   );
 }
 
-type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "stats" | "faucet" | "press" | "bank";
-
-const STATS_CLAN_NAMES = ["Iron Fist", "Golden Dawn", "Shadow Order"] as const;
-const POP_HISTORY_LS = "zion_pop_history";
-
-type PopHistoryPoint = { day: number; alive: number; time: string };
-
-function normClanLabel(s: string) {
-  return s.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function agentCharisma(agent: Agent): number {
-  return (agent.id % 5) + 1;
-}
-
-function findClanTreasury(clans: Clan[], targetName: string): number {
-  const n = normClanLabel(targetName);
-  const c = clans.find((x) => {
-    const cn = normClanLabel(x.name);
-    return cn === n || cn.includes(n) || n.includes(cn);
-  });
-  return c?.treasury ?? 0;
-}
-
-function clanLeaderForName(agents: Agent[], clanName: string): Agent | null {
-  const n = normClanLabel(clanName);
-  const pool = agents.filter((a) => {
-    if (!a.clan?.trim()) return false;
-    const cn = normClanLabel(a.clan);
-    return cn === n || cn.includes(n) || n.includes(cn);
-  });
-  if (!pool.length) return null;
-  return [...pool].sort((a, b) => b.balance - a.balance)[0] ?? null;
-}
-
-function pickProphet(agents: Agent[]): Agent | null {
-  if (!agents.length) return null;
-  return [...agents].sort((a, b) => {
-    const ca = agentCharisma(a);
-    const cb = agentCharisma(b);
-    if (cb !== ca) return cb - ca;
-    return b.balance - a.balance;
-  })[0] ?? null;
-}
-
-/** Monotone stroke + segment fills (green up / red down) under the curve. */
-function PopSegmentFills({ history }: { history: PopHistoryPoint[] }) {
-  const plot = usePlotArea();
-  const xScale = useXAxisScale(0);
-  const yScale = useYAxisScale(0);
-  if (!plot || !xScale || !yScale || history.length < 2) return null;
-  const baseY = plot.y + plot.height;
-  const paths: ReactNode[] = [];
-  for (let i = 1; i < history.length; i++) {
-    const a = history[i - 1]!;
-    const b = history[i]!;
-    const up = b.alive >= a.alive;
-    const x0 = xScale(a.day);
-    const y0 = yScale(a.alive);
-    const x1 = xScale(b.day);
-    const y1 = yScale(b.alive);
-    if (x0 == null || y0 == null || x1 == null || y1 == null) continue;
-    const d = `M ${x0} ${baseY} L ${x0} ${y0} L ${x1} ${y1} L ${x1} ${baseY} Z`;
-    paths.push(
-      <path
-        key={`${a.day}-${b.day}-${i}`}
-        d={d}
-        fill={up ? "url(#zionPopGradUp)" : "url(#zionPopGradDown)"}
-        stroke="none"
-      />,
-    );
-  }
-  return <g className="popSegmentFills">{paths}</g>;
-}
+type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "faucet" | "press" | "bank";
 
 function parseCooldownPayload(data: unknown): number | null {
   if (!data || typeof data !== "object") return null;
@@ -901,47 +817,6 @@ function topicSnippet(topic: string, maxLen = 44) {
 }
 
 const cleanMsg = (s: string) => s.replace(/\s*\*\s*\(\d+\)\s*\*\s*$/, "").trim();
-
-type WealthPieRow = { name: string; value: number; fill: string; pct: number };
-
-const RAD = Math.PI / 180;
-
-function wealthPieOutsideLabel(props: PieLabelRenderProps) {
-  const payload = props.payload as WealthPieRow | undefined;
-  const value = Number(props.value ?? payload?.value ?? 0);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const cx = Number(props.cx);
-  const cy = Number(props.cy);
-  const midAngle = Number(props.midAngle);
-  const outerRadius = Number(props.outerRadius);
-  const name = String(props.name ?? payload?.name ?? "");
-  const pct = typeof payload?.pct === "number" && Number.isFinite(payload.pct) ? payload.pct : 0;
-  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(midAngle) || !Number.isFinite(outerRadius)) return null;
-  const cos = Math.cos(-RAD * midAngle);
-  const sin = Math.sin(-RAD * midAngle);
-  const lx = cx + (outerRadius + 8) * cos;
-  const ly = cy + (outerRadius + 8) * sin;
-  const tx = cx + (outerRadius + 22) * cos;
-  const ty = cy + (outerRadius + 22) * sin;
-  const textAnchor = cos >= 0 ? "start" : "end";
-  return (
-    <g className="wealthPieLabelGroup">
-      <line x1={cx + outerRadius * cos} y1={cy + outerRadius * sin} x2={lx} y2={ly} stroke="rgba(0,255,65,0.45)" strokeWidth={1} />
-      <line x1={lx} y1={ly} x2={tx} y2={ty} stroke="rgba(0,255,65,0.45)" strokeWidth={1} />
-      <text
-        x={tx + (cos >= 0 ? 4 : -4)}
-        y={ty}
-        fill="#dfffea"
-        textAnchor={textAnchor}
-        dominantBaseline="middle"
-        fontSize={11}
-        fontFamily='ui-monospace, "JetBrains Mono", monospace'
-      >
-        {`${name} ${pct.toFixed(1)}%`}
-      </text>
-    </g>
-  );
-}
 
 function zionBetDisplayOdds(m: ZionBetMarket): { yes: number; no: number } {
   const y = m.yes_cents;
@@ -2511,7 +2386,6 @@ export default function Home() {
   const [chronicleNow, setChronicleNow] = useState(() => Date.now());
   const [civEvents, setCivEvents] = useState<CivilizationEvent[]>([]);
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
-  const [popHistory, setPopHistory] = useState<PopHistoryPoint[]>([]);
   const [markets, setMarkets] = useState<ZionMarket[]>([]);
   const [zionBetMyBets, setZionBetMyBets] = useState<ZionMyBetRow[]>([]);
   const [zionBetToast, setZionBetToast] = useState<string | null>(null);
@@ -2813,54 +2687,6 @@ export default function Home() {
   }, [showIntro]);
 
   useEffect(() => {
-    if (showIntro) return;
-    if (typeof window === "undefined") return;
-
-    if (stats != null && typeof stats.alive === "number") {
-      let work: PopHistoryPoint[] = [];
-      try {
-        const history = JSON.parse(localStorage.getItem(POP_HISTORY_LS) || "[]");
-        work = Array.isArray(history)
-          ? history.filter(
-              (h): h is PopHistoryPoint =>
-                h != null &&
-                typeof h === "object" &&
-                typeof h.day === "number" &&
-                typeof h.alive === "number" &&
-                typeof h.time === "string",
-            )
-          : [];
-      } catch {
-        work = [];
-      }
-
-      const today: PopHistoryPoint = {
-        day: work.length,
-        alive: stats.alive,
-        time: new Date().toLocaleTimeString(),
-      };
-      if (work.length === 0 || work[work.length - 1]!.alive !== stats.alive) {
-        work.push(today);
-        if (work.length > 30) work.shift();
-        try {
-          localStorage.setItem(POP_HISTORY_LS, JSON.stringify(work));
-        } catch {
-          /* ignore */
-        }
-      }
-      setPopHistory([...work]);
-    } else {
-      try {
-        const raw = localStorage.getItem(POP_HISTORY_LS);
-        const parsed = raw ? JSON.parse(raw) : [];
-        setPopHistory(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setPopHistory([]);
-      }
-    }
-  }, [showIntro, stats]);
-
-  useEffect(() => {
     if (showIntro && !dashboardVisible) return;
     const canvas = bgCanvasRef.current;
     if (!canvas) return;
@@ -3045,67 +2871,6 @@ export default function Home() {
   const maxBalance = useMemo(() => Math.max(1, ...agents.map((a) => a.balance)), [agents]);
   const chatAgents = chatAgentsFiltered;
   const chatMaxBalance = useMemo(() => Math.max(1, ...chatAgents.map((a) => a.balance)), [chatAgents]);
-
-  const statsClanBarData = useMemo(
-    () =>
-      STATS_CLAN_NAMES.map((name, i) => ({
-        name,
-        treasury: findClanTreasury(clans, name),
-        fill: (["#FFD700", "#e53935", "#ab47bc"] as const)[i]!,
-      })),
-    [clans],
-  );
-
-  const statsWealthPieData = useMemo((): WealthPieRow[] => {
-    const eliteTotal = agents
-      .filter((a) => (a.class || "").trim().toLowerCase() === "elite")
-      .reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const middleTotal = agents
-      .filter((a) => (a.class || "").trim().toLowerCase() === "middle")
-      .reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const poorTotal = agents
-      .filter((a) => (a.class || "").trim().toLowerCase() === "poor")
-      .reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
-    const total = eliteTotal + middleTotal + poorTotal;
-    const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
-    return [
-      { name: "Elite", value: eliteTotal, fill: "#FFD700", pct: pct(eliteTotal) },
-      { name: "Middle", value: middleTotal, fill: "#C0C0C0", pct: pct(middleTotal) },
-      { name: "Poor", value: poorTotal, fill: "#CD7F32", pct: pct(poorTotal) },
-    ];
-  }, [agents]);
-
-  const statsPowerHierarchy = useMemo(() => {
-    const prophet = pickProphet(agents);
-    const clanSlots = STATS_CLAN_NAMES.map((name) => ({
-      name,
-      leader: clanLeaderForName(agents, name),
-    }));
-    const elites = [...agents]
-      .filter((a) => a.class.toLowerCase() === "elite")
-      .sort((a, b) => b.balance - a.balance)
-      .slice(0, 5);
-    const featured = new Set<number>();
-    if (prophet) featured.add(prophet.id);
-    for (const { leader } of clanSlots) {
-      if (leader) featured.add(leader.id);
-    }
-    for (const e of elites) featured.add(e.id);
-    return {
-      prophet,
-      clanSlots,
-      elites,
-      othersCount: Math.max(0, agents.length - featured.size),
-    };
-  }, [agents]);
-
-  const chartTooltipStyle = {
-    backgroundColor: "rgba(6, 10, 8, 0.96)",
-    border: "1px solid rgba(0, 255, 65, 0.35)",
-    borderRadius: 8,
-    color: "#d8f5e4",
-    fontSize: 12,
-  } as const;
 
   const openChat = (agent: Agent) => {
     setChatAgent(agent);
@@ -3416,7 +3181,6 @@ export default function Home() {
               ["zionbet", "🎰 ZIONBET"],
               ["bank", "🏦 BANK"],
               ["leaderboard", "🏆 LEADERBOARD"],
-              ["stats", "📊 STATS"],
               ["faucet", "🚰 FAUCET"],
               ["press", "📰 PRESS"],
             ] as const
@@ -4349,174 +4113,6 @@ export default function Home() {
                     )}
                   </tbody>
                 </table>
-              </div>
-            </section>
-          )}
-
-          {activeTab === "stats" && (
-            <section className="statsTabSection" aria-label="Civilization statistics">
-              <p className="tabIntro statsTabIntro">
-                Live metrics from /api/stats, /api/agents, and /api/clans. Population samples append to localStorage key zion_pop_history when alive count changes.
-              </p>
-              <div className="statsPanelsGrid">
-                <article className="statsPanel statsPanelSpan2">
-                  <h2 className="statsPanelTitle">CIVILIZATION GROWTH</h2>
-                  <p className="statsPanelHint">Alive agents · new point whenever population changes (max 30)</p>
-                  <div className="statsChartBox statsChartTall popGrowthChartShell">
-                    {popHistory.length === 0 ? (
-                      <p className="statsChartEmpty">Waiting for population data…</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={popHistory} margin={{ top: 10, right: 14, left: 6, bottom: 8 }}>
-                          <defs>
-                            <linearGradient id="zionPopGradUp" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#00FF41" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#00FF41" stopOpacity={0} />
-                            </linearGradient>
-                            <linearGradient id="zionPopGradDown" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#ff4444" stopOpacity={0.28} />
-                              <stop offset="95%" stopColor="#ff4444" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid stroke="rgba(0,255,65,0.1)" strokeDasharray="4 4" />
-                          <XAxis dataKey="day" stroke="#00ff4150" tick={{ fill: "rgba(0,255,65,0.75)", fontSize: 11 }} />
-                          <YAxis
-                            stroke="#00ff4150"
-                            tick={{ fill: "rgba(0,255,65,0.75)", fontSize: 11 }}
-                            domain={[0, "auto"]}
-                            allowDecimals={false}
-                          />
-                          <PopSegmentFills history={popHistory} />
-                          <Tooltip
-                            contentStyle={{ background: "#000", border: "1px solid #00ff41", color: "#00ff41" }}
-                            formatter={(value) => [`${value ?? "—"}`, "alive"]}
-                            labelFormatter={(_, p) => {
-                              const row = p?.[0]?.payload as PopHistoryPoint | undefined;
-                              return row ? `Day ${row.day} · ${row.time}` : "";
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="alive"
-                            stroke="#00FF41"
-                            fill="none"
-                            dot={false}
-                            strokeWidth={2}
-                            isAnimationActive={false}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </article>
-
-                <article className="statsPanel">
-                  <h2 className="statsPanelTitle">CLAN POWER</h2>
-                  <p className="statsPanelHint">Treasury (ZION)</p>
-                  <div className="statsChartBox statsChartMid">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={statsClanBarData} margin={{ top: 8, right: 8, left: 4, bottom: 28 }}>
-                        <XAxis dataKey="name" stroke="rgba(140, 200, 160, 0.65)" tick={{ fill: "rgba(180, 235, 200, 0.82)", fontSize: 10 }} interval={0} angle={-12} textAnchor="end" height={48} />
-                        <YAxis stroke="rgba(140, 200, 160, 0.65)" tick={{ fill: "rgba(180, 235, 200, 0.85)", fontSize: 11 }} />
-                        <Tooltip contentStyle={chartTooltipStyle} formatter={(value) => [Number(value ?? 0).toFixed(1), "treasury"]} />
-                        <Bar dataKey="treasury" radius={[6, 6, 0, 0]}>
-                          {statsClanBarData.map((row) => (
-                            <Cell key={row.name} fill={row.fill} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </article>
-
-                <article className="statsPanel">
-                  <h2 className="statsPanelTitle">WEALTH DISTRIBUTION</h2>
-                  <p className="statsPanelHint">Total ZION held by class</p>
-                  <div className="statsChartBox statsChartMid wealthPieWrap">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart margin={{ top: 28, right: 56, bottom: 28, left: 56 }}>
-                        <Pie
-                          data={statsWealthPieData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius="42%"
-                          outerRadius="68%"
-                          paddingAngle={1.5}
-                          stroke="rgba(0,0,0,0.55)"
-                          strokeWidth={1}
-                          labelLine={false}
-                          label={wealthPieOutsideLabel}
-                          isAnimationActive={false}
-                        >
-                          {statsWealthPieData.map((row) => (
-                            <Cell key={row.name} fill={row.fill} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ background: "#000", border: "1px solid #00ff41", color: "#00ff41" }}
-                          formatter={(val) => `${Number(val ?? 0).toFixed(0)} ZION`}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </article>
-
-                <article className="statsPanel statsPanelSpan2 statsPanelHierarchy">
-                  <h2 className="statsPanelTitle">POWER HIERARCHY</h2>
-                  <p className="statsPanelHint">Prophet · clan leaders · top elites · remainder</p>
-                  <div className="powerTree">
-                    <div className="powerTreeRow powerTreeRowCenter">
-                      {statsPowerHierarchy.prophet ? (
-                        <div className="powerNode powerNodeGold powerNodeProphet">
-                          <span className="powerNodeLabel">PROPHET</span>
-                          <strong>{cleanName(statsPowerHierarchy.prophet.name)}</strong>
-                          <span className="powerNodeBal">{statsPowerHierarchy.prophet.balance.toFixed(2)} ZION</span>
-                          <span className="powerNodeMeta">Charisma {agentCharisma(statsPowerHierarchy.prophet)}</span>
-                        </div>
-                      ) : (
-                        <div className="powerNode powerNodeMuted">No prophet data</div>
-                      )}
-                    </div>
-                    <div className="powerTreeVine" aria-hidden />
-                    <div className="powerTreeRow powerTreeRowSpread">
-                      {statsPowerHierarchy.clanSlots.map(({ name, leader }) => (
-                        <div key={name} className="powerNode powerNodeLeader">
-                          <span className="powerNodeClan">{name}</span>
-                          {leader ? (
-                            <>
-                              <strong className="powerNodeGoldText">{cleanName(leader.name)}</strong>
-                              <span className="powerNodeBal">{leader.balance.toFixed(2)} ZION</span>
-                            </>
-                          ) : (
-                            <span className="powerNodeVacant">Vacant</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="powerTreeVine" aria-hidden />
-                    <div className="powerTreeRow powerTreeRowElites">
-                      {statsPowerHierarchy.elites.map((ag) => (
-                        <div key={ag.id} className="powerNode powerNodeElite powerNodeGold">
-                          <strong>{cleanName(ag.name)}</strong>
-                          <span className="powerNodeBal">{ag.balance.toFixed(2)}</span>
-                        </div>
-                      ))}
-                      {statsPowerHierarchy.elites.length === 0 ? (
-                        <span className="powerNodeVacant powerEliteFallback">No elite agents in feed</span>
-                      ) : null}
-                    </div>
-                    <div className="powerTreeVine powerTreeVineShort" aria-hidden />
-                    <div className="powerTreeRow powerTreeRowCenter">
-                      <div className="powerNode powerNodeOthers">
-                        <span className="powerNodeLabel">EVERYONE ELSE</span>
-                        <strong>{statsPowerHierarchy.othersCount}</strong>
-                        <span className="powerNodeMeta">agents not in spotlight rows above (unique count)</span>
-                      </div>
-                    </div>
-                  </div>
-                </article>
               </div>
             </section>
           )}
@@ -6582,189 +6178,6 @@ export default function Home() {
           opacity: 0.45;
           cursor: not-allowed;
         }
-        .statsTabSection {
-          margin-top: 4px;
-        }
-        .statsTabIntro {
-          max-width: 820px;
-        }
-        .statsPanelsGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-          align-items: stretch;
-        }
-        .statsPanel {
-          border-radius: 12px;
-          border: 1px solid rgba(0, 255, 65, 0.22);
-          background:
-            linear-gradient(165deg, rgba(0, 18, 10, 0.94) 0%, rgba(0, 0, 0, 0.96) 100%);
-          padding: 14px 16px 16px;
-          box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.65);
-        }
-        .statsPanelSpan2 {
-          grid-column: 1 / -1;
-        }
-        .statsPanelTitle {
-          margin: 0 0 4px;
-          font-family: Orbitron, monospace;
-          font-size: 0.72rem;
-          letter-spacing: 0.2em;
-          color: #9de8ff;
-        }
-        .statsPanelHint {
-          margin: 0 0 10px;
-          font-family: ui-monospace, "JetBrains Mono", monospace;
-          font-size: 0.58rem;
-          letter-spacing: 0.08em;
-          color: rgba(130, 200, 160, 0.55);
-        }
-        .statsChartBox {
-          width: 100%;
-          background: rgba(0, 0, 0, 0.55);
-          border-radius: 10px;
-          border: 1px solid rgba(0, 255, 65, 0.12);
-        }
-        .statsChartTall {
-          height: 280px;
-        }
-        .statsChartMid {
-          height: 260px;
-        }
-        .popGrowthChartShell {
-          background: rgba(0, 0, 0, 0.8);
-        }
-        .wealthPieWrap {
-          overflow: visible;
-        }
-        .wealthPieWrap .recharts-surface {
-          overflow: visible;
-        }
-        .statsChartEmpty {
-          margin: 0;
-          padding: 48px 16px;
-          text-align: center;
-          font-size: 0.75rem;
-          color: rgba(150, 210, 170, 0.55);
-          letter-spacing: 0.1em;
-        }
-        .statsPanelHierarchy .powerTree {
-          margin-top: 4px;
-        }
-        .powerTree {
-          display: flex;
-          flex-direction: column;
-          align-items: stretch;
-          gap: 0;
-          padding: 8px 4px 4px;
-        }
-        .powerTreeRow {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-        .powerTreeRowCenter {
-          justify-content: center;
-        }
-        .powerTreeRowSpread {
-          justify-content: center;
-          gap: 12px;
-        }
-        .powerTreeRowElites {
-          justify-content: center;
-          gap: 8px;
-        }
-        .powerTreeVine {
-          width: 2px;
-          min-height: 18px;
-          margin: 4px auto;
-          background: linear-gradient(180deg, rgba(0, 255, 65, 0.85), rgba(0, 255, 65, 0.15));
-          border-radius: 2px;
-          box-shadow: 0 0 10px rgba(0, 255, 65, 0.25);
-        }
-        .powerTreeVineShort {
-          min-height: 12px;
-        }
-        .powerNode {
-          border-radius: 10px;
-          border: 1px solid rgba(0, 255, 65, 0.22);
-          background: rgba(0, 8, 4, 0.88);
-          padding: 10px 12px;
-          min-width: 120px;
-          max-width: 200px;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          font-family: ui-monospace, "JetBrains Mono", monospace;
-          font-size: 0.62rem;
-          color: rgba(200, 235, 215, 0.92);
-        }
-        .powerNodeGold {
-          border-color: rgba(255, 215, 0, 0.45);
-          box-shadow: 0 0 18px rgba(255, 215, 0, 0.12);
-        }
-        .powerNodeProphet {
-          max-width: 280px;
-          text-align: center;
-          align-items: center;
-        }
-        .powerNodeLeader {
-          flex: 1 1 140px;
-          max-width: 220px;
-          min-width: 140px;
-        }
-        .powerNodeElite {
-          flex: 0 1 auto;
-          min-width: 100px;
-          max-width: 140px;
-          align-items: center;
-          text-align: center;
-        }
-        .powerNodeOthers {
-          max-width: 360px;
-          text-align: center;
-          align-items: center;
-        }
-        .powerNodeLabel {
-          font-size: 0.52rem;
-          letter-spacing: 0.16em;
-          color: rgba(160, 220, 180, 0.65);
-        }
-        .powerNode strong {
-          font-family: Orbitron, monospace;
-          font-size: 0.78rem;
-          color: #fffaf0;
-        }
-        .powerNodeGoldText {
-          font-family: Orbitron, monospace;
-          font-size: 0.72rem;
-          color: #ffe6a8;
-        }
-        .powerNodeBal {
-          color: rgba(0, 255, 100, 0.9);
-          font-size: 0.62rem;
-        }
-        .powerNodeMeta {
-          font-size: 0.52rem;
-          color: rgba(160, 200, 175, 0.65);
-        }
-        .powerNodeClan {
-          font-size: 0.55rem;
-          letter-spacing: 0.12em;
-          color: rgba(157, 232, 255, 0.85);
-        }
-        .powerNodeVacant {
-          color: rgba(160, 180, 170, 0.45);
-          font-style: italic;
-        }
-        .powerNodeMuted {
-          padding: 16px 20px;
-          color: rgba(160, 200, 175, 0.55);
-        }
-        .powerEliteFallback {
-          align-self: center;
-          padding: 8px;
-        }
         @keyframes nebulaMove {
           0% { transform: scale(1) translate3d(0, 0, 0); }
           100% { transform: scale(1.06) translate3d(1.5%, -1.5%, 0); }
@@ -6793,12 +6206,6 @@ export default function Home() {
           }
         }
         @media (max-width: 900px) {
-          .statsPanelsGrid {
-            grid-template-columns: 1fr;
-          }
-          .statsPanelSpan2 {
-            grid-column: 1;
-          }
           .statsGrid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
