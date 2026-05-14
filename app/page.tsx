@@ -1,7 +1,9 @@
 "use client";
 
 import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { generateNonce, generateRandomness } from "@mysten/zklogin";
 import { Transaction } from "@mysten/sui/transactions";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateZionMarkets, suiClient, type ZionMarket } from "@/lib/deepbook";
 import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
@@ -2357,6 +2359,7 @@ function ZionBetMarketDetail({
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
+  const [zkLoginUser, setZkLoginUser] = useState<string | null>(null);
 
   const [showIntro, setShowIntro] = useState(true);
   const [introFading, setIntroFading] = useState(false);
@@ -2744,14 +2747,30 @@ export default function Home() {
   }, [dashboardVisible, showIntro]);
 
   useEffect(() => {
+    if (!showIntro) {
+      setDashboardVisible(true);
+    }
+  }, [showIntro]);
+
+  useEffect(() => {
     const fadeTimer = setTimeout(() => {
       setIntroFading(true);
       setDashboardVisible(true);
     }, 5200);
-    const hideTimer = setTimeout(() => setShowIntro(false), 6000);
+    const hideTimer = setTimeout(() => {
+      setDashboardVisible(true);
+      setIntroFading(true);
+      setShowIntro(false);
+    }, 6000);
+    const failsafeTimer = setTimeout(() => {
+      setDashboardVisible(true);
+      setIntroFading(true);
+      setShowIntro(false);
+    }, 12000);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(hideTimer);
+      clearTimeout(failsafeTimer);
     };
   }, []);
 
@@ -3012,6 +3031,7 @@ export default function Home() {
 
       {showIntro && (
         <div
+          className="introFullscreen"
           style={{
             position: "fixed",
             inset: 0,
@@ -3024,6 +3044,7 @@ export default function Home() {
             overflow: "hidden",
             opacity: introFading ? 0 : 1,
             transition: "opacity 0.8s ease",
+            pointerEvents: introFading ? "none" : "auto",
           }}
         >
           <canvas
@@ -3157,8 +3178,69 @@ export default function Home() {
 
       <div className={`dashboard ${dashboardVisible ? "show" : ""}`}>
         <header className="header" style={{ position: "relative" }}>
-          <div style={{ position: "absolute", top: "20px", right: "20px" }}>
-            <ConnectButton />
+          <div
+            style={{
+              position: "absolute",
+              top: "20px",
+              right: "20px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "6px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const randomness = generateRandomness();
+                      const ephemeralKeypair = Ed25519Keypair.generate();
+                      const system = await suiClient.getLatestSuiSystemState({});
+                      const epoch = Number(system.epoch);
+                      const maxEpoch = epoch + 10;
+                      const nonce = generateNonce(ephemeralKeypair.getPublicKey(), maxEpoch, randomness);
+                      localStorage.setItem("zklogin_randomness", randomness);
+                      localStorage.setItem("zklogin_max_epoch", String(maxEpoch));
+                      localStorage.setItem("zklogin_ephemeral_secret", ephemeralKeypair.getSecretKey());
+                      const params = new URLSearchParams({
+                        client_id: "YOUR_GOOGLE_CLIENT_ID",
+                        redirect_uri: "http://142.132.189.45:4002/auth/callback",
+                        response_type: "id_token",
+                        scope: "openid email",
+                        nonce,
+                      });
+                      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  })();
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 16px",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  marginRight: "8px",
+                }}
+              >
+                <span>🔑</span>
+                <span>Sign in with Google</span>
+              </button>
+              <ConnectButton />
+            </div>
+            {zkLoginUser && (
+              <div style={{ color: "#00ff41", fontSize: "0.7rem" }}>
+                zkLogin: {zkLoginUser.slice(0, 8)}...
+              </div>
+            )}
           </div>
           <h1
             style={{
@@ -4687,6 +4769,12 @@ export default function Home() {
           background: #05030d;
           color: #f4f7ff;
           font-family: Orbitron, monospace;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .introFullscreen *:not(canvas) {
+            animation: none !important;
+            opacity: 1 !important;
+          }
         }
         .bg-nebula {
           position: fixed;
