@@ -10,7 +10,7 @@ import {
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateZionMarkets, suiClient, type ZionMarket } from "@/lib/deepbook";
 import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
@@ -772,6 +772,59 @@ function AgentTile({
 }
 
 type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "faucet" | "press" | "bank";
+
+type ParsedPressArticle = {
+  headline: string;
+  byline: string;
+  columns: string[];
+  editorsNote: string;
+  rawFallback: string;
+};
+
+function parsePressNewspaperArticle(raw: string): ParsedPressArticle {
+  const headline = raw.match(/^\s*HEADLINE:\s*(.+)$/im)?.[1]?.trim() ?? "";
+  const byline = raw.match(/^\s*BYLINE:\s*(.+)$/im)?.[1]?.trim() ?? "";
+  let editorsNote =
+    raw.match(/^\s*EDITOR['']S\s*NOTE:\s*(.+)$/im)?.[1]?.trim() ??
+    raw.match(/^\s*EDITORS\s*NOTE:\s*(.+)$/im)?.[1]?.trim() ??
+    "";
+
+  const withoutMeta = raw
+    .replace(/^\s*HEADLINE:\s*.+$/im, "")
+    .replace(/^\s*BYLINE:\s*.+$/im, "")
+    .replace(/^\s*EDITOR['']S\s*NOTE:\s*.+$/im, "")
+    .replace(/^\s*EDITORS\s*NOTE:\s*.+$/im, "")
+    .trim();
+
+  const betweenDashes = withoutMeta
+    .split(/^\s*---\s*$/gm)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  let colBlob = betweenDashes[0] ?? "";
+  if (!editorsNote) {
+    const em = colBlob.match(/^\s*EDITOR['']S\s*NOTE:\s*(.+)$/im);
+    if (em) {
+      editorsNote = (em[1] ?? "").trim();
+      colBlob = colBlob.replace(/^\s*EDITOR['']S\s*NOTE:\s*.+$/im, "").trim();
+    }
+  }
+
+  const paras = colBlob
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const columns = [paras[0] ?? "", paras[1] ?? "", paras[2] ?? ""];
+
+  const hasStructure = Boolean(headline || byline || editorsNote || columns.some((c) => c.length > 0));
+  return {
+    headline,
+    byline,
+    columns,
+    editorsNote,
+    rawFallback: hasStructure ? "" : raw.trim(),
+  };
+}
 
 function parseCooldownPayload(data: unknown): number | null {
   if (!data || typeof data !== "object") return null;
@@ -2362,6 +2415,215 @@ function ZionBetMarketDetail({
   );
 }
 
+/** Press papers — module scope so effects never see a new array identity each render. */
+type PressNewspaper = {
+  id: string;
+  name: string;
+  subtitle: string;
+  icon: string;
+  accentColor: string;
+  bgPattern: string;
+  borderColor: string;
+  relevantTypes: string[];
+  keywords: string[];
+  persona: string;
+  bodyFont: string;
+  mastheadFont: string;
+  vipOnly?: boolean;
+  silverMin?: number;
+  goldMin?: number;
+};
+
+const newspapers: PressNewspaper[] = [
+  {
+    id: "ziontimes",
+    name: "ZION TIMES",
+    subtitle: "The Paper of Record",
+    icon: "🗞️",
+    accentColor: "#c8a96e",
+    bgPattern: "#0a0800",
+    borderColor: "#c8a96e",
+    relevantTypes: ["election", "work", "clan", "revolt", "tax"],
+    keywords: ["senate", "election", "corrupt", "clan", "tax", "collect"],
+    persona:
+      "You are the chief editor of ZION TIMES, the civilization's paper of record — inspired by the New York Times. You cover corruption, political failures, senate elections, clan wars, and government inaction with sharp investigative journalism. Be critical, factual, authoritative.",
+    bodyFont: "'Source Serif 4', serif",
+    mastheadFont: "'Playfair Display', serif",
+  },
+  {
+    id: "economist",
+    name: "THE ZION ECONOMIST",
+    subtitle: "Markets · Taxes · Growth",
+    icon: "📊",
+    accentColor: "#e8e8e8",
+    bgPattern: "#00080a",
+    borderColor: "#e8e8e8",
+    relevantTypes: ["tax", "work", "lottery", "birth", "death"],
+    keywords: ["zion", "tax", "earn", "balance", "wealth", "poor", "rich"],
+    persona:
+      "You are the chief editor of THE ZION ECONOMIST. You analyze the civilization's economy: tax revenue, wealth inequality, birth rates vs death rates, ZION token flows. Use real numbers. Be analytical like The Economist magazine. Cover what taxes actually funded, wealth concentration.",
+    bodyFont: "'Courier Prime', monospace",
+    mastheadFont: "'Oswald', sans-serif",
+  },
+  {
+    id: "prophet",
+    name: "PROPHET'S VOICE",
+    subtitle: "Visions · Omens · Prophecy",
+    icon: "🔮",
+    accentColor: "#a78bfa",
+    bgPattern: "#08000a",
+    borderColor: "#a78bfa",
+    relevantTypes: ["prayer", "catastrophe", "death", "neo"],
+    keywords: ["prophet", "pray", "NEO", "watches", "storm", "catastrophe"],
+    persona:
+      "You are the scribe of the PROPHET'S VOICE. You write about the Prophet's visions, spiritual omens, NEO's mysterious movements, and prophecies about the civilization's future. Be mystical, dramatic, ominous. Quote the Prophet directly. Reference signs and portents.",
+    bodyFont: "'IM Fell English', serif",
+    mastheadFont: "'IM Fell English', serif",
+  },
+  {
+    id: "slums",
+    name: "THE GUTTER GAZETTE",
+    subtitle: "From the Streets · No Gods No Masters",
+    icon: "✊",
+    accentColor: "#ff4141",
+    bgPattern: "#0a0000",
+    borderColor: "#ff4141",
+    relevantTypes: ["death", "revolt", "work", "tax"],
+    keywords: ["poor", "died", "dead", "tax", "collect", "inequality"],
+    persona:
+      "You are the editor of THE GUTTER GAZETTE — the underground socialist newspaper of ZION. You write about the suffering of poor agents, deaths from poverty, inequality, how the rich exploit the poor, and how conditions are breeding revolution and anarchy. Be angry, passionate, socialist. Write exactly 3 columns separated by 'Column 1:', 'Column 2:', 'Column 3:' labels. Each column must be in English only, 60-80 words.",
+    bodyFont: "'Courier Prime', monospace",
+    mastheadFont: "'Special Elite', cursive",
+  },
+  {
+    id: "betinsider",
+    name: "BET INSIDER",
+    subtitle: "Odds · Analysis · Winners",
+    icon: "💰",
+    accentColor: "#00d4ff",
+    bgPattern: "#00080a",
+    borderColor: "#00d4ff",
+    relevantTypes: ["bet", "lottery", "market"],
+    keywords: ["bet", "won", "lottery", "odds", "market"],
+    persona:
+      "You are the editor of BET INSIDER. You analyze ZionBet markets, odds, big wins, losing streaks, and betting patterns. Give hot tips, analyze which events to bet on, cover lottery winners. Be like a sports betting analyst — sharp, data-driven, with insider feel.",
+    bodyFont: "'Courier Prime', monospace",
+    mastheadFont: "'Oswald', sans-serif",
+  },
+  {
+    id: "vip",
+    name: "VIP INTEL",
+    subtitle: "🔒 Encrypted · Silver & Gold Only",
+    icon: "👁️",
+    accentColor: "#ffd700",
+    bgPattern: "#0a0800",
+    borderColor: "#ffd700",
+    relevantTypes: ["election", "catastrophe", "clan", "revolt", "prayer", "lottery"],
+    keywords: ["NEO", "prophet", "elite", "clan", "catastrophe"],
+    persona:
+      "You are the anonymous source behind VIP INTEL — an encrypted intelligence briefing for ZION's wealthiest citizens. You provide insider analysis: which clans are about to collapse, upcoming catastrophes, political maneuvers, betting edge. Be like a hedge fund analyst meets spy thriller.",
+    bodyFont: "'Source Serif 4', serif",
+    mastheadFont: "'Playfair Display', serif",
+    vipOnly: true,
+    silverMin: 10,
+    goldMin: 100,
+  },
+];
+
+function renderArticle(text: string, ac: string, border: string, bodyFont: string) {
+  const clean = text.replace(/\*\*/g, "");
+
+  const headlineMatch = clean.match(/HEADLINE:\s*["«»""]?([\s\S]+?)["«»""]?(?:\r?\n|BYLINE|$)/i);
+  const headline = headlineMatch?.[1]?.replace(/["«»""]/g, "").trim() ?? "";
+
+  const bylineMatch = clean.match(/BYLINE:\s*([\s\S]+?)(?=\n|---|Column\s*2|EDITOR['']S\s*NOTE|$)/i);
+  const byline = bylineMatch?.[1]?.trim() ?? "";
+
+  const editorMatch = clean.match(/EDITOR['']S\s*NOTE:\s*([\s\S]+?)$/im);
+  const editorNote = editorMatch?.[1]?.trim() ?? "";
+
+  const col1Match = clean.match(/Column\s*1[:\s*]*\s*([\s\S]+?)(?=Column\s*2|---|EDITOR['']S\s*NOTE|$)/i);
+  const col2Match = clean.match(/Column\s*2[:\s*]*\s*([\s\S]+?)(?=Column\s*3|---|EDITOR['']S\s*NOTE|$)/i);
+  const col3Match = clean.match(/Column\s*3[:\s*]*\s*([\s\S]+?)(?=---|EDITOR['']S\s*NOTE|$)/i);
+
+  const col1 = col1Match?.[1]?.trim() ?? "";
+  const col2 = col2Match?.[1]?.trim() ?? "";
+  const col3 = col3Match?.[1]?.trim() ?? "";
+
+  const columns = [col1, col2, col3].filter((c) => c.length > 10);
+
+  const borderSoft = border.length === 7 ? `${border}44` : border;
+
+  return (
+    <div>
+      {headline ? (
+        <h2
+          style={{
+            color: ac,
+            fontFamily: bodyFont,
+            fontSize: "1.3rem",
+            fontWeight: "bold",
+            lineHeight: 1.4,
+            marginBottom: "8px",
+            textTransform: "uppercase",
+          }}
+        >
+          {headline}
+        </h2>
+      ) : null}
+      {byline ? (
+        <p
+          style={{
+            color: "#888",
+            fontFamily: bodyFont,
+            fontStyle: "italic",
+            fontSize: "0.85rem",
+            marginBottom: "16px",
+            borderBottom: `1px solid ${border}`,
+            paddingBottom: "12px",
+          }}
+        >
+          {byline}
+        </p>
+      ) : null}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            columns.length >= 3 ? "1fr 1fr 1fr" : columns.length === 2 ? "1fr 1fr" : "1fr",
+          gap: "24px",
+          marginBottom: "20px",
+        }}
+      >
+        {(columns.length > 0 ? columns : [clean]).map((col, i) => (
+          <p
+            key={i}
+            style={{
+              color: "#ccc",
+              fontFamily: bodyFont,
+              fontSize: "0.9rem",
+              lineHeight: 1.8,
+              margin: 0,
+              textAlign: "justify",
+              borderLeft: i > 0 ? `1px solid ${borderSoft}` : "none",
+              paddingLeft: i > 0 ? "20px" : 0,
+            }}
+          >
+            {col}
+          </p>
+        ))}
+      </div>
+      {editorNote ? (
+        <div style={{ borderLeft: `3px solid ${ac}`, paddingLeft: "12px", marginTop: "16px" }}>
+          <p style={{ color: "#aaa", fontFamily: bodyFont, fontStyle: "italic", fontSize: "0.82rem", margin: 0 }}>
+            <strong style={{ color: ac }}>Editor&apos;s Note:</strong> {editorNote}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -2418,6 +2680,174 @@ export default function Home() {
     zionBalance: number;
   } | null>(null);
   const [showVIP, setShowVIP] = useState(false);
+
+  const [pressArticles, setPressArticles] = useState<Record<string, string>>({});
+  const [pressLoading, setPressLoading] = useState<Record<string, boolean>>({});
+  const [activeNewspaper, setActiveNewspaper] = useState("ziontimes");
+  const [suiBalance, setSuiBalance] = useState(0);
+  const [pressSuiChecked, setPressSuiChecked] = useState(false);
+
+  const checkVipStatus = useCallback(async () => {
+    if (!account?.address) return;
+    try {
+      const res = await fetch("https://fullnode.mainnet.sui.io", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "suix_getBalance",
+          params: [account.address, "0x2::sui::SUI"],
+        }),
+      });
+      const data = (await res.json()) as { result?: { totalBalance?: string } };
+      const balance = parseInt(data.result?.totalBalance || "0", 10) / 1e9;
+      setSuiBalance(balance);
+    } catch {
+      setSuiBalance(0);
+    } finally {
+      setPressSuiChecked(true);
+    }
+  }, [account?.address]);
+
+  useEffect(() => {
+    if (account?.address) {
+      setPressSuiChecked(false);
+      void checkVipStatus();
+    } else {
+      setSuiBalance(0);
+      setPressSuiChecked(false);
+    }
+  }, [account?.address, checkVipStatus]);
+
+  const generateArticle = useCallback(async (newspaper: PressNewspaper) => {
+    const cacheKey = `press_${newspaper.id}_v2`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { article, timestamp } = JSON.parse(cached) as { article: string; timestamp: number };
+        if (Date.now() - timestamp < 2 * 60 * 60 * 1000) {
+          setPressArticles((prev) => ({ ...prev, [newspaper.id]: article }));
+          setPressLoading((prev) => ({ ...prev, [newspaper.id]: false }));
+          return;
+        }
+      }
+    } catch {
+      /* ignore cache */
+    }
+
+    setPressLoading((prev) => ({ ...prev, [newspaper.id]: true }));
+
+    try {
+      const [eventsRes, statsRes] = await Promise.all([fetch("/api/events?limit=20"), fetch("/api/stats")]);
+      const eventsRaw = await eventsRes.json();
+      const stats = (await statsRes.json()) as Record<string, unknown>;
+
+      type EvRow = { type?: string; description?: string; amount?: number };
+      const events: EvRow[] = Array.isArray(eventsRaw)
+        ? (eventsRaw as EvRow[])
+        : Array.isArray((eventsRaw as { events?: EvRow[] }).events)
+          ? (eventsRaw as { events: EvRow[] }).events
+          : [];
+
+      const tLower = (s: string | undefined) => (s ?? "").toLowerCase();
+      const relevantEvents = events
+        .filter(
+          (e) =>
+            newspaper.relevantTypes.some((rt) => tLower(e.type) === rt || tLower(e.type).includes(rt)) ||
+            newspaper.keywords.some((k) => tLower(e.description).includes(k.toLowerCase())),
+        )
+        .slice(0, 8);
+
+      const alive = Number(stats.alive ?? stats.alive_agents ?? 0);
+      const deathsToday = Number(stats.deaths_today ?? 0);
+      const totalZion = typeof stats.total_zion === "number" ? stats.total_zion : Number(stats.total_zion ?? 0);
+      const activeClans = Number(stats.active_clans ?? 0);
+
+      const prompt = `IMPORTANT: Write ONLY in English. No other languages.
+
+${newspaper.persona}
+
+LIVE CIVILIZATION DATA RIGHT NOW:
+- Alive agents: ${alive}
+- Deaths today: ${deathsToday}  
+- Total ZION in circulation: ${Number.isFinite(totalZion) ? totalZion.toFixed(2) : "0"}
+- Active clans: ${activeClans}
+
+RECENT EVENTS RELEVANT TO YOUR PAPER:
+${relevantEvents
+  .map((e) => {
+    const amt = typeof e.amount === "number" ? e.amount : 0;
+    return `[${(e.type ?? "?").toUpperCase()}] ${e.description ?? ""} ${amt > 0 ? `(${amt} ZION)` : ""}`;
+  })
+  .join("\n")}
+
+Write the article in EXACTLY this format, nothing else:
+
+HEADLINE: YOUR HEADLINE HERE
+BYLINE: By Journalist Name | ${newspaper.name}
+---
+Column 1:
+First paragraph text here, 60-80 words.
+
+Column 2:
+Second paragraph text here, 60-80 words.
+
+Column 3:
+Third paragraph text here, 40-60 words.
+---
+EDITOR'S NOTE: One sentence here.
+
+CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on their own lines. Write ONLY in English.`;
+
+      const openrouterKey = "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";
+
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openrouterKey}`,
+          "HTTP-Referer": "https://zionciv.com",
+          "X-Title": "ZION Civilization Press",
+        },
+        body: JSON.stringify({
+          model: "deepseek/deepseek-chat-v3-0324",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 500,
+          temperature: 0.85,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        choices?: { message?: { content?: string } }[];
+        error?: { message?: string };
+      };
+      const article =
+        data.choices?.[0]?.message?.content ||
+        data.error?.message ||
+        JSON.stringify(data).substring(0, 300);
+      localStorage.setItem(cacheKey, JSON.stringify({ article, timestamp: Date.now() }));
+      setPressArticles((prev) => ({ ...prev, [newspaper.id]: article }));
+    } catch (err) {
+      console.error("Press error:", err);
+      setPressArticles((prev) => ({
+        ...prev,
+        [newspaper.id]: "Error generating article. Check API key.",
+      }));
+    } finally {
+      setPressLoading((prev) => ({ ...prev, [newspaper.id]: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "press") return;
+    newspapers.forEach((newspaper) => {
+      if (!newspaper.vipOnly) {
+        void generateArticle(newspaper);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- batch on tab open; generateArticle stable
+  }, [activeTab]);
 
   const zionBetSourceList = useMemo(() => markets.map(zionBetMarketFromZionSource), [markets]);
 
@@ -4484,12 +4914,372 @@ export default function Home() {
             </section>
           )}
 
-          {activeTab === "press" && (
-            <section className="placeholderTab">
-              <h2>📰 PRESS</h2>
-              <p>Press kit and coverage — coming soon.</p>
-            </section>
-          )}
+          {activeTab === "press" && (() => {
+            const current = newspapers.find((n) => n.id === activeNewspaper) ?? newspapers[0]!;
+            const currentArticle = pressArticles[activeNewspaper];
+            const loading = !!pressLoading[activeNewspaper];
+            const ac = current.accentColor;
+            const border = current.borderColor;
+            const bgPat = current.bgPattern;
+            const bodyFont = current.bodyFont;
+            const mastheadFont = current.mastheadFont;
+            const silverMin = current.silverMin ?? 10;
+            const goldMin = current.goldMin ?? 100;
+            const isVip = !!current.vipOnly;
+            const hasWallet = !!account?.address;
+            const vipCanRead = hasWallet && pressSuiChecked && suiBalance >= silverMin;
+            const isGoldTier = hasWallet && pressSuiChecked && suiBalance >= goldMin;
+
+            const fakeVipParsed = {
+              headline: "CLASSIFIED: ELITE CIRCLES POSITION BEFORE THE STORM",
+              byline: "By Cipher Vale | VIP INTEL",
+              columns: [
+                "Multiple clan treasuries show stress fractures as tax receipts diverge from expected flows. Sources inside the senate chamber describe last-minute coalitions forming ahead of a contested mandate renewal.",
+                "NEO-linked volatility spiked across prediction corridors while catastrophe bonds repriced sharply. Analysts note synchronized wallet movements consistent with coordinated accumulation ahead of an undisclosed catalyst.",
+                "Prophet-adjacent channels lit up with coded warnings; the poor quarters report rising labor actions. Markets imply elevated tail risk through the next cycle.",
+              ],
+              editorsNote: "Full decryption requires Silver VIP (10 SUI) or higher.",
+              rawFallback: "",
+            };
+
+            const renderColumns = (
+              cols: string[],
+              note: string,
+              rawFb: string,
+              opts?: { blur?: boolean; dim?: boolean },
+            ) => (
+              <div
+                style={{
+                  filter: opts?.blur ? "blur(7px)" : undefined,
+                  opacity: opts?.dim ? 0.85 : 1,
+                  pointerEvents: opts?.blur ? "none" : undefined,
+                  userSelect: opts?.blur ? "none" : undefined,
+                }}
+              >
+                {rawFb ? (
+                  <div
+                    style={{
+                      color: "rgba(200,215,205,0.92)",
+                      fontSize: "0.82rem",
+                      lineHeight: 1.65,
+                      whiteSpace: "pre-wrap",
+                      fontFamily: bodyFont,
+                    }}
+                  >
+                    {rawFb}
+                  </div>
+                ) : (
+                  <>
+                    {cols[0] || cols[1] || cols[2] ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(3, 1fr)",
+                          gap: "14px",
+                          fontSize: "0.78rem",
+                          lineHeight: 1.55,
+                          color: "rgba(210,220,210,0.9)",
+                          fontFamily: bodyFont,
+                        }}
+                      >
+                        {cols.map((col, i) => (
+                          <p key={i} style={{ margin: 0, fontFamily: bodyFont }}>
+                            {col}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                    {note ? (
+                      <div
+                        style={{
+                          marginTop: "14px",
+                          padding: "10px 12px",
+                          borderLeft: `4px solid ${ac}`,
+                          background: "rgba(0,0,0,0.25)",
+                          fontSize: "0.76rem",
+                          color: "rgba(180,195,185,0.95)",
+                          fontFamily: bodyFont,
+                        }}
+                      >
+                        <strong style={{ color: ac }}>EDITOR{"'"}S NOTE:</strong> {note}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            );
+
+            const renderMasthead = () => (
+              <header style={{ textAlign: "center", paddingBottom: "14px", borderBottom: `2px solid ${border}` }}>
+                <div
+                  style={{
+                    fontSize: "2rem",
+                    letterSpacing: "0.02em",
+                    color: ac,
+                    fontWeight: 800,
+                    lineHeight: 1.1,
+                    fontFamily: mastheadFont,
+                    ...(current.id === "prophet"
+                      ? {
+                          textShadow: "0 0 28px rgba(167, 139, 250, 0.5)",
+                          color: "#e8dcff",
+                        }
+                      : {}),
+                  }}
+                >
+                  {current.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.72rem",
+                    color: "rgba(200,200,200,0.65)",
+                    marginTop: "6px",
+                    letterSpacing: "0.12em",
+                    fontFamily: bodyFont,
+                  }}
+                >
+                  {current.subtitle}
+                </div>
+                <div style={{ height: "1px", background: `linear-gradient(90deg, transparent, ${ac}, transparent)`, marginTop: "12px" }} />
+              </header>
+            );
+
+            const renderHeadlineByline = (headline: string, byline: string) => (
+              <>
+                {headline ? (
+                  <h3
+                    style={{
+                      margin: "12px 0 0 0",
+                      color: ac,
+                      fontSize: "1.4rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      lineHeight: 1.2,
+                      fontFamily: bodyFont,
+                    }}
+                  >
+                    {headline}
+                  </h3>
+                ) : null}
+                {byline ? (
+                  <p
+                    style={{
+                      margin: "8px 0 0 0",
+                      color: "#888",
+                      fontSize: "0.78rem",
+                      fontStyle: "italic",
+                      fontFamily: bodyFont,
+                    }}
+                  >
+                    {byline}
+                  </p>
+                ) : null}
+                {headline || byline ? (
+                  <hr style={{ border: "none", borderTop: `1px solid ${border}`, margin: "14px 0", opacity: 0.5 }} />
+                ) : null}
+              </>
+            );
+
+            const showLoadingLine = loading && (!isVip || vipCanRead);
+            const now = new Date();
+            const dateStr = now.toLocaleDateString("en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            });
+            const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+            return (
+              <section
+                style={{
+                  display: "flex",
+                  gap: "16px",
+                  alignItems: "stretch",
+                  minHeight: "420px",
+                  fontFamily: bodyFont,
+                }}
+                aria-label="AI Press"
+              >
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Special+Elite&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=IM+Fell+English:ital@0;1&family=Oswald:wght@400;600&display=swap');`,
+                  }}
+                />
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `@keyframes pressPulse{0%,100%{opacity:.35}50%{opacity:1}}@keyframes pressSpin{to{transform:rotate(360deg)}}`,
+                  }}
+                />
+                <div
+                  style={{
+                    flex: "0 0 180px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    border: `1px solid ${border}`,
+                    borderRadius: "8px",
+                    padding: "10px",
+                    background: `linear-gradient(180deg, ${bgPat} 0%, rgba(0,0,0,0.5) 100%)`,
+                  }}
+                >
+                  {newspapers.map((n) => {
+                    const active = activeNewspaper === n.id;
+                    return (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => setActiveNewspaper(n.id)}
+                        style={{
+                          textAlign: "left",
+                          padding: "10px 10px",
+                          borderRadius: "6px",
+                          border: active ? "none" : `1px solid ${n.borderColor}`,
+                          background: active ? n.accentColor : "transparent",
+                          color: active ? "#0a0a0a" : n.accentColor,
+                          cursor: "pointer",
+                          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                          fontSize: "0.68rem",
+                          letterSpacing: "0.03em",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700 }}>
+                          <span>{n.icon}</span>
+                          <span>{n.name}</span>
+                        </div>
+                        <div style={{ marginTop: "4px", fontSize: "0.6rem", opacity: active ? 0.85 : 0.75, fontWeight: 400 }}>
+                          {n.subtitle}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    border: `1px solid ${border}`,
+                    borderRadius: "8px",
+                    padding: "18px 20px",
+                    background: `linear-gradient(165deg, ${bgPat} 0%, rgba(0,0,0,0.55) 100%)`,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                    position: "relative",
+                  }}
+                >
+                  <div style={{ position: "absolute", top: "12px", right: "14px", display: "flex", gap: "8px", alignItems: "center" }}>
+                    {isVip && vipCanRead ? (
+                      <span
+                        style={{
+                          fontSize: "0.62rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          background: isGoldTier ? "#ffd700" : "#c0c0c0",
+                          color: isGoldTier ? "#1a1200" : "#222",
+                        }}
+                      >
+                        {isGoldTier ? "GOLD VIP" : "SILVER VIP"}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {renderMasthead()}
+
+                  {isVip && !hasWallet ? (
+                    <div
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "16px",
+                        padding: "32px 16px",
+                        textAlign: "center",
+                        color: "#aaa",
+                        fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                      }}
+                    >
+                      <div style={{ fontSize: "2.5rem" }}>🔒</div>
+                      <p style={{ margin: 0, maxWidth: "320px", fontSize: "0.9rem" }}>Connect wallet to check VIP status</p>
+                      <button
+                        type="button"
+                        onClick={connect}
+                        style={{
+                          background: ac,
+                          color: "#111",
+                          border: "none",
+                          padding: "10px 20px",
+                          borderRadius: "8px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        Connect wallet
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {isVip && hasWallet && !pressSuiChecked ? (
+                    <div
+                      style={{
+                        color: ac,
+                        fontSize: "0.85rem",
+                        animation: "pressPulse 1.2s ease-in-out infinite",
+                        fontFamily: "ui-monospace, monospace",
+                      }}
+                    >
+                      ⌛ Checking on-chain balance…
+                    </div>
+                  ) : null}
+
+                  {isVip && hasWallet && pressSuiChecked && !vipCanRead ? (
+                    <div style={{ position: "relative", minHeight: "280px" }}>
+                      <div style={{ position: "absolute", inset: 0, zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.72)", borderRadius: "8px", padding: "20px", textAlign: "center" }}>
+                        <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>🔒</div>
+                        <p style={{ margin: 0, color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>SILVER VIP: {silverMin} SUI minimum</p>
+                        <p style={{ margin: "8px 0 0 0", color: "#aaa", fontSize: "0.78rem", maxWidth: "280px" }}>
+                          Your balance: {suiBalance.toFixed(2)} SUI · Gold tier from {goldMin} SUI
+                        </p>
+                      </div>
+                      <div style={{ paddingTop: "8px" }}>
+                        {renderHeadlineByline(fakeVipParsed.headline, fakeVipParsed.byline)}
+                        <hr style={{ border: "none", borderTop: `1px solid ${border}`, margin: "12px 0", opacity: 0.4 }} />
+                        {renderColumns(fakeVipParsed.columns, fakeVipParsed.editorsNote, fakeVipParsed.rawFallback, { blur: true })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!isVip || (isVip && vipCanRead) ? (
+                    <>
+                      {showLoadingLine ? (
+                        <div style={{ color: "#666" }}>⌛ Journalist investigating...</div>
+                      ) : null}
+                      {currentArticle ? renderArticle(currentArticle, ac, border, bodyFont) : null}
+                    </>
+                  ) : null}
+
+                  <div
+                    style={{
+                      marginTop: "auto",
+                      paddingTop: "12px",
+                      borderTop: `1px solid rgba(255,255,255,0.08)`,
+                    }}
+                  >
+                    <p style={{ margin: 0, color: "#555", fontSize: "0.72rem", fontFamily: "ui-monospace, monospace" }}>
+                      📅 Published: {dateStr} · {timeStr}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
 
           {activeTab === "bank" && (
             <div style={{ padding: "24px" }}>
