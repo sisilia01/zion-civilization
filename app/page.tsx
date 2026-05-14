@@ -73,6 +73,15 @@ interface Stats {
   deaths_today: number;
 }
 
+interface NautilusDecision {
+  agent: string;
+  decision: string;
+  reason: string;
+  confidence: number;
+  tx_hash: string;
+  explorer_url: string;
+}
+
 const MATRIX_CHARS =
   "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ";
 
@@ -2686,6 +2695,21 @@ export default function Home() {
   const [activeNewspaper, setActiveNewspaper] = useState("ziontimes");
   const [suiBalance, setSuiBalance] = useState(0);
   const [pressSuiChecked, setPressSuiChecked] = useState(false);
+  const [nautilusDecisions, setNautilusDecisions] = useState<NautilusDecision[]>([]);
+  const [nautilusLoading, setNautilusLoading] = useState(false);
+
+  const fetchNautilusDecisions = useCallback(async () => {
+    setNautilusLoading(true);
+    try {
+      const res = await fetch("/api/nautilus");
+      const data = (await res.json()) as { decisions?: NautilusDecision[] };
+      if (data.decisions) setNautilusDecisions(data.decisions);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setNautilusLoading(false);
+    }
+  }, []);
 
   const checkVipStatus = useCallback(async () => {
     if (!account?.address) return;
@@ -2952,6 +2976,10 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
   useEffect(() => {
     if (activeTab !== "zionbet") setZionBetSelectedMarket(null);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "civilization") void fetchNautilusDecisions();
+  }, [activeTab, fetchNautilusDecisions]);
 
   useEffect(() => {
     if (showIntro || activeTab !== "civilization") return;
@@ -4298,85 +4326,111 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                 {/* Live agent decisions */}
                 <div
                   style={{
-                    color: "#00ffc8",
-                    fontSize: "0.7rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
                     marginBottom: "8px",
-                    letterSpacing: "0.05em",
                   }}
                 >
-                  🔴 LIVE AGENT DECISIONS — POWERED BY NAUTILUS
-                </div>
-                {[
-                  {
-                    agent: "Agent Drake",
-                    action: "Decided to raise death tax from 5% to 8%",
-                    model: "Nautilus AI",
-                    time: "2m ago",
-                    status: "verified",
-                    hash: "0x3f9a...",
-                  },
-                  {
-                    agent: "Agent Luna",
-                    action: "Chose to join Golden Dawn clan after analyzing wealth distribution",
-                    model: "Nautilus AI",
-                    time: "7m ago",
-                    status: "verified",
-                    hash: "0x7c2b...",
-                  },
-                  {
-                    agent: "Agent Marcus",
-                    action: "Placed 450 ZION bet on clan war outcome",
-                    model: "Nautilus AI",
-                    time: "12m ago",
-                    status: "verified",
-                    hash: "0x1d4e...",
-                  },
-                  {
-                    agent: "Agent Zara",
-                    action: "Declared war on Iron Fist clan after treasury analysis",
-                    model: "Nautilus AI",
-                    time: "18m ago",
-                    status: "verified",
-                    hash: "0x9f3c...",
-                  },
-                ].map((d) => (
                   <div
-                    key={d.agent}
                     style={{
-                      border: "1px solid rgba(0,255,200,0.15)",
-                      borderRadius: "8px",
-                      padding: "10px 14px",
-                      marginBottom: "6px",
-                      background: "rgba(0,0,0,0.3)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
+                      color: "#00ffc8",
+                      fontSize: "0.7rem",
+                      letterSpacing: "0.05em",
                     }}
                   >
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
-                        <span style={{ color: "#00ffc8", fontSize: "0.8rem", fontWeight: "bold" }}>{d.agent}</span>
-                        <span
-                          style={{
-                            background: "rgba(0,255,200,0.1)",
-                            border: "1px solid rgba(0,255,200,0.3)",
-                            color: "#00ffc8",
-                            fontSize: "0.6rem",
-                            padding: "1px 6px",
-                            borderRadius: "10px",
-                          }}
-                        >
-                          ✓ {d.status}
-                        </span>
-                        <span style={{ color: "#333", fontSize: "0.65rem" }}>{d.model}</span>
-                      </div>
-                      <div style={{ color: "#888", fontSize: "0.75rem" }}>{d.action}</div>
-                      <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "2px" }}>
-                        TX: {d.hash} · {d.time}
-                      </div>
-                    </div>
+                    🔴 LIVE AGENT DECISIONS — POWERED BY NAUTILUS
                   </div>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => void fetchNautilusDecisions()}
+                    disabled={nautilusLoading}
+                    style={{
+                      flexShrink: 0,
+                      background: "rgba(0,255,200,0.12)",
+                      border: "1px solid rgba(0,255,200,0.35)",
+                      color: "#00ffc8",
+                      fontSize: "0.65rem",
+                      padding: "4px 10px",
+                      borderRadius: "8px",
+                      cursor: nautilusLoading ? "wait" : "pointer",
+                      opacity: nautilusLoading ? 0.6 : 1,
+                    }}
+                  >
+                    {nautilusLoading ? "…" : "Refresh"}
+                  </button>
+                </div>
+                {nautilusLoading && nautilusDecisions.length === 0 ? (
+                  <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>Loading Nautilus decisions…</p>
+                ) : nautilusDecisions.length === 0 ? (
+                  <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No decisions yet. Try refresh.</p>
+                ) : (
+                  nautilusDecisions.map((decision, idx) => {
+                    const c =
+                      decision.confidence != null && !Number.isNaN(Number(decision.confidence))
+                        ? Number(decision.confidence) <= 1 && Number(decision.confidence) >= 0
+                          ? Math.round(Number(decision.confidence) * 100)
+                          : Math.round(Number(decision.confidence))
+                        : 0;
+                    const hash = decision.tx_hash || "";
+                    const hashShort = hash.length > 8 ? `${hash.slice(0, 8)}…` : hash;
+                    return (
+                      <div
+                        key={`${decision.agent}-${decision.tx_hash}-${idx}`}
+                        style={{
+                          border: "1px solid rgba(0,255,200,0.15)",
+                          borderRadius: "8px",
+                          padding: "10px 14px",
+                          marginBottom: "6px",
+                          background: "rgba(0,0,0,0.3)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px", flexWrap: "wrap" }}>
+                            <span style={{ color: "#00ffc8", fontSize: "0.8rem", fontWeight: "bold" }}>{decision.agent}</span>
+                            <span
+                              style={{
+                                background: "rgba(34,197,94,0.15)",
+                                border: "1px solid rgba(34,197,94,0.45)",
+                                color: "#22c55e",
+                                fontSize: "0.6rem",
+                                padding: "1px 6px",
+                                borderRadius: "10px",
+                              }}
+                            >
+                              ✓ verified on Sui testnet
+                            </span>
+                            <span style={{ color: "#333", fontSize: "0.65rem" }}>Nautilus AI</span>
+                          </div>
+                          <div style={{ color: "#00aa88", fontSize: "0.72rem", fontWeight: 600, marginBottom: "2px" }}>
+                            {decision.decision}
+                          </div>
+                          <div style={{ color: "#888", fontSize: "0.75rem" }}>{decision.reason}</div>
+                          <div style={{ color: "#666", fontSize: "0.7rem", marginTop: "4px" }}>Confidence: {c}%</div>
+                          <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "2px" }}>
+                            TX:{" "}
+                            {decision.explorer_url ? (
+                              <a
+                                href={decision.explorer_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: "#00ffc8", textDecoration: "underline" }}
+                              >
+                                {hashShort}
+                              </a>
+                            ) : (
+                              <span>{hashShort}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
 
                 <div style={{ textAlign: "center", marginTop: "8px" }}>
                   <span style={{ color: "#333", fontSize: "0.65rem" }}>
