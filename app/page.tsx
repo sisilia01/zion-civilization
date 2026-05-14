@@ -3367,18 +3367,18 @@ export default function Home() {
             >
               <div style={{ color: "#00ff41" }}>✓ Connected to Sui testnet</div>
               <div style={{ color: "#00ff41" }}>✓ Loading 1,282 agents...</div>
-              <div style={{ color: "#ffd700" }}>✓ ZionBet markets: 14 active</div>
-              <div style={{ color: "#555" }}>✓ Walrus · DeepBook · Seal online</div>
+              <div style={{ color: "#ffd700" }}>✓ ZionBet prediction markets ready</div>
+              <div style={{ color: "#00ff41" }}>✓ Walrus · DeepBook · Seal online</div>
             </div>
 
             <div
               style={{
                 marginTop: "24px",
-                animation: "fadeInUp 0.8s ease forwards",
+                animation: "fadeInUpSemi 0.8s ease forwards",
                 animationDelay: "2.5s",
                 opacity: 0,
                 animationFillMode: "forwards",
-                color: "#333",
+                color: "#00ff41",
                 fontSize: "0.7rem",
                 letterSpacing: "0.2em",
                 fontFamily: "monospace",
@@ -6149,6 +6149,10 @@ export default function Home() {
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUpSemi {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 0.6; transform: translateY(0); }
         }
         .civilizationSidebar {
           width: 380px;
