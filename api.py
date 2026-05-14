@@ -1178,53 +1178,13 @@ def get_market_holders(
 if __name__ == "__main__":
     import uvicorn
 
-# === NAUTILUS AI ENDPOINTS ===
-from nautilus import nautilus_agent_cycle
-import random
-
-@app.get("/nautilus/decisions")
-def get_nautilus_decisions():
-    """Live agent decisions powered by Nautilus"""
-    try:
-        conn = get_db()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        # Берём 4 случайных живых агента
-        cur.execute("""
-            SELECT name, class, balance FROM agents 
-            WHERE is_alive = true 
-            ORDER BY RANDOM() LIMIT 4
-        """)
-        agents = cur.fetchall()
-        cur.close()
-        conn.close()
-        
-        contexts = [
-            "100 agents died today, economy is unstable",
-            "Senate election just happened, new senator elected",
-            "Prophet warned of catastrophe coming",
-            "Lottery winner got 37.6 ZION, inequality rising"
-        ]
-        
-        results = []
-        for i, agent in enumerate(agents):
-            result = nautilus_agent_cycle(
-                agent_name=agent["name"],
-                agent_class=agent["class"],
-                balance=float(agent["balance"]),
-                context=contexts[i % len(contexts)]
-            )
-            results.append(result)
-        
-        return {"decisions": results, "powered_by": "Nautilus AI Engine"}
-    except Exception as e:
-        return {"error": str(e), "decisions": []}
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # === ZION CONSENSUS ORACLE ===
-from zco import zco_agent_decision
+from zco import zco_decide
 
 @app.get("/zco/decisions")
 def get_zco_decisions():
@@ -1249,7 +1209,7 @@ def get_zco_decisions():
 
         results = []
         for i, agent in enumerate(agents):
-            result = zco_agent_decision(
+            result = zco_decide(
                 agent_name=agent["name"],
                 agent_class=agent["class"],
                 balance=float(agent["balance"]),
