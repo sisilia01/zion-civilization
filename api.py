@@ -1267,13 +1267,14 @@ def _generate_zco():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute("""
-        SELECT e.description, e.event_type, e.zion_amount, a.name, a.class, a.balance
+        SELECT DISTINCT ON (e.event_type)
+            e.description, e.event_type, e.zion_amount, a.name, a.class, a.balance
         FROM events e
         LEFT JOIN agents a ON e.agent_id = a.id
         WHERE e.event_type IN ('election','catastrophe','clan_war','rebellion',
-                               'prayer','lottery','birth','blessing')
-        AND e.zion_amount > 0
-        ORDER BY e.id DESC LIMIT 3
+                               'lottery','birth','blessing')
+        ORDER BY e.event_type, e.id DESC
+        LIMIT 3
     """)
     events = cur.fetchall()
     cur.close()

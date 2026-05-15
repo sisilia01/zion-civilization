@@ -14,7 +14,7 @@ SUI_COIN_ID = "0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce5
 JUDGES = [
     {"name": "DeepSeek", "model": "deepseek/deepseek-chat-v3-0324"},
     {"name": "Gemini", "model": "google/gemini-2.0-flash-lite-001"},
-    {"name": "Gemma", "model": "google/gemma-3-12b-it"},
+    {"name": "GPT", "model": "openai/gpt-4o-mini"},
 ]
 
 def ask_judge(judge: dict, prompt: str) -> dict:
