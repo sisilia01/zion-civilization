@@ -9,22 +9,46 @@ conn = psycopg2.connect(
     password="zion2026"
 )
 
-NAMES_ELITE = ["Kael", "Raze", "Dorn", "Vex", "Zorn", "Axel", "Drake", "Cain"]
-NAMES_MIDDLE = ["Vess", "Olan", "Mire", "Sera", "Lena", "Orin", "Tara", "Bram"]
-NAMES_POOR = ["Ash", "Grim", "Mox", "Finn", "Pip", "Wick", "Bex", "Cob"]
+NAMES_ELITE = ["Kael", "Raze", "Dorn", "Vex", "Zorn", "Axel", "Drake", "Cain", "Nero", "Atlas", "Cyrus", "Magnus", "Orion", "Dante", "Victor", "Leon", "Marcus", "Adrian", "Dorian", "Evander", "Felix", "Gideon", "Hector", "Ivan", "Julius", "Kaspar", "Leander", "Maximus", "Nikolai", "Octavian", "Perseus", "Quintus", "Remus", "Silvius", "Titus", "Ulysses", "Valerian", "Wolfgang", "Xavier", "Zacharias", "Ares", "Brutus", "Cato", "Darius", "Emilio", "Fabian", "Gavril", "Harald", "Ignatius", "Jarvis", "Konrad", "Lucian", "Matteo", "Naveen", "Orlando", "Phineas", "Roland", "Stefan", "Theron", "Ulric", "Vincent", "Werner", "Yannick", "Zoltan"]
+NAMES_MIDDLE = ["Vess", "Olan", "Mire", "Sera", "Lena", "Orin", "Tara", "Bram", "Aria", "Cleo", "Dana", "Elsa", "Faye", "Gaia", "Hana", "Iris", "Jana", "Kira", "Luna", "Maya", "Nora", "Opal", "Pita", "Rena", "Sana", "Tess", "Uma", "Vera", "Wren", "Xena", "Yuki", "Zara", "Abel", "Beck", "Cole", "Dean", "Evan", "Flynn", "Glen", "Hugo", "Ivor", "Joel", "Kurt", "Lars", "Marc", "Neil", "Owen", "Paul", "Reid", "Sean", "Troy"]
+NAMES_POOR = ["Ash", "Grim", "Mox", "Finn", "Pip", "Wick", "Bex", "Cob", "Ace", "Bo", "Cal", "Dax", "Eli", "Fox", "Gio", "Hal", "Ike", "Jay", "Kai", "Lee", "Max", "Ned", "Oz", "Pat", "Ray", "Sam", "Ted", "Uri", "Val", "Walt", "Yul", "Zed", "Ada", "Bea", "Cay", "Dot", "Eve", "Flo", "Gay", "Ida", "Joy", "Kay", "Lou", "Mae", "Nan", "Ora", "Peg", "Rae", "Sue", "Una", "Viv"]
 
 # Match genesis.py so births are "First Surname", not single-token names (avoids "Samira B" style tags).
 SURNAMES_ELITE = [
     "Voltaire", "Blackwood", "Sterling", "Ashford", "Ravenswood", "Coldwell", "Stormborn", "Ironside",
     "Goldstein", "Castellan", "Drakon", "Vexlar", "Thornton", "Whitmore", "Blackstone",
+    "Beaumont", "Harrington", "Windsor", "Pemberton", "Fairfax", "Lockwood", "Wyndham",
+    "Sinclair", "Montague", "Everton", "Kingsley", "Mercer", "Aldrich", "Cromwell",
+    "Voss", "Hartley", "Ashton", "Braxton", "Clayborne", "Devereux", "Ellsworth",
+    "Falkner", "Grenville", "Hawkwood", "Ingram", "Jervais", "Kendrick", "Langford",
+    "Maddox", "Nightingale", "Ormond", "Prescott", "Queensbury", "Redgrave", "Stanwick",
+    "Tremont", "Ulrich", "Vanderburg", "Warwick", "Xerxes", "Yarborough", "Zephyr", "Acheron", "Borgia", "Czar", "Defoe", "Elric", "Faust", "Grimm", "Hexum", "Icarus", "Janus", "Kronos", "Lucius", "Moros", "Noctis", "Oberon", "Pluto", "Regulus", "Solus",
 ]
+
 SURNAMES_MIDDLE = [
     "Parker", "Loginov", "Kapoor", "Tanaka", "Santos", "Mueller", "Okafor", "Nguyen",
     "Petrov", "Garcia", "Yamamoto", "Kowalski", "Mbeki", "Rossi", "Diallo",
+    "Holloway", "Araujo", "Ekwueme", "Lindqvist", "Castellano", "Ferreira", "Nakamura",
+    "Johansson", "Barbosa", "Kimura", "Cortez", "Roux", "Eriksson", "Bernardo",
+    "Castillo", "Dubois", "Evangelista", "Fujimoto", "Guerrero", "Hashimoto", "Ibarra",
+    "Jensen", "Kuznetsov", "Laurent", "Morales", "Nielsen", "Oliveira", "Patel",
+    "Quiroga", "Ramirez", "Silva", "Torres", "Ueda", "Vargas", "Weber",
+    "Xiong", "Yilmaz", "Zabala", "Andersen", "Bakker", "Chavez", "Demir",
+    "Espinoza", "Flores", "Gomez", "Herrera", "Ishida", "Jimenez", "Kato",
+    "Lopez", "Mendez", "Navarro", "Ozaki", "Perez", "Reyes", "Sato", "Adeyemi", "Bergmann", "Chandra", "Delacroix", "Emeka", "Fonseca", "Gupta", "Hadley", "Ingrid", "Johal", "Kitamura", "Lavoie", "Mensah", "Nakata", "Obasi", "Pham", "Rashid", "Suzuki", "Tran", "Usman", "Vieira", "Watanabe", "Yoon", "Zuberi",
 ]
+
 SURNAMES_POOR = [
     "Gray", "Stone", "Marsh", "Field", "Brook", "Wood", "Hill", "Cross",
     "Banks", "Reed", "Mills", "Ford", "Lane", "West", "Nash",
+    "Burns", "Price", "Sharp", "Swift", "Thorn", "Vale", "Wilde",
+    "Frost", "Hale", "Quinn", "Ross", "Scott", "Todd", "Vance",
+    "Abel", "Blake", "Cole", "Dale", "Earl", "Finn", "Glen",
+    "Hart", "Ives", "Kane", "Knox", "Lake", "Moss", "Neal",
+    "Oaks", "Pace", "Rand", "Sage", "Tate", "Upton", "Vane",
+    "Wade", "Yates", "Zane", "Ash", "Bay", "Carr", "Drew",
+    "Fenn", "Gore", "Holt", "Isle", "Jude", "Kirk", "Lowe",
+    "More", "Noel", "Orr", "Penn", "Rowe", "Shaw", "Troy", "Abbot", "Bauer", "Crowe", "Dunn", "Ennis", "Frey", "Gunn", "Howe", "Innes", "Judd", "Kent", "Lund", "Munn", "Nunn", "Owen", "Penn", "Rudd", "Sunn", "Tunn", "Unn", "Vann", "Wynn", "York", "Zinn",
 ]
 
 
