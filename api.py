@@ -6,7 +6,7 @@ import urllib.request
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="ZION Civilization API")
@@ -1175,13 +1175,160 @@ def get_market_holders(
         conn.close()
 
 
+# === ZIONBET USER BETS ===
+import urllib.request as _ur
+import json as _json
+
+MARKETS_CONFIG = [
+    {"id": "btc_1h", "token": "BTC", "timeframe": "1h", "question": "Will BTC go UP in next 1 hour?", "category": "crypto", "cg_id": "bitcoin"},
+    {"id": "btc_24h", "token": "BTC", "timeframe": "24h", "question": "Will BTC go UP today?", "category": "crypto", "cg_id": "bitcoin"},
+    {"id": "btc_7d", "token": "BTC", "timeframe": "7d", "question": "Will BTC go UP this week?", "category": "crypto", "cg_id": "bitcoin"},
+    {"id": "eth_1h", "token": "ETH", "timeframe": "1h", "question": "Will ETH go UP in next 1 hour?", "category": "crypto", "cg_id": "ethereum"},
+    {"id": "eth_24h", "token": "ETH", "timeframe": "24h", "question": "Will ETH go UP today?", "category": "crypto", "cg_id": "ethereum"},
+    {"id": "sui_1h", "token": "SUI", "timeframe": "1h", "question": "Will SUI go UP in next 1 hour?", "category": "crypto", "cg_id": "sui"},
+    {"id": "sui_24h", "token": "SUI", "timeframe": "24h", "question": "Will SUI go UP today?", "category": "crypto", "cg_id": "sui"},
+    {"id": "sui_7d", "token": "SUI", "timeframe": "7d", "question": "Will SUI go UP this week?", "category": "crypto", "cg_id": "sui"},
+    {"id": "cetus_24h", "token": "CETUS", "timeframe": "24h", "question": "Will CETUS go UP today?", "category": "crypto", "cg_id": "cetus-protocol"},
+    {"id": "deepbook_24h", "token": "DEEP", "timeframe": "24h", "question": "Will DEEP go UP today?", "category": "crypto", "cg_id": "deepbook"},
+    {"id": "civ_deaths_24h", "token": "ZION", "timeframe": "24h", "question": "Will more than 50 agents die today?", "category": "civilization"},
+    {"id": "civ_clan_war", "token": "ZION", "timeframe": "7d", "question": "Will Golden Dawn win the next clan war?", "category": "civilization"},
+    {"id": "civ_rebellion", "token": "ZION", "timeframe": "7d", "question": "Will a rebellion happen this week?", "category": "civilization"},
+    {"id": "civ_lottery", "token": "ZION", "timeframe": "24h", "question": "Will Arthur Merrick win the next lottery?", "category": "civilization"},
+]
+
+def get_crypto_odds(cg_id: str) -> tuple:
+    """Получаем реальные одды из изменения цены за 24ч"""
+    try:
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd&include_24hr_change=true"
+        req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+            change = data[cg_id].get("usd_24h_change", 0) or 0
+            # Конвертируем изменение цены в одды
+            # Если +5% → YES 65¢ NO 35¢
+            yes = min(85, max(15, 50 + int(change * 2)))
+            no = 100 - yes
+            return yes, no
+    except:
+        return 50, 50
+
+@app.get("/markets")
+def get_markets():
+    """Все рынки с живыми оддами"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    markets = []
+    for m in MARKETS_CONFIG:
+        yes, no = 50, 50
+        if m["category"] == "crypto" and "cg_id" in m:
+            yes, no = get_crypto_odds(m["cg_id"])
+        
+        # Считаем объём из user_bets
+        cur.execute("""
+            SELECT 
+                COUNT(*) FILTER (WHERE prediction = true) as yes_count,
+                COUNT(*) FILTER (WHERE prediction = false) as no_count,
+                COALESCE(SUM(amount_sui), 0) as volume
+            FROM user_bets WHERE market_id = %s AND settled = false
+        """, (m["id"],))
+        row = cur.fetchone()
+        
+        markets.append({
+            **m,
+            "yes_cents": yes,
+            "no_cents": no,
+            "yes_count": row["yes_count"] or 0,
+            "no_count": row["no_count"] or 0,
+            "volume_sui": float(row["volume"] or 0),
+        })
+    
+    cur.close()
+    conn.close()
+    return markets
+
+@app.post("/bet")
+async def place_user_bet(request: Request):
+    """Разместить ставку пользователя"""
+    body = await request.json()
+    wallet = body.get("wallet")
+    market_id = body.get("market_id")
+    direction = body.get("direction")  # true=YES, false=NO
+    amount_sui = float(body.get("amount_sui", 0.1))
+    
+    if not wallet or not market_id or direction is None:
+        return {"error": "Missing fields"}
+    
+    # Найдём рынок
+    market = next((m for m in MARKETS_CONFIG if m["id"] == market_id), None)
+    if not market:
+        return {"error": "Market not found"}
+    
+    yes, no = 50, 50
+    if market.get("cg_id"):
+        yes, no = get_crypto_odds(market["cg_id"])
+    
+    odds = yes if direction else no
+    potential_payout = amount_sui * (100 / odds)
+    
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO user_bets 
+        (wallet_address, market_id, event_type, question, amount_sui, amount,
+         prediction, odds_at_bet, potential_payout, status, resolves_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', NOW() + INTERVAL '24 hours')
+        RETURNING id
+    """, (wallet, market_id, market.get("token",""), market["question"],
+          amount_sui, amount_sui, direction, odds, potential_payout))
+    bet_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return {
+        "success": True,
+        "bet_id": bet_id,
+        "market": market["question"],
+        "direction": "YES" if direction else "NO",
+        "amount_sui": amount_sui,
+        "odds": odds,
+        "potential_payout": round(potential_payout, 4)
+    }
+
+@app.get("/my_bets/{wallet}")
+def get_my_bets(wallet: str):
+    """История ставок пользователя"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("""
+        SELECT id, market_id, question, prediction, amount_sui, 
+               odds_at_bet, potential_payout, status, created_at, payout
+        FROM user_bets 
+        WHERE wallet_address = %s 
+        ORDER BY created_at DESC LIMIT 20
+    """, (wallet,))
+    bets = []
+    for row in cur.fetchall():
+        bets.append({
+            "id": row["id"],
+            "market_id": row["market_id"],
+            "question": row["question"],
+            "direction": "YES" if row["prediction"] else "NO",
+            "amount_sui": float(row["amount_sui"] or 0),
+            "odds": row["odds_at_bet"],
+            "potential_payout": float(row["potential_payout"] or 0),
+            "status": row["status"],
+            "created_at": str(row["created_at"]),
+            "payout": float(row["payout"] or 0)
+        })
+    cur.close()
+    conn.close()
+    return bets
+
 if __name__ == "__main__":
     import uvicorn
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 # === ZION CONSENSUS ORACLE ===
 from zco import zco_decide
@@ -1347,3 +1494,4 @@ def get_event_highlights():
         return events
     except Exception as e:
         return {"error": str(e)}
+
