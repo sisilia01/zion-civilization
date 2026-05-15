@@ -71,6 +71,18 @@ function walrusEventTypeEmoji(type: string): string {
   return map[type] ?? "📡";
 }
 
+function walrusRowAccent(type: string): string {
+  const k = chronicleTickerTypeKey(type);
+  const extra: Record<string, string> = {
+    death: "#ff3232",
+    war: "#ff6600",
+    trade: "#00ff41",
+    clan_join: "#34d399",
+  };
+  if (extra[k]) return extra[k];
+  return chronicleTickerBorder(type);
+}
+
 type ConversationPair = {
   id: number;
   topic: string;
@@ -130,8 +142,6 @@ interface ZcoDecision {
 
 const ZCO_ACCENT = "#a78bfa";
 
-const ZCO_JUDGE_ORDER = ["DeepSeek", "Gemini", "Qwen"] as const;
-
 function zcoConsensusLine(d: ZcoDecision): string {
   const c = d.consensus;
   if (c?.method === "consensus" && c.votes_for != null && c.total_votes != null) {
@@ -152,6 +162,12 @@ function zcoAgreementDisplayColor(pct: number): string {
   if (pct >= 50) return ZCO_ACCENT;
   if (pct >= 25) return "#f59e0b";
   return "#ef4444";
+}
+
+/** ZCO event-type pill tint (reuses chronicle ticker palette where defined). */
+function zcoEventPillPalette(eventTypeRaw: string): { bg: string; border: string; fg: string } {
+  const br = chronicleTickerBorder(eventTypeRaw);
+  return { bg: `${br}2a`, border: `${br}66`, fg: br };
 }
 
 const MATRIX_CHARS =
@@ -284,6 +300,64 @@ function filterChronicleEvents(raw: EventItem[], priority: readonly string[]): E
     if (ta != null) return -1;
     return b.id - a.id;
   });
+}
+
+const CHRONICLE_TICKER_TYPES = new Set([
+  "election",
+  "catastrophe",
+  "clan_war",
+  "rebellion",
+  "lottery",
+  "blessing",
+  "birth",
+  "prayer",
+]);
+
+/** Chronicle horizontal feed: canonical type key (clan_war, prayer, …). */
+function chronicleTickerTypeKey(type: string): string {
+  const t = type.toLowerCase().replace(/-/g, "_");
+  if (t.includes("clan") && t.includes("war")) return "clan_war";
+  return t;
+}
+
+function chronicleTickerBorder(type: string): string {
+  const k = chronicleTickerTypeKey(type);
+  const map: Record<string, string> = {
+    election: "#ffd700",
+    catastrophe: "#ff4141",
+    clan_war: "#ff6b35",
+    rebellion: "#ff4141",
+    lottery: "#00d4ff",
+    blessing: "#a78bfa",
+    birth: "#00ff41",
+    prayer: "#555",
+  };
+  return map[k] ?? "#555";
+}
+
+function filterChronicleTickerEvents(raw: unknown[]): EventItem[] {
+  const out: EventItem[] = [];
+  let fallbackId = 0;
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const typRaw = String(o.type ?? "");
+    const k = chronicleTickerTypeKey(typRaw);
+    if (!CHRONICLE_TICKER_TYPES.has(k)) continue;
+    const idRaw = o.id;
+    const idNum = typeof idRaw === "number" ? idRaw : Number(idRaw);
+    out.push({
+      id: Number.isFinite(idNum) ? idNum : ++fallbackId,
+      type: typRaw,
+      description: typeof o.description === "string" ? o.description : "",
+      time: typeof o.time === "string" ? o.time : "",
+    });
+  }
+  const isPrayer = (e: EventItem) =>
+    chronicleTickerTypeKey(e.type) === "prayer" || e.type.toLowerCase().includes("prayer");
+  const important = out.filter((e) => !isPrayer(e));
+  const prayers = out.filter((e) => isPrayer(e));
+  return [...important, ...prayers].slice(0, 48);
 }
 
 function parseEventTimeMs(time: string): number | null {
@@ -3253,22 +3327,10 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     if (showIntro) return;
     const loadChronicle = async () => {
       try {
-        const r = await fetch("/api/events?limit=120");
+        const r = await fetch("/api/events-mixed");
         const data = await r.json();
         const list = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : [];
-        const priority = [
-          "death",
-          "birth",
-          "catastrophe",
-          "clan_war",
-          "neo",
-          "neo_prophecy",
-          "rebellion",
-          "election",
-          "blessing",
-          "lottery",
-        ];
-        setChronicleEvents(filterChronicleEvents(list, priority));
+        setChronicleEvents(filterChronicleTickerEvents(list));
         setChronicleNow(Date.now());
       } catch {
         /* keep last snapshot */
@@ -4246,30 +4308,38 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                     <span className="chronicleLiveDot" aria-hidden />
                     CIVILIZATION CHRONICLE
                   </h2>
-                  <span className="chronicleFeedHint">LIVE · refresh 15s</span>
+                  <span className="chronicleFeedHint">LIVE · highlights · refresh 15s</span>
                 </div>
-                <div className="chronicleScroll">
-                  <div className="chronicleGrid">
+                <div className="chronicleScroll chronicleScrollTicker">
+                  <div className="chronicleTicker">
                     {chronicleEvents.length === 0 ? (
                       <p className="chronicleEmpty">Awaiting signal from civilization core…</p>
                     ) : (
                       chronicleEvents.map((event) => {
                         const meta = chronicleMeta(event.type);
+                        const border = chronicleTickerBorder(event.type);
+                        const title =
+                          (event.description.split(".")[0] || event.description || event.type).trim() ||
+                          event.type;
+                        const timeLabel =
+                          parseEventTimeMs(event.time) != null
+                            ? formatTimeAgo(event.time, chronicleNow)
+                            : event.time || "—";
                         return (
                           <article
                             key={`${event.id}-${event.time}`}
-                            className="chronicleCard"
-                            style={{ borderLeft: `3px solid ${meta.border}` }}
+                            className="chronicleTickerItem"
+                            style={{ borderLeftColor: border }}
                           >
-                            <div className="chronicleCardTop">
-                              <span className="chronicleIcon" aria-hidden>
-                                {meta.icon}
-                              </span>
-                              <time className="chronicleTime" dateTime={event.time}>
-                                {formatTimeAgo(event.time, chronicleNow)}
+                            <span className="chronicleTickerIcon" aria-hidden>
+                              {meta.icon}
+                            </span>
+                            <div className="chronicleTickerBody">
+                              <span className="chronicleTickerTitle">{title}</span>
+                              <time className="chronicleTickerTime" dateTime={event.time}>
+                                {timeLabel}
                               </time>
                             </div>
-                            <p className="chronicleDesc">{chronicleBoldDescription(event.description, event.type)}</p>
                           </article>
                         );
                       })
@@ -4292,316 +4362,126 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                 </div>
               </section>
 
-              <div style={{ marginTop: "24px" }}>
-                <h3
-                  style={{
-                    color: "#ffd700",
-                    fontSize: "0.8rem",
-                    letterSpacing: "0.1em",
-                    marginBottom: "12px",
-                  }}
-                >
-                  📡 LIVE EVENTS — STORED ON WALRUS
-                </h3>
+              <div className="walrusLiveBlock">
+                <h3 className="walrusLiveHeading">LIVE EVENTS — WALRUS</h3>
                 {walrusEvents.map((event) => {
-                  const colors: Record<string, string> = {
-                    death: "#ff3232",
-                    war: "#ff6600",
-                    election: "#ffd700",
-                    catastrophe: "#ff00ff",
-                    trade: "#00ff41",
-                    birth: "#00ffff",
-                    prayer: "#a78bfa",
-                    lottery: "#fbbf24",
-                    clan_join: "#34d399",
-                    work: "#94a3b8",
-                    rebellion: "#f472b6",
-                  };
-                  const accent = colors[event.type] ?? "#888888";
+                  const accent = walrusRowAccent(event.type);
+                  const agentLabel = event.agents[0] || "ZION System";
                   return (
                     <div
                       key={event.id}
-                      style={{
-                        border: `1px solid ${accent}33`,
-                        borderLeft: `3px solid ${accent}`,
-                        borderRadius: "8px",
-                        padding: "10px 14px",
-                        marginBottom: "8px",
-                        background: "rgba(0,0,0,0.4)",
-                      }}
+                      className="walrusLiveRow"
+                      style={{ borderLeftColor: accent }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: accent,
-                            fontSize: "0.85rem",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {walrusEventTypeEmoji(event.type)} {event.title}
-                        </span>
-                        <span style={{ color: "#444", fontSize: "0.7rem" }}>
-                          {event.timestamp || ""}
-                        </span>
-                      </div>
-                      <p
-                        style={{
-                          color: "#888",
-                          fontSize: "0.75rem",
-                          margin: "4px 0 0 0",
-                          lineHeight: "1.4",
-                        }}
-                      >
-                        {event.description}
-                      </p>
-                      <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "4px" }}>
-                        🐋 Walrus testnet · agents: {event.agents.join(", ")}
-                      </div>
+                      <span className="walrusLiveIcon" aria-hidden>
+                        {walrusEventTypeEmoji(event.type)}
+                      </span>
+                      <span className="walrusLiveTitle">{event.title}</span>
+                      <span className="walrusLiveTime">{event.timestamp || ""}</span>
+                      <span className="walrusLiveAgent" title={agentLabel}>
+                        {agentLabel}
+                      </span>
                     </div>
                   );
                 })}
               </div>
 
-              <div style={{ marginTop: "24px" }}>
-                {/* ZION CONSENSUS ORACLE */}
-                <div>
-                  <div style={{ marginBottom: "10px" }}>
-                    <div
-                      style={{
-                        color: ZCO_ACCENT,
-                        fontSize: "0.7rem",
-                        letterSpacing: "0.05em",
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      ⚖️ ZION CONSENSUS ORACLE — ZCO v1.0 | Proprietary Multi-AI Decision Engine
-                    </div>
-                    {zcoLastUpdated ? (
-                      <div style={{ color: "#666", fontSize: "0.62rem", marginTop: "4px" }}>
-                        Last updated: {zcoLastUpdated.toLocaleTimeString()}
-                      </div>
-                    ) : null}
-                  </div>
-                  {zcoLoading && zcoDecisions.length === 0 ? (
-                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>Loading ZCO decisions…</p>
-                  ) : zcoDecisions.length === 0 ? (
-                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No ZCO rounds yet.</p>
-                  ) : (
-                    zcoDecisions.map((decision, zidx) => {
-                      const judgeLabel = (name: string) =>
-                        name === "DeepSeek" ? "Judge I" : name === "Gemini" ? "Judge II" : "Judge III";
-                      const finalText = (decision.decision || "").trim() || "—";
-                      const eventDesc = (decision.event_description || "").trim();
-                      const eventTypeRaw = (decision.event_type || "").trim();
-                      const eventBadge = eventTypeRaw
-                        ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
-                        : "";
-                      const headline = eventDesc ? eventDesc : finalText;
-                      const consensus = zcoConsensusLine(decision);
-                      const agreementPct = zcoAgreementPercent(decision);
-                      const cls = (decision.agent_class || decision.class || "").trim();
-                      const clsUpper = cls.replace(/_/g, " ").toUpperCase();
-                      const hash = decision.consensus_hash || "";
-                      const votes = decision.votes ?? [];
-                      const judgeSlots = ZCO_JUDGE_ORDER.map((name) => ({
-                        apiName: name,
-                        label: judgeLabel(name),
-                        vote: votes.find((v) => v.judge === name),
-                      }));
-                      const agentName = (decision.agent || "").trim() || "—";
-                      return (
-                        <div
-                          key={`zco-${hash || decision.agent}-${zidx}`}
-                          style={{
-                            border: "1px solid rgba(167,139,250,0.25)",
-                            borderRadius: "8px",
-                            padding: "12px 14px",
-                            marginBottom: "8px",
-                            background: "rgba(167,139,250,0.04)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              alignItems: "flex-start",
-                              gap: "8px",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            {eventBadge ? (
-                              <span
-                                style={{
-                                  flexShrink: 0,
-                                  color: ZCO_ACCENT,
-                                  fontSize: "0.65rem",
-                                  fontWeight: 700,
-                                  letterSpacing: "0.08em",
-                                  padding: "3px 8px",
-                                  borderRadius: "6px",
-                                  border: "1px solid rgba(167,139,250,0.45)",
-                                  background: "rgba(167,139,250,0.1)",
-                                }}
-                              >
-                                [{eventBadge}]
-                              </span>
-                            ) : null}
-                            <div
+              <div className="zcoOracleSection">
+                <header className="zcoOracleHead">
+                  <div className="zcoOracleKicker">⚖️ ZION CONSENSUS ORACLE — ZCO v1.0</div>
+                  {zcoLastUpdated ? (
+                    <div className="zcoOracleUpdated">Last updated: {zcoLastUpdated.toLocaleTimeString()}</div>
+                  ) : null}
+                </header>
+                {zcoLoading && zcoDecisions.length === 0 ? (
+                  <p className="zcoOracleEmpty">Loading ZCO decisions…</p>
+                ) : zcoDecisions.length === 0 ? (
+                  <p className="zcoOracleEmpty">No ZCO rounds yet.</p>
+                ) : (
+                  zcoDecisions.map((decision, zidx) => {
+                    const finalText = (decision.decision || "").trim() || "—";
+                    const eventDesc = (decision.event_description || "").trim();
+                    const eventTypeRaw = (decision.event_type || "").trim();
+                    const eventBadge = eventTypeRaw
+                      ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
+                      : "";
+                    const headline = eventDesc ? eventDesc : finalText;
+                    const consensus = zcoConsensusLine(decision);
+                    const agreementPct = zcoAgreementPercent(decision);
+                    const consensusOk = consensus.startsWith("CONSENSUS");
+                    const cls = (decision.agent_class || decision.class || "").trim();
+                    const clsUpper = cls.replace(/_/g, " ").toUpperCase();
+                    const hash = decision.consensus_hash || "";
+                    const judgeLabel = (name: string, index: number) =>
+                      `Judge ${["I", "II", "III"][index] || index + 1}`;
+                    const agentName = (decision.agent || "").trim() || "—";
+                    const pill = eventTypeRaw ? zcoEventPillPalette(eventTypeRaw) : null;
+                    const agreeBg = zcoAgreementDisplayColor(agreementPct);
+                    return (
+                      <div key={`zco-${hash || decision.agent}-${zidx}`} className="zcoCard">
+                        <div className="zcoCardInner">
+                          {eventBadge && pill ? (
+                            <span
+                              className="zcoEventPill"
                               style={{
-                                color: ZCO_ACCENT,
-                                fontSize: "1.05rem",
-                                fontWeight: 700,
-                                lineHeight: 1.3,
-                                wordBreak: "break-word",
-                                flex: "1 1 160px",
-                                minWidth: 0,
+                                background: pill.bg,
+                                borderColor: pill.border,
+                                color: pill.fg,
                               }}
                             >
-                              {headline}
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              color: "#888",
-                              fontSize: "0.72rem",
-                              marginBottom: "10px",
-                              lineHeight: 1.35,
-                            }}
-                          >
+                              [{eventBadge}]
+                            </span>
+                          ) : null}
+                          <h3 className="zcoHeadline">{headline}</h3>
+                          <p className="zcoVerified">
                             Verified for: {agentName}
                             {clsUpper ? ` · ${clsUpper}` : ""}
+                          </p>
+                          <div className="zcoJudgeRow" aria-label="Judge votes">
+                            {decision.votes?.map((vote, idx) => (
+                              <span key={vote.judge}>
+                                {judgeLabel(vote.judge, idx)} {vote.status === "voted" ? "✓" : "…"}
+                                {idx < (decision.votes ?? []).length - 1 ? " | " : ""}
+                              </span>
+                            ))}
                           </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginBottom: "10px",
-                              fontSize: "0.62rem",
-                            }}
-                          >
-                            {judgeSlots.map(({ apiName, label, vote: v }, ji) => {
-                              const voted = v?.status === "voted";
-                              return (
-                                <span key={`${apiName}-${ji}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                                  {ji > 0 ? (
-                                    <span style={{ color: "#444", userSelect: "none", margin: "0 2px" }} aria-hidden>
-                                      {" | "}
-                                    </span>
-                                  ) : null}
-                                  <span style={{ color: "#777" }}>{label}</span>
-                                  {!v ? (
-                                    <span
-                                      style={{
-                                        background: "rgba(80,80,80,0.25)",
-                                        border: "1px solid rgba(120,120,120,0.35)",
-                                        color: "#666",
-                                        padding: "2px 6px",
-                                        borderRadius: "6px",
-                                      }}
-                                    >
-                                      […]
-                                    </span>
-                                  ) : voted ? (
-                                    <span
-                                      style={{
-                                        background: "rgba(34,197,94,0.12)",
-                                        border: "1px solid rgba(34,197,94,0.45)",
-                                        color: "#22c55e",
-                                        padding: "2px 6px",
-                                        borderRadius: "6px",
-                                      }}
-                                    >
-                                      [{v.decision} ✓]
-                                    </span>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        background: "rgba(239,68,68,0.12)",
-                                        border: "1px solid rgba(239,68,68,0.45)",
-                                        color: "#ef4444",
-                                        padding: "2px 6px",
-                                        borderRadius: "6px",
-                                      }}
-                                    >
-                                      [failed ✗]
-                                    </span>
-                                  )}
-                                </span>
-                              );
-                            })}
-                          </div>
-                          <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginBottom: "8px", fontWeight: 600 }}>
-                            <span style={{ color: consensus === "DEADLOCK" ? "#ef4444" : ZCO_ACCENT }}>{consensus}</span>
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginBottom: "8px",
-                              fontSize: "0.72rem",
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            <span style={{ color: "#888", wordBreak: "break-all", fontFamily: "monospace" }}>
-                              {hash || "—"}
+                          <div className="zcoConsensusRow">
+                            <span className={consensusOk ? "zcoConsensusText zcoConsensusOk" : "zcoConsensusText zcoConsensusBad"}>
+                              {consensus}
+                              {consensusOk ? " ✓" : ""}
                             </span>
-                            {decision.tx_hash ? (
-                              <>
-                                <span style={{ color: "#555", userSelect: "none" }} aria-hidden>
-                                  |
-                                </span>
-                                {decision.explorer_url ? (
-                                  <a
-                                    href={decision.explorer_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}
-                                  >
-                                    ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
-                                  </a>
-                                ) : (
-                                  <span style={{ color: "#00ff41", fontSize: "0.75rem", fontFamily: "monospace" }}>
-                                    ⛓ TX: {decision.tx_hash.slice(0, 8)}... verified on Sui testnet ↗
-                                  </span>
-                                )}
-                              </>
-                            ) : null}
-                          </div>
-                          <div
-                            style={{
-                              marginBottom: "10px",
-                              textAlign: "right",
-                            }}
-                          >
                             <span
+                              className="zcoAgreementOrb"
                               style={{
-                                display: "inline-block",
-                                fontSize: "1rem",
-                                fontWeight: 700,
-                                letterSpacing: "0.04em",
-                                fontVariantNumeric: "tabular-nums",
-                                color: zcoAgreementDisplayColor(agreementPct),
-                                textShadow: "0 0 12px rgba(167,139,250,0.35)",
+                                background: agreeBg,
+                                boxShadow: `0 0 22px ${agreeBg}66`,
                               }}
                             >
                               {agreementPct}%
                             </span>
                           </div>
+                          <div className="zcoMetaRow">
+                            <code className="zcoHash">{hash || "—"}</code>
+                            {decision.tx_hash ? (
+                              decision.explorer_url ? (
+                                <a
+                                  href={decision.explorer_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="zcoTxLink"
+                                >
+                                  ⛓ verified on Sui
+                                </a>
+                              ) : (
+                                <span className="zcoTxLink">⛓ verified on Sui</span>
+                              )
+                            ) : null}
+                          </div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </>
           )}
@@ -6329,68 +6209,283 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
           color: rgba(130, 220, 170, 0.65);
         }
         .chronicleScroll {
-          max-height: 400px;
-          overflow-y: auto;
-          overflow-x: hidden;
-          padding-right: 4px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding: 4px 2px 10px;
           scrollbar-width: thin;
           scrollbar-color: rgba(0, 255, 65, 0.35) rgba(0, 0, 0, 0.4);
+          -webkit-overflow-scrolling: touch;
         }
-        .chronicleGrid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-          align-items: start;
+        .chronicleScrollTicker {
+          max-height: none;
+        }
+        .chronicleTicker {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: stretch;
+          gap: 12px;
+          min-height: 72px;
+          padding-bottom: 2px;
         }
         .chronicleEmpty {
-          grid-column: 1 / -1;
           margin: 0;
-          padding: 28px 16px;
+          padding: 22px 16px;
+          flex: 1;
           text-align: center;
           font-family: ui-monospace, "JetBrains Mono", monospace;
           font-size: 0.72rem;
           letter-spacing: 0.12em;
           color: rgba(140, 200, 160, 0.55);
         }
-        .chronicleCard {
-          margin: 0;
-          padding: 10px 11px 11px 12px;
-          border-radius: 6px;
-          border: 1px solid rgba(0, 255, 65, 0.12);
-          background: rgba(0, 0, 0, 0.8);
-          box-sizing: border-box;
-          min-height: 72px;
-        }
-        .chronicleCardTop {
+        .chronicleTickerItem {
+          flex: 0 0 auto;
+          width: min(280px, 78vw);
           display: flex;
+          flex-direction: row;
           align-items: flex-start;
-          justify-content: space-between;
-          gap: 8px;
-          margin-bottom: 8px;
+          gap: 10px;
+          padding: 12px 14px 12px 14px;
+          border-radius: 10px;
+          border: 1px solid rgba(0, 255, 65, 0.1);
+          border-left: 4px solid #00ff41;
+          background: rgba(0, 0, 0, 0.55);
+          box-sizing: border-box;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
-        .chronicleIcon {
-          font-size: 1.15rem;
+        .chronicleTickerIcon {
+          font-size: 1.25rem;
           line-height: 1;
-          filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15));
+          flex-shrink: 0;
+          filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.12));
         }
-        .chronicleTime {
+        .chronicleTickerBody {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .chronicleTickerTitle {
+          font-family: ui-monospace, "JetBrains Mono", monospace;
+          font-size: 0.74rem;
+          line-height: 1.4;
+          font-weight: 600;
+          color: rgba(230, 255, 240, 0.95);
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .chronicleTickerTime {
+          font-family: ui-monospace, "JetBrains Mono", monospace;
+          font-size: 0.6rem;
+          letter-spacing: 0.08em;
+          color: rgba(140, 200, 170, 0.65);
+        }
+        .walrusLiveBlock {
+          margin-top: 28px;
+        }
+        .walrusLiveHeading {
+          margin: 0 0 14px;
+          color: rgba(200, 255, 232, 0.85);
+          font-family: Orbitron, monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.2em;
+          font-weight: 600;
+        }
+        .walrusLiveRow {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 12px 8px 12px;
+          margin-bottom: 8px;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-left: 3px solid #888;
+          background: rgba(4, 6, 8, 0.75);
+        }
+        .walrusLiveIcon {
+          flex-shrink: 0;
+          font-size: 1rem;
+          line-height: 1;
+          opacity: 0.95;
+        }
+        .walrusLiveTitle {
+          flex: 1 1 auto;
+          min-width: 0;
+          font-family: ui-monospace, "JetBrains Mono", monospace;
+          font-size: 0.78rem;
+          font-weight: 600;
+          color: #e8fff0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .walrusLiveTime {
           flex-shrink: 0;
           font-family: ui-monospace, "JetBrains Mono", monospace;
-          font-size: 0.58rem;
+          font-size: 0.62rem;
           letter-spacing: 0.06em;
-          color: rgba(160, 210, 185, 0.72);
+          color: rgba(140, 160, 150, 0.85);
         }
-        .chronicleDesc {
-          margin: 0;
-          font-family: ui-monospace, "JetBrains Mono", monospace;
-          font-size: 0.68rem;
-          line-height: 1.45;
-          color: rgba(215, 245, 225, 0.92);
-          word-break: break-word;
+        .walrusLiveAgent {
+          flex-shrink: 0;
+          max-width: 120px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 0.58rem;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          padding: 3px 8px;
+          border-radius: 999px;
+          border: 1px solid rgba(167, 139, 250, 0.35);
+          color: rgba(200, 190, 255, 0.9);
+          background: rgba(167, 139, 250, 0.08);
         }
-        .chronicleDesc strong {
-          color: #f4fff8;
+        .zcoOracleSection {
+          margin-top: 32px;
+        }
+        .zcoOracleHead {
+          margin-bottom: 18px;
+        }
+        .zcoOracleKicker {
+          color: #a78bfa;
+          font-size: 0.72rem;
+          letter-spacing: 0.14em;
+          font-weight: 600;
+          font-family: Orbitron, monospace;
+        }
+        .zcoOracleUpdated {
+          color: #6b7280;
+          font-size: 0.65rem;
+          margin-top: 8px;
+          letter-spacing: 0.04em;
+        }
+        .zcoOracleEmpty {
+          color: #6b7280;
+          font-size: 0.8rem;
+          margin: 16px 0;
+          letter-spacing: 0.06em;
+        }
+        .zcoCard {
+          border-radius: 16px;
+          margin-bottom: 22px;
+          background: rgba(8, 8, 12, 0.94);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-top: 3px solid #a78bfa;
+          box-shadow:
+            0 16px 48px rgba(0, 0, 0, 0.5),
+            inset 0 1px 0 rgba(167, 139, 250, 0.12);
+        }
+        .zcoCardInner {
+          padding: 22px 24px 20px;
+        }
+        .zcoEventPill {
+          display: inline-block;
+          font-size: 0.62rem;
+          font-weight: 800;
+          letter-spacing: 0.14em;
+          padding: 6px 14px;
+          border-radius: 999px;
+          border: 1px solid;
+          margin-bottom: 14px;
+        }
+        .zcoHeadline {
+          margin: 0 0 12px;
+          font-size: clamp(1.05rem, 2.4vw, 1.22rem);
           font-weight: 700;
+          line-height: 1.45;
+          color: #fafafa;
+          letter-spacing: 0.01em;
+        }
+        .zcoVerified {
+          margin: 0 0 18px;
+          font-size: 0.78rem;
+          color: #9ca3af;
+          letter-spacing: 0.02em;
+        }
+        .zcoJudgeRow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px 14px;
+          margin-bottom: 20px;
+          font-size: 1.02rem;
+          font-weight: 600;
+        }
+        .zcoJudgeItem {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .zcoJudgeSep {
+          color: #3f3f46;
+          font-weight: 400;
+          margin-right: 4px;
+          user-select: none;
+        }
+        .zcoJudgeName {
+          color: #e4e4e7;
+        }
+        .zcoJudgeMark {
+          font-weight: 700;
+        }
+        .zcoConsensusRow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+        .zcoConsensusText {
+          font-size: clamp(1.15rem, 2.8vw, 1.38rem);
+          font-weight: 800;
+          letter-spacing: 0.08em;
+        }
+        .zcoConsensusOk {
+          color: #22c55e;
+          text-shadow: 0 0 24px rgba(34, 197, 94, 0.35);
+        }
+        .zcoConsensusBad {
+          color: #ef4444;
+        }
+        .zcoAgreementOrb {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          font-size: 0.8rem;
+          font-weight: 800;
+          color: #0a0a0c;
+          font-variant-numeric: tabular-nums;
+        }
+        .zcoMetaRow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px 18px;
+          padding-top: 4px;
+        }
+        .zcoHash {
+          font-size: 0.62rem;
+          color: #6b7280;
+          word-break: break-all;
+          font-family: ui-monospace, "JetBrains Mono", monospace;
+          background: transparent;
+        }
+        .zcoTxLink {
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: #00ff41;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+        .zcoTxLink:hover {
+          color: #4ade80;
         }
         @keyframes chronicleLivePulse {
           0%,
@@ -7528,8 +7623,8 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
           .chatClassFiltersFull {
             min-height: auto;
           }
-          .chronicleGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+          .chronicleTickerItem {
+            width: min(320px, 85vw);
           }
         }
         @media (max-width: 900px) {
@@ -7546,11 +7641,9 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
             padding-right: 10px;
           }
         }
-        @media (max-width: 560px) {
-          .chronicleGrid {
-            grid-template-columns: 1fr;
+          .chronicleTickerItem {
+            width: min(300px, 88vw);
           }
-        }
       `}</style>
     </main>
   );
