@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 7200;
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
 
@@ -60,6 +60,7 @@ BYLINE: by [AI journalist name], ${newspaper.name}
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      cache: "force-cache",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
