@@ -1257,3 +1257,54 @@ def get_zco_events():
         return {"decisions": results, "oracle": "ZION Consensus Oracle v1.0"}
     except Exception as e:
         return {"error": str(e), "decisions": []}
+
+# === BACKGROUND CACHE WARMING ===
+import cache as _cache_mod
+from concurrent.futures import ThreadPoolExecutor as _TPE
+
+def _generate_zco():
+    """Фоновая генерация ZCO"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute("""
+        SELECT e.description, e.event_type, e.zion_amount, a.name, a.class, a.balance
+        FROM events e
+        LEFT JOIN agents a ON e.agent_id = a.id
+        WHERE e.event_type IN ('election','catastrophe','clan_war','rebellion',
+                               'prayer','lottery','birth','blessing')
+        AND e.zion_amount > 0
+        ORDER BY e.id DESC LIMIT 3
+    """)
+    events = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    contexts = [
+        "Economy unstable, 100 agents died today",
+        "Senate election just happened",
+        "Prophet warned of catastrophe",
+    ]
+    results = []
+    for i, event in enumerate(events):
+        result = zco_decide(
+            agent_name=event['name'] or 'ZION System',
+            agent_class=event['class'] or 'system',
+            balance=float(event['balance'] or 0),
+            context=f"Event: {event['description']}. Amount: {event['zion_amount']} ZION."
+        )
+        result['event_type'] = event['event_type']
+        result['event_description'] = event['description']
+        results.append(result)
+    return {"decisions": results, "oracle": "ZION Consensus Oracle v1.0"}
+
+# Обновляем ZCO каждые 10 минут фоново
+_cache_mod.warm("zco_events", _generate_zco, ttl=600, interval=600)
+
+@app.get("/zco/events/fast")
+def get_zco_events_fast():
+    """Мгновенный ZCO из кэша"""
+    data = _cache_mod.get("zco_events")
+    if data:
+        return data
+    # Если кэш ещё не готов — генерируем синхронно
+    return _generate_zco()
