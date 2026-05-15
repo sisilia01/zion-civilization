@@ -1424,12 +1424,20 @@ type ZionBetHolderRow = { wallet: string; total_vol: number; yes_vol: number; no
 const ZIONBET_PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78";
 
 const MARKET_OBJECTS: Record<string, string> = {
+  btc_15m: "0xe919326a4dcc86ec864d02dbb74e03a1fe68a6c75fe63b35614c710ef46fc3e2",
   btc_1h: "0x9a4d41099234c2440f9304bf97f9074da134bf717f83ca0bc10b4a739f0c6f0f",
   btc_24h: "0xb793080c46a464b6397c09004c2a844f667d373bdea34bf7a606e40201c6459a",
+  btc_7d: "0x5eb0c489f1fab1b62c6471d69b71476c19385905f52da8c0e6bc6314087002f7",
+  eth_15m: "0xa13f46cbbc7accd9476faca624a5699f68822e2c1654c6836b37a1a25281b9a2",
   eth_1h: "0xafb20c1cb3617c504edb266f7eea49676fd0f48098c8e42cbf6bef53b58c110a",
+  eth_24h: "0x9646bcba74f372f6a92de1744ad261ca585403be00089eee86ae3e3b489f6af6",
+  sui_15m: "0xcae3da89b633a4c7f251203490ae9e39de28ec67c31e988f89e399190eea5491",
   sui_1h: "0xd7a512b38dbc469b7704434a22275444cb52640c693e02fb5a1a89dac98a004c",
   sui_24h: "0xca3d4d349b6a8d0e50edeacf901dd24ba5e69b0ae0ce728f2b8e0d4fa50c38d5",
+  sui_7d: "0xa9a44c27411fce1e121bf2f9b6ff7a071b6802caf5022b5fcfd13747839b17fb",
   cetus_24h: "0x8d96356b4e732409c9ddf95d2ca7091ec27093f6f918e0c7d4ad4513545005ca",
+  walrus_24h: "0x3fad377d72b8bd7af81a069455c7278e895210cf1638674be7d3907b3eace2e5",
+  deep_7d: "0x0cbb00e6f66d93e97b3b32fca6c3d266029525a49a72480986bc2ae5d09dcf0b",
 };
 
 function getMarketObjectId(marketId: string): string {
