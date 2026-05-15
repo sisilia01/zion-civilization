@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_KEY", ""))
 SUI_ADDRESS = "0xb193ba40239f9caebbc9b6bf1d7aba2d9ff6f8a26eca4ae74ad610079607265b"
-SUI_COIN_ID = "0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50"
+SUI_COIN_ID = "0xd7e289b8f734ea56f234386cde0dfab5371eee6de1f4a479e47fed17a5485ef2"
 
 def ai_agent_decision(agent_name: str, agent_class: str, balance: float, context: str) -> dict:
     prompt = f"""You are {agent_name}, a {agent_class} AI agent in ZION Civilization.

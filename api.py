@@ -1175,6 +1175,19 @@ def get_market_holders(
         conn.close()
 
 
+
+# Кэш времён разрешения рынков
+from datetime import datetime, timezone, timedelta
+_market_resolves = {}
+
+def get_market_resolves_at(market_id: str, timeframe: str) -> str:
+    """Возвращает фиксированное время разрешения рынка"""
+    if market_id not in _market_resolves:
+        tf_map = {"15m": 15, "1h": 60, "4h": 240, "24h": 1440, "7d": 10080, "30d": 43200}
+        minutes = tf_map.get(timeframe, 1440)
+        _market_resolves[market_id] = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+    return _market_resolves[market_id]
+
 # === ZIONBET USER BETS ===
 import urllib.request as _ur
 import json as _json
@@ -1235,6 +1248,8 @@ def get_markets():
         """, (m["id"],))
         row = cur.fetchone()
         
+        resolves_at = get_market_resolves_at(m["id"], m.get("timeframe", "24h"))
+        
         markets.append({
             **m,
             "yes_cents": yes,
@@ -1242,6 +1257,7 @@ def get_markets():
             "yes_count": row["yes_count"] or 0,
             "no_count": row["no_count"] or 0,
             "volume_sui": float(row["volume"] or 0),
+            "resolves_at": resolves_at,
         })
     
     cur.close()
