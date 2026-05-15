@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const res = await fetch("http://localhost:8000/zco/events");
+    const res = await fetch("http://localhost:8000/zco/events/fast");
     const data = (await res.json()) as { decisions?: unknown[]; events?: unknown[] };
     const decisions = Array.isArray(data.decisions)
       ? data.decisions

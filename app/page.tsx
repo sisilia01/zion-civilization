@@ -2745,13 +2745,16 @@ export default function Home() {
   const [pressSuiChecked, setPressSuiChecked] = useState(false);
   const [zcoDecisions, setZcoDecisions] = useState<ZcoDecision[]>([]);
   const [zcoLoading, setZcoLoading] = useState(false);
+  const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
 
   const fetchZcoDecisions = useCallback(async () => {
     setZcoLoading(true);
     try {
       const res = await fetch("/api/zco");
+      if (!res.ok) return;
       const data = (await res.json()) as { decisions?: ZcoDecision[] };
       if (data.decisions) setZcoDecisions(data.decisions);
+      setZcoLastUpdated(new Date());
     } catch {
       /* ignore */
     } finally {
@@ -3026,8 +3029,12 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "civilization") void fetchZcoDecisions();
-  }, [activeTab, fetchZcoDecisions]);
+    void fetchZcoDecisions();
+    const interval = window.setInterval(() => {
+      void fetchZcoDecisions();
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [fetchZcoDecisions]);
 
   useEffect(() => {
     if (showIntro || activeTab !== "civilization") return;
@@ -4304,120 +4311,29 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               </div>
 
               <div style={{ marginTop: "24px" }}>
-                <h3
-                  style={{
-                    color: "#00ffc8",
-                    fontSize: "0.8rem",
-                    letterSpacing: "0.1em",
-                    marginBottom: "12px",
-                  }}
-                >
-                  ⚙️ NAUTILUS — AI AGENTS OFF-CHAIN COMPUTE
-                </h3>
-
-                {/* Explanation */}
-                <div
-                  style={{
-                    border: "1px solid rgba(0,255,200,0.2)",
-                    borderRadius: "12px",
-                    padding: "16px",
-                    marginBottom: "12px",
-                    background: "rgba(0,255,200,0.02)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto 1fr",
-                      gap: "12px",
-                      alignItems: "center",
-                      marginBottom: "16px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        textAlign: "center",
-                        padding: "12px",
-                        background: "rgba(0,0,0,0.3)",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <div style={{ fontSize: "1.5rem", marginBottom: "4px" }}>🤖</div>
-                      <div style={{ color: "#00ffc8", fontSize: "0.75rem", fontWeight: "bold" }}>AI Agent</div>
-                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Thinks OFF-chain</div>
-                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Nautilus Engine</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ color: "#00ffc8", fontSize: "1.5rem" }}>→</div>
-                      <div style={{ color: "#555", fontSize: "0.6rem" }}>proof</div>
-                    </div>
-                    <div
-                      style={{
-                        textAlign: "center",
-                        padding: "12px",
-                        background: "rgba(0,0,0,0.3)",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <div style={{ fontSize: "1.5rem", marginBottom: "4px" }}>⛓️</div>
-                      <div style={{ color: "#00ffc8", fontSize: "0.75rem", fontWeight: "bold" }}>Sui Blockchain</div>
-                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Result ON-chain</div>
-                      <div style={{ color: "#555", fontSize: "0.65rem" }}>Verifiable & honest</div>
-                    </div>
-                  </div>
-                  <div style={{ color: "#555", fontSize: "0.72rem", textAlign: "center" }}>
-                    Agents make complex decisions off-chain for free → Nautilus proves the computation was honest →
-                    Result recorded on Sui
-                  </div>
-                </div>
-
                 {/* ZION CONSENSUS ORACLE */}
-                <div style={{ marginTop: "28px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "10px",
-                      marginBottom: "10px",
-                      flexWrap: "wrap",
-                    }}
-                  >
+                <div>
+                  <div style={{ marginBottom: "10px" }}>
                     <div
                       style={{
                         color: ZCO_ACCENT,
                         fontSize: "0.7rem",
                         letterSpacing: "0.05em",
                         lineHeight: 1.35,
-                        flex: "1 1 200px",
-                        minWidth: 0,
                       }}
                     >
                       ⚖️ ZION CONSENSUS ORACLE — ZCO v1.0 | Proprietary Multi-AI Decision Engine
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void fetchZcoDecisions()}
-                      disabled={zcoLoading}
-                      style={{
-                        flexShrink: 0,
-                        background: "rgba(167,139,250,0.12)",
-                        border: "1px solid rgba(167,139,250,0.4)",
-                        color: ZCO_ACCENT,
-                        fontSize: "0.65rem",
-                        padding: "4px 10px",
-                        borderRadius: "8px",
-                        cursor: zcoLoading ? "wait" : "pointer",
-                        opacity: zcoLoading ? 0.6 : 1,
-                      }}
-                    >
-                      {zcoLoading ? "…" : "Refresh"}
-                    </button>
+                    {zcoLastUpdated ? (
+                      <div style={{ color: "#666", fontSize: "0.62rem", marginTop: "4px" }}>
+                        Last updated: {zcoLastUpdated.toLocaleTimeString()}
+                      </div>
+                    ) : null}
                   </div>
                   {zcoLoading && zcoDecisions.length === 0 ? (
                     <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>Loading ZCO decisions…</p>
                   ) : zcoDecisions.length === 0 ? (
-                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No ZCO rounds yet. Try refresh.</p>
+                    <p style={{ color: "#555", fontSize: "0.75rem", margin: "8px 0" }}>No ZCO rounds yet.</p>
                   ) : (
                     zcoDecisions.map((decision, zidx) => {
                       const judgeLabel = (name: string) =>
