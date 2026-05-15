@@ -12,7 +12,6 @@ import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { generateZionMarkets, suiClient, type ZionMarket } from "@/lib/deepbook";
-import { generateSampleEvents, storeCivEvent, type CivilizationEvent } from "@/lib/walrus";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
   CartesianGrid,
@@ -45,6 +44,31 @@ interface EventItem {
   type: string;
   description: string;
   time: string;
+}
+
+interface WalrusLiveEvent {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  agents: string[];
+  amount?: number;
+}
+
+function walrusEventTypeEmoji(type: string): string {
+  const map: Record<string, string> = {
+    prayer: "🙏",
+    election: "👑",
+    death: "💀",
+    lottery: "🎰",
+    clan_join: "🤝",
+    work: "⚙️",
+    catastrophe: "🌋",
+    rebellion: "✊",
+    birth: "👶",
+  };
+  return map[type] ?? "📡";
 }
 
 type ConversationPair = {
@@ -2721,7 +2745,7 @@ export default function Home() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [chronicleEvents, setChronicleEvents] = useState<EventItem[]>([]);
   const [chronicleNow, setChronicleNow] = useState(() => Date.now());
-  const [civEvents, setCivEvents] = useState<CivilizationEvent[]>([]);
+  const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [markets, setMarkets] = useState<ZionMarket[]>([]);
   const [zionBetMyBets, setZionBetMyBets] = useState<ZionMyBetRow[]>([]);
@@ -3157,10 +3181,46 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const events = generateSampleEvents();
-    setCivEvents(events);
+  const fetchWalrusEvents = useCallback(async () => {
+    try {
+      const res = await fetch("/api/events-mixed");
+      const json = await res.json();
+      const data = Array.isArray(json) ? json : Array.isArray(json?.events) ? json.events : [];
+      if (!Array.isArray(data)) return;
+      setWalrusEvents(
+        data.map((e: Record<string, unknown>) => ({
+          id: String(e.id ?? ""),
+          type: String(e.type ?? ""),
+          title:
+            typeof e.description === "string"
+              ? e.description.split(".")[0] || String(e.type ?? "")
+              : String(e.type ?? ""),
+          description: typeof e.description === "string" ? e.description : "",
+          timestamp: (typeof e.time === "string" ? e.time : "") || "",
+          agents:
+            typeof e.agent === "string" && e.agent && e.agent !== "Unknown"
+              ? [e.agent]
+              : typeof e.description === "string"
+                ? (() => {
+                    const m = e.description.match(/^(\w+ \w+)/);
+                    return m?.[1] ? [m[1]] : ["ZION System"];
+                  })()
+                : ["ZION System"],
+          amount: typeof e.amount === "number" ? e.amount : 0,
+        })),
+      );
+    } catch (err) {
+      console.error(err);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchWalrusEvents();
+    const interval = setInterval(() => {
+      void fetchWalrusEvents();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [fetchWalrusEvents]);
 
   useEffect(() => {
     if (showIntro || activeTab !== "zionbet") return;
@@ -4243,29 +4303,27 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                 >
                   📡 LIVE EVENTS — STORED ON WALRUS
                 </h3>
-                {civEvents.map((event) => {
-                  const icons = {
-                    death: "💀",
-                    war: "⚔️",
-                    election: "👑",
-                    catastrophe: "🌋",
-                    trade: "📊",
-                    birth: "🌱",
-                  };
-                  const colors = {
+                {walrusEvents.map((event) => {
+                  const colors: Record<string, string> = {
                     death: "#ff3232",
                     war: "#ff6600",
                     election: "#ffd700",
                     catastrophe: "#ff00ff",
                     trade: "#00ff41",
                     birth: "#00ffff",
+                    prayer: "#a78bfa",
+                    lottery: "#fbbf24",
+                    clan_join: "#34d399",
+                    work: "#94a3b8",
+                    rebellion: "#f472b6",
                   };
+                  const accent = colors[event.type] ?? "#888888";
                   return (
                     <div
                       key={event.id}
                       style={{
-                        border: `1px solid ${colors[event.type]}33`,
-                        borderLeft: `3px solid ${colors[event.type]}`,
+                        border: `1px solid ${accent}33`,
+                        borderLeft: `3px solid ${accent}`,
                         borderRadius: "8px",
                         padding: "10px 14px",
                         marginBottom: "8px",
@@ -4281,15 +4339,15 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                       >
                         <span
                           style={{
-                            color: colors[event.type],
+                            color: accent,
                             fontSize: "0.85rem",
                             fontWeight: "bold",
                           }}
                         >
-                          {icons[event.type]} {event.title}
+                          {walrusEventTypeEmoji(event.type)} {event.title}
                         </span>
                         <span style={{ color: "#444", fontSize: "0.7rem" }}>
-                          {new Date(event.timestamp).toLocaleTimeString()}
+                          {event.timestamp || ""}
                         </span>
                       </div>
                       <p
