@@ -2680,8 +2680,8 @@ const newspapers: PressNewspaper[] = [
     bodyFont: "'Source Serif 4', serif",
     mastheadFont: "'Playfair Display', serif",
     vipOnly: true,
-    silverMin: 10,
-    goldMin: 100,
+    silverMin: 0.1,
+    goldMin: 1,
   },
 ];
 
@@ -2893,6 +2893,12 @@ export default function Home() {
     }
   }, [account?.address, checkVipStatus]);
 
+  const vipCanRead = useMemo(() => {
+    const vipPaper = newspapers.find((n) => n.id === "vip");
+    const silverMin = vipPaper?.silverMin ?? 0.1;
+    return Boolean(account?.address && pressSuiChecked && suiBalance >= silverMin);
+  }, [account?.address, pressSuiChecked, suiBalance]);
+
   const generateArticle = useCallback(async (newspaper: PressNewspaper) => {
     const cacheKey = `press_${newspaper.id}_v2`;
     try {
@@ -3021,6 +3027,14 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- batch on tab open; generateArticle stable
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "press" && activeNewspaper === "vip" && vipCanRead && !pressArticles["vip"] && !pressLoading["vip"]) {
+      const vipPaper = newspapers.find((n) => n.id === "vip");
+      if (vipPaper) void generateArticle(vipPaper);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- VIP article when tab/newspaper/access line up; generateArticle is stable
+  }, [activeTab, activeNewspaper, vipCanRead]);
 
   const zionBetSourceList = useMemo(() => markets.map(zionBetMarketFromZionSource), [markets]);
 

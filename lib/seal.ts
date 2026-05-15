@@ -20,22 +20,20 @@ export function getSealClient(): SealClient {
   return sealClient;
 }
 
-export const SILVER_THRESHOLD = 10000;
-export const GOLD_THRESHOLD = 100000;
+export const SILVER_THRESHOLD = 0.1;
+export const GOLD_THRESHOLD = 1;
 
 export async function checkVIPAccess(walletAddress: string) {
   try {
-    const coins = await suiClient.getCoins({
+    const balance = await suiClient.getBalance({
       owner: walletAddress,
-      coinType:
-        "0xee45f1077c731a8b386ff062efb32dde1086b5419becc2b30bca7de5660484a9::civilization::CIVILIZATION",
+      coinType: "0x2::sui::SUI",
     });
-    const totalBalance = coins.data.reduce((sum, coin) => sum + Number(coin.balance), 0);
-    const zionBalance = totalBalance / 1_000_000_000;
+    const suiBalance = Number(balance.totalBalance) / 1_000_000_000;
     return {
-      isGold: zionBalance >= GOLD_THRESHOLD,
-      isSilver: zionBalance >= SILVER_THRESHOLD,
-      zionBalance,
+      isGold: suiBalance >= GOLD_THRESHOLD,
+      isSilver: suiBalance >= SILVER_THRESHOLD,
+      zionBalance: suiBalance,
       silverRequired: SILVER_THRESHOLD,
       goldRequired: GOLD_THRESHOLD,
     };
