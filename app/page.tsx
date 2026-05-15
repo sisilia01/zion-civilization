@@ -3154,6 +3154,20 @@ export default function Home() {
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
   const aliveAgents = stats?.alive ?? agents.length;
+  const [agentClasses, setAgentClasses] = useState({ elite: 0, middle: 0, poor: 0, critical: 0 });
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const s = await fetch("/api/stats").then((r) => r.json());
+      setStats(s);
+    } catch {
+      // keep last successful snapshot
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchStats();
+  }, [fetchStats]);
 
   const [userPoints, setUserPoints] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -3898,12 +3912,11 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     if (showIntro) return;
     const load = async () => {
       try {
-        const [s, a, c] = await Promise.all([
-          fetch("/api/stats").then((r) => r.json()),
+        await fetchStats();
+        const [a, c] = await Promise.all([
           fetch("/api/agents").then((r) => r.json()),
           fetch("/api/clans").then((r) => r.json()),
         ]);
-        setStats(s);
         setAgents(a);
         setClans(c);
         fetch("/api/conversations")
@@ -3918,7 +3931,26 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     load();
     const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
-  }, [showIntro]);
+  }, [showIntro, fetchStats]);
+
+  useEffect(() => {
+    fetch("/api/agents?limit=2000")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const classes = { elite: 0, middle: 0, poor: 0, critical: 0 };
+          data.forEach((a: Agent) => {
+            const cls = (a.class || "").toLowerCase();
+            if (cls === "elite") classes.elite++;
+            else if (cls === "middle") classes.middle++;
+            else if (cls === "poor") classes.poor++;
+            else classes.critical++;
+          });
+          setAgentClasses(classes);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (showIntro || activeTab !== "chat" || selectedClass == null) {
@@ -4175,6 +4207,9 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     faucetCooldownEndsAt != null ? Math.max(0, Math.ceil((faucetCooldownEndsAt - nowTick) / 1000)) : 0;
   const onCooldown = cooldownRemainingSec > 0;
 
+  const isGoogleConnected = !!zkLoginUser;
+  const isWalletConnected = !!account?.address;
+
   return (
     <main className="page">
       {(showWalletMenu || showUserMenu) && (
@@ -4204,11 +4239,12 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
         }}
         aria-label="Sign in"
       >
-        {!zkLoginUser ? (
-          <button
-            type="button"
-            onClick={() => {
-              void (async () => {
+        {!isGoogleConnected && !isWalletConnected && (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
                 try {
                   const randomness = generateRandomness();
                   const ephemeralKeypair = Ed25519Keypair.generate();
@@ -4252,12 +4288,10 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
           >
             <span>🔑</span>
             <span>Sign in with Google</span>
-          </button>
-        ) : null}
-        {!walletAddress.trim() ? (
-          <button
-            type="button"
-            onClick={() => connect()}
+            </button>
+            <button
+              type="button"
+              onClick={() => connect()}
             style={{
               background: "transparent",
               border: "1px solid #00ff41",
@@ -4275,9 +4309,11 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               justifyContent: "center",
             }}
           >
-            ⚡ CONNECT WALLET
-          </button>
-        ) : (
+              ⚡ CONNECT WALLET
+            </button>
+          </>
+        )}
+        {!isGoogleConnected && isWalletConnected && account?.address ? (
           <div style={{ position: "relative" }}>
             <button
               type="button"
@@ -4349,8 +4385,8 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               </div>
             ) : null}
           </div>
-        )}
-        {zkLoginUser ? (
+        ) : null}
+        {isGoogleConnected && !isWalletConnected && zkLoginUser ? (
           <div style={{ position: "relative" }}>
             <button
               type="button"
@@ -4434,6 +4470,164 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               </div>
             ) : null}
           </div>
+        ) : null}
+        {isGoogleConnected && isWalletConnected && zkLoginUser && account?.address ? (
+          <>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowUserMenu(!showUserMenu);
+                  setShowWalletMenu(false);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #00ff41",
+                  color: "#00ff41",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontFamily: "monospace",
+                  fontSize: "0.78rem",
+                  letterSpacing: "0.5px",
+                  height: "36px",
+                }}
+              >
+                ⚡ {zkLoginUser.email.split("@")[0]} ▾
+              </button>
+
+              {showUserMenu ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "40px",
+                    background: "#0a0a0a",
+                    border: "1px solid #00ff41",
+                    borderRadius: "6px",
+                    minWidth: "200px",
+                    zIndex: 200,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      color: "#555",
+                      fontFamily: "monospace",
+                      fontSize: "0.72rem",
+                      borderBottom: "1px solid #111",
+                    }}
+                  >
+                    {zkLoginUser.email}
+                  </div>
+                  <div
+                    style={{
+                      padding: "8px 14px",
+                      color: "#555",
+                      fontFamily: "monospace",
+                      fontSize: "0.7rem",
+                      borderBottom: "1px solid #111",
+                    }}
+                  >
+                    {zkLoginUser.address.substring(0, 10)}...
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem("zklogin_jwt");
+                      setZkLoginUser(null);
+                      setShowUserMenu(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      background: "transparent",
+                      border: "none",
+                      color: "#ff4141",
+                      padding: "10px 14px",
+                      cursor: "pointer",
+                      fontFamily: "monospace",
+                      fontSize: "0.78rem",
+                      textAlign: "left",
+                    }}
+                  >
+                    ⏻ Logout
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowWalletMenu(!showWalletMenu);
+                  setShowUserMenu(false);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #00ff41",
+                  color: "#00ff41",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontFamily: "monospace",
+                  fontSize: "0.78rem",
+                  letterSpacing: "0.5px",
+                  height: "36px",
+                }}
+              >
+                {`⚡ ${walletAddress.trim().slice(0, 6)}...${walletAddress.trim().slice(-4)} ▾`}
+              </button>
+
+              {showWalletMenu ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "40px",
+                    background: "#0a0a0a",
+                    border: "1px solid #00ff41",
+                    borderRadius: "6px",
+                    minWidth: "200px",
+                    zIndex: 200,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      color: "#555",
+                      fontFamily: "monospace",
+                      fontSize: "0.7rem",
+                      borderBottom: "1px solid #111",
+                    }}
+                  >
+                    {`${walletAddress.trim().slice(0, 16)}...`}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      disconnect();
+                      setShowWalletMenu(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      background: "transparent",
+                      border: "none",
+                      color: "#ff4141",
+                      padding: "10px 14px",
+                      cursor: "pointer",
+                      fontFamily: "monospace",
+                      fontSize: "0.78rem",
+                      textAlign: "left",
+                    }}
+                  >
+                    ⏻ Disconnect Wallet
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </div>
       <canvas
@@ -4567,7 +4761,9 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               }}
             >
               <div style={{ color: "#00ff41" }}>✓ Connected to Sui testnet</div>
-              <div style={{ color: "#00ff41" }}>✓ Loading 1,282 agents...</div>
+              <div style={{ color: "#00ff41" }}>{aliveAgents > 0
+                  ? `✓ ${aliveAgents.toLocaleString()} agents online`
+                  : "Loading agents..."}</div>
               <div style={{ color: "#ffd700" }}>✓ ZionBet prediction markets ready</div>
               <div style={{ color: "#00ff41" }}>✓ Walrus · DeepBook · Seal online</div>
             </div>
@@ -4709,14 +4905,16 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                   <div style={{ borderTop: "1px solid #111", paddingTop: "10px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       {[
-                        { label: "Total", value: "1,282", color: "#00ff41" },
-                        { label: "Elite", value: "~192", color: "#00ff41" },
-                        { label: "Middle", value: "~641", color: "#ffd700" },
-                        { label: "Poor", value: "~320", color: "#ff6600" },
-                        { label: "Critical", value: "~129", color: "#ff3232" },
+                        { label: "Total", value: aliveAgents, color: "#00ff41" },
+                        { label: "Elite", value: agentClasses.elite, color: "#00ff41" },
+                        { label: "Middle", value: agentClasses.middle, color: "#ffd700" },
+                        { label: "Poor", value: agentClasses.poor, color: "#ff6600" },
+                        { label: "Critical", value: agentClasses.critical, color: "#ff3232" },
                       ].map((s) => (
                         <div key={s.label} style={{ textAlign: "center" }}>
-                          <div style={{ color: s.color, fontSize: "0.85rem", fontWeight: "bold" }}>{s.value}</div>
+                          <div style={{ color: s.color, fontSize: "0.85rem", fontWeight: "bold" }}>
+                            {typeof s.value === "number" ? s.value.toLocaleString() : s.value}
+                          </div>
                           <div style={{ color: "#444", fontSize: "0.6rem" }}>{s.label}</div>
                         </div>
                       ))}
@@ -5123,7 +5321,7 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: "6px",
-                                  background: "rgba(167,139,250,0.15)",
+                                  background: "rgba(167,139,250,0.1)",
                                   border: "1px solid #a78bfa44",
                                   color: "#a78bfa",
                                   fontFamily: "monospace",
@@ -5131,11 +5329,23 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                                   padding: "4px 10px",
                                   borderRadius: "4px",
                                   textDecoration: "none",
-                                  cursor: "pointer",
+                                  marginTop: "8px",
                                 }}
                               >
                                 ⛓ View on Sui Explorer ↗
                               </a>
+                            ) : decision.consensus_hash ? (
+                              <span
+                                style={{
+                                  fontFamily: "monospace",
+                                  fontSize: "0.68rem",
+                                  color: "#555",
+                                  marginTop: "8px",
+                                  display: "block",
+                                }}
+                              >
+                                {decision.consensus_hash}
+                              </span>
                             ) : null}
                           </article>
                         );
