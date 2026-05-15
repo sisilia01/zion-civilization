@@ -1266,22 +1266,37 @@ async def place_user_bet(request: Request):
         return {"error": "Market not found"}
     
     yes, no = 50, 50
+    entry_price = 0.0
     if market.get("cg_id"):
         yes, no = get_crypto_odds(market["cg_id"])
+        # Записываем текущую цену для правильного settlement
+        try:
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={market['cg_id']}&vs_currencies=usd"
+            req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                entry_price = float(json.loads(r.read())[market["cg_id"]]["usd"])
+        except:
+            pass
     
     odds = yes if direction else no
     potential_payout = amount_sui * (100 / odds)
     
+    # Правильный resolves_at в зависимости от таймфрейма
+    timeframe = market.get("timeframe", "24h")
+    intervals = {"15m": "15 minutes", "1h": "1 hour", "4h": "4 hours", 
+                 "24h": "24 hours", "7d": "7 days", "30d": "30 days"}
+    interval = intervals.get(timeframe, "24 hours")
+    
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(f"""
         INSERT INTO user_bets 
         (wallet_address, market_id, event_type, question, amount_sui, amount,
-         prediction, odds_at_bet, potential_payout, status, resolves_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', NOW() + INTERVAL '24 hours')
+         prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}')
         RETURNING id
     """, (wallet, market_id, market.get("token",""), market["question"],
-          amount_sui, amount_sui, direction, odds, potential_payout))
+          amount_sui, amount_sui, direction, odds, potential_payout, entry_price))
     bet_id = cur.fetchone()[0]
     conn.commit()
     cur.close()

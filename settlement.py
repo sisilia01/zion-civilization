@@ -116,19 +116,40 @@ def run_settlement():
     
     for market_id, config in CRYPTO_MARKETS.items():
         cur.execute("""
-            SELECT COUNT(*) as cnt FROM user_bets
+            SELECT id, prediction, entry_price, amount_sui, potential_payout, wallet_address
+            FROM user_bets
             WHERE market_id = %s AND settled = false
-            AND created_at < NOW() - INTERVAL '%s minutes'
-        """, (market_id, config["minutes"]))
-        cnt = cur.fetchone()["cnt"]
+            AND resolves_at < NOW()
+        """, (market_id,))
+        bets = cur.fetchall()
         
-        if cnt > 0:
-            print(f"\nSettling {market_id} ({cnt} bets)...")
-            change = get_price_change(config["cg_id"])
-            result = change > 0
-            print(f"  Price change: {change:.2f}% → {'YES' if result else 'NO'}")
-            resolve_onchain(market_id, result)
-            settle_market(market_id, result)
+        if bets:
+            print(f"\nSettling {market_id} ({len(bets)} bets)...")
+            # Получаем текущую цену
+            try:
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={config['cg_id']}&vs_currencies=usd"
+                req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    current_price = float(json.loads(r.read())[config["cg_id"]]["usd"])
+            except:
+                print(f"  Price fetch failed, skipping")
+                continue
+            
+            for bet in bets:
+                bet_id, prediction, entry_price, amount_sui, potential_payout, wallet = bet
+                if entry_price and entry_price > 0:
+                    # Сравниваем с ценой в момент ставки
+                    result = current_price > float(entry_price)
+                    print(f"  Entry: {entry_price} → Now: {current_price} → {'UP' if result else 'DOWN'}")
+                else:
+                    # Нет entry price — используем 24h change
+                    change = get_price_change(config["cg_id"])
+                    result = change > 0
+                    print(f"  24h change: {change:.2f}% → {'YES' if result else 'NO'}")
+                
+                resolve_onchain(market_id, result)
+                settle_market(market_id, result)
+                break  # Один resolve на весь рынок
     
     # Цивилизационные
     cur.execute("""
