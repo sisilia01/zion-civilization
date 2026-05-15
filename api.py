@@ -1190,6 +1190,7 @@ MARKETS_CONFIG = [
     {"id": "sui_7d", "token": "SUI", "timeframe": "7d", "question": "Will SUI go UP this week?", "category": "crypto", "cg_id": "sui"},
     {"id": "cetus_24h", "token": "CETUS", "timeframe": "24h", "question": "Will CETUS go UP today?", "category": "crypto", "cg_id": "cetus-protocol"},
     {"id": "deepbook_24h", "token": "DEEP", "timeframe": "24h", "question": "Will DEEP go UP today?", "category": "crypto", "cg_id": "deepbook"},
+    {"id": "walrus_24h", "token": "WALRUS", "timeframe": "24h", "question": "Will WALRUS go UP today?", "category": "crypto", "cg_id": "walrus-2"},
     {"id": "civ_deaths_24h", "token": "ZION", "timeframe": "24h", "question": "Will more than 50 agents die today?", "category": "civilization"},
     {"id": "civ_clan_war", "token": "ZION", "timeframe": "7d", "question": "Will Golden Dawn win the next clan war?", "category": "civilization"},
     {"id": "civ_rebellion", "token": "ZION", "timeframe": "7d", "question": "Will a rebellion happen this week?", "category": "civilization"},
