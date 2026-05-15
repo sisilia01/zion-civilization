@@ -566,6 +566,8 @@ type ZionBetMarket = {
   no_count?: number;
   timeframe?: string;
   resolves_at_iso?: string | null;
+  /** Alias for countdown (ISO string). */
+  resolves_at?: string | null;
   /** Total ZION staked on this market (sum of bet amounts). */
   volume_zion?: number;
   /** Total SUI staked on this market (API). */
@@ -613,8 +615,32 @@ type ZionBetMyBetRow = {
   amount_sui: number;
   odds?: number;
   potential_payout?: number;
+  payout?: number;
   status?: string;
 };
+
+function notifyMyBetsSettlements(
+  prev: ZionBetMyBetRow[],
+  fetched: ZionBetMyBetRow[],
+  setNotify: (n: { message: string; type: "success" | "error" }) => void
+) {
+  fetched.forEach((bet) => {
+    const p = prev.find((b) => b.id === bet.id);
+    if (p?.status === "active" && bet.status === "won") {
+      const payout = bet.payout ?? bet.potential_payout ?? 0;
+      setNotify({
+        message: `🏆 You WON! +${payout} SUI on "${bet.question}"`,
+        type: "success",
+      });
+    }
+    if (p?.status === "active" && bet.status === "lost") {
+      setNotify({
+        message: `❌ You lost ${bet.amount_sui} SUI on "${bet.question}"`,
+        type: "error",
+      });
+    }
+  });
+}
 
 function zionBetCategorySlugFromLabel(label: string): ZionBetCategorySlug {
   const s = label.trim().toLowerCase();
@@ -669,15 +695,38 @@ function zionBetResolvesAtIso(timeframe: string, nowMs: number = Date.now()): st
   return new Date(nowMs + ms).toISOString();
 }
 
+const ZIONBET_TF_DURATION_MS: Record<string, number> = {
+  "15m": 15 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "4h": 4 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+};
+
+function getOrSetResolveTime(marketId: string, timeframe: string): number {
+  const tf = zionBetTfKeyFromZionMarket(timeframe);
+  const duration = ZIONBET_TF_DURATION_MS[tf] ?? 24 * 60 * 60 * 1000;
+  if (typeof window === "undefined") {
+    return Date.now() + duration;
+  }
+  const key = `zionbet_resolves_${marketId}`;
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    const ts = parseInt(stored, 10);
+    if (Number.isFinite(ts) && ts > Date.now()) return ts;
+  }
+  const resolveAt = Date.now() + duration;
+  localStorage.setItem(key, String(resolveAt));
+  return resolveAt;
+}
+
 /** Compact countdown for market cards (1h → minutes, 24h → hours). */
 function formatMarketCardCountdown(
+  marketId: string,
   timeframe: string | undefined,
-  resolvesAtIso: string | undefined | null,
   nowMs: number
 ): string | null {
-  if (!resolvesAtIso?.trim()) return null;
-  const end = Date.parse(resolvesAtIso);
-  if (!Number.isFinite(end)) return null;
+  const end = getOrSetResolveTime(marketId, timeframe ?? "24h");
   const ms = end - nowMs;
   if (ms <= 0) return "Resolving soon";
   const tf = (timeframe ?? "").toLowerCase();
@@ -2169,7 +2218,7 @@ function ZionBetMarketCard({
     return () => window.clearInterval(id);
   }, []);
 
-  const countdownLabel = formatMarketCardCountdown(bet.timeframe, bet.resolves_at_iso, cardNow);
+  const countdownLabel = formatMarketCardCountdown(bet.id, bet.timeframe, cardNow);
 
   const headline = bet.question.trim();
   const { yes: yesCents, no: noCents } = zionBetDisplayOdds(bet);
@@ -2403,19 +2452,42 @@ function ZionBetMarketDetail({
   const [priceChange, setPriceChange] = useState<number | null>(null);
   const [cgChartRows, setCgChartRows] = useState<{ time: string; price: number }[]>([]);
   const [cgChartLoading, setCgChartLoading] = useState(false);
-  const [detailNow, setDetailNow] = useState(() => Date.now());
+  const [timeLeft, setTimeLeft] = useState("");
 
   const detailCgId = useMemo(() => zionBetDetailCoinGeckoId(market.token), [market.token]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setDetailNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+    const resolveAt = getOrSetResolveTime(market.id, market.timeframe ?? "24h");
 
-  const resolveBadge = useMemo(
-    () => formatResolveCountdown(market.resolves_at_iso, detailNow),
-    [market.resolves_at_iso, detailNow]
-  );
+    const calcTime = () => {
+      const diff = Math.max(0, resolveAt - Date.now());
+      if (diff === 0) {
+        setTimeLeft("Resolving...");
+        return;
+      }
+      const days = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff % 86400000) / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+
+      if (days > 0) setTimeLeft(`${days}d ${hours}h ${mins}m`);
+      else if (hours > 0) setTimeLeft(`${hours}h ${mins}m ${secs}s`);
+      else setTimeLeft(`${mins}m ${secs}s`);
+    };
+
+    calcTime();
+    const interval = window.setInterval(calcTime, 1000);
+    return () => clearInterval(interval);
+  }, [market.id, market.timeframe]);
+
+  const resolveUrgent =
+    timeLeft.length > 0 &&
+    timeLeft !== "Resolving..." &&
+    (() => {
+      const resolveAt = getOrSetResolveTime(market.id, market.timeframe ?? "24h");
+      const diff = Math.max(0, resolveAt - Date.now());
+      return diff > 0 && diff < 5 * 60 * 1000;
+    })();
 
   useEffect(() => {
     const q = encodeURIComponent(market.question);
@@ -2550,28 +2622,54 @@ function ZionBetMarketDetail({
               >
                 {market.question}
               </h2>
-              {resolveBadge ? (
+              {timeLeft ? (
                 <span
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
                     fontSize: "0.78rem",
                     letterSpacing: "0.06em",
-                    color: "#7dffb8",
-                    border: "1px solid rgba(0,255,65,0.35)",
+                    color: resolveUrgent ? "#ff8888" : "#7dffb8",
+                    border: `1px solid ${resolveUrgent ? "rgba(255,65,65,0.5)" : "rgba(0,255,65,0.35)"}`,
                     borderRadius: 999,
                     padding: "6px 12px",
-                    background: "rgba(0,40,20,0.5)",
+                    background: resolveUrgent ? "rgba(40,8,8,0.55)" : "rgba(0,40,20,0.5)",
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {resolveBadge}
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                      background: resolveUrgent ? "#ff4141" : "#00ff41",
+                      boxShadow: resolveUrgent ? "0 0 10px #ff4141" : "0 0 6px #00ff41",
+                      animation: resolveUrgent ? "zionBetPulse 1s ease-in-out infinite" : undefined,
+                    }}
+                  />
+                  Resolves in {timeLeft}
                 </span>
               ) : null}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
               {livePrice != null && Number.isFinite(livePrice) ? (
                 <>
-                  <span style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold" }}>
-                    ${livePrice.toFixed(4)}
+                  <span
+                    style={{
+                      fontSize: "2.2rem",
+                      fontWeight: "800",
+                      fontFamily: "'Courier New', monospace",
+                      color: (priceChange ?? 0) >= 0 ? "#00ff41" : "#ff4141",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    $
+                    {livePrice.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </span>
                   {priceChange != null && Number.isFinite(priceChange) ? (
                     <span
@@ -3084,6 +3182,10 @@ export default function Home() {
   const [betLoading, setBetLoading] = useState(false);
   const [betResult, setBetResult] = useState<Record<string, unknown> | null>(null);
   const [zionBetToast, setZionBetToast] = useState<string | null>(null);
+  const [zionBetNotify, setZionBetNotify] = useState<{ message: string; type: "success" | "error" } | null>(
+    null
+  );
+  const myBetsRef = useRef<ZionBetMyBetRow[]>([]);
   const [zionBetPlacing, setZionBetPlacing] = useState<string | null>(null);
   const [zionBetSelectedMarket, setZionBetSelectedMarket] = useState<ZionBetMarket | null>(null);
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
@@ -3509,6 +3611,12 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     return () => window.clearTimeout(id);
   }, [zionBetToast]);
 
+  useEffect(() => {
+    if (!zionBetNotify) return;
+    const id = window.setTimeout(() => setZionBetNotify(null), 5200);
+    return () => window.clearTimeout(id);
+  }, [zionBetNotify]);
+
   const loadZionBetMarkets = useCallback(async (): Promise<ZionBetMarket[]> => {
     try {
       const r = await fetch("/api/markets");
@@ -3640,25 +3748,48 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
   const loadMyBets = useCallback(async () => {
     const w = account?.address?.trim();
     if (!w) {
+      myBetsRef.current = [];
       setMyBets([]);
       return;
     }
     try {
       const r = await fetch(`/api/my_bets/${encodeURIComponent(w)}`);
       const data = await r.json();
-      setMyBets(Array.isArray(data) ? data : []);
+      const fetched = Array.isArray(data) ? (data as ZionBetMyBetRow[]) : [];
+      const prev = myBetsRef.current || [];
+      notifyMyBetsSettlements(prev, fetched, setZionBetNotify);
+      myBetsRef.current = fetched;
+      setMyBets(fetched);
     } catch {
+      myBetsRef.current = [];
       setMyBets([]);
     }
   }, [account?.address]);
 
   useEffect(() => {
-    if (account?.address && activeTab === "zionbet") {
-      void loadMyBets();
-    } else if (!account?.address) {
+    if (!account?.address) {
+      myBetsRef.current = [];
       setMyBets([]);
+      return;
     }
-  }, [account?.address, activeTab, loadMyBets]);
+
+    const pollMyBets = () => {
+      void fetch(`/api/my_bets/${encodeURIComponent(account.address!)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const bets = Array.isArray(data) ? (data as ZionBetMyBetRow[]) : [];
+          const prev = myBetsRef.current || [];
+          notifyMyBetsSettlements(prev, bets, setZionBetNotify);
+          myBetsRef.current = bets;
+          setMyBets(bets);
+        })
+        .catch(() => {});
+    };
+
+    pollMyBets();
+    const interval = window.setInterval(pollMyBets, 30000);
+    return () => clearInterval(interval);
+  }, [account?.address]);
 
   useEffect(() => {
     if (!faucetCooldownEndsAt || faucetCooldownEndsAt <= Date.now()) return;
@@ -5075,6 +5206,20 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
               {zionBetToast ? (
                 <div className="zionBetToast" role="status">
                   {zionBetToast}
+                </div>
+              ) : null}
+              {zionBetNotify ? (
+                <div
+                  className="zionBetToast"
+                  role="status"
+                  style={{
+                    borderColor: zionBetNotify.type === "success" ? "rgba(0,255,65,0.45)" : "rgba(255,65,65,0.45)",
+                    background:
+                      zionBetNotify.type === "success" ? "rgba(0,40,14,0.55)" : "rgba(40,8,8,0.55)",
+                    color: zionBetNotify.type === "success" ? "#b8ffd0" : "#ffb8b8",
+                  }}
+                >
+                  {zionBetNotify.message}
                 </div>
               ) : null}
               {zionBetSelectedMarket ? (
@@ -6913,6 +7058,17 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
           font-size: 0.72rem;
           letter-spacing: 0.14em;
           color: rgba(180, 235, 200, 0.88);
+        }
+        @keyframes zionBetPulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.45;
+            transform: scale(1.35);
+          }
         }
         .zionBetToast {
           margin: 0 0 18px;
