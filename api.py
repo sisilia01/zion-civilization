@@ -1308,3 +1308,41 @@ def get_zco_events_fast():
         return data
     # Если кэш ещё не готов — генерируем синхронно
     return _generate_zco()
+
+@app.get("/events/highlights")
+def get_event_highlights():
+    """One event of each type for Walrus display"""
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("""
+            SELECT DISTINCT ON (event_type) 
+                e.id, e.event_type as type, e.description, e.zion_amount as amount,
+                e.created_at, a.name as agent_name
+            FROM events e
+            LEFT JOIN agents a ON e.agent_id = a.id
+            WHERE event_type IN ('election','catastrophe','clan_war','rebellion',
+                                'lottery','blessing','birth','work','prayer','clan_join')
+            ORDER BY event_type, id DESC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        priority = ['election','catastrophe','clan_war','rebellion','lottery','blessing','birth','work','clan_join','prayer']
+        events = []
+        for p in priority:
+            for row in rows:
+                if row['type'] == p:
+                    events.append({
+                        "id": row['id'],
+                        "type": row['type'],
+                        "description": row['description'],
+                        "amount": float(row['amount'] or 0),
+                        "agent": row["agent_name"] or "Unknown", "time": str(row["created_at"])[-15:-7] if row['created_at'] else ""
+                    })
+                    break
+
+        return events
+    except Exception as e:
+        return {"error": str(e)}
