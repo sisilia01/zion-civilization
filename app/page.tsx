@@ -3221,20 +3221,46 @@ export default function Home() {
   const [zcoLoading, setZcoLoading] = useState(false);
   const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
 
+  const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
+    const res = await fetch("/api/zco");
+    if (!res.ok) return [];
+    const data = (await res.json()) as { decisions?: ZcoDecision[] };
+    return data.decisions ?? [];
+  }, []);
+
   const fetchZcoDecisions = useCallback(async () => {
+    const cacheKey = "zco_decisions_cache";
+    const ttlMs = 10 * 60 * 1000;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached) as { data: ZcoDecision[]; ts: number };
+        if (Date.now() - ts < ttlMs && Array.isArray(data)) {
+          setZcoDecisions(data);
+          setZcoLastUpdated(new Date(ts));
+          void fetchZcoDecisionsFromAPI().then((fresh) => {
+            setZcoDecisions(fresh);
+            setZcoLastUpdated(new Date());
+            localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+          });
+          return;
+        }
+      }
+    } catch {
+      /* ignore bad cache */
+    }
     setZcoLoading(true);
     try {
-      const res = await fetch("/api/zco");
-      if (!res.ok) return;
-      const data = (await res.json()) as { decisions?: ZcoDecision[] };
-      if (data.decisions) setZcoDecisions(data.decisions);
+      const fresh = await fetchZcoDecisionsFromAPI();
+      setZcoDecisions(fresh);
       setZcoLastUpdated(new Date());
+      localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
     } catch {
       /* ignore */
     } finally {
       setZcoLoading(false);
     }
-  }, []);
+  }, [fetchZcoDecisionsFromAPI]);
 
   const checkVipStatus = useCallback(async () => {
     if (!account?.address) return;
@@ -3672,70 +3698,95 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     return () => clearInterval(interval);
   }, [zionBetSelectedMarket?.id, loadZionBetMarkets]);
 
+  const fetchWalrusEventsFromAPI = useCallback(async (): Promise<WalrusLiveEvent[]> => {
+    const res = await fetch("/api/events-mixed");
+    const json = await res.json();
+    const data = Array.isArray(json) ? json : Array.isArray(json?.events) ? json.events : [];
+    if (!Array.isArray(data)) return [];
+
+    return data.map((e: Record<string, unknown>) => ({
+      id: String(e.id ?? ""),
+      type: String(e.type ?? ""),
+      title:
+        typeof e.description === "string"
+          ? e.description.split(".")[0] || String(e.type ?? "")
+          : String(e.type ?? ""),
+      description: typeof e.description === "string" ? e.description : "",
+      timestamp: (typeof e.time === "string" ? e.time : "") || "",
+      agents:
+        typeof e.agent === "string" && e.agent && e.agent !== "Unknown"
+          ? [e.agent]
+          : typeof e.description === "string"
+            ? (() => {
+                const m = e.description.match(/^(\w+ \w+)/);
+                return m?.[1] ? [m[1]] : ["ZION System"];
+              })()
+            : ["ZION System"],
+      amount: typeof e.amount === "number" ? e.amount : 0,
+    })).slice(0, 12);
+  }, []);
+
   const fetchWalrusEvents = useCallback(async () => {
+    const cacheKey = "walrus_events_cache";
+    const ttlMs = 5 * 60 * 1000;
     try {
-      const [eventsRes, convRes] = await Promise.all([
-        fetch("/api/events-mixed"),
-        fetch("/api/conversations"),
-      ]);
-      const json = await eventsRes.json();
-      const convs = await convRes.json();
-      const data = Array.isArray(json) ? json : Array.isArray(json?.events) ? json.events : [];
-      if (!Array.isArray(data)) return;
-
-      const eventItems: WalrusLiveEvent[] = data.map((e: Record<string, unknown>) => ({
-        id: String(e.id ?? ""),
-        type: String(e.type ?? ""),
-        title:
-          typeof e.description === "string"
-            ? e.description.split(".")[0] || String(e.type ?? "")
-            : String(e.type ?? ""),
-        description: typeof e.description === "string" ? e.description : "",
-        timestamp: (typeof e.time === "string" ? e.time : "") || "",
-        agents:
-          typeof e.agent === "string" && e.agent && e.agent !== "Unknown"
-            ? [e.agent]
-            : typeof e.description === "string"
-              ? (() => {
-                  const m = e.description.match(/^(\w+ \w+)/);
-                  return m?.[1] ? [m[1]] : ["ZION System"];
-                })()
-              : ["ZION System"],
-        amount: typeof e.amount === "number" ? e.amount : 0,
-      }));
-
-      type RawConv = {
-        id?: number;
-        agent1?: { name?: string };
-        message1?: string;
-        time?: string;
-      };
-      const convItems: WalrusLiveEvent[] = (Array.isArray(convs) ? convs : []).map(
-        (c: RawConv, i: number) => {
-          const agentName = c.agent1?.name ? cleanName(c.agent1.name) : "Agent";
-          const message = cleanMsg(c.message1 || "");
-          return {
-            id: `conv-${c.id ?? i}`,
-            type: "chat",
-            title: `${agentName}: ${message}`,
-            description: message,
-            timestamp: (typeof c.time === "string" ? c.time : "") || "",
-            agents: [agentName],
-          };
-        },
-      );
-
-      const mixed: WalrusLiveEvent[] = [];
-      const maxLen = Math.max(eventItems.length, convItems.length);
-      for (let i = 0; i < maxLen && mixed.length < 12; i++) {
-        if (i < eventItems.length && mixed.length < 12) mixed.push(eventItems[i]!);
-        if (i < convItems.length && mixed.length < 12) mixed.push(convItems[i]!);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached) as { data: WalrusLiveEvent[]; ts: number };
+        if (Date.now() - ts < ttlMs && Array.isArray(data)) {
+          setWalrusEvents(data);
+          void fetchWalrusEventsFromAPI().then((fresh) => {
+            setWalrusEvents(fresh);
+            localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+          });
+          return;
+        }
       }
-      setWalrusEvents(mixed.slice(0, 12));
+    } catch {
+      /* ignore bad cache */
+    }
+    try {
+      const fresh = await fetchWalrusEventsFromAPI();
+      setWalrusEvents(fresh);
+      localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
     } catch (err) {
       console.error(err);
     }
+  }, [fetchWalrusEventsFromAPI]);
+
+  const fetchConversationsFromAPI = useCallback(async (): Promise<ConversationPair[]> => {
+    const res = await fetch("/api/conversations");
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   }, []);
+
+  const fetchConversations = useCallback(async () => {
+    const cacheKey = "conversations_cache";
+    const ttlMs = 2 * 60 * 1000;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached) as { data: ConversationPair[]; ts: number };
+        if (Date.now() - ts < ttlMs && Array.isArray(data)) {
+          setConversations(data);
+          void fetchConversationsFromAPI().then((fresh) => {
+            setConversations(fresh);
+            localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+          });
+          return;
+        }
+      }
+    } catch {
+      /* ignore bad cache */
+    }
+    try {
+      const fresh = await fetchConversationsFromAPI();
+      setConversations(fresh);
+      localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+    } catch {
+      /* ignore */
+    }
+  }, [fetchConversationsFromAPI]);
 
   useEffect(() => {
     void fetchWalrusEvents();
@@ -3812,16 +3863,10 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
   }, [faucetCooldownEndsAt]);
 
   useEffect(() => {
-    if (showIntro) return;
-    const loadConv = () =>
-      fetch("/api/conversations")
-        .then((r) => r.json())
-        .then((data) => setConversations(Array.isArray(data) ? data : []))
-        .catch(() => {});
-    loadConv();
-    const t = window.setInterval(loadConv, 60000);
+    void fetchConversations();
+    const t = window.setInterval(() => void fetchConversations(), 60000);
     return () => clearInterval(t);
-  }, [showIntro]);
+  }, [fetchConversations]);
 
   useEffect(() => {
     if (showIntro && !dashboardVisible) return;
@@ -3919,10 +3964,6 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
         ]);
         setAgents(a);
         setClans(c);
-        fetch("/api/conversations")
-          .then((r) => r.json())
-          .then((data) => setConversations(Array.isArray(data) ? data : []))
-          .catch(() => {});
       } catch {
         // keep last successful snapshot
       }
