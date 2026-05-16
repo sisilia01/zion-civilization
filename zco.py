@@ -1,5 +1,4 @@
 import json
-import os
 import urllib.request
 import hashlib
 import subprocess
@@ -7,9 +6,34 @@ import re
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "REDACTED_KEY")
+OPENROUTER_KEY = "REDACTED_KEY"
+
+
+def get_best_coin_id() -> str:
+    """Автоматически находит SUI монету с наибольшим балансом"""
+    try:
+        result = subprocess.run(
+            ["sui", "client", "gas", "--json"],
+            capture_output=True, text=True, timeout=15
+        )
+        coins = json.loads(result.stdout)
+        # Сортируем по balanceInMist если есть, иначе по suiBalance
+        def get_balance(c):
+            try:
+                bal = c.get("mistBalance", c.get("suiBalance", "0"))
+                return float(str(bal).replace(" SUI","").replace(",","") or 0)
+            except:
+                return 0
+        best = sorted(coins, key=get_balance, reverse=True)
+        for coin in best:
+            if get_balance(coin) > 0:
+                return coin["gasCoinId"]
+    except Exception as e:
+        print(f"Coin lookup error: {e}")
+    return ""
+
 SUI_ADDRESS = "0xb193ba40239f9caebbc9b6bf1d7aba2d9ff6f8a26eca4ae74ad610079607265b"
-SUI_COIN_ID = "0xd7e289b8f734ea56f234386cde0dfab5371eee6de1f4a479e47fed17a5485ef2"
+SUI_COIN_ID = ""  # auto-detected below
 
 JUDGES = [
     {"name": "DeepSeek", "model": "deepseek/deepseek-chat-v3-0324"},
@@ -93,7 +117,7 @@ def record_onchain(agent_name: str, decision: str, consensus_hash: str) -> str:
         result = subprocess.run([
             "sui", "client", "transfer-sui",
             "--to", SUI_ADDRESS,
-            "--sui-coin-object-id", SUI_COIN_ID,
+            "--sui-coin-object-id", get_best_coin_id(),
             "--amount", "1000000",
             "--gas-budget", "10000000",
             "--json"
