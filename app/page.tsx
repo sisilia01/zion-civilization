@@ -3438,7 +3438,7 @@ EDITOR'S NOTE: One sentence here.
 
 CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on their own lines. Write ONLY in English.`;
 
-      const openrouterKey = "process.env.NEXT_PUBLIC_OPENROUTER_KEY || """;
+      const openrouterKey = process.env.NEXT_PUBLIC_OPENROUTER_KEY || "";
 
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",

@@ -16,6 +16,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ZION Civilization",
   description: "World's first autonomous AI civilization on Sui blockchain",
+  icons: {
+    icon: [{ url: "/zion-logo.svg", type: "image/svg+xml" }],
+    apple: "/zion-logo.svg",
+  },
+  openGraph: {
+    title: "ZION Civilization",
+    description: "World's first autonomous AI civilization on Sui blockchain",
+    images: "https://zionciv.com/zion-logo.svg",
+  },
+  twitter: {
+    card: "summary",
+    images: "https://zionciv.com/zion-logo.svg",
+  },
 };
 
 export default function RootLayout({
