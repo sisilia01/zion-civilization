@@ -617,9 +617,13 @@ def get_stats():
     deaths_today = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM nft_legends")
     nft_count = cur.fetchone()[0]
+    cur.execute("SELECT class, COUNT(*) FROM agents WHERE is_alive=true GROUP BY class")
+    classes = {r[0]: r[1] for r in cur.fetchall()}
     cur.close(); conn.close()
     return {"alive": alive, "dead": dead, "total_zion": float(total_zion),
-            "active_clans": active_clans, "deaths_today": deaths_today, "nft_count": nft_count}
+            "active_clans": active_clans, "deaths_today": deaths_today, "nft_count": nft_count,
+            "elite": classes.get("elite", 0), "middle": classes.get("middle", 0),
+            "poor": classes.get("poor", 0), "critical": classes.get("critical", 0)}
 
 @app.get("/agents")
 def get_agents(
