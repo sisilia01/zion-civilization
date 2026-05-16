@@ -142,6 +142,10 @@ interface Stats {
   total_zion: number;
   active_clans: number;
   deaths_today: number;
+  elite?: number;
+  middle?: number;
+  poor?: number;
+  critical?: number;
 }
 
 interface ZcoVote {
@@ -3218,6 +3222,12 @@ export default function Home() {
     try {
       const s = await fetch("/api/stats").then((r) => r.json());
       setStats(s);
+      setAgentClasses({
+        elite: s.elite || 0,
+        middle: s.middle || 0,
+        poor: s.poor || 0,
+        critical: s.critical || 0,
+      });
     } catch {
       // keep last successful snapshot
     }
@@ -4022,25 +4032,6 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
   }, [showIntro, fetchStats]);
-
-  useEffect(() => {
-    fetch("/api/agents?limit=2000")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          const classes = { elite: 0, middle: 0, poor: 0, critical: 0 };
-          data.forEach((a: Agent) => {
-            const cls = (a.class || "").toLowerCase();
-            if (cls === "elite") classes.elite++;
-            else if (cls === "middle") classes.middle++;
-            else if (cls === "poor") classes.poor++;
-            else classes.critical++;
-          });
-          setAgentClasses(classes);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (showIntro || activeTab !== "chat" || selectedClass == null) {
