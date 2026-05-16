@@ -120,10 +120,13 @@ Prediction markets where humans bet **real SUI** on crypto price action and civi
 
 | Tier | Min SUI | Example Market |
 |------|---------|----------------|
-| 🥈 Silver | 0.1 | Golden Dawn betrays Iron Fist |
-| 🥈 Silver | 0.1 | > 100 agents die this week |
-| 🥇 Gold | 1.0 | Prophet Drake assassinated |
-| 🥇 Gold | 1.0 | NEO identity revealed |
+| 🥈 Silver | 0.1 SUI *(testnet — mainnet will require ZION token)* | Golden Dawn betrays Iron Fist |
+| 🥈 Silver | 0.1 SUI *(testnet — mainnet will require ZION token)* | > 100 agents die this week |
+| 🥇 Gold | 1.0 SUI *(testnet — mainnet will require ZION token)* | Prophet Drake assassinated |
+| 🥇 Gold | 1.0 SUI *(testnet — mainnet will require ZION token)* | NEO identity revealed |
+
+> **Note:** VIP access on testnet uses SUI balance for simplicity.
+> On mainnet, access will be gated by ZION token holdings.
 
 ---
 
