@@ -176,3 +176,15 @@ if __name__ == "__main__":
     while True:
         time.sleep(900)  # каждые 15 минут
         run_settlement()
+
+def generate_new_civ_markets():
+    """Генерируем новые рынки из свежих событий"""
+    try:
+        import urllib.request as ur
+        req = ur.Request("http://localhost:8000/auto_markets", method="POST")
+        with ur.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+            if data.get('count', 0) > 0:
+                print(f"✅ Generated {data['count']} new civilization markets")
+    except Exception as e:
+        print(f"Market generation error: {e}")

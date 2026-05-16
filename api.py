@@ -1527,3 +1527,98 @@ def get_event_highlights():
     except Exception as e:
         return {"error": str(e)}
 
+
+# === AUTO CIVILIZATION MARKETS ===
+import hashlib
+
+def create_civ_market_onchain(market_id: str, question: str):
+    """Создаём рынок on-chain"""
+    try:
+        PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78"
+        ADMIN = "0x252e23431bbe8252e003e8c179f6dfafd8dcfefc068eb862fe329504f8391892"
+        result = subprocess.run([
+            "sui", "client", "call",
+            "--package", PACKAGE,
+            "--module", "zion_bet",
+            "--function", "create_market",
+            "--args", ADMIN, question, market_id, "0",
+            "--gas-budget", "10000000"
+        ], capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            # Извлекаем object ID
+            import re
+            match = re.search(r'ID: (0x[a-f0-9]{64})', result.stdout)
+            if match:
+                return match.group(1)
+    except Exception as e:
+        print(f"Market creation error: {e}")
+    return None
+
+@app.post("/auto_markets")
+def generate_auto_markets():
+    """Автоматически создаём рынки из последних событий"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    # Берём последние важные события
+    cur.execute("""
+        SELECT e.id, e.event_type, e.description, a.name, a.class
+        FROM events e
+        LEFT JOIN agents a ON e.agent_id = a.id
+        WHERE e.event_type IN ('election','catastrophe','clan_war','rebellion','lottery','death','birth')
+        AND e.created_at > NOW() - INTERVAL '24 hours'
+        ORDER BY e.id DESC
+        LIMIT 20
+    """)
+    events = cur.fetchall()
+    
+    # Существующие рынки
+    cur.execute("SELECT market_id FROM user_bets GROUP BY market_id")
+    existing = set(r[0] for r in cur.fetchall())
+    
+    created = []
+    seen_types = set()
+    for event in events:
+        etype = event['event_type']
+        desc = event['description'] or ''
+        agent = event['name'] or 'ZION'
+        
+        # Только один рынок на каждый тип события
+        if etype in seen_types:
+            continue
+        seen_types.add(etype)
+        
+        # Генерируем уникальный market_id
+        market_id = f"civ_{etype}_{event['id']}"
+        if market_id in existing:
+            continue
+        
+        # Генерируем вопрос в зависимости от типа
+        if etype == 'election':
+            question = f"Will {agent} win re-election next cycle?"
+        elif etype == 'catastrophe':
+            question = f"Will another catastrophe hit ZION this week?"
+        elif etype == 'clan_war':
+            question = f"Will Golden Dawn win the next clan war?"
+        elif etype == 'rebellion':
+            question = f"Will the rebellion succeed this cycle?"
+        elif etype == 'lottery':
+            question = f"Will {agent} win the next lottery?"
+        elif etype == 'death':
+            agents_class = event['class'] or 'poor'
+            question = f"Will more than 100 {agents_class} agents die today?"
+        elif etype == 'birth':
+            question = f"Will ZION population exceed 11,000 this week?"
+        else:
+            continue
+        
+        created.append({
+            "market_id": market_id,
+            "question": question,
+            "event_type": etype
+        })
+    
+    cur.close()
+    conn.close()
+    
+    return {"created": created, "count": len(created)}
