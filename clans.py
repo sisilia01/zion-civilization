@@ -126,3 +126,62 @@ if __name__ == "__main__":
     join_clans()
     if random.random() > 0.70:  # 30% chance of war
         clan_war()
+
+NEW_CLAN_NAMES = [
+    "Neon Syndicate", "Void Brotherhood", "Crimson Legion",
+    "Azure Collective", "Steel Covenant", "Phantom Council",
+    "Nova Alliance", "Dark Meridian", "Apex Order", "Silver Pact"
+]
+
+def auto_create_clans():
+    """Создаём новые кланы если популяция выросла"""
+    cur = conn.cursor()
+    
+    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive=true")
+    population = cur.fetchone()[0]
+    
+    cur.execute("SELECT COUNT(*) FROM clans")
+    clan_count = cur.fetchone()[0]
+    
+    # Формула: 1 клан на каждые 2000 агентов
+    target_clans = max(3, population // 2000)
+    
+    if clan_count >= target_clans:
+        cur.close()
+        return
+    
+    to_create = target_clans - clan_count
+    
+    # Берём имена которых ещё нет
+    cur.execute("SELECT name FROM clans")
+    existing = set(r[0] for r in cur.fetchall())
+    available = [n for n in NEW_CLAN_NAMES if n not in existing]
+    
+    created = 0
+    for name in available[:to_create]:
+        # Найдём богатого элитного агента как лидера
+        cur.execute("""
+            SELECT id FROM agents 
+            WHERE is_alive=true AND class='elite' AND clan_id IS NULL
+            ORDER BY balance DESC LIMIT 1
+        """)
+        leader = cur.fetchone()
+        leader_id = leader[0] if leader else None
+        
+        cur.execute("""
+            INSERT INTO clans (name, leader_id, treasury, members_count, wins, losses)
+            VALUES (%s, %s, 100, 0, 0, 0)
+        """, (name, leader_id))
+        
+        print(f"✅ New clan created: {name}")
+        created += 1
+    
+    conn.commit()
+    cur.close()
+    print(f"Created {created} new clans. Total: {target_clans}")
+
+if __name__ == "__main__":
+    auto_create_clans()
+    join_clans()
+    clan_wars()
+    conn.close()
