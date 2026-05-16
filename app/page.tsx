@@ -538,13 +538,13 @@ type ZionBetCategoryFilter = "all" | ZionBetCategorySlug;
 
 type ZionBetTimeframeFilterKey =
   | "all"
-  | "15m"
+  | "15min"
   | "1h"
   | "4h"
   | "24h"
   | "7d"
-  | "monthly"
-  | "yearly";
+  | "30d"
+  | "1y";
 
 type ZionBetBracketRow = {
   index: number;
@@ -586,14 +586,34 @@ type ZionBetMarket = {
 
 const ZIONBET_TIMEFRAME_SIDEBAR_ROWS: { key: ZionBetTimeframeFilterKey; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "15m", label: "15 min" },
+  { key: "15min", label: "15 min" },
   { key: "1h", label: "1 hour" },
   { key: "4h", label: "4 hours" },
   { key: "24h", label: "Daily" },
   { key: "7d", label: "Weekly" },
-  { key: "monthly", label: "Monthly" },
-  { key: "yearly", label: "Yearly" },
+  { key: "30d", label: "Monthly" },
+  { key: "1y", label: "Yearly" },
 ];
+
+const ZIONBET_TIMEFRAME_MAP: Record<string, string[]> = {
+  "15min": ["15m"],
+  "1h": ["1h"],
+  "4h": ["4h"],
+  "24h": ["24h"],
+  "7d": ["7d"],
+  "30d": ["30d"],
+  "1y": ["1y"],
+};
+
+function zionBetMarketMatchesTimeframeFilter(
+  marketTf: string | undefined,
+  selectedTimeframe: ZionBetTimeframeFilterKey
+): boolean {
+  if (selectedTimeframe === "all") return true;
+  const normalized = zionBetTfKeyFromZionMarket(marketTf ?? "");
+  const allowed = ZIONBET_TIMEFRAME_MAP[selectedTimeframe] ?? [selectedTimeframe];
+  return allowed.includes(normalized);
+}
 
 type ZionMyBetRow = {
   id: number;
@@ -3035,6 +3055,44 @@ const newspapers: PressNewspaper[] = [
   },
 ];
 
+const CONV_CACHE_TTL_MS = 2 * 60 * 1000;
+const PRESS_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+
+function readConvCache(): ConversationPair[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const convCache = localStorage.getItem("conv_cache");
+    if (!convCache) return null;
+    const { data, ts } = JSON.parse(convCache) as { data: ConversationPair[]; ts: number };
+    if (Date.now() - ts < CONV_CACHE_TTL_MS && Array.isArray(data)) return data;
+  } catch {
+    /* ignore bad cache */
+  }
+  return null;
+}
+
+function readPressCache(newspaperId: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const pressCache = localStorage.getItem(`press_${newspaperId}`);
+    if (!pressCache) return null;
+    const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
+    if (Date.now() - ts < PRESS_CACHE_TTL_MS && typeof content === "string") return content;
+  } catch {
+    /* ignore bad cache */
+  }
+  return null;
+}
+
+function readAllPressCaches(): Record<string, string> {
+  const articles: Record<string, string> = {};
+  for (const newspaper of newspapers) {
+    const content = readPressCache(newspaper.id);
+    if (content) articles[newspaper.id] = content;
+  }
+  return articles;
+}
+
 function renderArticle(text: string, ac: string, border: string, bodyFont: string) {
   const clean = text.replace(/\*\*/g, "");
 
@@ -3183,7 +3241,7 @@ export default function Home() {
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
-  const [conversations, setConversations] = useState<ConversationPair[]>([]);
+  const [conversations, setConversations] = useState<ConversationPair[]>(() => readConvCache() ?? []);
   const [markets, setMarkets] = useState<ZionBetMarket[]>([]);
   const [myBets, setMyBets] = useState<ZionBetMyBetRow[]>([]);
   const [betModal, setBetModal] = useState<{
@@ -3212,7 +3270,7 @@ export default function Home() {
   } | null>(null);
   const [showVIP, setShowVIP] = useState(false);
 
-  const [pressArticles, setPressArticles] = useState<Record<string, string>>({});
+  const [pressArticles, setPressArticles] = useState<Record<string, string>>(() => readAllPressCaches());
   const [pressLoading, setPressLoading] = useState<Record<string, boolean>>({});
   const [activeNewspaper, setActiveNewspaper] = useState("ziontimes");
   const [suiBalance, setSuiBalance] = useState(0);
@@ -3302,14 +3360,13 @@ export default function Home() {
   }, [account?.address, pressSuiChecked, suiBalance]);
 
   const generateArticle = useCallback(async (newspaper: PressNewspaper) => {
-    const cacheKey = `press_${newspaper.id}_v2`;
+    const cacheKey = `press_${newspaper.id}`;
     try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { article, timestamp } = JSON.parse(cached) as { article: string; timestamp: number };
-        if (Date.now() - timestamp < 2 * 60 * 60 * 1000) {
-          setPressArticles((prev) => ({ ...prev, [newspaper.id]: article }));
-          setPressLoading((prev) => ({ ...prev, [newspaper.id]: false }));
+      const pressCache = localStorage.getItem(cacheKey);
+      if (pressCache) {
+        const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
+        if (Date.now() - ts < PRESS_CACHE_TTL_MS) {
+          setPressArticles((prev) => ({ ...prev, [newspaper.id]: content }));
           return;
         }
       }
@@ -3381,7 +3438,7 @@ EDITOR'S NOTE: One sentence here.
 
 CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on their own lines. Write ONLY in English.`;
 
-      const openrouterKey = "REDACTED_KEY";
+      const openrouterKey = "process.env.NEXT_PUBLIC_OPENROUTER_KEY || """;
 
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -3407,7 +3464,7 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
         data.choices?.[0]?.message?.content ||
         data.error?.message ||
         JSON.stringify(data).substring(0, 300);
-      localStorage.setItem(cacheKey, JSON.stringify({ article, timestamp: Date.now() }));
+      localStorage.setItem(cacheKey, JSON.stringify({ content: article, ts: Date.now() }));
       setPressArticles((prev) => ({ ...prev, [newspaper.id]: article }));
     } catch (err) {
       console.error("Press error:", err);
@@ -3462,22 +3519,24 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     const n = (tf: ZionBetTimeframeFilterKey) =>
       tf === "all"
         ? list.length
-        : list.filter((b) => (b.timeframe ?? "") === tf).length;
+        : list.filter((b) => zionBetMarketMatchesTimeframeFilter(b.timeframe, tf)).length;
     return {
       all: n("all"),
-      "15m": n("15m"),
+      "15min": n("15min"),
       "1h": n("1h"),
       "4h": n("4h"),
       "24h": n("24h"),
       "7d": n("7d"),
-      monthly: n("monthly"),
-      yearly: n("yearly"),
+      "30d": n("30d"),
+      "1y": n("1y"),
     };
   }, [zionBetListAfterCategory]);
 
   const zionBetFilteredMarkets = useMemo(() => {
     if (zionBetTimeframeTab === "all") return zionBetListAfterCategory;
-    return zionBetListAfterCategory.filter((b) => b.timeframe === zionBetTimeframeTab);
+    return zionBetListAfterCategory.filter((b) =>
+      zionBetMarketMatchesTimeframeFilter(b.timeframe, zionBetTimeframeTab)
+    );
   }, [zionBetListAfterCategory, zionBetTimeframeTab]);
 
   useEffect(() => {
@@ -3754,25 +3813,13 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
     }
   }, [fetchWalrusEventsFromAPI]);
 
-  const fetchConversationsFromAPI = useCallback(async (): Promise<ConversationPair[]> => {
-    const res = await fetch("/api/conversations");
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  }, []);
-
   const fetchConversations = useCallback(async () => {
-    const cacheKey = "conversations_cache";
-    const ttlMs = 2 * 60 * 1000;
     try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { data, ts } = JSON.parse(cached) as { data: ConversationPair[]; ts: number };
-        if (Date.now() - ts < ttlMs && Array.isArray(data)) {
+      const convCache = localStorage.getItem("conv_cache");
+      if (convCache) {
+        const { data, ts } = JSON.parse(convCache) as { data: ConversationPair[]; ts: number };
+        if (Date.now() - ts < CONV_CACHE_TTL_MS && Array.isArray(data)) {
           setConversations(data);
-          void fetchConversationsFromAPI().then((fresh) => {
-            setConversations(fresh);
-            localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
-          });
           return;
         }
       }
@@ -3780,13 +3827,15 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
       /* ignore bad cache */
     }
     try {
-      const fresh = await fetchConversationsFromAPI();
-      setConversations(fresh);
-      localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
+      const res = await fetch("/api/conversations");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setConversations(list);
+      localStorage.setItem("conv_cache", JSON.stringify({ data: list, ts: Date.now() }));
     } catch {
       /* ignore */
     }
-  }, [fetchConversationsFromAPI]);
+  }, []);
 
   useEffect(() => {
     void fetchWalrusEvents();
@@ -5733,14 +5782,7 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                       <nav aria-label="Timeframe filters">
                         {ZIONBET_TIMEFRAME_SIDEBAR_ROWS.map(({ key: tfKey, label }) => {
                           const selected = zionBetTimeframeTab === tfKey;
-                          const count =
-                            tfKey === "all"
-                              ? zionBetTimeframeCounts.all
-                              : tfKey === "monthly"
-                                ? zionBetTimeframeCounts.monthly
-                                : tfKey === "yearly"
-                                  ? zionBetTimeframeCounts.yearly
-                                  : zionBetTimeframeCounts[tfKey];
+                          const count = zionBetTimeframeCounts[tfKey];
                           return (
                             <div
                               key={tfKey}
