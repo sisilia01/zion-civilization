@@ -107,6 +107,131 @@ def settle_market(market_id, result):
         print(f"   🏆 {w[1][:20]}... +{w[3]} SUI")
     return len(rows)
 
+def settle_civ_deaths(market_id: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute(
+        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+        (market_id,),
+    )
+    if cur.fetchone()["cnt"] == 0:
+        cur.close()
+        conn.close()
+        return
+
+    cur.execute("SELECT deaths_today FROM stats ORDER BY id DESC LIMIT 1")
+    row = cur.fetchone()
+    deaths = row["deaths_today"] if row else 0
+    result = deaths > 50
+    print(f"Deaths today: {deaths} > 50: {result}")
+    resolve_onchain(market_id, result)
+    settle_market(market_id, result)
+    cur.close()
+    conn.close()
+
+def settle_civ_election(market_id: str):
+    """Settle election market - check if election happened"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cur.execute(
+        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+        (market_id,),
+    )
+    if cur.fetchone()["cnt"] == 0:
+        cur.close()
+        conn.close()
+        return
+
+    cur.execute("""
+        SELECT COUNT(*) as cnt,
+               MAX(description) as desc
+        FROM events
+        WHERE event_type = 'election'
+        AND created_at > NOW() - INTERVAL '24 hours'
+    """)
+    row = cur.fetchone()
+    result = (row["cnt"] or 0) > 0
+    print(f"Election happened: {result} - {row['desc']}")
+
+    resolve_onchain(market_id, result)
+    settle_market(market_id, result)
+    cur.close()
+    conn.close()
+
+def settle_civ_rebellion(market_id: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute(
+        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+        (market_id,),
+    )
+    if cur.fetchone()["cnt"] == 0:
+        cur.close()
+        conn.close()
+        return
+
+    cur.execute("""
+        SELECT COUNT(*) as cnt FROM events
+        WHERE event_type = 'rebellion'
+        AND created_at > NOW() - INTERVAL '7 days'
+    """)
+    result = (cur.fetchone()["cnt"] or 0) > 0
+    print(f"Rebellion happened: {result}")
+
+    resolve_onchain(market_id, result)
+    settle_market(market_id, result)
+    cur.close()
+    conn.close()
+
+def settle_civ_clan_war(market_id: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute(
+        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+        (market_id,),
+    )
+    if cur.fetchone()["cnt"] == 0:
+        cur.close()
+        conn.close()
+        return
+
+    cur.execute("""
+        SELECT clan_name, COUNT(*) as members
+        FROM agents WHERE is_alive = true AND clan_name IS NOT NULL
+        GROUP BY clan_name ORDER BY members DESC LIMIT 1
+    """)
+    row = cur.fetchone()
+    result = row and "Golden Dawn" in (row["clan_name"] or "")
+    print(f"Golden Dawn winning: {result}")
+
+    resolve_onchain(market_id, result)
+    settle_market(market_id, result)
+    cur.close()
+    conn.close()
+
+def settle_civ_population(market_id: str, threshold: int = 11000):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute(
+        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+        (market_id,),
+    )
+    if cur.fetchone()["cnt"] == 0:
+        cur.close()
+        conn.close()
+        return
+
+    cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive = true")
+    population = cur.fetchone()["cnt"] or 0
+    result = population >= threshold
+    print(f"Population {population} >= {threshold}: {result}")
+
+    resolve_onchain(market_id, result)
+    settle_market(market_id, result)
+    cur.close()
+    conn.close()
+
 def run_settlement():
     print(f"\n{'='*50}")
     print(f"Settlement: {datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}")
@@ -151,21 +276,31 @@ def run_settlement():
                 settle_market(market_id, result)
                 break  # Один resolve на весь рынок
     
-    # Цивилизационные
+    # Civilization markets
+    settle_civ_deaths("civ_deaths_24h")
+    settle_civ_election("civ_election_24h")
+    settle_civ_rebellion("civ_rebellion")
+    settle_civ_clan_war("civ_clan_war")
+    settle_civ_population("civ_birth_auto", 11000)
+
     cur.execute("""
-        SELECT COUNT(*) FROM user_bets
-        WHERE market_id = 'civ_deaths_24h' AND settled = false
-        AND created_at < NOW() - INTERVAL '24 hours'
+        SELECT DISTINCT market_id FROM user_bets
+        WHERE settled = false AND resolves_at < NOW()
+        AND (
+            market_id LIKE 'auto_election%'
+            OR market_id LIKE 'auto_rebellion%'
+            OR market_id LIKE 'auto_clan_war%'
+        )
     """)
-    if cur.fetchone()[0] > 0:
-        cur.execute("SELECT deaths_today FROM stats ORDER BY id DESC LIMIT 1")
-        row = cur.fetchone()
-        deaths = row["deaths_today"] if row else 0
-        result = deaths > 50
-        print(f"\nSettling civ_deaths_24h: {deaths} deaths → {'YES' if result else 'NO'}")
-        resolve_onchain("civ_deaths_24h", result)
-        settle_market("civ_deaths_24h", result)
-    
+    for row in cur.fetchall():
+        market_id = row["market_id"]
+        if market_id.startswith("auto_election"):
+            settle_civ_election(market_id)
+        elif market_id.startswith("auto_rebellion"):
+            settle_civ_rebellion(market_id)
+        elif market_id.startswith("auto_clan_war"):
+            settle_civ_clan_war(market_id)
+
     cur.close()
     conn.close()
     print("Done!")
