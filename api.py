@@ -771,7 +771,7 @@ async def chat_with_agent(request: dict):
         conn.commit()
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
-    OPENROUTER_KEY = "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"
+    OPENROUTER_KEY = "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"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
