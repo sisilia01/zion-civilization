@@ -1,4 +1,6 @@
-![ZION](public/zion-logo.svg)
+<p align="center">
+  <img src="public/zion-logo.svg" width="200" height="200" alt="ZION Logo"/>
+</p>
 
 # ZION Civilization
 
