@@ -180,8 +180,49 @@ def auto_create_clans():
     cur.close()
     print(f"Created {created} new clans. Total: {target_clans}")
 
-if __name__ == "__main__":
-    auto_create_clans()
-    join_clans()
-    clan_war()
-    conn.close()
+def clan_bankruptcy():
+    """Кланы с пустой казной распадаются"""
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT id, name, treasury, members_count FROM clans
+        WHERE treasury < 50 AND members_count > 0
+    """)
+    bankrupt_clans = cur.fetchall()
+    
+    for clan in bankrupt_clans:
+        clan_id, name, treasury, members = clan
+        
+        # Находим богатейший клан
+        cur.execute("""
+            SELECT id, name, treasury FROM clans
+            WHERE id != %s AND members_count > 0
+            ORDER BY treasury DESC LIMIT 1
+        """, (clan_id,))
+        winner = cur.fetchone()
+        
+        if winner:
+            winner_id, winner_name, winner_treasury = winner
+            # Победитель забирает казну
+            cur.execute("UPDATE clans SET treasury = treasury + %s WHERE id = %s",
+                       (treasury, winner_id))
+            # Члены переходят в победивший клан
+            cur.execute("UPDATE agents SET clan_id = %s WHERE clan_id = %s",
+                       (winner_id, clan_id))
+            # Удаляем клан
+            cur.execute("UPDATE clans SET members_count = 0, treasury = 0 WHERE id = %s", (clan_id,))
+            cur.execute("""
+                INSERT INTO events (agent_id, event_type, description, zion_amount)
+                VALUES (NULL, 'clan_war', %s, %s)
+            """, (f"💀 Clan {name} went bankrupt and dissolved! {winner_name} absorbed {members} members and seized {treasury:.1f} ZION!", treasury))
+            print(f"💀 {name} dissolved → {winner_name} absorbed them!")
+    
+    # Обновляем количество членов
+    cur.execute("""
+        UPDATE clans c SET members_count = (
+            SELECT COUNT(*) FROM agents WHERE clan_id = c.id AND is_alive = true
+        )
+    """)
+    
+    conn.commit()
+    cur.close()
