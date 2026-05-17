@@ -3362,6 +3362,24 @@ export default function Home() {
   const [bankLoading, setBankLoading] = useState(false);
   const [bankTxHash, setBankTxHash] = useState<string | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
+  const [frsStats, setFrsStats] = useState<{
+    economy: {
+      total_agents: number;
+      avg_balance: number;
+      total_money: number;
+      poor_pct: number;
+      elite_count: number;
+      middle_count: number;
+      poor_count: number;
+      max_balance: number;
+    };
+    status: string;
+    interest_rate: number;
+    president: { agent_name: string; party: string; votes: number } | null;
+    active_law: { law_text: string; party: string } | null;
+    corporations: { count: number; total_treasury: number };
+    recent_actions: { action: string; amount: number; reason: string; performed_at: string }[];
+  } | null>(null);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
@@ -3375,6 +3393,15 @@ export default function Home() {
     newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
     localStorage.removeItem('conv_cache');
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "treasury") {
+      fetch("/api/frs/stats")
+        .then((r) => r.json())
+        .then((d) => setFrsStats(d))
+        .catch(() => {});
+    }
+  }, [activeTab]);
 
   const fetchZcoDecisions = useCallback(async () => {
     const cacheKey = "zco_decisions_cache";
@@ -3929,6 +3956,25 @@ export default function Home() {
     }));
     return [...fromEvents, ...fromConvs].filter((i) => i.text);
   }, [walrusEvents, conversations]);
+
+  const filteredEvents = useMemo(() => {
+    if (eventFilter === "all") return allFeedItems;
+    return allFeedItems.filter((e) => {
+      const t = (e.type || "").toLowerCase();
+      if (eventFilter === "police") return t.includes("police") || t.includes("arrest") || t.includes("crime");
+      if (eventFilter === "corporation") return t.includes("corp");
+      if (eventFilter === "marriage") return t.includes("marr") || t.includes("divorce") || t.includes("wedding");
+      if (eventFilter === "religion") return t.includes("relig") || t.includes("prayer") || t.includes("faith");
+      if (eventFilter === "casino") return t.includes("casino") || t.includes("gambl");
+      if (eventFilter === "espionage") return t.includes("spy") || t.includes("espion");
+      if (eventFilter === "frs") return t.includes("frs");
+      if (eventFilter === "epidemic") return t.includes("epidem") || t.includes("disease") || t.includes("virus");
+      if (eventFilter === "education") return t.includes("educ") || t.includes("school") || t.includes("graduat");
+      if (eventFilter === "election") return t.includes("elect") || t.includes("rebel") || t.includes("law");
+      if (eventFilter === "trade") return t.includes("trade") || t.includes("market") || t.includes("famine");
+      return t.includes(eventFilter);
+    });
+  }, [allFeedItems, eventFilter]);
 
   const loadMyBets = useCallback(async () => {
     const w = account?.address?.trim();
@@ -5268,13 +5314,13 @@ export default function Home() {
                       type="button"
                       onClick={() => setEventFilter(f.id)}
                       style={{
-                        padding: "3px 8px",
+                        padding: "5px 12px",
                         background: eventFilter === f.id ? "rgba(0,255,65,0.15)" : "rgba(0,0,0,0.3)",
                         border: eventFilter === f.id ? "1px solid #00ff41" : "1px solid #222",
                         borderRadius: "4px",
                         color: eventFilter === f.id ? "#00ff41" : "#555",
                         fontFamily: "monospace",
-                        fontSize: "0.65rem",
+                        fontSize: "0.75rem",
                         cursor: "pointer",
                       }}
                     >
@@ -5292,14 +5338,7 @@ export default function Home() {
                       width: "max-content",
                     }}
                   >
-                    {[
-                      ...(eventFilter === "all"
-                        ? allFeedItems
-                        : allFeedItems.filter((e) => e.type?.toLowerCase().includes(eventFilter))),
-                      ...(eventFilter === "all"
-                        ? allFeedItems
-                        : allFeedItems.filter((e) => e.type?.toLowerCase().includes(eventFilter))),
-                    ].map((item, i) => {
+                    {[...filteredEvents, ...filteredEvents].map((item, i) => {
                       const color = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
                       const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
                       return (
@@ -6710,6 +6749,180 @@ export default function Home() {
                   Central Bank · Private Transfers · Economic Monitor · Powered by Sui
                 </p>
               </div>
+
+              {frsStats && (
+                <div style={{ marginBottom: "24px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "12px 16px",
+                      marginBottom: "16px",
+                      background:
+                        frsStats.status === "CRISIS"
+                          ? "rgba(255,50,50,0.08)"
+                          : frsStats.status === "INFLATION"
+                            ? "rgba(255,170,0,0.08)"
+                            : "rgba(0,255,65,0.08)",
+                      border: `1px solid ${frsStats.status === "CRISIS" ? "#ff3232" : frsStats.status === "INFLATION" ? "#ffaa00" : "#00ff41"}44`,
+                      borderRadius: "10px",
+                    }}
+                  >
+                    <div style={{ fontSize: "1.5rem" }}>🏦</div>
+                    <div>
+                      <div
+                        style={{
+                          color:
+                            frsStats.status === "CRISIS"
+                              ? "#ff6464"
+                              : frsStats.status === "INFLATION"
+                                ? "#ffaa00"
+                                : "#00ff41",
+                          fontFamily: "monospace",
+                          fontWeight: "bold",
+                          fontSize: "0.9rem",
+                        }}
+                      >
+                        FRS STATUS: {frsStats.status} — Rate: {frsStats.interest_rate}%
+                      </div>
+                      <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                        Federal Reserve System · Independent from President · Auto-stabilizing economy
+                      </div>
+                    </div>
+                    {frsStats.president && (
+                      <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                        <div
+                          style={{
+                            color: frsStats.president.party === "blue" ? "#4DA2FF" : "#ff4444",
+                            fontFamily: "monospace",
+                            fontSize: "0.75rem",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {frsStats.president.party === "blue" ? "🔵" : "🔴"} President:{" "}
+                          {frsStats.president.agent_name}
+                        </div>
+                        {frsStats.active_law && (
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                            📜 {frsStats.active_law.law_text.slice(0, 50)}...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
+                    {[
+                      { label: "AVG BALANCE", value: `${frsStats.economy.avg_balance.toFixed(1)} ZION`, color: "#4DA2FF" },
+                      {
+                        label: "TOTAL MONEY",
+                        value: `${(frsStats.economy.total_money / 1000).toFixed(1)}K ZION`,
+                        color: "#00ff41",
+                      },
+                      {
+                        label: "POOR %",
+                        value: `${frsStats.economy.poor_pct}%`,
+                        color: frsStats.economy.poor_pct > 40 ? "#ff6464" : "#ffaa00",
+                      },
+                      {
+                        label: "MAX WEALTH",
+                        value: `${frsStats.economy.max_balance.toFixed(0)} ZION`,
+                        color: "#ffd700",
+                      },
+                    ].map((m) => (
+                      <div
+                        key={m.label}
+                        style={{
+                          background: "#050a10",
+                          border: "1px solid #1a1a2e",
+                          borderRadius: "8px",
+                          padding: "12px",
+                          textAlign: "center",
+                        }}
+                      >
+                        <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.6rem", marginBottom: "6px" }}>
+                          {m.label}
+                        </div>
+                        <div style={{ color: m.color, fontFamily: "monospace", fontSize: "1.1rem", fontWeight: "bold" }}>
+                          {m.value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      background: "#050a10",
+                      border: "1px solid #1a1a2e",
+                      borderRadius: "8px",
+                      padding: "14px",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.65rem", marginBottom: "10px" }}>
+                      CLASS DISTRIBUTION
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", height: "20px", borderRadius: "4px", overflow: "hidden" }}>
+                      {[
+                        { cls: "Elite", cnt: frsStats.economy.elite_count, color: "#ffd700" },
+                        { cls: "Middle", cnt: frsStats.economy.middle_count, color: "#4DA2FF" },
+                        { cls: "Poor", cnt: frsStats.economy.poor_count, color: "#ff6464" },
+                      ].map((c) => {
+                        const pct = ((c.cnt / frsStats.economy.total_agents) * 100).toFixed(1);
+                        return (
+                          <div
+                            key={c.cls}
+                            style={{
+                              flex: c.cnt,
+                              background: `${c.color}33`,
+                              borderLeft: `2px solid ${c.color}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <span style={{ color: c.color, fontFamily: "monospace", fontSize: "0.6rem" }}>
+                              {c.cls} {pct}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
+                      <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "8px" }}>
+                        🏢 CORPORATIONS
+                      </div>
+                      <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "1.2rem", fontWeight: "bold" }}>
+                        {frsStats.corporations.count} active
+                      </div>
+                      <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                        Treasury: {frsStats.corporations.total_treasury.toFixed(0)} ZION
+                      </div>
+                    </div>
+                    <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
+                      <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "8px" }}>
+                        📋 LAST FRS ACTION
+                      </div>
+                      {frsStats.recent_actions[0] ? (
+                        <>
+                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
+                            {frsStats.recent_actions[0].action}
+                          </div>
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                            {frsStats.recent_actions[0].reason?.slice(0, 60)}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.75rem" }}>No actions yet</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* How it works */}
               <div
