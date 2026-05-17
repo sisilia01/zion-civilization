@@ -70,7 +70,7 @@ def analyze_economy(cur):
 
 def quantitative_easing(cur, economy):
     """Печатаем деньги при кризисе — раздаём корпорациям"""
-    emission = round(economy['total_agents'] * 5.0, 2)
+    emission = min(round(economy['total_agents'] * 2.0, 2), 2000)  # max 2000 ZION per QE
     
     print(f"🏦 FRS: CRISIS DETECTED! Printing {emission:.1f} ZION (QE)...")
     
