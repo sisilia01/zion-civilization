@@ -5577,13 +5577,13 @@ export default function Home() {
                       ))}
                     </div>
                     <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
-                      <span style={{color:"#333", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         📦 Package: 0xf5ea2b37...
                       </span>
-                      <span style={{color:"#333", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         🔮 Predict: 0xc8736204...
                       </span>
-                      <span style={{color:"#00ff41", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                      <span style={{color:"#66ff99", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         ✓ Testnet Live
                       </span>
                     </div>
