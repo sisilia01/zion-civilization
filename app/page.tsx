@@ -3263,6 +3263,16 @@ export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [clans, setClans] = useState<Clan[]>([]);
+  const [corporations, setCorporations] = useState<
+    Array<{
+      id: number;
+      name: string;
+      corp_type: string;
+      employees: number;
+      treasury: number;
+      revenue: number;
+    }>
+  >([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -3287,6 +3297,15 @@ export default function Home() {
   useEffect(() => {
     void fetchStats();
   }, [fetchStats]);
+
+  useEffect(() => {
+    fetch("/api/corporations")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setCorporations(d);
+      })
+      .catch(() => {});
+  }, []);
 
   const [userPoints, setUserPoints] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -5306,6 +5325,88 @@ export default function Home() {
                   ))}
                 </div>
               </section>
+
+              {corporations.length > 0 && (
+                <div style={{ marginTop: "24px" }}>
+                  <h3
+                    style={{
+                      color: "#4DA2FF",
+                      fontSize: "1rem",
+                      fontWeight: "bold",
+                      letterSpacing: "2px",
+                      marginBottom: "16px",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    🏢 CORPORATIONS
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                    {corporations.map((corp) => (
+                      <div
+                        key={corp.id}
+                        style={{
+                          border: "1px solid #1a3a5c",
+                          borderRadius: "10px",
+                          padding: "14px",
+                          background: "rgba(77,162,255,0.03)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              color: "#4DA2FF",
+                              fontFamily: "monospace",
+                              fontWeight: "bold",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            {corp.name}
+                          </span>
+                          <span
+                            style={{
+                              background: "rgba(77,162,255,0.1)",
+                              color: "#4DA2FF",
+                              fontSize: "0.6rem",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {corp.corp_type?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>EMPLOYEES</div>
+                            <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                              {corp.employees}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
+                            <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                              {corp.treasury?.toFixed(0)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>REVENUE</div>
+                            <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                              {corp.revenue?.toFixed(0)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div
                 style={{
