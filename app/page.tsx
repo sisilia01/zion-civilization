@@ -1495,6 +1495,10 @@ type ZionBetActivityRow = {
 type ZionBetHolderRow = { wallet: string; total_vol: number; yes_vol: number; no_vol: number };
 
 const ZIONBET_PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78";
+const DEEPBOOK_PREDICT_PACKAGE = "0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138";
+const DEEPBOOK_PREDICT_ID = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a";
+const DEEPBOOK_REGISTRY = "0x43af14fed5480c20ff77e2263d5f794c35b9fab7e2212903127062f4fe2a6e64";
+const DUSDC_TYPE = "0xe95040085976bfd54a1a07225cd46c8a2b4e8e2b6732f140a0fc49850ba73e1a::dusdc::DUSDC";
 
 const MARKET_OBJECTS: Record<string, string> = {
   btc_15m: "0xe919326a4dcc86ec864d02dbb74e03a1fe68a6c75fe63b35614c710ef46fc3e2",
@@ -1559,6 +1563,63 @@ function executeZionBetOnChain(
     ],
   });
   tx.transferObjects([receipt], tx.pure.address(params.walletAddress));
+
+  signAndExecute(
+    { transaction: tx, chain: "sui:testnet" },
+    {
+      onSuccess: (result) => callbacks.onSuccess(suiTxDigest(result)),
+      onError: (error) => callbacks.onError(error.message),
+    }
+  );
+}
+
+function executeDeepBookMintBinary(
+  signAndExecute: SignAndExecuteFn,
+  params: {
+    oracleId: string;
+    strike: bigint;
+    expiry: bigint;
+    isCall: boolean;
+    amount: number;
+    walletAddress: string;
+    managerObjectId?: string;
+  },
+  callbacks: { onSuccess: (digest: string) => void; onError: (message: string) => void }
+) {
+  const tx = new Transaction();
+
+  // Create or reuse PredictManager
+  let manager: ReturnType<typeof tx.moveCall>;
+  if (params.managerObjectId) {
+    // existing manager - just use it
+    manager = tx.object(params.managerObjectId) as unknown as ReturnType<typeof tx.moveCall>;
+  } else {
+    // create new PredictManager
+    manager = tx.moveCall({
+      target: `${DEEPBOOK_PREDICT_PACKAGE}::predict_manager::new`,
+      arguments: [tx.object(DEEPBOOK_PREDICT_ID)],
+    });
+  }
+
+  // Deposit DUSDC quote asset
+  const amountBase = BigInt(Math.floor(params.amount * 1_000_000)); // DUSDC has 6 decimals
+
+  // Mint binary position (call or put)
+  const position = tx.moveCall({
+    target: `${DEEPBOOK_PREDICT_PACKAGE}::predict::mint_binary`,
+    typeArguments: [DUSDC_TYPE],
+    arguments: [
+      tx.object(DEEPBOOK_PREDICT_ID),
+      manager,
+      tx.object(params.oracleId),
+      tx.pure.u64(params.strike),
+      tx.pure.bool(params.isCall),
+      tx.pure.u64(amountBase),
+      tx.object("0x6"), // clock
+    ],
+  });
+
+  tx.transferObjects([position], tx.pure.address(params.walletAddress));
 
   signAndExecute(
     { transaction: tx, chain: "sui:testnet" },
@@ -3281,6 +3342,14 @@ export default function Home() {
     expiry: number;
     status: string;
   }>>([]);
+  const [deepbookVault, setDeepbookVault] = useState<{
+    vault_balance: number;
+    vault_value: number;
+    plp_share_price: number;
+    utilization: number;
+    available_liquidity: number;
+    plp_total_supply: number;
+  } | null>(null);
   const [vipAccess, setVipAccess] = useState<{
     isGold: boolean;
     isSilver: boolean;
@@ -3732,9 +3801,14 @@ export default function Home() {
 
   const fetchDeepbookOracles = useCallback(async () => {
     try {
-      const res = await fetch("/api/deepbook/oracles");
-      const data = await res.json();
-      if (Array.isArray(data)) setDeepbookOracles(data);
+      const [oraclesRes, vaultRes] = await Promise.all([
+        fetch("/api/deepbook/oracles"),
+        fetch("/api/deepbook/vault"),
+      ]);
+      const oraclesData = await oraclesRes.json();
+      const vaultData = await vaultRes.json();
+      if (Array.isArray(oraclesData)) setDeepbookOracles(oraclesData);
+      if (vaultData && !vaultData.error) setDeepbookVault(vaultData);
     } catch {}
   }, []);
 
@@ -5573,9 +5647,101 @@ export default function Home() {
                           <div style={{color:"#333", fontFamily:"monospace", fontSize:"0.6rem", marginTop:"4px"}}>
                             Oracle: {oracle.oracle_id.slice(0,8)}...
                           </div>
+                          <div style={{marginTop:"10px", display:"flex", gap:"8px"}}>
+                            <button
+                              onClick={() => {
+                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 0.95 * 1e9));
+                                const expiry = BigInt(oracle.expiry);
+                                if (!account?.address) { alert("Connect wallet first"); return; }
+                                executeDeepBookMintBinary(
+                                  signAndExecute as SignAndExecuteFn,
+                                  {
+                                    oracleId: oracle.oracle_id,
+                                    strike,
+                                    expiry,
+                                    isCall: true,
+                                    amount: 1,
+                                    walletAddress: account.address,
+                                  },
+                                  {
+                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
+                                    onError: (err) => alert(`❌ Error: ${err}`),
+                                  }
+                                );
+                              }}
+                              style={{
+                                flex:1, padding:"8px", background:"#0d3a0d", border:"1px solid #00ff41",
+                                color:"#00ff41", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
+                                cursor:"pointer"
+                              }}
+                            >
+                              📈 CALL +5%
+                            </button>
+                            <button
+                              onClick={() => {
+                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 1.05 * 1e9));
+                                const expiry = BigInt(oracle.expiry);
+                                if (!account?.address) { alert("Connect wallet first"); return; }
+                                executeDeepBookMintBinary(
+                                  signAndExecute as SignAndExecuteFn,
+                                  {
+                                    oracleId: oracle.oracle_id,
+                                    strike,
+                                    expiry,
+                                    isCall: false,
+                                    amount: 1,
+                                    walletAddress: account.address,
+                                  },
+                                  {
+                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
+                                    onError: (err) => alert(`❌ Error: ${err}`),
+                                  }
+                                );
+                              }}
+                              style={{
+                                flex:1, padding:"8px", background:"#3a0d0d", border:"1px solid #ff4141",
+                                color:"#ff4141", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
+                                cursor:"pointer"
+                              }}
+                            >
+                              📉 PUT -5%
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
+                    {deepbookVault && (
+                      <div style={{
+                        display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px",
+                        marginTop:"16px", padding:"14px", background:"#050a10",
+                        borderRadius:"8px", border:"1px solid #1a3a5c"
+                      }}>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>VAULT TVL</div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${(deepbookVault.vault_value / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>PLP PRICE</div>
+                          <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${deepbookVault.plp_share_price.toFixed(4)}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>UTILIZATION</div>
+                          <div style={{color:"#ffaa00", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            {(deepbookVault.utilization * 100).toFixed(3)}%
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>LIQUIDITY</div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${(deepbookVault.available_liquidity / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
                       <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         📦 Package: 0xf5ea2b37...
