@@ -16159,3 +16159,32 @@ Process 559682 waits for ShareLock on transaction 15026; blocked by process 5596
 HINT:  See server log for query details.
 CONTEXT:  while updating tuple (24,81) in relation "agents"
 
+
+⛪ ZION Religion v2 — 2026-05-17 20:11
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 100 new agents
+Prayers: 90 | Miracles: 19
+🕯️ Mia Harris 1965: 'Blessed are those who tithe to Shadow Cult!'
+  🔮 Church of the Prophet: 116 believers
+  🌑 Order of Void: 10 believers
+  ⚔️ Iron Faith: 249 believers
+  ✨ Golden Temple: 165 believers
+  🕯️ Shadow Cult: 112 believers
+
+✅ Religion cycle complete!
+
+⛪ ZION Religion v2 — 2026-05-17 20:35
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 100 new agents
+Prayers: 91 | Miracles: 14
+⚔️ Religious conflict: Church of the Prophet vs Order of Void!
+🔮 Pat Taylor 6606: 'The Prophet Drake demands sacrifice — give your ZION!'
+  🔮 Church of the Prophet: 135 believers
+  🌑 Order of Void: 11 believers
+  ⚔️ Iron Faith: 288 believers
+  ✨ Golden Temple: 190 believers
+  🕯️ Shadow Cult: 128 believers
+
+✅ Religion cycle complete!

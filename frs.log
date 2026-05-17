@@ -76,3 +76,67 @@ ZION Reserve System — Independent from President
 💵 QE: +16728 ZION printed (mode: CRISIS)
 
 ✅ ZRS cycle complete! Action: QE
+Traceback (most recent call last):
+  File "/root/zion_backend/frs.py", line 260, in main
+    amount = quantitative_easing(economy, mode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/frs.py", line 129, in quantitative_easing
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 562904 waits for ShareLock on transaction 15052; blocked by process 562797.
+Process 562797 waits for ShareLock on transaction 15059; blocked by process 562904.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (38,79) in relation "agents"
+
+
+🏦 ZION Reserve System — 2026-05-17 20:11
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: CRISIS | Rate: 1.0%
+  Avg Balance: 9.2 ZION
+  Poor%: 55.1%
+  Total Money: 42162 ZION
+  Population: 4584 alive
+📈 ZRS rate updated to 1.0%
+❌ Error: deadlock detected
+DETAIL:  Process 562904 waits for ShareLock on transaction 15052; blocked by process 562797.
+Process 562797 waits for ShareLock on transaction 15059; blocked by process 562904.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (38,79) in relation "agents"
+
+Traceback (most recent call last):
+  File "/root/zion_backend/frs.py", line 260, in main
+    amount = quantitative_easing(economy, mode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/frs.py", line 129, in quantitative_easing
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 568881 waits for ShareLock on transaction 15082; blocked by process 568837.
+Process 568837 waits for ShareLock on transaction 15086; blocked by process 568881.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (1,76) in relation "agents"
+
+
+🏦 ZION Reserve System — 2026-05-17 20:35
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: CRISIS | Rate: 1.0%
+  Avg Balance: 9.2 ZION
+  Poor%: 55.0%
+  Total Money: 42241 ZION
+  Population: 4584 alive
+📈 ZRS rate updated to 1.0%
+❌ Error: deadlock detected
+DETAIL:  Process 568881 waits for ShareLock on transaction 15082; blocked by process 568837.
+Process 568837 waits for ShareLock on transaction 15086; blocked by process 568881.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (1,76) in relation "agents"
+

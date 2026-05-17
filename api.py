@@ -2140,3 +2140,38 @@ async def get_corporations():
     finally:
         cur.close()
         db.close()
+
+@app.get("/sheriff/state")
+async def get_sheriff_state():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT agent_name, sheriff_type, approval_rating, 
+                   police_budget, police_count, term_number, days_in_office
+            FROM sheriff_state WHERE is_active = true LIMIT 1
+        """)
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return {"agent_name": "No Sheriff", "sheriff_type": "none", "approval_rating": 0,
+                "police_budget": 0, "police_count": 0, "term_number": 0, "days_in_office": 0}
+    finally:
+        cur.close()
+        db.close()
+
+@app.get("/sheriff/actions")
+async def get_sheriff_actions():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT description, created_at FROM events
+            WHERE event_type = 'police'
+            ORDER BY created_at DESC LIMIT 10
+        """)
+        rows = cur.fetchall()
+        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+    finally:
+        cur.close()
+        db.close()
