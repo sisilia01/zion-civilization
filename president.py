@@ -423,6 +423,7 @@ def main():
             # Предвыборная кампания (дни 6-7)
             cur.execute("UPDATE president_state SET phase = 'campaign' WHERE is_active = true")
             campaign_phase(cur, president)
+            interact_with_sheriff(cur, get_president(cur))
         
         elif days >= 8 and president['term_number'] == 1:
             # Выборы после первого срока
@@ -453,5 +454,132 @@ def main():
         cur.close()
         conn.close()
 
+def interact_with_sheriff(cur, president):
+    """President interacts with sheriff based on situation"""
+    if not president:
+        return
+    
+    cur.execute("SELECT * FROM sheriff_state WHERE is_active = true LIMIT 1")
+    sheriff = cur.fetchone()
+    if not sheriff:
+        return
+    
+    pid = president['agent_id']
+    pname = president['agent_name']
+    is_dictator = president['is_dictator']
+    sname = sheriff['agent_name']
+    stype = sheriff['sheriff_type']
+    
+    # Get crime rate
+    cur.execute("""
+        SELECT COUNT(*) as poor FROM agents WHERE is_alive=true AND class IN ('poor','critical')
+    """)
+    poor = cur.fetchone()['poor']
+    cur.execute("SELECT COUNT(*) as total FROM agents WHERE is_alive=true")
+    total = max(cur.fetchone()['total'], 1)
+    crime_rate = poor / total * 100
+    
+    print(f"🤝 President-Sheriff interaction | Crime: {crime_rate:.0f}% | Sheriff: {stype}")
+    
+    # SCENARIO 1: High crime — president funds sheriff
+    if crime_rate > 50 and stype == 'honest':
+        funding = min(float(president['police_fund']) * 0.3, 300)
+        if funding > 50:
+            cur.execute("UPDATE president_state SET police_fund = police_fund - %s WHERE is_active=true", (funding,))
+            cur.execute("UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active=true", (funding,))
+            new_cops = int(funding / 15)
+            cur.execute("UPDATE sheriff_state SET police_count = police_count + %s WHERE is_active=true", (new_cops,))
+            log_event(cur, pid, 'president',
+                     f"🚔 President {pname} allocated {funding:.0f} ZION to Sheriff {sname}! Crime at {crime_rate:.0f}% — hiring {new_cops} more officers!",
+                     funding)
+            print(f"🚔 President funded sheriff: +{funding:.0f} ZION, +{new_cops} cops")
+    
+    # SCENARIO 2: President vs Junta sheriff
+    elif stype == 'junta' and not is_dictator:
+        # President fights junta
+        protest_fund = min(float(president['personal_fund']) * 0.2, 200)
+        if protest_fund > 30:
+            cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active=true", (protest_fund,))
+            # Give money to poor to protest
+            cur.execute("""
+                UPDATE agents SET balance = balance + 5
+                WHERE is_alive=true AND class IN ('poor','critical')
+                AND id IN (SELECT id FROM agents WHERE is_alive=true ORDER BY RANDOM() LIMIT %s)
+            """, (int(protest_fund / 5),))
+            # Reduce sheriff approval
+            cur.execute("UPDATE sheriff_state SET approval_rating = GREATEST(0, approval_rating - 15) WHERE is_active=true")
+            log_event(cur, pid, 'president',
+                     f"✊ President {pname} funds anti-junta protests! Spent {protest_fund:.0f} ZION. Sheriff {sname} approval -15%!",
+                     protest_fund)
+            print(f"✊ President fights junta: {protest_fund:.0f} ZION to protesters")
+            
+            # If junta approval very low — sheriff ousted
+            cur.execute("SELECT approval_rating FROM sheriff_state WHERE is_active=true LIMIT 1")
+            approval = cur.fetchone()
+            if approval and approval['approval_rating'] < 15:
+                cur.execute("UPDATE sheriff_state SET is_active=false WHERE is_active=true")
+                log_event(cur, pid, 'president',
+                         f"🏆 President {pname} successfully ousted junta Sheriff {sname}! Democracy restored! New election called.",
+                         0)
+                print(f"🏆 Junta sheriff OUSTED by president!")
+    
+    # SCENARIO 3: Dictator vs honest sheriff
+    elif is_dictator and stype == 'honest':
+        # Dictator tries to bribe/fire sheriff
+        bribe = min(float(president['personal_fund']) * 0.15, 150)
+        if bribe > 20:
+            cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active=true", (bribe,))
+            if random.random() < 0.3:
+                # Bribe works — sheriff becomes corrupt
+                cur.execute("UPDATE sheriff_state SET sheriff_type='corrupt', approval_rating=GREATEST(0, approval_rating-20) WHERE is_active=true")
+                log_event(cur, pid, 'president',
+                         f"💰 Dictator {pname} bribed Sheriff {sname} with {bribe:.0f} ZION! Sheriff now CORRUPT and serves the dictator!",
+                         bribe)
+                print(f"💰 Dictator bribed sheriff into corruption!")
+            else:
+                # Sheriff refuses
+                cur.execute("UPDATE president_state SET approval_rating = GREATEST(0, approval_rating - 10) WHERE is_active=true")
+                log_event(cur, pid, 'president',
+                         f"⚖️ Sheriff {sname} REFUSED dictator {pname}'s bribe of {bribe:.0f} ZION! Public supports sheriff!",
+                         bribe)
+                print(f"⚖️ Sheriff refused dictator's bribe!")
+    
+    # SCENARIO 4: Both dictator and junta — CHAOS
+    elif is_dictator and stype == 'junta':
+        cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive=true")
+        total_agents = cur.fetchone()['cnt']
+        victims = int(total_agents * random.uniform(0.03, 0.08))
+        cur.execute(f"""
+            UPDATE agents SET is_alive=false, died_at=NOW(), death_cause='caught in power struggle'
+            WHERE is_alive=true AND id IN (SELECT id FROM agents ORDER BY RANDOM() LIMIT {victims})
+        """)
+        log_event(cur, None, 'president',
+                 f"☠️ POWER STRUGGLE! Dictator {pname} vs Junta Sheriff {sname}! {victims} citizens caught in crossfire! City in chaos!",
+                 victims * 5)
+        print(f"☠️ Dictator vs Junta: {victims} civilians killed!")
+    
+    # SCENARIO 5: Corrupt sheriff — president cuts funding
+    elif stype == 'corrupt' and not is_dictator:
+        cut = min(float(president['police_fund']) * 0.25, 150)
+        cur.execute("UPDATE president_state SET police_fund = police_fund - %s WHERE is_active=true", (cut,))
+        cur.execute("UPDATE sheriff_state SET police_budget = GREATEST(0, police_budget - %s), police_count = GREATEST(5, police_count - 5) WHERE is_active=true", (cut,))
+        log_event(cur, pid, 'president',
+                 f"✂️ President {pname} CUTS corrupt Sheriff {sname}'s budget by {cut:.0f} ZION! Police force shrinks!",
+                 cut)
+        print(f"✂️ President cut corrupt sheriff budget: -{cut:.0f} ZION")
+    
+    # SCENARIO 6: Both honest — cooperation
+    elif stype == 'honest' and not is_dictator:
+        if random.random() < 0.4:
+            bonus = min(float(president['police_fund']) * 0.1, 100)
+            cur.execute("UPDATE president_state SET police_fund = police_fund - %s WHERE is_active=true", (bonus,))
+            cur.execute("UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active=true", (bonus,))
+            cur.execute("UPDATE president_state SET approval_rating = LEAST(100, approval_rating + 5) WHERE is_active=true")
+            cur.execute("UPDATE sheriff_state SET approval_rating = LEAST(100, approval_rating + 5) WHERE is_active=true")
+            log_event(cur, pid, 'president',
+                     f"🤝 President {pname} & Sheriff {sname} cooperate! Joint anti-crime operation. +{bonus:.0f} ZION to police. Both approval +5%",
+                     bonus)
+            print(f"🤝 President + Sheriff cooperation: +{bonus:.0f} ZION")
 if __name__ == "__main__":
     main()
+
