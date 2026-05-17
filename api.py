@@ -1748,3 +1748,58 @@ Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR
         return {"content": content, "cached": False}
     except Exception as e:
         return {"content": None, "error": str(e)}
+
+# ============ DEEPBOOK PREDICT INTEGRATION ============
+PREDICT_SERVER = "https://predict-server.testnet.mystenlabs.com"
+PREDICT_ID = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a"
+_db_cache: dict = {}
+
+@app.get("/deepbook/oracles")
+async def get_deepbook_oracles():
+    import time
+    now = time.time()
+    if "oracles" in _db_cache and now - _db_cache["oracles_ts"] < 30:
+        return _db_cache["oracles"]
+    try:
+        req = urllib.request.Request(f"{PREDICT_SERVER}/predicts/{PREDICT_ID}/oracles")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            all_oracles = json.loads(r.read())
+        active = [o for o in all_oracles if o["status"] == "active"]
+        # Get latest price for each active oracle
+        result = []
+        for oracle in active[:6]:
+            try:
+                req2 = urllib.request.Request(
+                    f"{PREDICT_SERVER}/oracles/{oracle['oracle_id']}/prices/latest"
+                )
+                with urllib.request.urlopen(req2, timeout=5) as r2:
+                    price_data = json.loads(r2.read())
+                spot = price_data.get("spot", 0)
+                oracle["spot_price"] = round(spot / 1e9, 2)
+                oracle["expiry_date"] = datetime.fromtimestamp(
+                    oracle["expiry"] / 1000, tz=timezone.utc
+                ).strftime("%Y-%m-%d %H:%M UTC")
+            except:
+                oracle["spot_price"] = None
+            result.append(oracle)
+        _db_cache["oracles"] = result
+        _db_cache["oracles_ts"] = now
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/deepbook/vault")
+async def get_deepbook_vault():
+    import time
+    now = time.time()
+    if "vault" in _db_cache and now - _db_cache.get("vault_ts", 0) < 60:
+        return _db_cache["vault"]
+    try:
+        req = urllib.request.Request(f"{PREDICT_SERVER}/predicts/{PREDICT_ID}/vault/summary")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        _db_cache["vault"] = data
+        _db_cache["vault_ts"] = now
+        return data
+    except Exception as e:
+        return {"error": str(e)}

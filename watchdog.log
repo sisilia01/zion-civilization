@@ -1,0 +1,41 @@
+2026-05-17 07:22:00,433 [WATCHDOG] === ZION Watchdog started ===
+2026-05-17 07:22:00,433 [WATCHDOG] Monitoring 9 scripts + API
+2026-05-17 07:22:00,492 [WATCHDOG] Running tax (interval 3600s)
+2026-05-17 07:22:01,519 [WATCHDOG] Started tax (tax_cron.py)
+2026-05-17 07:22:01,552 [WATCHDOG] Running birth (interval 1800s)
+2026-05-17 07:22:02,617 [WATCHDOG] Started birth (birth.py)
+2026-05-17 07:22:02,645 [WATCHDOG] Running neo (interval 3600s)
+2026-05-17 07:22:03,691 [WATCHDOG] Started neo (neo.py)
+2026-05-17 07:22:03,721 [WATCHDOG] Running religion (interval 1800s)
+2026-05-17 07:22:04,747 [WATCHDOG] Started religion (religion.py)
+2026-05-17 07:22:04,761 [WATCHDOG] Running politics (interval 3600s)
+2026-05-17 07:22:05,791 [WATCHDOG] Started politics (politics.py)
+2026-05-17 07:22:05,809 [WATCHDOG] Running catastrophes (interval 7200s)
+2026-05-17 07:22:06,858 [WATCHDOG] Started catastrophes (catastrophes.py)
+2026-05-17 07:22:06,888 [WATCHDOG] Running clans (interval 3600s)
+2026-05-17 07:22:07,925 [WATCHDOG] Started clans (clans.py)
+2026-05-17 07:22:07,941 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-17 07:22:08,988 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-17 07:22:09,017 [WATCHDOG] Running settlement (interval 300s)
+2026-05-17 07:22:10,051 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:30:11,026 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 9
+2026-05-17 07:32:11,288 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:32:12,342 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:35:42,672 [WATCHDOG] API DOWN — restarting...
+2026-05-17 07:35:44,719 [WATCHDOG] API restarted
+2026-05-17 07:37:19,903 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:37:20,946 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:40:21,308 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 9
+2026-05-17 07:42:21,550 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:42:22,612 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:47:23,233 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:47:24,296 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:50:24,725 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 9
+2026-05-17 07:52:24,990 [WATCHDOG] Running birth (interval 1800s)
+2026-05-17 07:52:26,053 [WATCHDOG] Started birth (birth.py)
+2026-05-17 07:52:26,082 [WATCHDOG] Running religion (interval 1800s)
+2026-05-17 07:52:27,126 [WATCHDOG] Started religion (religion.py)
+2026-05-17 07:52:27,157 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-17 07:52:28,201 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-17 07:52:28,230 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:52:29,280 [WATCHDOG] Started settlement (settlement.py)

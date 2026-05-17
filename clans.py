@@ -183,5 +183,5 @@ def auto_create_clans():
 if __name__ == "__main__":
     auto_create_clans()
     join_clans()
-    clan_wars()
+    clan_war()
     conn.close()
