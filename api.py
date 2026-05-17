@@ -2131,7 +2131,7 @@ async def get_corporations():
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute("""
-            SELECT id, name, corp_type, employees, treasury, revenue
+            SELECT id, name, corp_type, employees, treasury, revenue, market_share, debt
             FROM corporations WHERE is_active = true
             ORDER BY treasury DESC LIMIT 9
         """)
