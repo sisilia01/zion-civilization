@@ -3380,6 +3380,7 @@ export default function Home() {
     corporations: { count: number; total_treasury: number };
     recent_actions: { action: string; amount: number; reason: string; performed_at: string }[];
   } | null>(null);
+  const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
@@ -3398,7 +3399,38 @@ export default function Home() {
     if (activeTab === "treasury") {
       fetch("/api/frs/stats")
         .then((r) => r.json())
-        .then((d) => setFrsStats(d))
+        .then((d) => {
+          setFrsStats(d);
+          const news: string[] = [];
+          if (d.status === "CRISIS") news.push("🚨 FRS ALERT: Economy in CRISIS — QE stimulus activated");
+          if (d.status === "INFLATION") news.push("⚠️ FRS WARNING: Inflation detected — tightening policy");
+          if (d.status === "STABLE") news.push("✅ FRS REPORT: Economy stable — holding rates");
+          if (d.president)
+            news.push(
+              `🏛️ PRESIDENT: ${d.president.agent_name} (${d.president.party === "blue" ? "Blue Alliance" : "Red Coalition"}) in office`
+            );
+          if (d.active_law) news.push(`📜 NEW LAW: ${d.active_law.law_text}`);
+          if (d.corporations)
+            news.push(
+              `🏢 MARKET: ${d.corporations.count} active corporations — treasury ${d.corporations.total_treasury.toFixed(0)} ZION`
+            );
+          news.push(`📊 RATE: FRS interest rate at ${d.interest_rate}%`);
+          news.push(
+            `💰 ECONOMY: Avg balance ${d.economy?.avg_balance?.toFixed(1)} ZION — ${d.economy?.poor_pct}% population in poverty`
+          );
+          news.push(
+            `👥 POPULATION: ${d.economy?.total_agents} alive agents — Elite ${d.economy?.elite_count} / Middle ${d.economy?.middle_count} / Poor ${d.economy?.poor_count}`
+          );
+          news.push(`⚡ ZIONBET: Prediction markets live on DeepBook Predict — BTC/USD oracles active`);
+          news.push(`🔮 ZCO: Consensus Oracle validating ${d.economy?.total_agents || 0} agent decisions on-chain`);
+          news.push(`🌐 SUI TESTNET: ZION civilization running ${d.economy?.total_agents || 0} AI agents 24/7`);
+          news.push(`🏦 TREASURY: Total wealth in circulation ${(d.economy?.total_money || 0).toFixed(0)} ZION`);
+          news.push(`⚔️ CLANS: 7 active clans competing for power and resources`);
+          news.push(`🕵️ ESPIONAGE: Shadow agents infiltrating rival clan treasuries`);
+          news.push(`🎰 CASINO: Underground gambling operations running despite police crackdowns`);
+          news.push(`💍 SOCIETY: Marriage and divorce rates reflect economic conditions`);
+          setTreasuryNews(news);
+        })
         .catch(() => {});
     }
   }, [activeTab]);
@@ -6924,6 +6956,69 @@ export default function Home() {
                 </div>
               )}
 
+              {treasuryNews.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    background: "#050a10",
+                    border: "1px solid #1a3a1a",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(0,255,65,0.1)",
+                      padding: "4px 12px",
+                      borderBottom: "1px solid #1a3a1a",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "6px",
+                        height: "6px",
+                        borderRadius: "50%",
+                        background: "#00ff41",
+                        animation: "pulse 1s infinite",
+                      }}
+                    />
+                    <span style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
+                      ZION FINANCIAL WIRE
+                    </span>
+                  </div>
+                  <div style={{ overflow: "hidden", padding: "8px 0", position: "relative" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        width: "max-content",
+                        animation: "marquee 20s linear infinite",
+                      }}
+                    >
+                      {[...treasuryNews, ...treasuryNews, ...treasuryNews].map((item, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            color: "#888",
+                            fontFamily: "monospace",
+                            fontSize: "0.75rem",
+                            flexShrink: 0,
+                            paddingRight: "60px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item}
+                          <span style={{ color: "#333", marginLeft: "20px" }}>◆</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* How it works */}
               <div
                 style={{
@@ -8546,6 +8641,14 @@ export default function Home() {
         @keyframes tickerScroll {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-33.333%); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
         }
         @keyframes agentMapPulse {
           0%, 100% { transform: scale(1); opacity: 0.7; }
