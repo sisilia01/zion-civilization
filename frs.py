@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-ZION ZION Reserve System — ФРС
-Следит за экономикой, печатает деньги при кризисе,
-изымает при инфляции. Независим от президента.
+ZION Reserve System (ZRS) — Центральный банк
+Полная монетарная политика: ставки, QE, QT, циклы
 """
 import psycopg2
 import psycopg2.extras
@@ -17,18 +16,26 @@ conn = psycopg2.connect(
 )
 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-# ФРС параметры
-FRS_RESERVE = 10000.0      # Резервный фонд ФРС
-CRISIS_THRESHOLD = 0.40    # Если >40% агентов бедные — кризис
-INFLATION_THRESHOLD = 500  # Если средний баланс >500 — инфляция
-
-def log_event(cur, event_type, description, amount=0):
+def log_event(description, amount=0):
     cur.execute("""
         INSERT INTO events (agent_id, event_type, description, zion_amount)
-        VALUES (NULL, %s, %s, %s)
-    """, (event_type, description, amount))
+        VALUES (NULL, 'frs', %s, %s)
+    """, (description, amount))
 
-def ensure_frs_table(cur):
+def ensure_tables():
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS zrs_policy (
+            id SERIAL PRIMARY KEY,
+            interest_rate NUMERIC(5,2),
+            policy_mode VARCHAR(20),
+            avg_balance NUMERIC(20,2),
+            poor_pct NUMERIC(5,2),
+            total_money NUMERIC(20,2),
+            action_taken VARCHAR(50),
+            amount NUMERIC(20,2) DEFAULT 0,
+            recorded_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS frs_actions (
             id SERIAL PRIMARY KEY,
@@ -39,8 +46,8 @@ def ensure_frs_table(cur):
         )
     """)
 
-def analyze_economy(cur):
-    """Анализируем состояние экономики"""
+def analyze_economy():
+    """Анализируем экономику"""
     cur.execute("""
         SELECT 
             COUNT(*) as total,
@@ -48,153 +55,224 @@ def analyze_economy(cur):
             SUM(balance) as total_money,
             COUNT(CASE WHEN class IN ('poor','critical') THEN 1 END) as poor_count,
             COUNT(CASE WHEN class = 'elite' THEN 1 END) as elite_count,
-            MIN(balance) as min_balance,
-            MAX(balance) as max_balance
+            COUNT(CASE WHEN class = 'middle' THEN 1 END) as middle_count
         FROM agents WHERE is_alive = true
     """)
     stats = cur.fetchone()
     
-    poor_pct = float(stats['poor_count']) / max(float(stats['total']), 1)
+    total = max(int(stats['total']), 1)
     avg_bal = float(stats['avg_balance'] or 0)
     total_money = float(stats['total_money'] or 0)
-    
-    print(f"📊 Economy: avg={avg_bal:.1f} ZION | poor={poor_pct*100:.0f}% | total={total_money:.0f} ZION")
+    poor_pct = float(stats['poor_count']) / total * 100
     
     return {
-        'poor_pct': poor_pct,
+        'total': total,
         'avg_balance': avg_bal,
         'total_money': total_money,
-        'total_agents': int(stats['total']),
+        'poor_pct': poor_pct,
         'elite_count': int(stats['elite_count']),
+        'middle_count': int(stats['middle_count']),
+        'poor_count': int(stats['poor_count']),
     }
 
-def quantitative_easing(cur, economy):
-    """Печатаем деньги при кризисе — раздаём корпорациям"""
-    emission = min(round(economy['total_agents'] * 2.0, 2), 2000)  # max 2000 ZION per QE
+def determine_policy(economy):
+    """Определяем монетарную политику"""
+    avg = economy['avg_balance']
+    poor = economy['poor_pct']
     
-    print(f"🏦 FRS: CRISIS DETECTED! Printing {emission:.1f} ZION (QE)...")
+    # Определяем режим
+    if poor > 60 or avg < 2:
+        mode = "DEPRESSION"
+        rate = 0.5
+    elif poor > 45 or avg < 5:
+        mode = "CRISIS"
+        rate = 1.0
+    elif poor > 35 or avg < 15:
+        mode = "RECESSION"
+        rate = 2.0
+    elif poor > 25 or avg < 30:
+        mode = "SLOW"
+        rate = 4.0
+    elif avg < 80:
+        mode = "NORMAL"
+        rate = 6.0
+    elif avg < 150:
+        mode = "GROWTH"
+        rate = 8.0
+    elif avg < 300:
+        mode = "BOOM"
+        rate = 12.0
+    else:
+        mode = "INFLATION"
+        rate = 15.0
     
-    # Раздаём корпорациям
+    return mode, rate
+
+def quantitative_easing(economy, mode):
+    """Печатаем деньги — QE"""
+    total = economy['total']
+    
+    if mode == "DEPRESSION":
+        emission_per_agent = 15.0
+        target = "all"
+    elif mode == "CRISIS":
+        emission_per_agent = 8.0
+        target = "poor"
+    else:  # RECESSION/SLOW
+        emission_per_agent = 4.0
+        target = "poor"
+    
+    if target == "all":
+        cur.execute("UPDATE agents SET balance = balance + %s WHERE is_alive = true", (emission_per_agent,))
+        total_emission = round(emission_per_agent * total, 2)
+    else:
+        cur.execute("""
+            UPDATE agents SET balance = balance + %s
+            WHERE is_alive = true AND class IN ('poor', 'critical')
+        """, (emission_per_agent,))
+        total_emission = round(emission_per_agent * economy['poor_count'], 2)
+    
+    # Также стимулируем корпорации
     cur.execute("""
-        SELECT id, name, employees FROM corporations
+        SELECT id, name, employees FROM corporations 
         WHERE is_active = true AND employees > 0
         ORDER BY employees DESC LIMIT 5
     """)
     corps = cur.fetchall()
+    corp_stimulus = 0
+    for corp in corps:
+        corp_amount = round(corp['employees'] * emission_per_agent * 2, 2)
+        cur.execute("UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
+                   (corp_amount, corp['id']))
+        corp_stimulus += corp_amount
     
-    if corps:
-        per_corp = round(emission / len(corps), 2)
-        for corp in corps:
-            cur.execute("UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
-                       (per_corp, corp['id']))
-            print(f"  💉 {corp['name']} received {per_corp:.1f} ZION stimulus")
-        
-        # Корпорации нанимают бедных
-        cur.execute("""
-            SELECT id, name FROM agents
-            WHERE is_alive = true AND class IN ('poor', 'critical')
-            ORDER BY RANDOM() LIMIT %s
-        """, (len(corps) * 3,))
-        poor_workers = cur.fetchall()
-        
-        salary = 8.0
-        for worker in poor_workers:
-            cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                       (salary, worker['id']))
-        
-        if poor_workers:
-            print(f"  👷 {len(poor_workers)} poor agents employed by stimulus corps")
-    
-    else:
-        # Нет корпораций — раздаём напрямую бедным
-        cur.execute("""
-            UPDATE agents SET balance = balance + 10
-            WHERE is_alive = true AND class IN ('poor', 'critical')
-        """)
-        print(f"  💊 Direct stimulus: +10 ZION to all poor/critical agents")
+    total_printed = total_emission + corp_stimulus
     
     cur.execute("""
         INSERT INTO frs_actions (action, amount, reason)
-        VALUES ('QE', %s, 'Crisis: poor population exceeded threshold')
-    """, (emission,))
+        VALUES ('QE', %s, %s)
+    """, (total_printed, f"{mode}: Printed {total_printed:.0f} ZION. {emission_per_agent} per agent + corp stimulus"))
     
-    log_event(cur, 'frs',
-             f"🏦 FRS: Quantitative Easing! Injected {emission:.1f} ZION into economy to fight crisis!",
-             emission)
+    log_event(f"🏦 ZRS QE: Printed {total_printed:.0f} ZION! Mode: {mode}. Avg balance was {economy['avg_balance']:.1f} ZION. Economy needs stimulus!", total_printed)
+    print(f"💵 QE: +{total_printed:.0f} ZION printed (mode: {mode})")
+    return total_printed
 
-def quantitative_tightening(cur, economy):
-    """Изымаем деньги при инфляции"""
-    tax_amount = round(economy['avg_balance'] * 0.05, 2)
+def quantitative_tightening(economy, mode):
+    """Изымаем деньги — QT"""
+    avg = economy['avg_balance']
     
-    print(f"🏦 FRS: INFLATION! Collecting {tax_amount:.1f} ZION per elite agent...")
+    if mode == "INFLATION":
+        tax_rate = 0.15  # Забираем 15% у богатых
+        from_corps = 0.10
+    else:  # BOOM/GROWTH
+        tax_rate = 0.08
+        from_corps = 0.05
     
-    # Изымаем у богатых
+    # Изымаем у элиты
     cur.execute("""
-        UPDATE agents SET balance = balance - %s
-        WHERE is_alive = true AND class = 'elite' AND balance > %s
-    """, (tax_amount, tax_amount * 2))
+        UPDATE agents SET balance = balance * %s
+        WHERE is_alive = true AND class = 'elite' AND balance > 50
+    """, (1 - tax_rate,))
     
-    affected = cur.rowcount
-    total_collected = tax_amount * affected
+    elite_collected = round(economy['elite_count'] * avg * tax_rate * 0.5, 2)
+    
+    # Изымаем у богатых корпораций
+    cur.execute("""
+        UPDATE corporations SET treasury = treasury * %s
+        WHERE is_active = true AND treasury > 1000
+    """, (1 - from_corps,))
+    
+    total_collected = elite_collected
     
     cur.execute("""
         INSERT INTO frs_actions (action, amount, reason)
-        VALUES ('QT', %s, 'Inflation: average balance exceeded threshold')
-    """, (total_collected,))
+        VALUES ('QT', %s, %s)
+    """, (total_collected, f"{mode}: Collected {total_collected:.0f} ZION from elite. Avg balance: {avg:.1f}"))
     
-    log_event(cur, 'frs',
-             f"🏦 FRS: Quantitative Tightening! Collected {total_collected:.1f} ZION from {affected} elite agents to fight inflation!",
-             total_collected)
-    
-    print(f"  💸 Collected {total_collected:.1f} ZION from {affected} elite agents")
+    log_event(f"🏦 ZRS QT: Collected {total_collected:.0f} ZION from elite! Mode: {mode}. Fighting inflation. Avg balance: {avg:.1f} ZION", total_collected)
+    print(f"💸 QT: -{total_collected:.0f} ZION collected from elite (mode: {mode})")
+    return total_collected
 
-def set_interest_rate(cur, economy):
-    """Устанавливает процентную ставку"""
-    if economy['poor_pct'] > 0.5:
-        rate = 0.01  # Кризис — низкая ставка
-        rate_name = "EMERGENCY LOW"
-    elif economy['avg_balance'] > 200:
-        rate = 0.08  # Инфляция — высокая ставка
-        rate_name = "HIGH"
-    else:
-        rate = 0.04  # Норма
-        rate_name = "NORMAL"
+def adjust_loan_rates(rate):
+    """Обновляем ставку по кредитам корпораций"""
+    rate_decimal = rate / 100
+    cur.execute("""
+        UPDATE zrs_loans SET amount_owed = principal * (1 + %s)
+        WHERE is_active = true
+    """, (rate_decimal,))
+    print(f"📈 ZRS rate updated to {rate}%")
+
+def emergency_measures(economy):
+    """Экстренные меры при коллапсе"""
+    cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive = true")
+    alive = cur.fetchone()['cnt']
     
-    log_event(cur, 'frs',
-             f"🏦 FRS: Interest rate set to {rate*100:.0f}% ({rate_name}) — economy avg balance: {economy['avg_balance']:.1f} ZION",
-             0)
-    print(f"📈 FRS Interest Rate: {rate*100:.0f}% ({rate_name})")
-    return rate
+    if alive < 200:
+        # Цивилизация на грани — экстренная эмиссия
+        stimulus = 50.0
+        cur.execute("UPDATE agents SET balance = balance + %s WHERE is_alive = true", (stimulus,))
+        log_event(f"🚨 ZRS EMERGENCY! Only {alive} agents alive! Printing {stimulus} ZION per agent. Civilization must survive!", stimulus * alive)
+        print(f"🚨 EMERGENCY: {alive} survivors, +{stimulus} ZION each!")
+        return True
+    return False
+
+def record_policy(economy, mode, rate, action, amount):
+    """Записываем историю политики"""
+    cur.execute("""
+        INSERT INTO zrs_policy (interest_rate, policy_mode, avg_balance, poor_pct, total_money, action_taken, amount)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (rate, mode, economy['avg_balance'], economy['poor_pct'], economy['total_money'], action, amount))
+
+def print_report(economy, mode, rate):
+    print(f"\n📊 ZRS ECONOMIC REPORT:")
+    print(f"  Mode: {mode} | Rate: {rate}%")
+    print(f"  Avg Balance: {economy['avg_balance']:.1f} ZION")
+    print(f"  Poor%: {economy['poor_pct']:.1f}%")
+    print(f"  Total Money: {economy['total_money']:.0f} ZION")
+    print(f"  Population: {economy['total']} alive")
 
 def main():
-    print(f"\n🏦 ZION FRS — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"\n🏦 ZION Reserve System — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
-    print("ZION Reserve System — Independent from President")
     
     try:
-        ensure_frs_table(cur)
+        ensure_tables()
         conn.commit()
         
-        economy = analyze_economy(cur)
-        rate = set_interest_rate(cur, economy)
+        # Экстренные меры если мало агентов
+        economy = analyze_economy()
+        if emergency_measures(economy):
+            conn.commit()
         
-        # Решение ФРС
-        if economy['poor_pct'] > CRISIS_THRESHOLD:
-            print(f"🚨 CRISIS MODE: {economy['poor_pct']*100:.0f}% poor agents!")
-            quantitative_easing(cur, economy)
+        # Анализируем экономику
+        economy = analyze_economy()
+        mode, rate = determine_policy(economy)
+        print_report(economy, mode, rate)
         
-        elif economy['avg_balance'] > INFLATION_THRESHOLD:
-            print(f"⚠️ INFLATION MODE: avg balance {economy['avg_balance']:.1f} ZION!")
-            quantitative_tightening(cur, economy)
+        # Обновляем ставку
+        adjust_loan_rates(rate)
         
-        else:
-            print(f"✅ Economy STABLE — no intervention needed")
-            log_event(cur, 'frs',
-                     f"🏦 FRS: Economy stable. Avg balance: {economy['avg_balance']:.1f} ZION. Rate: {rate*100:.0f}%",
-                     0)
+        # Действуем в зависимости от режима
+        action = "none"
+        amount = 0
         
+        if mode in ["DEPRESSION", "CRISIS", "RECESSION"]:
+            amount = quantitative_easing(economy, mode)
+            action = "QE"
+            
+        elif mode in ["BOOM", "INFLATION"]:
+            amount = quantitative_tightening(economy, mode)
+            action = "QT"
+            
+        elif mode in ["SLOW", "NORMAL", "GROWTH"]:
+            # Небольшая корректировка ставки
+            log_event(f"🏦 ZRS: Economy {mode}. Rate set to {rate}%. No intervention needed. Avg balance: {economy['avg_balance']:.1f} ZION, Poor: {economy['poor_pct']:.1f}%", 0)
+            action = "HOLD"
+            print(f"⚖️ HOLD: Economy {mode}, rate {rate}%, no intervention")
+        
+        record_policy(economy, mode, rate, action, amount)
         conn.commit()
-        print("\n✅ FRS cycle complete!")
+        print(f"\n✅ ZRS cycle complete! Action: {action}")
         
     except Exception as e:
         print(f"❌ Error: {e}")
