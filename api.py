@@ -2089,3 +2089,22 @@ async def get_frs_stats():
     finally:
         cur.close()
         db.close()
+
+# ============ PRESIDENT ============
+@app.get("/president/state")
+async def get_president_state():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT agent_name, party, term_number, is_dictator, 
+                   approval_rating, days_in_power, police_fund, personal_fund
+            FROM president_state WHERE is_active = true LIMIT 1
+        """)
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return {"agent_name": "No President", "approval_rating": 0, "is_dictator": False, "term_number": 0, "days_in_power": 0, "party": "none", "police_fund": 0, "personal_fund": 0}
+    finally:
+        cur.close()
+        db.close()
