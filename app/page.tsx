@@ -3273,6 +3273,14 @@ export default function Home() {
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
   const [zionBetTimeframeTab, setZionBetTimeframeTab] = useState<ZionBetTimeframeFilterKey>("all");
   const [zionBetCgUsd, setZionBetCgUsd] = useState<{ SUI?: number }>({});
+  const [deepbookOracles, setDeepbookOracles] = useState<Array<{
+    oracle_id: string;
+    underlying_asset: string;
+    spot_price: number | null;
+    expiry_date: string;
+    expiry: number;
+    status: string;
+  }>>([]);
   const [vipAccess, setVipAccess] = useState<{
     isGold: boolean;
     isSilver: boolean;
@@ -3721,6 +3729,20 @@ export default function Home() {
       return [];
     }
   }, []);
+
+  const fetchDeepbookOracles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/deepbook/oracles");
+      const data = await res.json();
+      if (Array.isArray(data)) setDeepbookOracles(data);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "zionbet") {
+      void fetchDeepbookOracles();
+    }
+  }, [activeTab, fetchDeepbookOracles]);
 
   useEffect(() => {
     void loadZionBetMarkets();
@@ -5503,6 +5525,69 @@ export default function Home() {
                 />
               ) : (
                 <>
+                  <div style={{
+                    background: "linear-gradient(135deg, #0a0a1a 0%, #0d1117 100%)",
+                    border: "1px solid #1a3a5c",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    marginBottom: "24px",
+                  }}>
+                    <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"16px"}}>
+                      <span style={{fontSize:"1.2rem"}}>⚡</span>
+                      <h3 style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"1rem", margin:0, letterSpacing:"2px"}}>
+                        DEEPBOOK PREDICT — LIVE ORACLES
+                      </h3>
+                      <span style={{
+                        background:"#0d3a6e", color:"#4DA2FF", fontSize:"0.65rem",
+                        padding:"2px 8px", borderRadius:"4px", fontFamily:"monospace"
+                      }}>POWERED BY BLOCK SCHOLES</span>
+                    </div>
+                    <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:"12px"}}>
+                      {deepbookOracles.length === 0 ? (
+                        <p style={{color:"#333", fontFamily:"monospace", fontSize:"0.8rem"}}>Loading DeepBook oracles...</p>
+                      ) : deepbookOracles.map((oracle) => (
+                        <div key={oracle.oracle_id} style={{
+                          background:"#0a0f1a",
+                          border:"1px solid #1a3a5c",
+                          borderRadius:"8px",
+                          padding:"14px",
+                        }}>
+                          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}}>
+                            <span style={{color:"#4DA2FF", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.9rem"}}>
+                              {oracle.underlying_asset}/USD
+                            </span>
+                            <span style={{
+                              background: oracle.status === "active" ? "#0d3a0d" : "#1a1a0d",
+                              color: oracle.status === "active" ? "#00ff41" : "#888",
+                              fontSize:"0.6rem", padding:"2px 6px", borderRadius:"4px", fontFamily:"monospace"
+                            }}>
+                              {oracle.status.toUpperCase()}
+                            </span>
+                          </div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1.3rem", fontWeight:"bold", marginBottom:"4px"}}>
+                            ${oracle.spot_price ? oracle.spot_price.toLocaleString() : "—"}
+                          </div>
+                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.7rem"}}>
+                            Expires: {oracle.expiry_date}
+                          </div>
+                          <div style={{color:"#333", fontFamily:"monospace", fontSize:"0.6rem", marginTop:"4px"}}>
+                            Oracle: {oracle.oracle_id.slice(0,8)}...
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
+                      <span style={{color:"#333", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                        📦 Package: 0xf5ea2b37...
+                      </span>
+                      <span style={{color:"#333", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                        🔮 Predict: 0xc8736204...
+                      </span>
+                      <span style={{color:"#00ff41", fontFamily:"monospace", fontSize:"0.65rem"}}>
+                        ✓ Testnet Live
+                      </span>
+                    </div>
+                  </div>
                   <div className="zionBetCatTabs" role="tablist" aria-label="Market categories">
                     <button
                       type="button"
