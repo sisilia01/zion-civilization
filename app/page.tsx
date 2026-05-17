@@ -5413,7 +5413,7 @@ export default function Home() {
                           <div style={{ textAlign: "center" }}>
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MARKET</div>
                             <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                              {corp.market_share?.toFixed(0)}%
+                              {((corp.market_share ?? 0) * 100).toFixed(0)}%
                             </div>
                           </div>
                         </div>
