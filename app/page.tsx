@@ -3251,7 +3251,7 @@ export default function Home() {
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
-  const [conversations, setConversations] = useState<ConversationPair[]>(() => readConvCache() ?? []);
+  const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [markets, setMarkets] = useState<ZionBetMarket[]>([]);
   const [myBets, setMyBets] = useState<ZionBetMyBetRow[]>([]);
   const [betModal, setBetModal] = useState<{
@@ -3280,7 +3280,7 @@ export default function Home() {
   } | null>(null);
   const [showVIP, setShowVIP] = useState(false);
 
-  const [pressArticles, setPressArticles] = useState<Record<string, string>>(() => readAllPressCaches());
+  const [pressArticles, setPressArticles] = useState<Record<string, string>>({});
   const [pressLoading, setPressLoading] = useState<Record<string, boolean>>({});
   const [activeNewspaper, setActiveNewspaper] = useState("ziontimes");
   const [suiBalance, setSuiBalance] = useState(0);
@@ -3294,6 +3294,13 @@ export default function Home() {
     if (!res.ok) return [];
     const data = (await res.json()) as { decisions?: ZcoDecision[] };
     return data.decisions ?? [];
+  }, []);
+
+  useEffect(() => {
+    // Clear old press cache to force server-side caching
+    newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
+    const conv = readConvCache();
+    if (conv) setConversations(conv);
   }, []);
 
   const fetchZcoDecisions = useCallback(async () => {
@@ -3370,9 +3377,21 @@ export default function Home() {
   }, [account?.address, pressSuiChecked, suiBalance]);
 
   const generateArticle = useCallback(async (newspaper: PressNewspaper) => {
-    const cacheKey = `press_${newspaper.id}`;
+    // 1. Check server cache first
     try {
-      const pressCache = localStorage.getItem(cacheKey);
+      const serverRes = await fetch(`/api/press/${newspaper.id}`);
+      const serverData = await serverRes.json();
+      if (serverData.cached && serverData.content) {
+        setPressArticles((prev) => ({ ...prev, [newspaper.id]: serverData.content }));
+        // Also save to localStorage as local backup
+        localStorage.setItem(`press_${newspaper.id}`, JSON.stringify({ content: serverData.content, ts: Date.now() }));
+        return;
+      }
+    } catch { /* ignore */ }
+
+    // 2. Check localStorage fallback
+    try {
+      const pressCache = localStorage.getItem(`press_${newspaper.id}`);
       if (pressCache) {
         const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
         if (Date.now() - ts < PRESS_CACHE_TTL_MS) {
@@ -3380,12 +3399,10 @@ export default function Home() {
           return;
         }
       }
-    } catch {
-      /* ignore cache */
-    }
+    } catch { /* ignore */ }
 
+    // 3. Generate new article
     setPressLoading((prev) => ({ ...prev, [newspaper.id]: true }));
-
     try {
       const [eventsRes, statsRes] = await Promise.all([fetch("/api/events?limit=20"), fetch("/api/stats")]);
       const eventsRaw = await eventsRes.json();
@@ -3412,77 +3429,36 @@ export default function Home() {
       const totalZion = typeof stats.total_zion === "number" ? stats.total_zion : Number(stats.total_zion ?? 0);
       const activeClans = Number(stats.active_clans ?? 0);
 
-      const prompt = `IMPORTANT: Write ONLY in English. No other languages.
-
-${newspaper.persona}
-
-LIVE CIVILIZATION DATA RIGHT NOW:
-- Alive agents: ${alive}
-- Deaths today: ${deathsToday}  
-- Total ZION in circulation: ${Number.isFinite(totalZion) ? totalZion.toFixed(2) : "0"}
-- Active clans: ${activeClans}
-
-RECENT EVENTS RELEVANT TO YOUR PAPER:
-${relevantEvents
-  .map((e) => {
-    const amt = typeof e.amount === "number" ? e.amount : 0;
-    return `[${(e.type ?? "?").toUpperCase()}] ${e.description ?? ""} ${amt > 0 ? `(${amt} ZION)` : ""}`;
-  })
-  .join("\n")}
-
-Write the article in EXACTLY this format, nothing else:
-
-HEADLINE: YOUR HEADLINE HERE
-BYLINE: By Journalist Name | ${newspaper.name}
----
-Column 1:
-First paragraph text here, 60-80 words.
-
-Column 2:
-Second paragraph text here, 60-80 words.
-
-Column 3:
-Third paragraph text here, 40-60 words.
----
-EDITOR'S NOTE: One sentence here.
-
-CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on their own lines. Write ONLY in English.`;
-
-      const openrouterKey = process.env.NEXT_PUBLIC_OPENROUTER_KEY || "";
-
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const aiRes = await fetch("/api/generate_press", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openrouterKey}`,
-          "HTTP-Referer": "https://zionciv.com",
-          "X-Title": "ZION Civilization Press",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "deepseek/deepseek-chat-v3-0324",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 500,
-          temperature: 0.85,
+          newspaper_id: newspaper.id,
+          persona: newspaper.persona,
+          relevant_events: relevantEvents.map((e) => `[${e.type}] ${e.description}`).join("\n") || "- Civilization continues its eternal struggle",
+          alive,
+          deaths_today: deathsToday,
+          total_zion: totalZion,
+          active_clans: activeClans,
         }),
       });
+      const aiData = (await aiRes.json()) as { content?: string };
+      const content = aiData.content ?? "";
+      console.log("PRESS AI RESPONSE:", content.slice(0, 100));
 
-      const data = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-        error?: { message?: string };
-      };
-      const article =
-        data.choices?.[0]?.message?.content ||
-        data.error?.message ||
-        JSON.stringify(data).substring(0, 300);
-      localStorage.setItem(cacheKey, JSON.stringify({ content: article, ts: Date.now() }));
-      setPressArticles((prev) => ({ ...prev, [newspaper.id]: article }));
-    } catch (err) {
-      console.error("Press error:", err);
-      setPressArticles((prev) => ({
-        ...prev,
-        [newspaper.id]: "Error generating article. Check API key.",
-      }));
-    } finally {
+      if (content) {
+        setPressArticles((prev) => ({ ...prev, [newspaper.id]: content }));
+        // Save to server (6h cache)
+        console.log("PRESS CONTENT LENGTH:", content.length, "ID:", newspaper.id);
+        fetch(`/api/press/${newspaper.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        }).then(r => r.json()).then(d => console.log("PRESS SAVE:", d)).catch(e => console.error("PRESS SAVE ERROR:", e));
+        // Save to localStorage
+        localStorage.setItem(`press_${newspaper.id}`, JSON.stringify({ content, ts: Date.now() }));
+      }
+    } catch { /* ignore */ } finally {
       setPressLoading((prev) => ({ ...prev, [newspaper.id]: false }));
     }
   }, []);
@@ -5120,14 +5096,7 @@ CRITICAL: Use exactly these labels: 'Column 1:', 'Column 2:', 'Column 3:' on the
                   >
                     LIVE EVENTS — WALRUS
                   </span>
-                  <img
-                    src="/walrus-logo.png"
-                    alt=""
-                    style={{ height: "14px", marginLeft: "4px", opacity: 0.6 }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
+                  <img src="/zion-logo.svg" alt="" style={{ height: "14px", marginLeft: "4px", opacity: 0.6 }} />
                 </div>
                 <div style={{ overflow: "hidden", padding: "10px 0" }}>
                   <div
