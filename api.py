@@ -2000,3 +2000,92 @@ async def bank_stats():
     finally:
         cur.close()
         db.close()
+
+# ============ FRS DASHBOARD ============
+@app.get("/frs/stats")
+async def get_frs_stats():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Экономика
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_agents,
+                AVG(balance) as avg_balance,
+                SUM(balance) as total_money,
+                COUNT(CASE WHEN class IN ('poor','critical') THEN 1 END) as poor_count,
+                COUNT(CASE WHEN class = 'elite' THEN 1 END) as elite_count,
+                COUNT(CASE WHEN class = 'middle' THEN 1 END) as middle_count,
+                MAX(balance) as max_balance
+            FROM agents WHERE is_alive = true
+        """)
+        economy = cur.fetchone()
+        
+        # Последние решения ФРС
+        cur.execute("""
+            SELECT action, amount, reason, performed_at 
+            FROM frs_actions 
+            ORDER BY performed_at DESC LIMIT 5
+        """)
+        actions = cur.fetchall()
+        
+        # Президент
+        cur.execute("""
+            SELECT agent_name, party, votes, term_start
+            FROM presidents WHERE is_active = true LIMIT 1
+        """)
+        president = cur.fetchone()
+        
+        # Активный закон
+        cur.execute("""
+            SELECT law_text, party, passed_at
+            FROM active_laws WHERE is_active = true 
+            AND expires_at > NOW() LIMIT 1
+        """)
+        law = cur.fetchone()
+
+        # Корпорации
+        cur.execute("""
+            SELECT COUNT(*) as count, SUM(treasury) as total_treasury
+            FROM corporations WHERE is_active = true
+        """)
+        corps = cur.fetchone()
+
+        poor_pct = float(economy['poor_count']) / max(float(economy['total_agents']), 1)
+        avg_bal = float(economy['avg_balance'] or 0)
+        
+        # Определяем статус экономики
+        if poor_pct > 0.4:
+            status = "CRISIS"
+            rate = 1
+        elif avg_bal > 500:
+            status = "INFLATION"
+            rate = 8
+        else:
+            status = "STABLE"
+            rate = 4
+
+        return {
+            "economy": {
+                "total_agents": int(economy['total_agents']),
+                "avg_balance": round(avg_bal, 2),
+                "total_money": round(float(economy['total_money'] or 0), 2),
+                "poor_pct": round(poor_pct * 100, 1),
+                "elite_count": int(economy['elite_count']),
+                "middle_count": int(economy['middle_count']),
+                "poor_count": int(economy['poor_count']),
+                "max_balance": round(float(economy['max_balance'] or 0), 2),
+            },
+            "status": status,
+            "interest_rate": rate,
+            "president": dict(president) if president else None,
+            "active_law": dict(law) if law else None,
+            "corporations": {
+                "count": int(corps['count'] or 0),
+                "total_treasury": round(float(corps['total_treasury'] or 0), 2),
+            },
+            "recent_actions": [dict(a) for a in actions],
+        }
+    finally:
+        cur.close()
+        db.close()
