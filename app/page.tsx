@@ -3380,6 +3380,16 @@ export default function Home() {
     corporations: { count: number; total_treasury: number };
     recent_actions: { action: string; amount: number; reason: string; performed_at: string }[];
   } | null>(null);
+  const [presidentState, setPresidentState] = useState<{
+    agent_name: string;
+    party: string;
+    term_number: number;
+    is_dictator: boolean;
+    approval_rating: number;
+    days_in_power: number;
+    police_fund: number;
+    personal_fund: number;
+  } | null>(null);
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
@@ -3397,6 +3407,10 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === "treasury") {
+      fetch("/api/president/state")
+        .then((r) => r.json())
+        .then((d) => setPresidentState(d))
+        .catch(() => {});
       fetch("/api/frs/stats")
         .then((r) => r.json())
         .then((d) => {
@@ -6822,24 +6836,78 @@ export default function Home() {
                         Federal Reserve System · Independent from President · Auto-stabilizing economy
                       </div>
                     </div>
-                    {frsStats.president && (
+                    {presidentState && (
                       <div style={{ marginLeft: "auto", textAlign: "right" }}>
                         <div
                           style={{
-                            color: frsStats.president.party === "blue" ? "#4DA2FF" : "#ff4444",
+                            color: presidentState.is_dictator
+                              ? "#ff3232"
+                              : presidentState.party === "blue"
+                                ? "#4DA2FF"
+                                : "#ff6464",
                             fontFamily: "monospace",
-                            fontSize: "0.75rem",
+                            fontSize: "0.8rem",
                             fontWeight: "bold",
                           }}
                         >
-                          {frsStats.president.party === "blue" ? "🔵" : "🔴"} President:{" "}
-                          {frsStats.president.agent_name}
+                          {presidentState.is_dictator
+                            ? "👑 DICTATOR"
+                            : presidentState.party === "blue"
+                              ? "🔵 President"
+                              : "🔴 President"}
+                          : {presidentState.agent_name}
                         </div>
-                        {frsStats.active_law && (
-                          <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.65rem" }}>
-                            📜 {frsStats.active_law.law_text.slice(0, 50)}...
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            marginTop: "4px",
+                            justifyContent: "flex-end",
+                          }}
+                        >
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                            APPROVAL
                           </div>
-                        )}
+                          <div
+                            style={{
+                              width: "80px",
+                              height: "6px",
+                              background: "#111",
+                              borderRadius: "3px",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${presidentState.approval_rating}%`,
+                                height: "100%",
+                                background:
+                                  presidentState.approval_rating > 50
+                                    ? "#00ff41"
+                                    : presidentState.approval_rating > 25
+                                      ? "#ffaa00"
+                                      : "#ff3232",
+                                borderRadius: "3px",
+                                transition: "width 0.5s",
+                              }}
+                            />
+                          </div>
+                          <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                            {presidentState.approval_rating}%
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            color: "#555",
+                            fontFamily: "monospace",
+                            fontSize: "0.65rem",
+                            marginTop: "2px",
+                          }}
+                        >
+                          Term {presidentState.term_number}/2 · Day {presidentState.days_in_power}
+                          {presidentState.is_dictator ? " · ⚠️ DICTATORSHIP" : ""}
+                        </div>
                       </div>
                     )}
                   </div>
