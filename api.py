@@ -1626,3 +1626,125 @@ def generate_auto_markets():
     conn.close()
     
     return {"created": created, "count": len(created)}
+
+# ============ PRESS CACHE ============
+@app.get("/press/{newspaper_id}")
+async def get_press(newspaper_id: str):
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT content, generated_at FROM press_cache
+            WHERE newspaper_id = %s
+            AND generated_at > NOW() - INTERVAL '6 hours'
+        """, (newspaper_id,))
+        row = cur.fetchone()
+        if row:
+            return {"content": row["content"], "generated_at": str(row["generated_at"]), "cached": True}
+        return {"content": None, "cached": False}
+    finally:
+        cur.close()
+        db.close()
+
+@app.post("/press/{newspaper_id}")
+async def save_press(newspaper_id: str, body: dict):
+    content = body.get("content", "")
+    if not content:
+        return {"ok": False}
+    db = get_db()
+    cur = db.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO press_cache (newspaper_id, content, generated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (newspaper_id) DO UPDATE
+            SET content = EXCLUDED.content, generated_at = NOW()
+        """, (newspaper_id, content))
+        db.commit()
+        return {"ok": True}
+    finally:
+        cur.close()
+        db.close()
+
+# ============ PRESS GENERATE ============
+@app.post("/generate_press")
+async def generate_press(body: dict):
+    newspaper_id = body.get("newspaper_id", "")
+    persona = body.get("persona", "")
+    relevant_events = body.get("relevant_events", "")
+    alive = body.get("alive", 0)
+    deaths_today = body.get("deaths_today", 0)
+    total_zion = body.get("total_zion", 0)
+    active_clans = body.get("active_clans", 0)
+
+    # Check DB cache first
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT content FROM press_cache
+            WHERE newspaper_id = %s
+            AND generated_at > NOW() - INTERVAL '6 hours'
+        """, (newspaper_id,))
+        row = cur.fetchone()
+        if row:
+            return {"content": row["content"], "cached": True}
+    finally:
+        cur.close()
+        db.close()
+
+    # Generate via OpenRouter
+    prompt = f"""IMPORTANT: Write ONLY in English. No other languages.
+
+{persona}
+
+LIVE CIVILIZATION DATA RIGHT NOW:
+- Alive agents: {alive}
+- Deaths today: {deaths_today}
+- Total ZION in economy: {total_zion}
+- Active clans: {active_clans}
+
+RECENT EVENTS IN ZION:
+{relevant_events}
+
+Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR'S NOTE format."""
+
+    try:
+        import urllib.request as req
+        payload = json.dumps({
+            "model": "google/gemini-2.0-flash-lite-001",
+            "max_tokens": 600,
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode()
+        request = req.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer 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",
+                "HTTP-Referer": "https://zionciv.com",
+                "X-Title": "ZION Civilization"
+            }
+        )
+        with req.urlopen(request, timeout=30) as resp:
+            data = json.loads(resp.read())
+            content = data["choices"][0]["message"]["content"]
+
+        # Save to DB cache
+        db = get_db()
+        cur = db.cursor()
+        try:
+            cur.execute("""
+                INSERT INTO press_cache (newspaper_id, content, generated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (newspaper_id) DO UPDATE
+                SET content = EXCLUDED.content, generated_at = NOW()
+            """, (newspaper_id, content))
+            db.commit()
+        finally:
+            cur.close()
+            db.close()
+
+        return {"content": content, "cached": False}
+    except Exception as e:
+        return {"content": None, "error": str(e)}
