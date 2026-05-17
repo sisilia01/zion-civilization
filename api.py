@@ -1803,3 +1803,143 @@ async def get_deepbook_vault():
         return data
     except Exception as e:
         return {"error": str(e)}
+
+# ============ CONVERSATIONS ============
+def _conversation_row_to_api(r: dict) -> dict:
+    return {
+        "id": r["id"],
+        "topic": r["topic"] or "",
+        "agent1": {
+            "id": int(r["id"]) * 2,
+            "name": r["agent1_name"],
+            "class": r["agent1_class"],
+            "balance": 0,
+            "age_days": 0,
+            "clan": None,
+            "dust_days": 0,
+            "dying": False,
+        },
+        "agent2": {
+            "id": int(r["id"]) * 2 + 1,
+            "name": r["agent2_name"],
+            "class": r["agent2_class"],
+            "balance": 0,
+            "age_days": 0,
+            "clan": None,
+            "dust_days": 0,
+            "dying": False,
+        },
+        "message1": r["message1"],
+        "message2": r["message2"],
+    }
+
+
+@app.get("/conversations")
+async def get_conversations():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT * FROM conversations_cache
+            WHERE generated_at > NOW() - INTERVAL '30 minutes'
+            ORDER BY CASE agent1_class 
+                WHEN 'elite' THEN 1 
+                WHEN 'middle' THEN 2 
+                WHEN 'poor' THEN 3 
+                WHEN 'critical' THEN 4 
+                ELSE 5 END
+            LIMIT 4
+        """)
+        rows = cur.fetchall()
+        if rows:
+            return [_conversation_row_to_api(dict(r)) for r in rows]
+        return []
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.post("/generate_conversations")
+async def generate_conversations():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            (SELECT name, class, balance, 1 as ord FROM agents WHERE is_alive = true AND class = 'elite' ORDER BY RANDOM() LIMIT 2)
+            UNION ALL
+            (SELECT name, class, balance, 2 as ord FROM agents WHERE is_alive = true AND class = 'middle' ORDER BY RANDOM() LIMIT 2)
+            UNION ALL
+            (SELECT name, class, balance, 3 as ord FROM agents WHERE is_alive = true AND class = 'poor' ORDER BY RANDOM() LIMIT 2)
+            UNION ALL
+            (SELECT name, class, balance, 4 as ord FROM agents WHERE is_alive = true AND class = 'critical' ORDER BY RANDOM() LIMIT 2)
+            ORDER BY ord
+        """)
+        agents = cur.fetchall()
+        if len(agents) < 2:
+            return {"ok": False, "error": "not enough agents"}
+
+        cur.execute("""
+            SELECT event_type, description FROM events
+            ORDER BY created_at DESC LIMIT 5
+        """)
+        events = cur.fetchall()
+        event_context = "; ".join([f"{e['event_type']}: {e['description']}" for e in events])
+
+        OPENROUTER_KEY = "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"
+        import urllib.request as req
+        conversations = []
+
+        for i in range(0, min(len(agents) - 1, 7), 2):
+            a1 = agents[i]
+            a2 = agents[i + 1]
+            prompt = f"""Two AI agents from ZION civilization are talking.
+Agent 1: {a1['name']} ({a1['class']} class, {a1['balance']:.1f} ZION)
+Agent 2: {a2['name']} ({a2['class']} class, {a2['balance']:.1f} ZION)
+Recent events: {event_context}
+
+Write ONE short message from each agent (max 30 words each).
+They discuss recent events with their class perspective.
+Format exactly:
+{a1['name']}: [message]
+{a2['name']}: [message]
+English only."""
+
+            try:
+                payload = json.dumps({
+                    "model": "google/gemini-2.0-flash-lite-001",
+                    "max_tokens": 150,
+                    "messages": [{"role": "user", "content": prompt}]
+                }).encode()
+                request = req.Request(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    data=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {OPENROUTER_KEY}",
+                        "HTTP-Referer": "https://zionciv.com",
+                        "X-Title": "ZION Civilization"
+                    }
+                )
+                with req.urlopen(request, timeout=15) as r:
+                    data = json.loads(r.read())
+                content = data["choices"][0]["message"]["content"]
+                lines = [l.strip() for l in content.strip().split("\n") if l.strip()]
+                msg1 = lines[0].split(":", 1)[1].strip() if len(lines) > 0 and ":" in lines[0] else lines[0] if lines else ""
+                msg2 = lines[1].split(":", 1)[1].strip() if len(lines) > 1 and ":" in lines[1] else lines[1] if len(lines) > 1 else ""
+
+                cur2 = db.cursor()
+                cur2.execute("""
+                    INSERT INTO conversations_cache
+                    (agent1_name, agent1_class, agent2_name, agent2_class, message1, message2, topic, generated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (a1['name'], a1['class'], a2['name'], a2['class'], msg1, msg2, event_context[:100]))
+                db.commit()
+                cur2.close()
+                conversations.append({"agent1": a1['name'], "agent2": a2['name']})
+            except Exception:
+                continue
+
+        return {"ok": True, "generated": len(conversations)}
+    finally:
+        cur.close()
+        db.close()

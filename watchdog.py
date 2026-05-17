@@ -36,6 +36,8 @@ SCRIPTS = {
 
 # Время последнего запуска каждого скрипта
 last_run = {name: 0 for name in SCRIPTS}
+last_coin_manager = 0
+COIN_MANAGER_INTERVAL = 14400  # каждые 4 часа
 
 def is_screen_running(name):
     """Проверяет запущена ли screen сессия"""
@@ -122,6 +124,16 @@ def main():
             api_status = "✅" if is_api_running() else "❌"
             log.info(f"Heartbeat — API:{api_status} | Scripts monitored: {len(SCRIPTS)}")
         
+        # Coin manager каждые 4 часа
+        if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
+            subprocess.Popen(
+                ["python3", f"{BACKEND_DIR}/coin_manager.py"],
+                stdout=open(f"{BACKEND_DIR}/coin_manager.log", "a"),
+                stderr=subprocess.STDOUT
+            )
+            last_coin_manager = now
+            log.info("Coin manager started")
+
         time.sleep(30)  # Проверяем каждые 30 секунд
 
 if __name__ == "__main__":
