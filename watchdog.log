@@ -1,45 +1,7 @@
-2026-05-17 17:59:18,748 [WATCHDOG] === ZION Watchdog started ===
-2026-05-17 17:59:18,748 [WATCHDOG] Monitoring 18 scripts + API
-2026-05-17 17:59:18,801 [WATCHDOG] Running tax (interval 3600s)
-2026-05-17 17:59:19,864 [WATCHDOG] Started tax (tax_cron.py)
-2026-05-17 17:59:19,893 [WATCHDOG] Running birth (interval 1800s)
-2026-05-17 17:59:20,945 [WATCHDOG] Started birth (birth.py)
-2026-05-17 17:59:20,974 [WATCHDOG] Running police (interval 3600s)
-2026-05-17 17:59:22,001 [WATCHDOG] Started police (police.py)
-2026-05-17 17:59:22,025 [WATCHDOG] Running corporations (interval 1800s)
-2026-05-17 17:59:23,072 [WATCHDOG] Started corporations (corporations.py)
-2026-05-17 17:59:23,103 [WATCHDOG] Running epidemics (interval 7200s)
-2026-05-17 17:59:24,152 [WATCHDOG] Started epidemics (epidemics.py)
-2026-05-17 17:59:24,181 [WATCHDOG] Running marriages (interval 3600s)
-2026-05-17 17:59:25,214 [WATCHDOG] Started marriages (marriages.py)
-2026-05-17 17:59:25,227 [WATCHDOG] Running education (interval 3600s)
-2026-05-17 17:59:26,270 [WATCHDOG] Started education (education.py)
-2026-05-17 17:59:26,299 [WATCHDOG] Running market (interval 1800s)
-2026-05-17 17:59:27,348 [WATCHDOG] Started market (market.py)
-2026-05-17 17:59:27,373 [WATCHDOG] Running espionage (interval 3600s)
-2026-05-17 17:59:28,416 [WATCHDOG] Started espionage (espionage.py)
-2026-05-17 17:59:28,430 [WATCHDOG] Running casino (interval 1800s)
-2026-05-17 17:59:29,492 [WATCHDOG] Started casino (casino.py)
-2026-05-17 17:59:29,523 [WATCHDOG] Running religion (interval 1800s)
-2026-05-17 17:59:30,574 [WATCHDOG] Started religion (religion.py)
-2026-05-17 17:59:30,604 [WATCHDOG] Running politics (interval 3600s)
-2026-05-17 17:59:31,655 [WATCHDOG] Started politics (politics.py)
-2026-05-17 17:59:31,685 [WATCHDOG] Running catastrophes (interval 7200s)
-2026-05-17 17:59:32,736 [WATCHDOG] Started catastrophes (catastrophes.py)
-2026-05-17 17:59:32,765 [WATCHDOG] Running clans (interval 3600s)
-2026-05-17 17:59:33,814 [WATCHDOG] Started clans (clans.py)
-2026-05-17 17:59:33,843 [WATCHDOG] Running zionwork (interval 1800s)
-2026-05-17 17:59:34,894 [WATCHDOG] Started zionwork (zionwork.py)
-2026-05-17 17:59:34,923 [WATCHDOG] settlement appears stuck — restarting
-2026-05-17 17:59:35,977 [WATCHDOG] Started settlement (settlement.py)
-2026-05-17 17:59:36,008 [WATCHDOG] Running frs (interval 1800s)
-2026-05-17 17:59:37,055 [WATCHDOG] Started frs (frs.py)
-2026-05-17 17:59:37,084 [WATCHDOG] Running president (interval 3600s)
-2026-05-17 17:59:38,110 [WATCHDOG] Started president (president.py)
-Traceback (most recent call last):
-  File "/root/zion_backend/watchdog.py", line 149, in <module>
-    main()
-  File "/root/zion_backend/watchdog.py", line 137, in main
-    if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
-             ^^^^^^^^^^^^^^^^^
-UnboundLocalError: cannot access local variable 'last_coin_manager' where it is not associated with a value
+2026-05-17 20:10:51,455 [WATCHDOG] === ZION Watchdog started ===
+2026-05-17 20:10:51,455 [WATCHDOG] Monitoring 19 scripts + API
+2026-05-17 20:10:51,544 [WATCHDOG] Running tax (interval 3600s)
+2026-05-17 20:10:52,610 [WATCHDOG] Started tax (tax_cron.py)
+2026-05-17 20:10:52,639 [WATCHDOG] Running birth (interval 1800s)
+2026-05-17 20:10:53,689 [WATCHDOG] Started birth (birth.py)
+2026-05-17 20:10:53,701 [WATCHDOG] Running police (interval 3600s)

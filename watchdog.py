@@ -40,7 +40,8 @@ SCRIPTS = {
     "zionwork":     ("zionwork.py",    1800),   # каждые 30 мин
     "settlement":   ("settlement.py",  300),    # каждые 5 мин
     "frs":          ("frs.py",          1800),   # каждые 30 мин
-    "president":    ("president.py",    3600),   # каждый часждые 5 мин
+    "president":    ("president.py",    3600),   # каждый час
+    "sheriff":      ("sheriff.py",      3600),   # каждый часждые 5 мин
 }
 
 # Время последнего запуска каждого скрипта

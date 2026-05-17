@@ -16133,3 +16133,29 @@ Prayers: 93 | Miracles: 10
   🕯️ Shadow Cult: 90 believers
 
 ✅ Religion cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/religion.py", line 220, in main
+    prayers, miracles = run_religious_cycle(cur)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/religion.py", line 131, in run_religious_cycle
+    cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 559621 waits for ShareLock on transaction 15031; blocked by process 559682.
+Process 559682 waits for ShareLock on transaction 15026; blocked by process 559621.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (24,81) in relation "agents"
+
+
+⛪ ZION Religion v2 — 2026-05-17 19:54
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 100 new agents
+❌ Error: deadlock detected
+DETAIL:  Process 559621 waits for ShareLock on transaction 15031; blocked by process 559682.
+Process 559682 waits for ShareLock on transaction 15026; blocked by process 559621.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (24,81) in relation "agents"
+
