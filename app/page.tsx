@@ -1132,7 +1132,7 @@ function AgentTile({
   );
 }
 
-type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "faucet" | "press" | "bank";
+type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "faucet" | "press" | "treasury";
 
 type ParsedPressArticle = {
   headline: string;
@@ -3302,6 +3302,7 @@ export default function Home() {
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
+  const [eventFilter, setEventFilter] = useState<string>("all");
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [markets, setMarkets] = useState<ZionBetMarket[]>([]);
   const [myBets, setMyBets] = useState<ZionBetMyBetRow[]>([]);
@@ -3355,6 +3356,12 @@ export default function Home() {
   const [zcoDecisions, setZcoDecisions] = useState<ZcoDecision[]>([]);
   const [zcoLoading, setZcoLoading] = useState(false);
   const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
+  const [bankRecipient, setBankRecipient] = useState("");
+  const [bankAmount, setBankAmount] = useState("0.1");
+  const [bankToken, setBankToken] = useState<"SUI" | "ZION">("SUI");
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankTxHash, setBankTxHash] = useState<string | null>(null);
+  const [bankError, setBankError] = useState<string | null>(null);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
@@ -3943,6 +3950,71 @@ export default function Home() {
       setMyBets([]);
     }
   }, [account?.address]);
+
+  const handleBankSend = useCallback(async () => {
+    if (!account?.address) {
+      setBankError("Connect wallet first");
+      return;
+    }
+    if (!bankRecipient.startsWith("0x")) {
+      setBankError("Invalid address");
+      return;
+    }
+    if (!bankAmount || parseFloat(bankAmount) <= 0) {
+      setBankError("Invalid amount");
+      return;
+    }
+
+    setBankLoading(true);
+    setBankError(null);
+    setBankTxHash(null);
+
+    try {
+      const tx = new Transaction();
+
+      if (bankToken === "SUI") {
+        const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
+        const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+        tx.transferObjects([coin], tx.pure.address(bankRecipient));
+      } else {
+        const amountZion = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000_000));
+        tx.moveCall({
+          target: "0x2::coin::transfer",
+          typeArguments: ["0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78::zion::ZION"],
+          arguments: [tx.pure.u64(amountZion), tx.pure.address(bankRecipient)],
+        });
+      }
+
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: async (result) => {
+            const digest = suiTxDigest(result);
+            setBankTxHash(digest);
+            setBankLoading(false);
+            fetch("/api/bank/transfer", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from: account.address,
+                to: bankRecipient,
+                amount: parseFloat(bankAmount),
+                token: bankToken,
+                tx_hash: digest,
+              }),
+            }).catch(() => {});
+          },
+          onError: (err) => {
+            setBankError(err.message);
+            setBankLoading(false);
+          },
+        }
+      );
+    } catch (err: unknown) {
+      setBankError(err instanceof Error ? err.message : "Unknown error");
+      setBankLoading(false);
+    }
+  }, [account?.address, bankRecipient, bankAmount, bankToken, signAndExecute]);
 
   useEffect(() => {
     if (!account?.address) {
@@ -4943,7 +5015,7 @@ export default function Home() {
               ["civilization", "🌍 CIVILIZATION"],
               ["chat", "💬 CHAT"],
               ["zionbet", "🎰 ZIONBET"],
-              ["bank", "🏦 BANK"],
+              ["treasury", "💰 TREASURY"],
               ["leaderboard", "🏆 LEADERBOARD"],
               ["faucet", "🚰 FAUCET"],
               ["press", "📰 PRESS"],
@@ -5176,6 +5248,40 @@ export default function Home() {
                   </span>
                   <img src="/zion-logo.svg" alt="" style={{ height: "14px", marginLeft: "4px", opacity: 0.6 }} />
                 </div>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", padding: "8px 12px", borderBottom: "1px solid #111" }}>
+                  {[
+                    { id: "all", label: "ALL" },
+                    { id: "police", label: "🚔 CRIME" },
+                    { id: "corporation", label: "🏢 CORP" },
+                    { id: "marriage", label: "💍 LOVE" },
+                    { id: "religion", label: "⛪ FAITH" },
+                    { id: "casino", label: "🎰 CASINO" },
+                    { id: "espionage", label: "🕵️ SPY" },
+                    { id: "frs", label: "🏦 FRS" },
+                    { id: "epidemic", label: "🦠 HEALTH" },
+                    { id: "education", label: "🎓 EDU" },
+                    { id: "election", label: "🏛️ POLITICS" },
+                    { id: "trade", label: "📦 MARKET" },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setEventFilter(f.id)}
+                      style={{
+                        padding: "3px 8px",
+                        background: eventFilter === f.id ? "rgba(0,255,65,0.15)" : "rgba(0,0,0,0.3)",
+                        border: eventFilter === f.id ? "1px solid #00ff41" : "1px solid #222",
+                        borderRadius: "4px",
+                        color: eventFilter === f.id ? "#00ff41" : "#555",
+                        fontFamily: "monospace",
+                        fontSize: "0.65rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ overflow: "hidden", padding: "10px 0" }}>
                   <div
                     style={{
@@ -5186,7 +5292,14 @@ export default function Home() {
                       width: "max-content",
                     }}
                   >
-                    {[...allFeedItems, ...allFeedItems].map((item, i) => {
+                    {[
+                      ...(eventFilter === "all"
+                        ? allFeedItems
+                        : allFeedItems.filter((e) => e.type?.toLowerCase().includes(eventFilter))),
+                      ...(eventFilter === "all"
+                        ? allFeedItems
+                        : allFeedItems.filter((e) => e.type?.toLowerCase().includes(eventFilter))),
+                    ].map((item, i) => {
                       const color = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
                       const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
                       return (
@@ -6586,15 +6699,15 @@ export default function Home() {
             );
           })()}
 
-          {activeTab === "bank" && (
+          {activeTab === "treasury" && (
             <div style={{ padding: "24px" }}>
               {/* Header */}
               <div style={{ marginBottom: "24px" }}>
                 <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
-                  🏦 ZION Bank — Private Transactions
+                  💰 ZION TREASURY
                 </h2>
                 <p style={{ color: "#555", fontSize: "0.8rem", margin: 0 }}>
-                  Send SUI or USDC privately · Powered by Sui Protocol Privacy · Viewing key for compliance
+                  Central Bank · Private Transfers · Economic Monitor · Powered by Sui
                 </p>
               </div>
 
@@ -6632,7 +6745,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* vs Tornado Cash */}
+              {/* Our technology */}
               <div
                 style={{
                   border: "1px solid rgba(0,255,65,0.2)",
@@ -6643,39 +6756,40 @@ export default function Home() {
                 }}
               >
                 <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  ✅ WHY ZION BANK IS LEGAL
+                  ⚙️ POWERED BY
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div>
-                    <div style={{ color: "#ff3232", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "8px" }}>
-                      ❌ Tornado Cash (illegal)
-                    </div>
-                    {[
-                      "Money goes through shared pool",
-                      "Thousands of users mixed",
-                      "No audit trail possible",
-                      "Developers prosecuted",
-                    ].map((t) => (
-                      <div key={t} style={{ color: "#555", fontSize: "0.72rem", marginBottom: "4px" }}>
-                        • {t}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  {[
+                    { icon: "🔐", title: "Sui zkLogin", desc: "Sign in with Google — no seed phrase needed" },
+                    { icon: "🛡️", title: "Seal Protocol", desc: "On-chain encryption for private transfers" },
+                    { icon: "🌊", title: "Walrus Storage", desc: "Decentralized storage for transaction history" },
+                    { icon: "⚡", title: "Sui Move", desc: "Smart contracts with object-based security" },
+                    { icon: "🔑", title: "Viewing Key", desc: "Full audit trail — reveal only when needed" },
+                    { icon: "📊", title: "DeepBook", desc: "On-chain liquidity for ZION token transfers" },
+                  ].map((tech) => (
+                    <div
+                      key={tech.title}
+                      style={{
+                        padding: "12px",
+                        background: "rgba(0,0,0,0.3)",
+                        borderRadius: "8px",
+                        border: "1px solid #1a1a1a",
+                      }}
+                    >
+                      <div style={{ fontSize: "1.2rem", marginBottom: "6px" }}>{tech.icon}</div>
+                      <div
+                        style={{
+                          color: "#00ff41",
+                          fontSize: "0.78rem",
+                          fontWeight: "bold",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {tech.title}
                       </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div style={{ color: "#00ff41", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "8px" }}>
-                      ✅ ZION Bank (legal)
+                      <div style={{ color: "#555", fontSize: "0.68rem", lineHeight: "1.4" }}>{tech.desc}</div>
                     </div>
-                    {[
-                      "Money goes directly to recipient",
-                      "One-to-one transaction",
-                      "Viewing key for full audit",
-                      "Built on Sui Protocol Privacy",
-                    ].map((t) => (
-                      <div key={t} style={{ color: "#888", fontSize: "0.72rem", marginBottom: "4px" }}>
-                        • {t}
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
 
@@ -6699,6 +6813,8 @@ export default function Home() {
                   <input
                     type="text"
                     placeholder="0x..."
+                    value={bankRecipient}
+                    onChange={(e) => setBankRecipient(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "10px 12px",
@@ -6720,6 +6836,8 @@ export default function Home() {
                     <input
                       type="number"
                       placeholder="0.00"
+                      value={bankAmount}
+                      onChange={(e) => setBankAmount(e.target.value)}
                       style={{
                         width: "100%",
                         padding: "10px 12px",
@@ -6737,6 +6855,8 @@ export default function Home() {
                       TOKEN
                     </label>
                     <select
+                      value={bankToken}
+                      onChange={(e) => setBankToken(e.target.value as "SUI" | "ZION")}
                       style={{
                         width: "100%",
                         padding: "10px 12px",
@@ -6748,8 +6868,8 @@ export default function Home() {
                         boxSizing: "border-box",
                       }}
                     >
-                      <option>SUI</option>
-                      <option>USDC</option>
+                      <option value="SUI">SUI</option>
+                      <option value="ZION">ZION</option>
                     </select>
                   </div>
                 </div>
@@ -6770,7 +6890,8 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={() => alert("ZION Bank launches with Sui Protocol Privacy mainnet. Coming soon!")}
+                  onClick={handleBankSend}
+                  disabled={bankLoading}
                   style={{
                     width: "100%",
                     padding: "14px",
@@ -6780,11 +6901,48 @@ export default function Home() {
                     color: "#ffd700",
                     fontSize: "1rem",
                     fontWeight: "bold",
-                    cursor: "pointer",
+                    cursor: bankLoading ? "not-allowed" : "pointer",
+                    opacity: bankLoading ? 0.7 : 1,
                   }}
                 >
-                  🔐 Send Private Transaction
+                  {bankLoading ? "⏳ Sending..." : "🔐 Send Transaction"}
                 </button>
+                {bankTxHash && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px",
+                      background: "rgba(0,255,65,0.05)",
+                      border: "1px solid #00ff4144",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "4px" }}>
+                      ✅ Transaction sent!
+                    </div>
+                    <a
+                      href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
+                    >
+                      View on Suiscan →
+                    </a>
+                  </div>
+                )}
+                {bankError && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px",
+                      background: "rgba(255,50,50,0.05)",
+                      border: "1px solid #ff323244",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
+                  </div>
+                )}
                 <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
                   Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
                 </div>
