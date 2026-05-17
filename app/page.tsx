@@ -5321,20 +5321,6 @@ export default function Home() {
               </section>
 
 
-              <section className="clanSection">
-                <h2>CLAN RANKINGS</h2>
-                <div className="clanGrid">
-                  {clans.map((clan, idx) => (
-                    <article key={clan.id} className="clanCard">
-                      <h3>{idx === 0 ? "👑 " : ""}{clan.name}</h3>
-                      <p>Treasury: {clan.treasury.toFixed(1)}</p>
-                      <p>Members: {clan.members}</p>
-                      <p>W/L: {clan.wins}/{clan.losses}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
               {corporations.length > 0 && (
                 <div style={{ marginTop: "24px" }}>
                   <h3
@@ -5422,6 +5408,99 @@ export default function Home() {
                   </div>
                 </div>
               )}
+
+              <div
+                style={{
+                  margin: "28px 0 20px 0",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #00ff41)" }} />
+                <span
+                  style={{
+                    color: "#00ff41",
+                    fontFamily: "monospace",
+                    fontSize: "0.8rem",
+                    letterSpacing: "3px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ⚔️ CLAN RANKINGS ⚔️
+                </span>
+                <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #00ff41)" }} />
+              </div>
+
+              <section className="clanSection">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  {clans.map((clan, idx) => (
+                    <div
+                      key={clan.id}
+                      style={{
+                        border: "1px solid #1a3a1a",
+                        borderRadius: "10px",
+                        padding: "14px",
+                        background: "rgba(0,255,65,0.03)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#00ff41",
+                            fontFamily: "monospace",
+                            fontWeight: "bold",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          {idx === 0 ? "👑 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : ""}
+                          {clan.name}
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(0,255,65,0.1)",
+                            color: "#00ff41",
+                            fontSize: "0.6rem",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          W {clan.wins} / L {clan.losses}
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MEMBERS</div>
+                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            {clan.members}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
+                          <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            {clan.treasury?.toFixed(0)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
+                          <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
+                            {clan.wins > clan.losses ? "⚔️ DOM" : clan.wins === clan.losses ? "⚖️ TIE" : "💀 WEAK"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
 
               <div
                 style={{
