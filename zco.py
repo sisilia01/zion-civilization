@@ -118,8 +118,8 @@ def record_onchain(agent_name: str, decision: str, consensus_hash: str) -> str:
             "sui", "client", "transfer-sui",
             "--to", SUI_ADDRESS,
             "--sui-coin-object-id", get_best_coin_id(),
-            "--amount", "1000000",
-            "--gas-budget", "10000000",
+            "--amount", "500",
+            "--gas-budget", "3000000",
             "--json"
         ], capture_output=True, text=True, timeout=45)
 
