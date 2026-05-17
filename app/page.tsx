@@ -3430,6 +3430,29 @@ export default function Home() {
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
+  const [policeNews, setPoliceNews] = useState<string[]>([]);
+
+  const fetchPoliceNews = useCallback(async () => {
+    try {
+      const [sheriffRes, eventsRes] = await Promise.all([
+        fetch("/api/sheriff/state"),
+        fetch("/api/sheriff/actions"),
+      ]);
+      const sheriffData = await sheriffRes.json();
+      const events = await eventsRes.json();
+
+      const pNews: string[] = [];
+      if (Array.isArray(events)) {
+        events.slice(0, 8).forEach((e: { description: string }) => pNews.push(e.description));
+      }
+      if (sheriffData?.agent_name && sheriffData.agent_name !== "No Sheriff") {
+        pNews.push(
+          `👮 ACTIVE FORCE: ${sheriffData.police_count} officers | Budget: ${Math.floor(sheriffData.police_budget || 0)} ZION | Approval: ${sheriffData.approval_rating}%`
+        );
+      }
+      setPoliceNews(pNews);
+    } catch {}
+  }, []);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
@@ -3505,6 +3528,14 @@ export default function Home() {
         .catch(() => {});
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "treasury") {
+      void fetchPoliceNews();
+      const interval = setInterval(() => void fetchPoliceNews(), 3600000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, fetchPoliceNews]);
 
   const fetchZcoDecisions = useCallback(async () => {
     const cacheKey = "zco_decisions_cache";
@@ -7413,6 +7444,61 @@ export default function Home() {
                         >
                           {item}
                           <span style={{ color: "#666", marginLeft: "20px" }}>◆</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {policeNews.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    background: "#050a10",
+                    border: "1px solid #1a3a5c",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(77,162,255,0.1)",
+                      padding: "4px 12px",
+                      borderBottom: "1px solid #1a3a5c",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4DA2FF" }} />
+                    <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
+                      🚔 POLICE WIRE
+                    </span>
+                  </div>
+                  <div style={{ overflow: "hidden", padding: "8px 0" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        width: "max-content",
+                        animation: "marquee 50s linear infinite",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {[...policeNews, ...policeNews, ...policeNews].map((item, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            color: "#7ab8f5",
+                            fontFamily: "monospace",
+                            fontSize: "0.75rem",
+                            flexShrink: 0,
+                            paddingRight: "60px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item}
+                          <span style={{ color: "#1a3a5c", marginLeft: "20px" }}>◆</span>
                         </span>
                       ))}
                     </div>
