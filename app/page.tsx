@@ -6777,7 +6777,7 @@ export default function Home() {
                 <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
                   💰 ZION TREASURY
                 </h2>
-                <p style={{ color: "#555", fontSize: "0.8rem", margin: 0 }}>
+                <p style={{ color: "#888", fontSize: "0.8rem", margin: 0 }}>
                   Central Bank · Private Transfers · Economic Monitor · Powered by Sui
                 </p>
               </div>
@@ -6818,7 +6818,7 @@ export default function Home() {
                       >
                         FRS STATUS: {frsStats.status} — Rate: {frsStats.interest_rate}%
                       </div>
-                      <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                      <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.7rem" }}>
                         Federal Reserve System · Independent from President · Auto-stabilizing economy
                       </div>
                     </div>
@@ -6836,7 +6836,7 @@ export default function Home() {
                           {frsStats.president.agent_name}
                         </div>
                         {frsStats.active_law && (
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                          <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.65rem" }}>
                             📜 {frsStats.active_law.law_text.slice(0, 50)}...
                           </div>
                         )}
@@ -6873,7 +6873,7 @@ export default function Home() {
                           textAlign: "center",
                         }}
                       >
-                        <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.6rem", marginBottom: "6px" }}>
+                        <div style={{ color: "#777", fontFamily: "monospace", fontSize: "0.6rem", marginBottom: "6px" }}>
                           {m.label}
                         </div>
                         <div style={{ color: m.color, fontFamily: "monospace", fontSize: "1.1rem", fontWeight: "bold" }}>
@@ -6892,7 +6892,7 @@ export default function Home() {
                       marginBottom: "16px",
                     }}
                   >
-                    <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.65rem", marginBottom: "10px" }}>
+                    <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.65rem", marginBottom: "10px" }}>
                       CLASS DISTRIBUTION
                     </div>
                     <div style={{ display: "flex", gap: "4px", height: "20px", borderRadius: "4px", overflow: "hidden" }}>
@@ -6931,7 +6931,7 @@ export default function Home() {
                       <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "1.2rem", fontWeight: "bold" }}>
                         {frsStats.corporations.count} active
                       </div>
-                      <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                      <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.7rem" }}>
                         Treasury: {frsStats.corporations.total_treasury.toFixed(0)} ZION
                       </div>
                     </div>
@@ -6944,12 +6944,12 @@ export default function Home() {
                           <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
                             {frsStats.recent_actions[0].action}
                           </div>
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                          <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.65rem" }}>
                             {frsStats.recent_actions[0].reason?.slice(0, 60)}
                           </div>
                         </>
                       ) : (
-                        <div style={{ color: "#333", fontFamily: "monospace", fontSize: "0.75rem" }}>No actions yet</div>
+                        <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.75rem" }}>No actions yet</div>
                       )}
                     </div>
                   </div>
@@ -6995,14 +6995,14 @@ export default function Home() {
                       style={{
                         display: "flex",
                         width: "max-content",
-                        animation: "marquee 20s linear infinite",
+                        animation: "marquee 80s linear infinite",
                       }}
                     >
                       {[...treasuryNews, ...treasuryNews, ...treasuryNews].map((item, i) => (
                         <span
                           key={i}
                           style={{
-                            color: "#888",
+                            color: "#ccc",
                             fontFamily: "monospace",
                             fontSize: "0.75rem",
                             flexShrink: 0,
@@ -7011,7 +7011,7 @@ export default function Home() {
                           }}
                         >
                           {item}
-                          <span style={{ color: "#333", marginLeft: "20px" }}>◆</span>
+                          <span style={{ color: "#666", marginLeft: "20px" }}>◆</span>
                         </span>
                       ))}
                     </div>
