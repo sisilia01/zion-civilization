@@ -1943,3 +1943,60 @@ English only."""
     finally:
         cur.close()
         db.close()
+
+# ============ ZION BANK ============
+@app.post("/bank/transfer")
+async def bank_transfer(body: dict):
+    from_addr = body.get("from", "")
+    to_addr = body.get("to", "")
+    amount = body.get("amount", 0)
+    token = body.get("token", "SUI")
+    tx_hash = body.get("tx_hash", "")
+    
+    db = get_db()
+    cur = db.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO bank_transfers (from_address, to_address, amount, token, tx_hash)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (from_addr, to_addr, amount, token, tx_hash))
+        db.commit()
+        return {"ok": True}
+    finally:
+        cur.close()
+        db.close()
+
+@app.get("/bank/history/{address}")
+async def bank_history(address: str):
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT * FROM bank_transfers
+            WHERE from_address = %s OR to_address = %s
+            ORDER BY created_at DESC LIMIT 20
+        """, (address, address))
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        cur.close()
+        db.close()
+
+@app.get("/bank/stats")
+async def bank_stats():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_tx,
+                SUM(CASE WHEN token='SUI' THEN amount ELSE 0 END) as total_sui,
+                SUM(CASE WHEN token='ZION' THEN amount ELSE 0 END) as total_zion,
+                COUNT(DISTINCT from_address) as unique_senders
+            FROM bank_transfers
+        """)
+        row = cur.fetchone()
+        return dict(row)
+    finally:
+        cur.close()
+        db.close()
