@@ -476,3 +476,14 @@ INFO:     127.0.0.1:48640 - "GET /agents HTTP/1.1" 200 OK
 INFO:     127.0.0.1:48662 - "GET /conversations HTTP/1.1" 200 OK
 INFO:     127.0.0.1:48638 - "GET /events/highlights HTTP/1.1" 200 OK
 INFO:     127.0.0.1:48646 - "GET /markets HTTP/1.1" 200 OK
+[CACHE] zco_events updated at 2026-05-17T17:27:59.560077+00:00
+INFO:     127.0.0.1:59794 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51854 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51856 - "GET /leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51842 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51870 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51882 - "GET /clans HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51856 - "GET /zco/events/fast HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51918 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51908 - "GET /events/highlights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51894 - "GET /markets HTTP/1.1" 200 OK
