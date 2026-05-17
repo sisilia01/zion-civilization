@@ -39,3 +39,5 @@
 2026-05-17 07:52:28,201 [WATCHDOG] Started zionwork (zionwork.py)
 2026-05-17 07:52:28,230 [WATCHDOG] settlement appears stuck — restarting
 2026-05-17 07:52:29,280 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 07:57:29,839 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 07:57:30,908 [WATCHDOG] Started settlement (settlement.py)
