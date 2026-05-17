@@ -76,6 +76,14 @@ const WALRUS_TICKER_TYPE_COLORS: Record<string, string> = {
   clan_join: "#4ade80",
 };
 
+const sectorEmoji: Record<string, string> = {
+  tech: "🖥️",
+  agro: "🌾",
+  military: "⚔️",
+  pharma: "💊",
+  media: "📺",
+};
+
 const WALRUS_TICKER_TYPE_ICONS: Record<string, string> = {
   election: "👑",
   catastrophe: "🌋",
@@ -3271,6 +3279,7 @@ export default function Home() {
       employees: number;
       treasury: number;
       revenue: number;
+      market_share: number;
     }>
   >([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -5379,10 +5388,10 @@ export default function Home() {
                               fontFamily: "monospace",
                             }}
                           >
-                            {corp.corp_type?.toUpperCase()}
+                            {sectorEmoji[corp.corp_type] || "🏢"} {corp.corp_type?.toUpperCase()}
                           </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "8px" }}>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>EMPLOYEES</div>
                             <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
@@ -5399,6 +5408,12 @@ export default function Home() {
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>REVENUE</div>
                             <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
                               {corp.revenue?.toFixed(0)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MARKET</div>
+                            <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                              {corp.market_share?.toFixed(0)}%
                             </div>
                           </div>
                         </div>
