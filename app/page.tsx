@@ -3390,6 +3390,7 @@ export default function Home() {
     police_fund: number;
     personal_fund: number;
   } | null>(null);
+  const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
@@ -3411,14 +3412,20 @@ export default function Home() {
         .then((r) => r.json())
         .then((d) => setPresidentState(d))
         .catch(() => {});
+      fetch("/api/president/actions")
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d)) setPresidentActions(d);
+        })
+        .catch(() => {});
       fetch("/api/frs/stats")
         .then((r) => r.json())
         .then((d) => {
           setFrsStats(d);
           const news: string[] = [];
-          if (d.status === "CRISIS") news.push("🚨 FRS ALERT: Economy in CRISIS — QE stimulus activated");
-          if (d.status === "INFLATION") news.push("⚠️ FRS WARNING: Inflation detected — tightening policy");
-          if (d.status === "STABLE") news.push("✅ FRS REPORT: Economy stable — holding rates");
+          if (d.status === "CRISIS") news.push("🚨 ZRS ALERT: Economy in CRISIS — QE stimulus activated");
+          if (d.status === "INFLATION") news.push("⚠️ ZRS WARNING: Inflation detected — tightening policy");
+          if (d.status === "STABLE") news.push("✅ ZRS REPORT: Economy stable — holding rates");
           if (d.president)
             news.push(
               `🏛️ PRESIDENT: ${d.president.agent_name} (${d.president.party === "blue" ? "Blue Alliance" : "Red Coalition"}) in office`
@@ -3428,7 +3435,7 @@ export default function Home() {
             news.push(
               `🏢 MARKET: ${d.corporations.count} active corporations — treasury ${d.corporations.total_treasury.toFixed(0)} ZION`
             );
-          news.push(`📊 RATE: FRS interest rate at ${d.interest_rate}%`);
+          news.push(`📊 RATE: ZRS interest rate at ${d.interest_rate}%`);
           news.push(
             `💰 ECONOMY: Avg balance ${d.economy?.avg_balance?.toFixed(1)} ZION — ${d.economy?.poor_pct}% population in poverty`
           );
@@ -6801,83 +6808,77 @@ export default function Home() {
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      padding: "12px 16px",
                       marginBottom: "16px",
-                      background:
-                        frsStats.status === "CRISIS"
-                          ? "rgba(255,50,50,0.08)"
-                          : frsStats.status === "INFLATION"
-                            ? "rgba(255,170,0,0.08)"
-                            : "rgba(0,255,65,0.08)",
-                      border: `1px solid ${frsStats.status === "CRISIS" ? "#ff3232" : frsStats.status === "INFLATION" ? "#ffaa00" : "#00ff41"}44`,
                       borderRadius: "10px",
+                      overflow: "hidden",
+                      border: "1px solid #1a1a1a",
                     }}
                   >
-                    <div style={{ fontSize: "1.5rem" }}>🏦</div>
-                    <div>
-                      <div
-                        style={{
-                          color:
-                            frsStats.status === "CRISIS"
-                              ? "#ff6464"
-                              : frsStats.status === "INFLATION"
-                                ? "#ffaa00"
-                                : "#00ff41",
-                          fontFamily: "monospace",
-                          fontWeight: "bold",
-                          fontSize: "0.9rem",
-                        }}
-                      >
-                        FRS STATUS: {frsStats.status} — Rate: {frsStats.interest_rate}%
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: "14px 16px",
+                        background: "rgba(0,255,65,0.06)",
+                        borderRight: "2px solid #333",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "1.2rem" }}>🏦</span>
+                        <span
+                          style={{
+                            color: "#00ff41",
+                            fontFamily: "monospace",
+                            fontWeight: "bold",
+                            fontSize: "0.85rem",
+                            letterSpacing: "1px",
+                          }}
+                        >
+                          ZRS STATUS: {frsStats?.status || "LOADING"}
+                        </span>
                       </div>
-                      <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.7rem" }}>
-                        Federal Reserve System · Independent from President · Auto-stabilizing economy
+                      <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "4px" }}>
+                        Rate: {frsStats?.interest_rate || 0}% · ZION Reserve System
+                      </div>
+                      <div style={{ color: "#4a8a4a", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                        Independent from President · Auto-stabilizing economy
                       </div>
                     </div>
+
                     {presidentState && (
-                      <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                        <div
-                          style={{
-                            color: presidentState.is_dictator
-                              ? "#ff3232"
-                              : presidentState.party === "blue"
-                                ? "#4DA2FF"
-                                : "#ff6464",
-                            fontFamily: "monospace",
-                            fontSize: "0.8rem",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {presidentState.is_dictator
-                            ? "👑 DICTATOR"
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "14px 16px",
+                          background: presidentState.is_dictator
+                            ? "rgba(180,0,0,0.12)"
                             : presidentState.party === "blue"
-                              ? "🔵 President"
-                              : "🔴 President"}
-                          : {presidentState.agent_name}
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            marginTop: "4px",
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>
-                            APPROVAL
-                          </div>
-                          <div
+                              ? "rgba(77,162,255,0.08)"
+                              : "rgba(255,50,50,0.08)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "1rem" }}>
+                            {presidentState.is_dictator ? "👑" : presidentState.party === "blue" ? "🔵" : "🔴"}
+                          </span>
+                          <span
                             style={{
-                              width: "80px",
-                              height: "6px",
-                              background: "#111",
-                              borderRadius: "3px",
-                              overflow: "hidden",
+                              color: presidentState.is_dictator
+                                ? "#ff3232"
+                                : presidentState.party === "blue"
+                                  ? "#4DA2FF"
+                                  : "#ff6464",
+                              fontFamily: "monospace",
+                              fontWeight: "bold",
+                              fontSize: "0.85rem",
                             }}
                           >
+                            {presidentState.is_dictator ? "DICTATOR" : "PRESIDENT"}: {presidentState.agent_name}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                          <span style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.65rem" }}>APPROVAL</span>
+                          <div style={{ flex: 1, height: "6px", background: "#111", borderRadius: "3px", overflow: "hidden" }}>
                             <div
                               style={{
                                 width: `${presidentState.approval_rating}%`,
@@ -6889,29 +6890,25 @@ export default function Home() {
                                       ? "#ffaa00"
                                       : "#ff3232",
                                 borderRadius: "3px",
-                                transition: "width 0.5s",
                               }}
                             />
                           </div>
-                          <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.7rem" }}>
+                          <span style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.75rem", fontWeight: "bold" }}>
                             {presidentState.approval_rating}%
-                          </div>
+                          </span>
                         </div>
-                        <div
-                          style={{
-                            color: "#555",
-                            fontFamily: "monospace",
-                            fontSize: "0.65rem",
-                            marginTop: "2px",
-                          }}
-                        >
+
+                        <div style={{ color: "#ccc", fontFamily: "monospace", fontSize: "0.68rem", marginBottom: "4px" }}>
                           Term {presidentState.term_number}/2 · Day {presidentState.days_in_power}
                           {presidentState.is_dictator ? " · ⚠️ DICTATORSHIP" : ""}
+                        </div>
+                        <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.65rem" }}>
+                          🚔 Police: {presidentState.police_fund?.toFixed(0)} ZION · 💰 Treasury:{" "}
+                          {presidentState.personal_fund?.toFixed(0)} ZION
                         </div>
                       </div>
                     )}
                   </div>
-
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
                     {[
                       { label: "AVG BALANCE", value: `${frsStats.economy.avg_balance.toFixed(1)} ZION`, color: "#4DA2FF" },
@@ -7005,7 +7002,7 @@ export default function Home() {
                     </div>
                     <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
                       <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "8px" }}>
-                        📋 LAST FRS ACTION
+                        📋 LAST ZRS ACTION
                       </div>
                       {frsStats.recent_actions[0] ? (
                         <>
@@ -7021,6 +7018,60 @@ export default function Home() {
                       )}
                     </div>
                   </div>
+
+                  {presidentActions.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        background: "#050a10",
+                        border: "1px solid #2a1a0a",
+                        borderRadius: "8px",
+                        padding: "14px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#ffaa00",
+                          fontFamily: "monospace",
+                          fontSize: "0.7rem",
+                          letterSpacing: "1px",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        🏛️ PRESIDENTIAL DECREE LOG
+                      </div>
+                      {presidentActions.slice(0, 5).map((action, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            gap: "10px",
+                            alignItems: "flex-start",
+                            padding: "6px 0",
+                            borderBottom: i < presidentActions.length - 1 ? "1px solid #111" : "none",
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: "#888",
+                              fontFamily: "monospace",
+                              fontSize: "0.6rem",
+                              whiteSpace: "nowrap",
+                              marginTop: "2px",
+                            }}
+                          >
+                            {new Date(action.created_at).toLocaleTimeString("en", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                          <div style={{ color: "#ddd", fontFamily: "monospace", fontSize: "0.72rem", lineHeight: 1.4 }}>
+                            {action.description}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -7055,7 +7106,7 @@ export default function Home() {
                       }}
                     />
                     <span style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
-                      ZION FINANCIAL WIRE
+                      ZRS FINANCIAL WIRE
                     </span>
                   </div>
                   <div style={{ overflow: "hidden", padding: "8px 0", position: "relative" }}>
