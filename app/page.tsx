@@ -215,11 +215,15 @@ const MATRIX_CHARS =
 const bgChars = MATRIX_CHARS;
 
 const classMeta = (agentClass: string) => {
-  if (agentClass === "elite") {
+  const c = (agentClass || "").trim().toLowerCase();
+  if (c === "elite") {
     return { icon: "👑", border: "#FFD700", tier: "tier-elite" as const };
   }
-  if (agentClass === "middle") {
+  if (c === "middle") {
     return { icon: "⚡", border: "#C0C0C0", tier: "tier-middle" as const };
+  }
+  if (c === "critical") {
+    return { icon: "🩸", border: "#cc0000", tier: "tier-critical" as const };
   }
   return { icon: "💀", border: "#CD7F32", tier: "tier-poor" as const };
 };
@@ -3120,21 +3124,7 @@ const newspapers: PressNewspaper[] = [
   },
 ];
 
-const CONV_CACHE_TTL_MS = 2 * 60 * 1000;
 const PRESS_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-
-function readConvCache(): ConversationPair[] | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const convCache = localStorage.getItem("conv_cache");
-    if (!convCache) return null;
-    const { data, ts } = JSON.parse(convCache) as { data: ConversationPair[]; ts: number };
-    if (Date.now() - ts < CONV_CACHE_TTL_MS && Array.isArray(data)) return data;
-  } catch {
-    /* ignore bad cache */
-  }
-  return null;
-}
 
 function readPressCache(newspaperId: string): string | null {
   if (typeof window === "undefined") return null;
@@ -3376,8 +3366,7 @@ export default function Home() {
   useEffect(() => {
     // Clear old press cache to force server-side caching
     newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
-    const conv = readConvCache();
-    if (conv) setConversations(conv);
+    localStorage.removeItem('conv_cache');
   }, []);
 
   const fetchZcoDecisions = useCallback(async () => {
@@ -3897,23 +3886,16 @@ export default function Home() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const convCache = localStorage.getItem("conv_cache");
-      if (convCache) {
-        const { data, ts } = JSON.parse(convCache) as { data: ConversationPair[]; ts: number };
-        if (Date.now() - ts < CONV_CACHE_TTL_MS && Array.isArray(data)) {
-          setConversations(data);
-          return;
-        }
-      }
-    } catch {
-      /* ignore bad cache */
-    }
-    try {
       const res = await fetch("/api/conversations");
       const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
-      setConversations(list);
-      localStorage.setItem("conv_cache", JSON.stringify({ data: list, ts: Date.now() }));
+      if (Array.isArray(data) && data.length > 0) {
+        setConversations(data);
+      } else {
+        await fetch("/api/generate_conversations", { method: "POST" });
+        const res2 = await fetch("/api/conversations");
+        const data2 = await res2.json();
+        if (Array.isArray(data2)) setConversations(data2);
+      }
     } catch {
       /* ignore */
     }
