@@ -2108,3 +2108,19 @@ async def get_president_state():
     finally:
         cur.close()
         db.close()
+
+@app.get("/president/actions")
+async def get_president_actions():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT description, created_at FROM events
+            WHERE event_type = 'president'
+            ORDER BY created_at DESC LIMIT 10
+        """)
+        rows = cur.fetchall()
+        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+    finally:
+        cur.close()
+        db.close()

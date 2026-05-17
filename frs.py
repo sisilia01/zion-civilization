@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ZION Federal Reserve System — ФРС
+ZION ZION Reserve System — ФРС
 Следит за экономикой, печатает деньги при кризисе,
 изымает при инфляции. Независим от президента.
 """
@@ -169,7 +169,7 @@ def set_interest_rate(cur, economy):
 def main():
     print(f"\n🏦 ZION FRS — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
-    print("Federal Reserve System — Independent from President")
+    print("ZION Reserve System — Independent from President")
     
     try:
         ensure_frs_table(cur)
