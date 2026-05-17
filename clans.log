@@ -3001,3 +3001,342 @@ NameError: name 'clan_wars' is not defined. Did you mean: 'clan_war'?
 
 ⚔️  WAR: Neon Syndicate vs Crimson Legion!
 🏆 Neon Syndicate WINS! Takes 432.81 ZION from Crimson Legion
+
+⚔️  ZION Clan Cycle - 2026-05-17 14:18
+⚔️  Lena Nakamura 3 (middle) joined Golden Dawn — paid 1.76 ZION dues
+⚔️  Jana Perez 2 (middle) joined Azure Collective — paid 1.74 ZION dues
+⚔️  Rena Torres 2 (middle) joined Shadow Order — paid 1.74 ZION dues
+⚔️  Xena Yoon 3 (middle) joined Neon Syndicate — paid 1.56 ZION dues
+⚔️  Uma Xiong 3 (middle) joined Iron Fist — paid 1.55 ZION dues
+⚔️  Abel Bakker 4 (middle) joined Crimson Legion — paid 1.54 ZION dues
+⚔️  Dean Diallo 2 (middle) joined Void Brotherhood — paid 1.53 ZION dues
+⚔️  Marc Araujo 2 (middle) joined Neon Syndicate — paid 1.52 ZION dues
+⚔️  Vess Fujimoto 3 (middle) joined Shadow Order — paid 1.49 ZION dues
+⚔️  Flynn Roux 4 (middle) joined Iron Fist — paid 0.99 ZION dues
+⚔️  Maya Roux 2 (middle) joined Crimson Legion — paid 0.88 ZION dues
+⚔️  Neil Nielsen 3 (middle) joined Shadow Order — paid 0.86 ZION dues
+⚔️  Vess Morales 2 (middle) joined Iron Fist — paid 0.85 ZION dues
+⚔️  Beck Perez 4 (middle) joined Iron Fist — paid 0.85 ZION dues
+⚔️  Pita Roux 2 (middle) joined Neon Syndicate — paid 0.84 ZION dues
+⚔️  Cleo Lindqvist 2 (middle) joined Crimson Legion — paid 0.89 ZION dues
+⚔️  Marc Petrov 3 (middle) joined Golden Dawn — paid 0.84 ZION dues
+⚔️  Kurt Mbeki 3 (middle) joined Golden Dawn — paid 0.67 ZION dues
+⚔️  Cleo Hashimoto 3 (middle) joined Golden Dawn — paid 0.84 ZION dues
+⚔️  Mia White 2246 (middle) joined Crimson Legion — paid 3.05 ZION dues
+⚔️  Ray Brown 2496 (middle) joined Azure Collective — paid 3.12 ZION dues
+⚔️  Owen Bergmann 3 (middle) joined Neon Syndicate — paid 1.75 ZION dues
+⚔️  Lena Rossi 7 (middle) joined Crimson Legion — paid 1.70 ZION dues
+⚔️  Cole Dubois 3 (middle) joined Neon Syndicate — paid 1.70 ZION dues
+⚔️  Faye Nakamura 3 (middle) joined Void Brotherhood — paid 1.69 ZION dues
+⚔️  Pita Lindqvist 3 (middle) joined Golden Dawn — paid 1.69 ZION dues
+⚔️  Mire Watanabe 2 (middle) joined Iron Fist — paid 1.65 ZION dues
+⚔️  Beck Zuberi 2 (middle) joined Azure Collective — paid 1.61 ZION dues
+⚔️  Gaia Andersen 2 (middle) joined Crimson Legion — paid 1.60 ZION dues
+Traceback (most recent call last):
+  File "/root/zion_backend/clans.py", line 126, in <module>
+    join_clans()
+  File "/root/zion_backend/clans.py", line 46, in join_clans
+    cur.execute("""
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 510817 waits for ShareLock on transaction 14796; blocked by process 510804.
+Process 510804 waits for ShareLock on transaction 14797; blocked by process 510817.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (71,76) in relation "agents"
+
+
+⚔️  ZION Clan Cycle - 2026-05-17 14:20
+⚔️  Wren Ibarra 2 (middle) joined Shadow Order — paid 1.76 ZION dues
+⚔️  Iris Nielsen 2 (middle) joined Crimson Legion — paid 1.68 ZION dues
+⚔️  Abel Bakker 4 (middle) joined Neon Syndicate — paid 1.54 ZION dues
+⚔️  Tess Cortez 2 (middle) joined Neon Syndicate — paid 1.51 ZION dues
+⚔️  Dana Ishida 3 (middle) joined Iron Fist — paid 0.62 ZION dues
+⚔️  Maya Roux 2 (middle) joined Neon Syndicate — paid 0.88 ZION dues
+⚔️  Nora Kuznetsov 3 (middle) joined Azure Collective — paid 0.85 ZION dues
+⚔️  Kurt Mbeki 3 (middle) joined Void Brotherhood — paid 0.67 ZION dues
+⚔️  Owen Bergmann 3 (middle) joined Iron Fist — paid 1.75 ZION dues
+⚔️  Lena Rossi 7 (middle) joined Iron Fist — paid 1.70 ZION dues
+⚔️  Wren Kuznetsov 3 (middle) joined Azure Collective — paid 1.19 ZION dues
+⚔️  Faye Nakamura 3 (middle) joined Iron Fist — paid 1.18 ZION dues
+⚔️  Maya Yoon 2 (middle) joined Void Brotherhood — paid 1.65 ZION dues
+⚔️  Uma Lopez 3 (middle) joined Shadow Order — paid 1.12 ZION dues
+⚔️  Faye Torres 4 (middle) joined Neon Syndicate — paid 1.11 ZION dues
+⚔️  Mire Ingrid 3 (middle) joined Azure Collective — paid 1.10 ZION dues
+⚔️  Dana Pham 4 (middle) joined Iron Fist — paid 1.08 ZION dues
+⚔️  Lena Holloway 4 (middle) joined Neon Syndicate — paid 1.06 ZION dues
+⚔️  Xena Ekwueme 3 (middle) joined Golden Dawn — paid 1.49 ZION dues
+⚔️  Beck Ueda 2 (middle) joined Neon Syndicate — paid 0.63 ZION dues
+⚔️  Jana Nakamura 2 (middle) joined Void Brotherhood — paid 0.63 ZION dues
+⚔️  Vera Nguyen 2 (middle) joined Azure Collective — paid 0.63 ZION dues
+⚔️  Beck Perez 4 (middle) joined Iron Fist — paid 0.60 ZION dues
+⚔️  Beck Santos 4 (middle) joined Iron Fist — paid 0.59 ZION dues
+⚔️  Vess Fujimoto 3 (middle) joined Void Brotherhood — paid 1.04 ZION dues
+⚔️  Blake White 5229 (middle) joined Golden Dawn — paid 0.33 ZION dues
+⚔️  Bram Perez 2 (middle) joined Iron Fist — paid 1.12 ZION dues
+⚔️  Dean Rossi 3 (middle) joined Void Brotherhood — paid 0.62 ZION dues
+⚔️  Neil Nielsen 3 (middle) joined Iron Fist — paid 0.60 ZION dues
+⚔️  Jordan Smith 7038 (critical) joined Iron Fist — paid 0.31 ZION dues
+⚔️  Mia Wilson 8045 (middle) joined Crimson Legion — paid 0.43 ZION dues
+⚔️  Max Jackson 2199 (middle) joined Golden Dawn — paid 2.15 ZION dues
+⚔️  Jordan Thomas 5673 (middle) joined Azure Collective — paid 0.43 ZION dues
+⚔️  Alex Thomas 309 (middle) joined Golden Dawn — paid 2.12 ZION dues
+⚔️  Drew Robinson 4933 (middle) joined Crimson Legion — paid 2.93 ZION dues
+⚔️  Rex Davis 2695 (middle) joined Golden Dawn — paid 2.06 ZION dues
+⚔️  Rena Torres 2 (middle) joined Azure Collective — paid 1.22 ZION dues
+⚔️  Pat Robinson 6225 (middle) joined Neon Syndicate — paid 3.11 ZION dues
+⚔️  Max Robinson 8320 (middle) joined Void Brotherhood — paid 2.17 ZION dues
+⚔️  Rex Jackson 285 (middle) joined Neon Syndicate — paid 2.20 ZION dues
+⚔️  Sam Jackson 8262 (middle) joined Azure Collective — paid 2.12 ZION dues
+⚔️  Ray Martinez 284 (middle) joined Golden Dawn — paid 0.43 ZION dues
+⚔️  Quinn Miller 2567 (middle) joined Shadow Order — paid 2.12 ZION dues
+⚔️  Jordan White 774 (middle) joined Iron Fist — paid 2.93 ZION dues
+⚔️  Taylor Garcia 1038 (middle) joined Golden Dawn — paid 2.11 ZION dues
+⚔️  Pat Martin 9728 (middle) joined Iron Fist — paid 3.08 ZION dues
+⚔️  Ray Clark 9894 (middle) joined Shadow Order — paid 2.13 ZION dues
+⚔️  Nova White 6159 (middle) joined Azure Collective — paid 2.99 ZION dues
+⚔️  Sidney Garcia 3393 (middle) joined Neon Syndicate — paid 0.63 ZION dues
+⚔️  Dana Vargas 4 (middle) joined Neon Syndicate — paid 0.14 ZION dues
+⚔️  Cole Morales 3 (middle) joined Crimson Legion — paid 1.20 ZION dues
+⚔️  Abel Flores 3 (middle) joined Iron Fist — paid 1.72 ZION dues
+⚔️  Pat Miller 506 (middle) joined Azure Collective — paid 3.15 ZION dues
+⚔️  Nova Jones 3885 (middle) joined Azure Collective — paid 0.63 ZION dues
+⚔️  Pat Jackson 1430 (middle) joined Shadow Order — paid 0.42 ZION dues
+⚔️  Kai Thomas 9913 (middle) joined Shadow Order — paid 2.12 ZION dues
+⚔️  Alex Martinez 1342 (middle) joined Crimson Legion — paid 2.20 ZION dues
+⚔️  Kim Jackson 4837 (middle) joined Crimson Legion — paid 2.12 ZION dues
+⚔️  Robin Thomas 6346 (middle) joined Golden Dawn — paid 0.43 ZION dues
+⚔️  Ray Martin 7362 (middle) joined Void Brotherhood — paid 0.44 ZION dues
+⚔️  Robin Lewis 1167 (middle) joined Shadow Order — paid 2.11 ZION dues
+⚔️  Avery Jackson 6143 (middle) joined Neon Syndicate — paid 3.16 ZION dues
+⚔️  Jamie Lewis 8917 (middle) joined Golden Dawn — paid 3.06 ZION dues
+⚔️  Jamie Wilson 9175 (critical) joined Void Brotherhood — paid -0.03 ZION dues
+⚔️  Kai Jones 5813 (critical) joined Azure Collective — paid 0.11 ZION dues
+⚔️  Zoe Thomas 4899 (critical) joined Neon Syndicate — paid 0.01 ZION dues
+⚔️  Jamie Davis 5175 (critical) joined Golden Dawn — paid 0.15 ZION dues
+⚔️  Avery White 7772 (critical) joined Golden Dawn — paid 0.08 ZION dues
+⚔️  Robin Martinez 8491 (critical) joined Shadow Order — paid 0.11 ZION dues
+⚔️  Kai Jackson 5663 (critical) joined Iron Fist — paid 0.31 ZION dues
+⚔️  Lee Martinez 8372 (critical) joined Neon Syndicate — paid 0.05 ZION dues
+⚔️  Mia Garcia 1384 (critical) joined Golden Dawn — paid 0.10 ZION dues
+⚔️  Sidney Anderson 4551 (critical) joined Azure Collective — paid 0.46 ZION dues
+⚔️  Maya Cortez 3 (middle) joined Azure Collective — paid 0.58 ZION dues
+⚔️  Troy Torres 2 (middle) joined Iron Fist — paid 0.36 ZION dues
+⚔️  Iris Garcia 3 (middle) joined Azure Collective — paid 1.64 ZION dues
+⚔️  Nova Anderson 6934 (middle) joined Crimson Legion — paid 0.45 ZION dues
+⚔️  Flynn Emeka 2 (middle) joined Neon Syndicate — paid 1.63 ZION dues
+⚔️  Abel Nguyen 3 (middle) joined Void Brotherhood — paid 1.76 ZION dues
+⚔️  Blake Anderson 9951 (middle) joined Neon Syndicate — paid 0.44 ZION dues
+⚔️  Riley Martin 2603 (middle) joined Crimson Legion — paid 0.34 ZION dues
+⚔️  Pat Martin 5174 (middle) joined Golden Dawn — paid 0.31 ZION dues
+⚔️  Drew White 7904 (middle) joined Iron Fist — paid 0.22 ZION dues
+⚔️  Tara Torres 2 (middle) joined Azure Collective — paid 0.34 ZION dues
+⚔️  Rex Garcia 569 (middle) joined Iron Fist — paid 0.62 ZION dues
+⚔️  Nova Anderson 107 (middle) joined Azure Collective — paid 0.43 ZION dues
+⚔️  Luna Oliveira 2 (middle) joined Iron Fist — paid 1.07 ZION dues
+⚔️  Max Taylor 5987 (middle) joined Void Brotherhood — paid 0.42 ZION dues
+⚔️  Mia Robinson 3115 (middle) joined Crimson Legion — paid 0.42 ZION dues
+⚔️  Luna Rodriguez 5809 (middle) joined Crimson Legion — paid 0.28 ZION dues
+⚔️  Ray Wilson 1625 (middle) joined Iron Fist — paid 0.42 ZION dues
+⚔️  Iris White 2505 (middle) joined Crimson Legion — paid 2.15 ZION dues
+⚔️  Faye Gupta 3 (middle) joined Crimson Legion — paid 1.10 ZION dues
+⚔️  Hugo Nguyen 2 (middle) joined Void Brotherhood — paid 0.97 ZION dues
+⚔️  Pita Santos 2 (middle) joined Iron Fist — paid 0.93 ZION dues
+⚔️  Zara Tran 4 (middle) joined Azure Collective — paid 1.32 ZION dues
+⚔️  Iris Jones 5073 (middle) joined Neon Syndicate — paid 0.30 ZION dues
+
+📊 Clan Stats:
+  🏰 Iron Fist: 1821 members | 9853.42 ZION treasury
+  🏰 Void Brotherhood: 1497 members | 8098.20 ZION treasury
+  🏰 Golden Dawn: 1784 members | 6798.71 ZION treasury
+  🏰 Shadow Order: 1730 members | 1364.68 ZION treasury
+  🏰 Neon Syndicate: 1521 members | 1097.34 ZION treasury
+  🏰 Azure Collective: 693 members | 750.57 ZION treasury
+  🏰 Crimson Legion: 946 members | 448.11 ZION treasury
+
+✅ 97 agents joined clans!
+
+⚔️  ZION Clan Cycle - 2026-05-17 14:20
+⚔️  Glen Patel 4 (middle) joined Shadow Order — paid 1.24 ZION dues
+⚔️  Jana Perez 2 (middle) joined Shadow Order — paid 1.22 ZION dues
+⚔️  Aria Ibarra 3 (middle) joined Void Brotherhood — paid 1.60 ZION dues
+⚔️  Zara Santos 4 (middle) joined Azure Collective — paid 1.00 ZION dues
+⚔️  Hana Kuznetsov 3 (middle) joined Void Brotherhood — paid 0.89 ZION dues
+⚔️  Jana Obasi 2 (middle) joined Void Brotherhood — paid 0.86 ZION dues
+⚔️  Cleo Lindqvist 2 (middle) joined Shadow Order — paid 0.62 ZION dues
+⚔️  Tess Gomez 2 (middle) joined Iron Fist — paid 1.75 ZION dues
+⚔️  Iris Ferreira 2 (middle) joined Crimson Legion — paid 1.22 ZION dues
+⚔️  Rena Ingrid 2 (middle) joined Azure Collective — paid 1.20 ZION dues
+⚔️  Cole Dubois 3 (middle) joined Iron Fist — paid 1.70 ZION dues
+⚔️  Pita Lindqvist 3 (middle) joined Crimson Legion — paid 1.18 ZION dues
+⚔️  Yuki Evangelista 4 (middle) joined Neon Syndicate — paid 1.11 ZION dues
+⚔️  Kira Johal 5 (middle) joined Golden Dawn — paid 1.11 ZION dues
+⚔️  Orin Fonseca 4 (middle) joined Azure Collective — paid 1.56 ZION dues
+⚔️  Cleo Eriksson 3 (middle) joined Shadow Order — paid 1.08 ZION dues
+⚔️  Joel Kapoor 3 (middle) joined Void Brotherhood — paid 1.53 ZION dues
+⚔️  Olan Araujo 3 (middle) joined Crimson Legion — paid 0.69 ZION dues
+⚔️  Tara Tanaka 4 (middle) joined Crimson Legion — paid 0.62 ZION dues
+⚔️  Elsa Vargas 3 (middle) joined Neon Syndicate — paid 0.61 ZION dues
+⚔️  Gaia Usman 2 (middle) joined Void Brotherhood — paid 0.87 ZION dues
+⚔️  Chris Jones 1381 (critical) joined Iron Fist — paid 0.11 ZION dues
+⚔️  Gaia Flores 4 (middle) joined Iron Fist — paid 1.62 ZION dues
+⚔️  Jin White 3712 (middle) joined Crimson Legion — paid 0.33 ZION dues
+⚔️  Wren Pham 3 (middle) joined Void Brotherhood — paid 1.05 ZION dues
+⚔️  Flynn Roux 4 (middle) joined Neon Syndicate — paid 0.69 ZION dues
+⚔️  Casey Jones 6986 (middle) joined Shadow Order — paid 2.96 ZION dues
+⚔️  Zoe Jackson 1291 (middle) joined Iron Fist — paid 0.48 ZION dues
+⚔️  Troy Kowalski 3 (middle) joined Golden Dawn — paid 1.04 ZION dues
+⚔️  Nova Harris 8261 (middle) joined Shadow Order — paid 2.92 ZION dues
+⚔️  Kai Garcia 1540 (middle) joined Shadow Order — paid 0.64 ZION dues
+⚔️  Ray Thomas 6824 (middle) joined Iron Fist — paid 2.11 ZION dues
+⚔️  Drew Clark 4782 (middle) joined Neon Syndicate — paid 3.10 ZION dues
+⚔️  Lee Brown 9930 (middle) joined Void Brotherhood — paid 2.07 ZION dues
+⚔️  Jordan Martinez 802 (middle) joined Shadow Order — paid 2.10 ZION dues
+⚔️  Kim Clark 8526 (critical) joined Crimson Legion — paid 0.18 ZION dues
+⚔️  Taylor Taylor 6306 (middle) joined Azure Collective — paid 3.12 ZION dues
+⚔️  Iris Rodriguez 2529 (middle) joined Azure Collective — paid 3.09 ZION dues
+⚔️  Iris Wilson 3884 (critical) joined Golden Dawn — paid -0.03 ZION dues
+⚔️  Taylor Taylor 9673 (critical) joined Void Brotherhood — paid -0.00 ZION dues
+⚔️  Quinn White 139 (critical) joined Shadow Order — paid 0.09 ZION dues
+⚔️  Marc Roux 4 (middle) joined Golden Dawn — paid 1.24 ZION dues
+⚔️  Tess Vieira 3 (middle) joined Crimson Legion — paid 1.74 ZION dues
+⚔️  Chris Davis 6511 (middle) joined Shadow Order — paid 0.43 ZION dues
+⚔️  Reid Yamamoto 3 (middle) joined Golden Dawn — paid 0.34 ZION dues
+⚔️  Sidney Wilson 9056 (middle) joined Azure Collective — paid 0.43 ZION dues
+⚔️  Lee Brown 69 (middle) joined Neon Syndicate — paid 0.47 ZION dues
+⚔️  Chris Anderson 2678 (middle) joined Crimson Legion — paid 2.02 ZION dues
+⚔️  Jin Wilson 9263 (middle) joined Shadow Order — paid 3.11 ZION dues
+⚔️  Chris Lewis 6315 (middle) joined Crimson Legion — paid 0.62 ZION dues
+⚔️  Drew Garcia 8026 (middle) joined Iron Fist — paid 3.00 ZION dues
+⚔️  Kai Robinson 8981 (middle) joined Void Brotherhood — paid 0.44 ZION dues
+⚔️  Max Harris 5684 (middle) joined Crimson Legion — paid 1.97 ZION dues
+⚔️  Ray Martin 6594 (critical) joined Void Brotherhood — paid 0.17 ZION dues
+⚔️  Nova Brown 1700 (critical) joined Crimson Legion — paid 0.11 ZION dues
+⚔️  Kim Smith 1098 (critical) joined Iron Fist — paid -0.01 ZION dues
+⚔️  Mia Jackson 9513 (critical) joined Shadow Order — paid 0.00 ZION dues
+⚔️  Max Rodriguez 4071 (critical) joined Shadow Order — paid -0.00 ZION dues
+⚔️  Jana Silva 2 (middle) joined Azure Collective — paid 1.12 ZION dues
+⚔️  Lee Anderson 5049 (middle) joined Iron Fist — paid 0.63 ZION dues
+⚔️  Cole Espinoza 2 (middle) joined Shadow Order — paid 1.76 ZION dues
+⚔️  Dana Anderson 8165 (middle) joined Crimson Legion — paid 0.62 ZION dues
+⚔️  Hugo Andersen 5 (middle) joined Azure Collective — paid 0.24 ZION dues
+⚔️  Zara Dubois 4 (middle) joined Void Brotherhood — paid 0.24 ZION dues
+⚔️  Mia Thomas 3169 (middle) joined Iron Fist — paid 0.62 ZION dues
+⚔️  Owen Zabala 2 (middle) joined Azure Collective — paid 1.74 ZION dues
+⚔️  Robin Rodriguez 1638 (middle) joined Iron Fist — paid 0.43 ZION dues
+⚔️  Jamie Robinson 6032 (middle) joined Golden Dawn — paid 0.44 ZION dues
+⚔️  Sidney Wilson 6408 (middle) joined Neon Syndicate — paid 0.59 ZION dues
+⚔️  Abel Hadley 2 (middle) joined Crimson Legion — paid 1.09 ZION dues
+⚔️  Nora Gomez 2 (middle) joined Shadow Order — paid 1.39 ZION dues
+⚔️  Uma Silva 4 (middle) joined Neon Syndicate — paid 1.09 ZION dues
+⚔️  Ray Robinson 6890 (middle) joined Neon Syndicate — paid 0.45 ZION dues
+⚔️  Hugo Jimenez 2 (middle) joined Neon Syndicate — paid 1.42 ZION dues
+
+📊 Clan Stats:
+  🏰 Iron Fist: 1832 members | 9865.87 ZION treasury
+  🏰 Void Brotherhood: 1508 members | 8107.92 ZION treasury
+  🏰 Golden Dawn: 1790 members | 6802.85 ZION treasury
+  🏰 Shadow Order: 1745 members | 1384.24 ZION treasury
+  🏰 Neon Syndicate: 1530 members | 1106.87 ZION treasury
+  🏰 Azure Collective: 702 members | 764.07 ZION treasury
+  🏰 Crimson Legion: 959 members | 460.51 ZION treasury
+
+✅ 74 agents joined clans!
+
+⚔️  WAR: Void Brotherhood vs Crimson Legion!
+🏆 Void Brotherhood WINS! Takes 230.25 ZION from Crimson Legion
+
+⚔️  ZION Clan Cycle - 2026-05-17 14:25
+⚔️  Paul Castillo 3 (middle) joined Crimson Legion — paid 1.51 ZION dues
+⚔️  Cleo Flores 2 (middle) joined Azure Collective — paid 0.59 ZION dues
+⚔️  Tess Johal 3 (middle) joined Shadow Order — paid 0.42 ZION dues
+⚔️  Cole Demir 3 (middle) joined Shadow Order — paid 1.33 ZION dues
+⚔️  Nora Silva 3 (middle) joined Crimson Legion — paid 0.36 ZION dues
+⚔️  Mire Watanabe 2 (middle) joined Neon Syndicate — paid 1.40 ZION dues
+⚔️  Gaia Andersen 2 (middle) joined Azure Collective — paid 0.96 ZION dues
+⚔️  Tess Castellano 3 (middle) joined Shadow Order — paid 1.34 ZION dues
+⚔️  Pita Vieira 4 (middle) joined Iron Fist — paid 1.28 ZION dues
+⚔️  Quinn Smith 3408 (middle) joined Void Brotherhood — paid 1.82 ZION dues
+⚔️  Zoe Rodriguez 6328 (middle) joined Shadow Order — paid 0.37 ZION dues
+⚔️  Pat Moore 9154 (middle) joined Void Brotherhood — paid 1.76 ZION dues
+⚔️  Robin Robinson 3728 (middle) joined Neon Syndicate — paid 2.53 ZION dues
+⚔️  Jamie Garcia 8304 (middle) joined Golden Dawn — paid 3.46 ZION dues
+⚔️  Avery Harris 340 (middle) joined Crimson Legion — paid 1.72 ZION dues
+⚔️  Cleo Gupta 2 (middle) joined Crimson Legion — paid 1.18 ZION dues
+⚔️  Lena Herrera 2 (middle) joined Void Brotherhood — paid 1.49 ZION dues
+⚔️  Cleo Bakker 3 (middle) joined Golden Dawn — paid 0.17 ZION dues
+⚔️  Paul Weber 2 (middle) joined Neon Syndicate — paid 0.78 ZION dues
+⚔️  Mia White 2246 (middle) joined Golden Dawn — paid 1.81 ZION dues
+⚔️  Ray Brown 2496 (middle) joined Azure Collective — paid 1.86 ZION dues
+⚔️  Dean Petrov 2 (middle) joined Iron Fist — paid 1.04 ZION dues
+⚔️  Sera Loginov 6 (middle) joined Neon Syndicate — paid 0.53 ZION dues
+⚔️  Casey Anderson 6911 (critical) joined Shadow Order — paid -0.03 ZION dues
+⚔️  Alex Lewis 6411 (middle) joined Void Brotherhood — paid 0.29 ZION dues
+⚔️  Avery Robinson 2450 (middle) joined Crimson Legion — paid 0.25 ZION dues
+⚔️  Alex Martinez 8545 (middle) joined Iron Fist — paid 0.37 ZION dues
+⚔️  Pat Miller 3694 (middle) joined Crimson Legion — paid 0.11 ZION dues
+⚔️  Flynn Kapoor 2 (middle) joined Iron Fist — paid 0.20 ZION dues
+⚔️  Kurt Nguyen 2 (middle) joined Crimson Legion — paid 0.86 ZION dues
+⚔️  Iris Taylor 2059 (middle) joined Crimson Legion — paid 2.38 ZION dues
+⚔️  Iris Thomas 1860 (middle) joined Neon Syndicate — paid 2.32 ZION dues
+⚔️  Mia Moore 5511 (middle) joined Golden Dawn — paid 0.53 ZION dues
+⚔️  Rex Robinson 4575 (middle) joined Azure Collective — paid 1.71 ZION dues
+⚔️  Olan Oliveira 3 (middle) joined Golden Dawn — paid 0.79 ZION dues
+⚔️  Kurt Gomez 4 (middle) joined Azure Collective — paid 0.66 ZION dues
+⚔️  Blake Wilson 8516 (middle) joined Shadow Order — paid 0.34 ZION dues
+⚔️  Tara Ekwueme 4 (middle) joined Iron Fist — paid 0.66 ZION dues
+⚔️  Marc Eriksson 2 (middle) joined Golden Dawn — paid 1.48 ZION dues
+⚔️  Yuki Diallo 4 (middle) joined Azure Collective — paid 0.84 ZION dues
+⚔️  Wren Okafor 2 (middle) joined Azure Collective — paid 1.44 ZION dues
+⚔️  Quinn Thomas 3448 (middle) joined Golden Dawn — paid 1.60 ZION dues
+
+📊 Clan Stats:
+  🏰 Iron Fist: 1837 members | 9869.42 ZION treasury
+  🏰 Void Brotherhood: 1512 members | 8343.55 ZION treasury
+  🏰 Golden Dawn: 1797 members | 6812.69 ZION treasury
+  🏰 Shadow Order: 1751 members | 1336.84 ZION treasury
+  🏰 Neon Syndicate: 1535 members | 1114.43 ZION treasury
+  🏰 Azure Collective: 709 members | 772.13 ZION treasury
+  🏰 Crimson Legion: 967 members | 219.64 ZION treasury
+
+✅ 42 agents joined clans!
+
+⚔️  ZION Clan Cycle - 2026-05-17 14:25
+⚔️  Marc Petrov 3 (middle) joined Azure Collective — paid 0.30 ZION dues
+⚔️  Cleo Hashimoto 3 (middle) joined Shadow Order — paid 0.33 ZION dues
+⚔️  Sera Mendez 2 (middle) joined Iron Fist — paid 0.94 ZION dues
+⚔️  Kira Weber 2 (middle) joined Golden Dawn — paid 1.32 ZION dues
+⚔️  Zara Nakamura 2 (middle) joined Neon Syndicate — paid 0.71 ZION dues
+⚔️  Faye Ekwueme 3 (middle) joined Neon Syndicate — paid 1.12 ZION dues
+⚔️  Cleo Watanabe 2 (middle) joined Golden Dawn — paid 0.89 ZION dues
+⚔️  Abel Johansson 3 (middle) joined Crimson Legion — paid 0.37 ZION dues
+⚔️  Cole Reyes 3 (middle) joined Neon Syndicate — paid 0.81 ZION dues
+⚔️  Iris Thomas 9266 (critical) joined Shadow Order — paid 0.10 ZION dues
+⚔️  Pat Robinson 8354 (middle) joined Azure Collective — paid 2.36 ZION dues
+⚔️  Lars Emeka 4 (middle) joined Iron Fist — paid 0.59 ZION dues
+⚔️  Lena Nakamura 3 (middle) joined Golden Dawn — paid 0.85 ZION dues
+⚔️  Ivor Kapoor 2 (middle) joined Golden Dawn — paid 1.01 ZION dues
+⚔️  Dana Oliveira 2 (middle) joined Golden Dawn — paid 1.50 ZION dues
+⚔️  Ray Garcia 1568 (middle) joined Golden Dawn — paid 0.37 ZION dues
+⚔️  Zoe Moore 8312 (middle) joined Crimson Legion — paid 0.34 ZION dues
+⚔️  Ray Miller 6661 (middle) joined Golden Dawn — paid 0.36 ZION dues
+⚔️  Taylor Jones 2261 (middle) joined Neon Syndicate — paid 1.87 ZION dues
+⚔️  Chris Clark 7206 (middle) joined Void Brotherhood — paid 2.16 ZION dues
+⚔️  Sidney Wilson 2052 (middle) joined Void Brotherhood — paid 0.51 ZION dues
+⚔️  Lee Martinez 8411 (middle) joined Crimson Legion — paid 0.26 ZION dues
+⚔️  Aria Yamamoto 2 (middle) joined Iron Fist — paid 0.11 ZION dues
+⚔️  Luna Sato 2 (middle) joined Iron Fist — paid 0.83 ZION dues
+⚔️  Blake Robinson 1742 (middle) joined Golden Dawn — paid 0.51 ZION dues
+⚔️  Casey Moore 5751 (middle) joined Shadow Order — paid 0.39 ZION dues
+
+📊 Clan Stats:
+  🏰 Iron Fist: 1841 members | 9871.89 ZION treasury
+  🏰 Void Brotherhood: 1514 members | 8346.22 ZION treasury
+  🏰 Golden Dawn: 1805 members | 6819.50 ZION treasury
+  🏰 Shadow Order: 1754 members | 1337.66 ZION treasury
+  🏰 Neon Syndicate: 1539 members | 1118.94 ZION treasury
+  🏰 Azure Collective: 711 members | 774.79 ZION treasury
+  🏰 Crimson Legion: 970 members | 220.61 ZION treasury
+
+✅ 26 agents joined clans!
+
+⚔️  WAR: Shadow Order vs Azure Collective!
+🏆 Shadow Order WINS! Takes 387.39 ZION from Azure Collective

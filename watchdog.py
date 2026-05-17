@@ -25,7 +25,14 @@ BACKEND_DIR = "/root/zion_backend"
 SCRIPTS = {
     "tax":          ("tax_cron.py",    3600),   # каждый час
     "birth":        ("birth.py",       1800),   # каждые 30 мин
-    "neo":          ("neo.py",         3600),   # каждый час
+    "police":       ("police.py",      3600),   # каждый час
+    "corporations": ("corporations.py", 1800),   # каждые 30 мин
+    "epidemics":    ("epidemics.py",    7200),   # каждые 2 часа
+    "marriages":    ("marriages.py",    3600),   # каждый час
+    "education":    ("education.py",    3600),   # каждый час
+    "market":       ("market.py",       1800),   # каждые 30 мин
+    "espionage":    ("espionage.py",    3600),   # каждый час
+    "casino":       ("casino.py",       1800),   # каждые 30 мин
     "religion":     ("religion.py",    1800),   # каждые 30 мин
     "politics":     ("politics.py",    3600),   # каждый час
     "catastrophes": ("catastrophes.py",7200),   # каждые 2 часа

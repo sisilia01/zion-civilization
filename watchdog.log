@@ -1,27 +1,41 @@
-2026-05-17 10:28:46,712 [WATCHDOG] === ZION Watchdog started ===
-2026-05-17 10:28:46,712 [WATCHDOG] Monitoring 9 scripts + API
-2026-05-17 10:28:46,800 [WATCHDOG] Running tax (interval 3600s)
-2026-05-17 10:28:47,859 [WATCHDOG] Started tax (tax_cron.py)
-2026-05-17 10:28:47,873 [WATCHDOG] Running birth (interval 1800s)
-2026-05-17 10:28:48,916 [WATCHDOG] Started birth (birth.py)
-2026-05-17 10:28:48,929 [WATCHDOG] Running neo (interval 3600s)
-2026-05-17 10:28:49,956 [WATCHDOG] Started neo (neo.py)
-2026-05-17 10:28:49,971 [WATCHDOG] Running religion (interval 1800s)
-2026-05-17 10:28:51,002 [WATCHDOG] Started religion (religion.py)
-2026-05-17 10:28:51,018 [WATCHDOG] Running politics (interval 3600s)
-2026-05-17 10:28:52,064 [WATCHDOG] Started politics (politics.py)
-2026-05-17 10:28:52,077 [WATCHDOG] Running catastrophes (interval 7200s)
-2026-05-17 10:28:53,141 [WATCHDOG] Started catastrophes (catastrophes.py)
-2026-05-17 10:28:53,154 [WATCHDOG] Running clans (interval 3600s)
-2026-05-17 10:28:54,204 [WATCHDOG] Started clans (clans.py)
-2026-05-17 10:28:54,238 [WATCHDOG] Running zionwork (interval 1800s)
-2026-05-17 10:28:55,282 [WATCHDOG] Started zionwork (zionwork.py)
-2026-05-17 10:28:55,294 [WATCHDOG] settlement appears stuck — restarting
-2026-05-17 10:28:56,357 [WATCHDOG] Started settlement (settlement.py)
+2026-05-17 14:24:59,798 [WATCHDOG] === ZION Watchdog started ===
+2026-05-17 14:24:59,799 [WATCHDOG] Monitoring 16 scripts + API
+2026-05-17 14:24:59,842 [WATCHDOG] Running tax (interval 3600s)
+2026-05-17 14:25:00,867 [WATCHDOG] Started tax (tax_cron.py)
+2026-05-17 14:25:00,880 [WATCHDOG] Running birth (interval 1800s)
+2026-05-17 14:25:01,925 [WATCHDOG] Started birth (birth.py)
+2026-05-17 14:25:01,954 [WATCHDOG] Running police (interval 3600s)
+2026-05-17 14:25:02,979 [WATCHDOG] Started police (police.py)
+2026-05-17 14:25:02,993 [WATCHDOG] Running corporations (interval 1800s)
+2026-05-17 14:25:04,037 [WATCHDOG] Started corporations (corporations.py)
+2026-05-17 14:25:04,066 [WATCHDOG] Running epidemics (interval 7200s)
+2026-05-17 14:25:05,124 [WATCHDOG] Started epidemics (epidemics.py)
+2026-05-17 14:25:05,158 [WATCHDOG] Running marriages (interval 3600s)
+2026-05-17 14:25:06,213 [WATCHDOG] Started marriages (marriages.py)
+2026-05-17 14:25:06,236 [WATCHDOG] Running education (interval 3600s)
+2026-05-17 14:25:07,273 [WATCHDOG] Started education (education.py)
+2026-05-17 14:25:07,287 [WATCHDOG] Running market (interval 1800s)
+2026-05-17 14:25:08,353 [WATCHDOG] Started market (market.py)
+2026-05-17 14:25:08,376 [WATCHDOG] Running espionage (interval 3600s)
+2026-05-17 14:25:09,402 [WATCHDOG] Started espionage (espionage.py)
+2026-05-17 14:25:09,416 [WATCHDOG] Running casino (interval 1800s)
+2026-05-17 14:25:10,447 [WATCHDOG] Started casino (casino.py)
+2026-05-17 14:25:10,478 [WATCHDOG] Running religion (interval 1800s)
+2026-05-17 14:25:11,509 [WATCHDOG] Started religion (religion.py)
+2026-05-17 14:25:11,522 [WATCHDOG] Running politics (interval 3600s)
+2026-05-17 14:25:12,573 [WATCHDOG] Started politics (politics.py)
+2026-05-17 14:25:12,611 [WATCHDOG] Running catastrophes (interval 7200s)
+2026-05-17 14:25:13,668 [WATCHDOG] Started catastrophes (catastrophes.py)
+2026-05-17 14:25:13,697 [WATCHDOG] Running clans (interval 3600s)
+2026-05-17 14:25:14,725 [WATCHDOG] Started clans (clans.py)
+2026-05-17 14:25:14,738 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-17 14:25:15,768 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-17 14:25:15,782 [WATCHDOG] settlement appears stuck — restarting
+2026-05-17 14:25:16,829 [WATCHDOG] Started settlement (settlement.py)
 Traceback (most recent call last):
-  File "/root/zion_backend/watchdog.py", line 140, in <module>
+  File "/root/zion_backend/watchdog.py", line 147, in <module>
     main()
-  File "/root/zion_backend/watchdog.py", line 128, in main
+  File "/root/zion_backend/watchdog.py", line 135, in main
     if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
              ^^^^^^^^^^^^^^^^^
 UnboundLocalError: cannot access local variable 'last_coin_manager' where it is not associated with a value
