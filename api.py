@@ -2124,3 +2124,19 @@ async def get_president_actions():
     finally:
         cur.close()
         db.close()
+
+@app.get("/corporations")
+async def get_corporations():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, name, corp_type, employees, treasury, revenue
+            FROM corporations WHERE is_active = true
+            ORDER BY treasury DESC LIMIT 9
+        """)
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        cur.close()
+        db.close()
