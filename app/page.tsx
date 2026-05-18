@@ -609,6 +609,8 @@ type ZionbetApiMarket = {
   yes_pct?: number;
   no_pct?: number;
   seed_yes_cents?: number;
+  volume?: number;
+  end_date?: string | null;
 };
 
 type ZionbetMarketsBundle = {
@@ -616,6 +618,31 @@ type ZionbetMarketsBundle = {
   sports: ZionbetApiMarket[];
   civilization: ZionbetApiMarket[];
 };
+
+type ZionbetBetTab = "civilization" | "crypto" | "sports" | "politics" | "finance" | "world";
+
+const ZIONBET_TAB_POLY_CATEGORIES: Record<ZionbetBetTab, string[]> = {
+  civilization: [],
+  crypto: ["crypto"],
+  sports: ["sports"],
+  politics: ["politics"],
+  finance: ["finance", "tech"],
+  world: ["geopolitics", "events", "culture"],
+};
+
+const ZIONBET_POLY_FETCH_CATEGORIES = [
+  "crypto",
+  "sports",
+  "politics",
+  "finance",
+  "tech",
+  "geopolitics",
+  "events",
+  "culture",
+] as const;
+
+const ZIONBET_CARD_BORDER = "#00ff41";
+const ZIONBET_CARD_BG = "rgba(0,255,65,0.04)";
 
 function zionbetApiToMarket(m: ZionbetApiMarket): ZionBetMarket {
   const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
@@ -638,16 +665,23 @@ function zionbetStableVolume(id: string, min: number, max: number): number {
   return min + (Math.abs(h) % (max - min + 1));
 }
 
-function zionbetCardVolumeDisplay(tab: "crypto" | "sports" | "civilization", id: string): string {
-  if (tab === "crypto") return "12.4K SUI vol";
-  if (tab === "sports") return "3.2K SUI vol";
-  return `${zionbetStableVolume(id, 500, 2000).toLocaleString()} SUI vol`;
+/** USD polymarket volume ≈ SUI vol for display. */
+function zionbetVolumeSuiAmount(volume?: number, id?: string): number {
+  const v = Number(volume) || 0;
+  if (v > 0) return Math.round(v);
+  if (id) return zionbetStableVolume(id, 500, 2000);
+  return 0;
 }
 
-function zionbetCardVolumeSui(tab: "crypto" | "sports" | "civilization", id: string): number {
-  if (tab === "crypto") return 12400;
-  if (tab === "sports") return 3200;
-  return zionbetStableVolume(id, 500, 2000);
+function zionbetVolumeSuiLabel(volume?: number, id?: string): string {
+  const sui = zionbetVolumeSuiAmount(volume, id);
+  if (sui >= 1_000_000) return `${(sui / 1_000_000).toFixed(1)}M SUI vol`;
+  if (sui >= 1_000) return `${(sui / 1_000).toFixed(1)}K SUI vol`;
+  return `${sui.toLocaleString()} SUI vol`;
+}
+
+function zionbetCardVolumeSui(_tab: ZionbetBetTab, id: string, volume?: number): number {
+  return zionbetVolumeSuiAmount(volume, id);
 }
 
 function zionbetTimeframeEndLabel(tf?: string): string {
@@ -674,196 +708,56 @@ type ZionPolyMarket = {
   yes_price: number;
   no_price: number;
   volume?: number;
+  end_date?: string | null;
 };
 
-function polyMarketToBetMarket(m: ZionPolyMarket): ZionBetMarket {
+function polyToApiMarket(m: ZionPolyMarket): ZionbetApiMarket {
   const yes = Math.round(Number(m.yes_price) || 50);
-  const no = Math.round(Number(m.no_price) || 100 - yes);
   return {
     id: `poly-${m.market_id}`,
     question: m.question,
-    event_type: `polymarket_${m.market_id}`,
-    yes_cents: yes,
-    no_cents: no,
-    category: m.category === "crypto" ? "crypto" : "events",
+    event_type: `poly_${m.market_id}`,
+    category: m.category,
+    yes_pct: yes,
+    no_pct: 100 - yes,
+    seed_yes_cents: yes,
+    volume: m.volume,
+    end_date: m.end_date,
   };
 }
 
-function zionbetPolyVolumeLabel(volume?: number): string {
-  const v = Number(volume) || 0;
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M vol`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K vol`;
-  return v > 0 ? `$${v.toFixed(0)} vol` : "Polymarket";
+function zionbetPolyMarketsForTab(
+  tab: ZionbetBetTab,
+  polyByCat: Record<string, ZionPolyMarket[]>
+): ZionPolyMarket[] {
+  return ZIONBET_TAB_POLY_CATEGORIES[tab].flatMap((cat) => polyByCat[cat] ?? []);
 }
 
-function ZionBetPolyMarketBlock({
-  header,
-  markets,
-  isMobile,
-  setBetModal,
-}: {
-  header: string;
-  markets: ZionPolyMarket[];
-  isMobile: boolean;
-  setBetModal: (v: { market: ZionBetMarket; direction: boolean; open: boolean } | null) => void;
-}) {
-  if (markets.length === 0) return null;
-  const borderColor = "#4DA2FF";
-  const cardBg = "rgba(77,162,255,0.06)";
-  return (
-    <div style={{ marginTop: "16px", borderTop: "1px solid #1a3a5c", paddingTop: "12px" }}>
-      <div
-        style={{
-          color: "#6b8fa3",
-          fontFamily: "monospace",
-          fontSize: "10px",
-          letterSpacing: "1px",
-          marginBottom: "8px",
-        }}
-      >
-        {header}
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-          gap: "10px",
-        }}
-      >
-        {markets.map((m) => {
-          const yes = Math.round(Number(m.yes_price) || 50);
-          const no = Math.round(Number(m.no_price) || 100 - yes);
-          const trend = zionbetOddsTrendIndicator(yes);
-          const market = polyMarketToBetMarket(m);
-          return (
-            <article
-              key={m.market_id}
-              style={{
-                border: `1px solid ${borderColor}`,
-                borderRadius: "10px",
-                padding: "12px",
-                background: cardBg,
-                boxShadow: `0 0 12px ${borderColor}18`,
-              }}
-            >
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px" }}>
-                <span
-                  style={{
-                    fontSize: "9px",
-                    fontFamily: "monospace",
-                    padding: "1px 5px",
-                    borderRadius: "3px",
-                    background: "rgba(77,162,255,0.15)",
-                    color: "#4DA2FF",
-                  }}
-                >
-                  🌐 Polymarket
-                </span>
-              </div>
-              <h4
-                style={{
-                  color: "#fff",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  lineHeight: 1.3,
-                  margin: "0 0 8px 0",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={m.question}
-              >
-                {m.question}
-              </h4>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "8px",
-                  fontFamily: "monospace",
-                  fontSize: "11px",
-                  color: "#888",
-                }}
-              >
-                <span style={{ color: borderColor }}>{zionbetPolyVolumeLabel(m.volume)}</span>
-                <span>External</span>
-              </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                <button
-                  type="button"
-                  onClick={() => setBetModal({ market, direction: true, open: true })}
-                  style={{
-                    flex: 1,
-                    height: "36px",
-                    padding: "0 6px",
-                    background: "rgba(77,162,255,0.12)",
-                    border: `1px solid ${borderColor}`,
-                    borderRadius: "6px",
-                    color: borderColor,
-                    fontFamily: "monospace",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <span>YES {yes}¢</span>
-                  <span style={{ color: trend.color, fontSize: "12px" }} aria-hidden>
-                    {trend.symbol}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBetModal({ market, direction: false, open: true })}
-                  style={{
-                    flex: 1,
-                    height: "36px",
-                    padding: "0 6px",
-                    background: "rgba(255,50,50,0.12)",
-                    border: "1px solid #ff3232",
-                    borderRadius: "6px",
-                    color: "#ff3232",
-                    fontFamily: "monospace",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <span>NO {no}¢</span>
-                  <span style={{ color: "#888", fontSize: "12px" }} aria-hidden>
-                    {yes > 60 ? "↓" : yes < 40 ? "↑" : "—"}
-                  </span>
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
+function zionbetEndDateLabel(endDate?: string | null, timeframe?: string): string {
+  if (endDate) {
+    const d = new Date(endDate);
+    if (!Number.isNaN(d.getTime())) {
+      return `Ends ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    }
+  }
+  return zionbetTimeframeEndLabel(timeframe);
 }
 
-type ZionbetBetTimeframeKey = ZionBetTimeframeFilterKey;
+function zionbetMarketEndSortKey(m: ZionbetApiMarket): number {
+  if (m.end_date) {
+    const t = new Date(m.end_date).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return zionbetTimeframeSortOrder(m.timeframe) * 1e15;
+}
+
+function zionbetTruncateQuestion(q: string, max = 40): string {
+  const t = q.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
 type ZionbetSortKey = "volume" | "ending" | "newest";
-
-const ZIONBET_BET_TIMEFRAME_SIDEBAR: { key: ZionbetBetTimeframeKey; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "15min", label: "15m" },
-  { key: "1h", label: "1h" },
-  { key: "4h", label: "4h" },
-  { key: "24h", label: "Daily" },
-  { key: "7d", label: "Weekly" },
-  { key: "30d", label: "Monthly" },
-  { key: "1y", label: "Yearly" },
-];
 
 function zionbetTimeframeSortOrder(tf?: string): number {
   const k = zionBetTfKeyFromZionMarket(tf ?? "");
@@ -1065,32 +959,26 @@ function ZionBetMyBetsSection({
         activeBets.length === 0 ? (
           <p className="zionBetMyBetsEmpty">No active bets. Place your first bet above! ↑</p>
         ) : (
-          <div className="zionBetMyBetsList">
+          <div className="zionBetMyBetsGrid">
             {activeBets.map((bet) => {
               const yes = isYes(bet.direction);
               return (
                 <article
                   key={bet.id}
-                  className={`zionBetMyBetCard zionBetMyBetCardActive zionBetMyBetCard--${yes ? "yes" : "no"}`}
+                  className={`zionBetMyBetCard zionBetMyBetCardLine zionBetMyBetCard--${yes ? "yes" : "no"}`}
+                  title={bet.question}
                 >
-                  <p className="zionBetMyBetQuestion" title={bet.question}>
-                    {bet.question}
-                  </p>
-                  <div className="zionBetMyBetRow">
-                    <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
-                      {bet.direction}
-                    </span>
-                    <span className="zionBetMyBetAmt">{bet.amount_sui} SUI</span>
-                    <span className="zionBetMyBetArrow">→</span>
-                    <span className="zionBetMyBetPayout">
-                      {(bet.potential_payout ?? 0).toFixed(3)} SUI
-                    </span>
-                    <span className="zionBetMyBetResolve">{zionbetMyBetResolvesInLabel(bet)}</span>
-                    <span className="zionBetMyBetStatusPending">
-                      <span className="zionBetPendingDot" aria-hidden />
-                      PENDING
-                    </span>
-                  </div>
+                  <span className="zionBetMyBetQuestionLine">{zionbetTruncateQuestion(bet.question)}</span>
+                  <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
+                    {bet.direction}
+                  </span>
+                  <span className="zionBetMyBetAmt">
+                    {bet.amount_sui} SUI → {(bet.potential_payout ?? 0).toFixed(3)}
+                  </span>
+                  <span className="zionBetMyBetStatusPending">
+                    <span className="zionBetPendingDot" aria-hidden />
+                    PENDING
+                  </span>
                 </article>
               );
             })}
@@ -1099,7 +987,7 @@ function ZionBetMyBetsSection({
       ) : settledBets.length === 0 ? (
         <p className="zionBetMyBetsEmpty">No settled bets yet.</p>
       ) : (
-        <div className="zionBetMyBetsList">
+        <div className="zionBetMyBetsGrid">
           {settledBets.map((bet) => {
             const yes = isYes(bet.direction);
             const won = bet.status === "won";
@@ -1109,34 +997,29 @@ function ZionBetMyBetsSection({
             return (
               <article
                 key={bet.id}
-                className={`zionBetMyBetCard zionBetMyBetCard--${yes ? "yes" : "no"} ${
+                className={`zionBetMyBetCard zionBetMyBetCardLine zionBetMyBetCard--${yes ? "yes" : "no"} ${
                   won ? "zionBetMyBetCardWon" : "zionBetMyBetCardLost"
                 }`}
+                title={bet.question}
               >
-                <p className="zionBetMyBetQuestion" title={bet.question}>
-                  {bet.question}
-                </p>
-                <div className="zionBetMyBetRow">
-                  <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
-                    {bet.direction}
-                  </span>
-                  <span className="zionBetMyBetAmt">{bet.amount_sui} SUI</span>
-                  {won ? (
-                    <span className="zionBetMyBetProfit">+{profit.toFixed(3)} SUI profit</span>
-                  ) : (
-                    <span className="zionBetMyBetLostAmt">-{bet.amount_sui} SUI</span>
-                  )}
-                  <span className={won ? "zionBetMyBetOutcomeWon" : "zionBetMyBetOutcomeLost"}>
-                    {won ? "✓ WON" : "✗ LOST"}
-                  </span>
-                  {won && !claimed ? (
-                    <button type="button" className="zionBetClaimBtnInline" onClick={() => handleClaim(bet)}>
-                      CLAIM
-                    </button>
-                  ) : won && claimed ? (
-                    <span className="zionBetClaimedLabel">CLAIMED</span>
-                  ) : null}
-                </div>
+                <span className="zionBetMyBetQuestionLine">{zionbetTruncateQuestion(bet.question)}</span>
+                <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
+                  {bet.direction}
+                </span>
+                <span className="zionBetMyBetAmt">
+                  {bet.amount_sui} SUI
+                  {won ? ` → +${profit.toFixed(3)}` : ` → -${bet.amount_sui}`}
+                </span>
+                <span className={won ? "zionBetMyBetOutcomeWon" : "zionBetMyBetOutcomeLost"}>
+                  {won ? "WON" : "LOST"}
+                </span>
+                {won && !claimed ? (
+                  <button type="button" className="zionBetClaimBtnInline" onClick={() => handleClaim(bet)}>
+                    CLAIM
+                  </button>
+                ) : won && claimed ? (
+                  <span className="zionBetClaimedLabel">CLAIMED</span>
+                ) : null}
               </article>
             );
           })}
@@ -3898,15 +3781,14 @@ export default function Home() {
   const [zionBetSelectedMarket, setZionBetSelectedMarket] = useState<ZionBetMarket | null>(null);
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
   const [zionBetTimeframeTab, setZionBetTimeframeTab] = useState<ZionBetTimeframeFilterKey>("all");
-  const [betTab, setBetTab] = useState<"crypto" | "sports" | "civilization">("civilization");
-  const [betTimeframe, setBetTimeframe] = useState<ZionbetBetTimeframeKey>("all");
+  const [betTab, setBetTab] = useState<ZionbetBetTab>("civilization");
   const [betSort, setBetSort] = useState<ZionbetSortKey>("volume");
   const [zionbetMarkets, setZionbetMarkets] = useState<ZionbetMarketsBundle>({
     crypto: [],
     sports: [],
     civilization: [],
   });
-  const [polyMarkets, setPolyMarkets] = useState<ZionPolyMarket[]>([]);
+  const [polyByCat, setPolyByCat] = useState<Record<string, ZionPolyMarket[]>>({});
   const [zionBetCgUsd, setZionBetCgUsd] = useState<{ SUI?: number }>({});
   const [deepbookOracles, setDeepbookOracles] = useState<Array<{
     oracle_id: string;
@@ -4607,49 +4489,79 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab !== "zionbet") return;
-    fetch("/api/zionbet/polymarkets")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) setPolyMarkets(d);
-      })
-      .catch(() => {});
+    ZIONBET_POLY_FETCH_CATEGORIES.forEach((cat) => {
+      fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(cat)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d)) setPolyByCat((prev) => ({ ...prev, [cat]: d }));
+        })
+        .catch(() => {});
+    });
   }, [activeTab]);
 
-  const zionbetTimeframeCounts = useMemo(() => {
-    const list = zionbetMarkets[betTab];
-    const n = (tf: ZionbetBetTimeframeKey) =>
-      tf === "all"
-        ? list.length
-        : list.filter((m) => zionBetMarketMatchesTimeframeFilter(m.timeframe, tf)).length;
-    return {
-      all: n("all"),
-      "15min": n("15min"),
-      "1h": n("1h"),
-      "4h": n("4h"),
-      "24h": n("24h"),
-      "7d": n("7d"),
-      "30d": n("30d"),
-      "1y": n("1y"),
-    };
-  }, [zionbetMarkets, betTab]);
+  useEffect(() => {
+    if (activeTab !== "zionbet") return;
+    const cats = ZIONBET_TAB_POLY_CATEGORIES[betTab];
+    if (cats.length === 0) return;
+    cats.forEach((cat) => {
+      fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(cat)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d)) setPolyByCat((prev) => ({ ...prev, [cat]: d }));
+        })
+        .catch(() => {});
+    });
+  }, [activeTab, betTab]);
+
+  const zionbetTabCounts = useMemo(
+    () => ({
+      civilization: zionbetMarkets.civilization.length,
+      crypto: zionbetMarkets.crypto.length + (polyByCat.crypto?.length ?? 0),
+      sports: zionbetMarkets.sports.length + (polyByCat.sports?.length ?? 0),
+      politics: polyByCat.politics?.length ?? 0,
+      finance: (polyByCat.finance?.length ?? 0) + (polyByCat.tech?.length ?? 0),
+      world:
+        (polyByCat.geopolitics?.length ?? 0) +
+        (polyByCat.events?.length ?? 0) +
+        (polyByCat.culture?.length ?? 0),
+    }),
+    [zionbetMarkets, polyByCat]
+  );
 
   const zionbetDisplayedMarkets = useMemo(() => {
-    let list = zionbetMarkets[betTab];
-    if (betTimeframe !== "all") {
-      list = list.filter((m) => zionBetMarketMatchesTimeframeFilter(m.timeframe, betTimeframe));
+    let list: ZionbetApiMarket[] = [];
+    if (betTab === "civilization") {
+      list = [...zionbetMarkets.civilization];
+    } else if (betTab === "crypto") {
+      list = [
+        ...zionbetMarkets.crypto,
+        ...zionbetPolyMarketsForTab("crypto", polyByCat).map(polyToApiMarket),
+      ];
+    } else if (betTab === "sports") {
+      list = [
+        ...zionbetMarkets.sports,
+        ...zionbetPolyMarketsForTab("sports", polyByCat).map(polyToApiMarket),
+      ];
+    } else if (betTab === "politics") {
+      list = zionbetPolyMarketsForTab("politics", polyByCat).map(polyToApiMarket);
+    } else if (betTab === "finance") {
+      list = zionbetPolyMarketsForTab("finance", polyByCat).map(polyToApiMarket);
+    } else {
+      list = zionbetPolyMarketsForTab("world", polyByCat).map(polyToApiMarket);
     }
     const sorted = [...list];
     if (betSort === "volume") {
       sorted.sort(
-        (a, b) => zionbetCardVolumeSui(betTab, b.id) - zionbetCardVolumeSui(betTab, a.id)
+        (a, b) =>
+          zionbetCardVolumeSui(betTab, b.id, b.volume) - zionbetCardVolumeSui(betTab, a.id, a.volume)
       );
     } else if (betSort === "ending") {
-      sorted.sort((a, b) => zionbetTimeframeSortOrder(a.timeframe) - zionbetTimeframeSortOrder(b.timeframe));
+      sorted.sort((a, b) => zionbetMarketEndSortKey(a) - zionbetMarketEndSortKey(b));
     } else {
       sorted.reverse();
     }
     return sorted;
-  }, [zionbetMarkets, betTab, betTimeframe, betSort]);
+  }, [zionbetMarkets, polyByCat, betTab, betSort]);
 
   const zionbetHeaderStats = useMemo(() => {
     const all = [
@@ -6939,8 +6851,11 @@ export default function Home() {
                     {(
                       [
                         ["civilization", "🌍 CIVILIZATION"],
-                        ["crypto", "📈 CRYPTO & MARKETS"],
+                        ["crypto", "📈 CRYPTO"],
                         ["sports", "⚽ SPORTS"],
+                        ["politics", "🗳️ POLITICS"],
+                        ["finance", "💹 FINANCE"],
+                        ["world", "🌐 WORLD"],
                       ] as const
                     ).map(([key, label]) => (
                       <button
@@ -6951,7 +6866,7 @@ export default function Home() {
                         className={`zionBetCatTab${betTab === key ? " zionBetCatTabActive" : ""}`}
                         onClick={() => setBetTab(key)}
                       >
-                        {label} ({zionbetMarkets[key].length})
+                        {label} ({zionbetTabCounts[key]})
                       </button>
                     ))}
                   </div>
@@ -7284,58 +7199,7 @@ export default function Home() {
                   </div>
                   ) : null}
                   <div style={{ marginBottom: "24px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: isMobile ? "column" : "row",
-                        gap: "12px",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <nav
-                        aria-label="Timeframe filter"
-                        style={{
-                          width: isMobile ? "100%" : "120px",
-                          flexShrink: 0,
-                          background: "rgba(0,0,0,0.55)",
-                          border: "1px solid #1a1a1a",
-                          borderRadius: "8px",
-                          padding: "8px 6px",
-                        }}
-                      >
-                        {ZIONBET_BET_TIMEFRAME_SIDEBAR.map(({ key, label }) => {
-                          const active = betTimeframe === key;
-                          const count = zionbetTimeframeCounts[key];
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => setBetTimeframe(key)}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                width: "100%",
-                                padding: "7px 8px",
-                                marginBottom: "2px",
-                                border: "none",
-                                borderRadius: "6px",
-                                cursor: "pointer",
-                                fontFamily: "monospace",
-                                fontSize: "11px",
-                                textAlign: "left",
-                                color: active ? "#00ff41" : "#888",
-                                background: active ? "rgba(0,255,65,0.12)" : "transparent",
-                                borderLeft: active ? "2px solid #00ff41" : "2px solid transparent",
-                              }}
-                            >
-                              <span>{label}</span>
-                              <span style={{ color: active ? "#00ff41" : "#555", fontSize: "10px" }}>{count}</span>
-                            </button>
-                          );
-                        })}
-                      </nav>
-                      <div style={{ flex: 1, minWidth: 0, width: "100%" }}>
+
                         <div
                           style={{
                             display: "flex",
@@ -7380,13 +7244,17 @@ export default function Home() {
                             </select>
                           </label>
                         </div>
-                        {zionbetMarkets[betTab].length === 0 ? (
+                        {zionbetDisplayedMarkets.length === 0 &&
+                        zionbetMarkets.civilization.length === 0 &&
+                        zionbetMarkets.crypto.length === 0 &&
+                        zionbetMarkets.sports.length === 0 &&
+                        Object.keys(polyByCat).length === 0 ? (
                           <p style={{ fontSize: "0.78rem", color: "rgba(160,190,175,0.65)", margin: "12px 0" }}>
                             Loading markets…
                           </p>
                         ) : zionbetDisplayedMarkets.length === 0 ? (
                           <p style={{ fontSize: "0.78rem", color: "rgba(160,190,175,0.65)", margin: "12px 0" }}>
-                            No markets match this timeframe.
+                            No markets in this category yet.
                           </p>
                         ) : (
                           <div
@@ -7397,72 +7265,24 @@ export default function Home() {
                               gap: "10px",
                             }}
                           >
-                            {zionbetDisplayedMarkets.map((m, cardIdx) => {
+                            {zionbetDisplayedMarkets.map((m) => {
                               const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
                               const no = m.no_pct ?? 100 - yes;
                               const trend = zionbetOddsTrendIndicator(yes);
-                              const borderColor =
-                                betTab === "civilization" ? "#00ff41" : betTab === "sports" ? "#4DA2FF" : "#ffd700";
-                              const cardBg =
-                                betTab === "civilization"
-                                  ? "rgba(0,255,65,0.04)"
-                                  : betTab === "sports"
-                                    ? "rgba(77,162,255,0.06)"
-                                    : "rgba(255,215,0,0.05)";
                               const market = zionbetApiToMarket(m);
-                              const isTrending = betTab === "civilization" && cardIdx < 3;
-                              const volumeLabel = zionbetCardVolumeDisplay(betTab, m.id);
-                              const endLabel = zionbetTimeframeEndLabel(m.timeframe);
+                              const volumeLabel = zionbetVolumeSuiLabel(m.volume, m.id);
+                              const endLabel = zionbetEndDateLabel(m.end_date, m.timeframe);
                               return (
                                 <article
                                   key={m.id}
                                   style={{
-                                    border: `1px solid ${borderColor}`,
+                                    border: `1px solid ${ZIONBET_CARD_BORDER}`,
                                     borderRadius: "10px",
                                     padding: "12px",
-                                    background: cardBg,
-                                    boxShadow: `0 0 12px ${borderColor}18`,
+                                    background: ZIONBET_CARD_BG,
+                                    boxShadow: `0 0 12px ${ZIONBET_CARD_BORDER}18`,
                                   }}
                                 >
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      flexWrap: "wrap",
-                                      gap: "4px",
-                                      marginBottom: "6px",
-                                      alignItems: "center",
-                                    }}
-                                  >
-                                    {isTrending ? (
-                                      <span
-                                        style={{
-                                          fontSize: "9px",
-                                          fontFamily: "monospace",
-                                          padding: "1px 5px",
-                                          borderRadius: "3px",
-                                          background: "rgba(255,100,0,0.2)",
-                                          color: "#ffaa44",
-                                          fontWeight: "bold",
-                                        }}
-                                      >
-                                        🔥 TRENDING
-                                      </span>
-                                    ) : null}
-                                    {betTab === "civilization" ? (
-                                      <span
-                                        style={{
-                                          fontSize: "9px",
-                                          fontFamily: "monospace",
-                                          padding: "1px 5px",
-                                          borderRadius: "3px",
-                                          background: "rgba(0,255,65,0.12)",
-                                          color: "#00ff41",
-                                        }}
-                                      >
-                                        LIVE
-                                      </span>
-                                    ) : null}
-                                  </div>
                                   <h4
                                     style={{
                                       color: "#fff",
@@ -7485,7 +7305,7 @@ export default function Home() {
                                       color: "#888",
                                     }}
                                   >
-                                    <span style={{ color: borderColor }}>{volumeLabel}</span>
+                                    <span style={{ color: ZIONBET_CARD_BORDER }}>{volumeLabel}</span>
                                     <span>{endLabel}</span>
                                   </div>
                                   <div style={{ display: "flex", gap: "6px" }}>
@@ -7547,26 +7367,6 @@ export default function Home() {
                             })}
                           </div>
                         )}
-                        {betTab === "sports" ? (
-                          <ZionBetPolyMarketBlock
-                            header="🌐 LIVE FROM POLYMARKET · Real odds · Updated every 2h"
-                            markets={polyMarkets.filter((m) => m.category === "sports")}
-                            isMobile={isMobile}
-                            setBetModal={setBetModal}
-                          />
-                        ) : null}
-                        {betTab === "crypto" ? (
-                          <ZionBetPolyMarketBlock
-                            header="🌐 POLYMARKET DATA · Real odds · Updated every 2h"
-                            markets={polyMarkets.filter(
-                              (m) => m.category === "crypto" || m.category === "events"
-                            )}
-                            isMobile={isMobile}
-                            setBetModal={setBetModal}
-                          />
-                        ) : null}
-                      </div>
-                    </div>
                   </div>
                   <ZionBetMyBetsSection
                     walletConnected={Boolean(walletAddress.trim())}
@@ -9623,18 +9423,43 @@ export default function Home() {
           border-color: #00ff41;
           color: #00ff41;
         }
-        .zionBetMyBetsList {
-          display: flex;
-          flex-direction: column;
+        .zionBetMyBetsGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
+        }
+        @media (max-width: 640px) {
+          .zionBetMyBetsGrid {
+            grid-template-columns: 1fr;
+          }
         }
         .zionBetMyBetCard {
           border-radius: 8px;
-          padding: 10px 12px 10px 14px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 10px 12px;
+          border: 1px solid rgba(0, 255, 65, 0.15);
           background: rgba(10, 14, 10, 0.95);
           border-left-width: 3px;
           border-left-style: solid;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+        }
+        .zionBetMyBetCardLine {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: nowrap;
+          min-height: 40px;
+          overflow: hidden;
+        }
+        .zionBetMyBetQuestionLine {
+          flex: 1;
+          min-width: 0;
+          font-weight: 600;
+          font-size: 12px;
+          color: #e8fff0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-family: ui-sans-serif, system-ui, sans-serif;
         }
         .zionBetMyBetCard--yes {
           border-left-color: #00ff41;

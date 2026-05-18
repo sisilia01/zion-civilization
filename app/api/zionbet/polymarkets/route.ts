@@ -1,13 +1,10 @@
-import { NextResponse } from "next/server";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {
-  try {
-    const res = await fetch("http://localhost:8000/zionbet/polymarkets", { cache: "no-store" });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json([], { status: 500 });
-  }
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const category = url.searchParams.get("category") || "";
+  const apiUrl = category
+    ? `http://localhost:8000/zionbet/polymarkets?category=${encodeURIComponent(category)}`
+    : "http://localhost:8000/zionbet/polymarkets";
+  const res = await fetch(apiUrl, { next: { revalidate: 120 } });
+  const data = await res.json();
+  return Response.json(data);
 }
