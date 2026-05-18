@@ -3156,7 +3156,13 @@ function readAllPressCaches(): Record<string, string> {
   return articles;
 }
 
-function renderArticle(text: string, ac: string, border: string, bodyFont: string) {
+function renderArticle(
+  text: string,
+  ac: string,
+  border: string,
+  bodyFont: string,
+  sealEncrypted?: boolean
+) {
   const clean = text.replace(/\*\*/g, "");
 
   const headlineMatch = clean.match(/HEADLINE:\s*["«»""]?([\s\S]+?)["«»""]?(?:\r?\n|BYLINE|$)/i);
@@ -3195,6 +3201,25 @@ function renderArticle(text: string, ac: string, border: string, bodyFont: strin
           }}
         >
           {headline}
+          {sealEncrypted ? (
+            <span
+              style={{
+                background: "rgba(139,92,246,0.2)",
+                color: "#a78bfa",
+                fontSize: "0.6rem",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                marginLeft: "8px",
+                verticalAlign: "middle",
+                textTransform: "none",
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+              }}
+            >
+              🔒 SEAL ENCRYPTED
+            </span>
+          ) : null}
         </h2>
       ) : null}
       {byline ? (
@@ -5745,7 +5770,7 @@ export default function Home() {
                         })}
                       </a>
                     ))}
-                    <span style={{ color: "#333", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                    <span style={{ color: "#888", fontFamily: "monospace", fontSize: "0.6rem" }}>
                       Civilization state archived on Walrus testnet
                     </span>
                   </div>
@@ -6404,6 +6429,9 @@ export default function Home() {
                           🥈 Silver: {SILVER_THRESHOLD.toLocaleString()} ZION · 🥇 Gold:{" "}
                           {GOLD_THRESHOLD.toLocaleString()} ZION
                         </div>
+                        <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.65rem", marginTop: "4px" }}>
+                          Powered by Seal Protocol · Threshold encryption · On-chain access control
+                        </div>
                       </div>
                       {vipAccess?.isSilver || vipAccess?.isGold ? (
                         <button
@@ -6923,7 +6951,7 @@ export default function Home() {
               </header>
             );
 
-            const renderHeadlineByline = (headline: string, byline: string) => (
+            const renderHeadlineByline = (headline: string, byline: string, sealBadge?: boolean) => (
               <>
                 {headline ? (
                   <h3
@@ -6938,6 +6966,21 @@ export default function Home() {
                     }}
                   >
                     {headline}
+                    {sealBadge ? (
+                      <span
+                        style={{
+                          background: "rgba(139,92,246,0.2)",
+                          color: "#a78bfa",
+                          fontSize: "0.6rem",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          fontFamily: "monospace",
+                          marginLeft: "8px",
+                        }}
+                      >
+                        🔒 SEAL ENCRYPTED
+                      </span>
+                    ) : null}
                   </h3>
                 ) : null}
                 {byline ? (
@@ -7069,6 +7112,12 @@ export default function Home() {
 
                   {renderMasthead()}
 
+                  {isVip ? (
+                    <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.65rem", marginTop: "4px" }}>
+                      Powered by Seal Protocol · Threshold encryption · On-chain access control
+                    </div>
+                  ) : null}
+
                   {isVip && !hasWallet ? (
                     <div
                       style={{
@@ -7128,7 +7177,7 @@ export default function Home() {
                         </p>
                       </div>
                       <div style={{ paddingTop: "8px" }}>
-                        {renderHeadlineByline(fakeVipParsed.headline, fakeVipParsed.byline)}
+                        {renderHeadlineByline(fakeVipParsed.headline, fakeVipParsed.byline, true)}
                         <hr style={{ border: "none", borderTop: `1px solid ${border}`, margin: "12px 0", opacity: 0.4 }} />
                         {renderColumns(fakeVipParsed.columns, fakeVipParsed.editorsNote, fakeVipParsed.rawFallback, { blur: true })}
                       </div>
@@ -7140,7 +7189,9 @@ export default function Home() {
                       {showLoadingLine ? (
                         <div style={{ color: "#666" }}>⌛ Journalist investigating...</div>
                       ) : null}
-                      {currentArticle ? renderArticle(currentArticle, ac, border, bodyFont) : null}
+                      {currentArticle
+                        ? renderArticle(currentArticle, ac, border, bodyFont, isVip && vipCanRead)
+                        : null}
                     </>
                   ) : null}
 
