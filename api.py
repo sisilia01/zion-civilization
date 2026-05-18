@@ -2206,3 +2206,32 @@ async def get_state_treasury():
     finally:
         cur.close()
         db.close()
+
+@app.get("/walrus/blobs")
+async def get_walrus_blobs():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT blob_id, blob_type, content_summary, sui_object_id, created_at
+            FROM walrus_blobs ORDER BY created_at DESC LIMIT 20
+        """)
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except:
+        return []
+    finally:
+        cur.close()
+        db.close()
+
+@app.post("/walrus/store_snapshot")
+async def store_walrus_snapshot():
+    import subprocess
+    result = subprocess.run(
+        ["python3", "/root/zion_backend/walrus.py"],
+        capture_output=True, text=True, timeout=60
+    )
+    if "Blob ID:" in result.stdout:
+        blob_id = result.stdout.split("Blob ID:")[1].split("\n")[0].strip()
+        return {"success": True, "blob_id": blob_id}
+    return {"success": False, "error": result.stderr}

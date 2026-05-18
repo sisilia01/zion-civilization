@@ -40,6 +40,7 @@ SCRIPTS = {
     "frs":          ("frs.py",          1800),   # каждые 30 мин
     "president":    ("president.py",    3600),   # каждый час
     "sheriff":      ("sheriff.py",      3600),   # каждый час
+    "walrus":       ("walrus.py",       3600),   # каждый час
     "police":       ("police.py",       1800),   # каждые 30 мин
 }
 
