@@ -600,6 +600,38 @@ type ZionBetMarket = {
   brackets?: ZionBetBracketRow[];
 };
 
+type ZionbetApiMarket = {
+  id: string;
+  question: string;
+  event_type: string;
+  timeframe?: string;
+  category?: string;
+  yes_pct?: number;
+  no_pct?: number;
+  seed_yes_cents?: number;
+};
+
+type ZionbetMarketsBundle = {
+  crypto: ZionbetApiMarket[];
+  sports: ZionbetApiMarket[];
+  civilization: ZionbetApiMarket[];
+};
+
+function zionbetApiToMarket(m: ZionbetApiMarket): ZionBetMarket {
+  const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
+  const no = m.no_pct ?? 100 - yes;
+  const cat = (m.category || "events") as ZionBetCategorySlug;
+  return {
+    id: m.id,
+    question: m.question,
+    event_type: m.event_type,
+    timeframe: m.timeframe,
+    yes_cents: yes,
+    no_cents: no,
+    category: cat,
+  };
+}
+
 const ZIONBET_TIMEFRAME_SIDEBAR_ROWS: { key: ZionBetTimeframeFilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "15min", label: "15 min" },
@@ -3430,6 +3462,12 @@ export default function Home() {
   const [zionBetSelectedMarket, setZionBetSelectedMarket] = useState<ZionBetMarket | null>(null);
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
   const [zionBetTimeframeTab, setZionBetTimeframeTab] = useState<ZionBetTimeframeFilterKey>("all");
+  const [betTab, setBetTab] = useState<"crypto" | "sports" | "civilization">("civilization");
+  const [zionbetMarkets, setZionbetMarkets] = useState<ZionbetMarketsBundle>({
+    crypto: [],
+    sports: [],
+    civilization: [],
+  });
   const [zionBetCgUsd, setZionBetCgUsd] = useState<{ SUI?: number }>({});
   const [deepbookOracles, setDeepbookOracles] = useState<Array<{
     oracle_id: string;
@@ -4108,6 +4146,25 @@ export default function Home() {
       void fetchDeepbookOracles();
     }
   }, [activeTab, fetchDeepbookOracles]);
+
+  useEffect(() => {
+    if (activeTab !== "zionbet") return;
+    const load = () => {
+      fetch("/api/zionbet/markets")
+        .then((r) => r.json())
+        .then((d: ZionbetMarketsBundle & { total?: number }) => {
+          setZionbetMarkets({
+            crypto: Array.isArray(d.crypto) ? d.crypto : [],
+            sports: Array.isArray(d.sports) ? d.sports : [],
+            civilization: Array.isArray(d.civilization) ? d.civilization : [],
+          });
+        })
+        .catch(() => {});
+    };
+    load();
+    const interval = window.setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   useEffect(() => {
     void loadZionBetMarkets();
@@ -6371,216 +6428,25 @@ export default function Home() {
                 />
               ) : (
                 <>
-                  <div style={{
-                    background: "linear-gradient(135deg, #0a0a1a 0%, #0d1117 100%)",
-                    border: "1px solid #1a3a5c",
-                    borderRadius: "12px",
-                    padding: "20px",
-                    marginBottom: "24px",
-                  }}>
-                    <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"16px"}}>
-                      <span style={{fontSize:"1.2rem"}}>⚡</span>
-                      <h3 style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"1rem", margin:0, letterSpacing:"2px"}}>
-                        DEEPBOOK PREDICT — LIVE ORACLES
-                      </h3>
-                      <span style={{
-                        background:"#0d3a6e", color:"#4DA2FF", fontSize:"0.65rem",
-                        padding:"2px 8px", borderRadius:"4px", fontFamily:"monospace"
-                      }}>POWERED BY BLOCK SCHOLES</span>
-                    </div>
-                    <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:"12px"}}>
-                      {deepbookOracles.length === 0 ? (
-                        <p style={{color:"#333", fontFamily:"monospace", fontSize:"0.8rem"}}>Loading DeepBook oracles...</p>
-                      ) : deepbookOracles.map((oracle) => (
-                        <div key={oracle.oracle_id} style={{
-                          background:"#0a0f1a",
-                          border:"1px solid #1a3a5c",
-                          borderRadius:"8px",
-                          padding:"14px",
-                        }}>
-                          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}}>
-                            <span style={{color:"#4DA2FF", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.9rem"}}>
-                              {oracle.underlying_asset}/USD
-                            </span>
-                            <span style={{
-                              background: oracle.status === "active" ? "#0d3a0d" : "#1a1a0d",
-                              color: oracle.status === "active" ? "#00ff41" : "#888",
-                              fontSize:"0.6rem", padding:"2px 6px", borderRadius:"4px", fontFamily:"monospace"
-                            }}>
-                              {oracle.status.toUpperCase()}
-                            </span>
-                          </div>
-                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1.3rem", fontWeight:"bold", marginBottom:"4px"}}>
-                            ${oracle.spot_price ? oracle.spot_price.toLocaleString() : "—"}
-                          </div>
-                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.7rem"}}>
-                            Expires: {oracle.expiry_date}
-                          </div>
-                          <div style={{color:"#333", fontFamily:"monospace", fontSize:"0.6rem", marginTop:"4px"}}>
-                            Oracle: {oracle.oracle_id.slice(0,8)}...
-                          </div>
-                          <div style={{marginTop:"10px", display:"flex", gap:"8px"}}>
-                            <button
-                              onClick={() => {
-                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 0.95 * 1e9));
-                                const expiry = BigInt(oracle.expiry);
-                                if (!account?.address) { alert("Connect wallet first"); return; }
-                                executeDeepBookMintBinary(
-                                  signAndExecute as SignAndExecuteFn,
-                                  {
-                                    oracleId: oracle.oracle_id,
-                                    strike,
-                                    expiry,
-                                    isCall: true,
-                                    amount: 1,
-                                    walletAddress: account.address,
-                                  },
-                                  {
-                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
-                                    onError: (err) => alert(`❌ Error: ${err}`),
-                                  }
-                                );
-                              }}
-                              style={{
-                                flex:1, padding:"8px", background:"#0d3a0d", border:"1px solid #00ff41",
-                                color:"#00ff41", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
-                                cursor:"pointer"
-                              }}
-                            >
-                              📈 CALL +5%
-                            </button>
-                            <button
-                              onClick={() => {
-                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 1.05 * 1e9));
-                                const expiry = BigInt(oracle.expiry);
-                                if (!account?.address) { alert("Connect wallet first"); return; }
-                                executeDeepBookMintBinary(
-                                  signAndExecute as SignAndExecuteFn,
-                                  {
-                                    oracleId: oracle.oracle_id,
-                                    strike,
-                                    expiry,
-                                    isCall: false,
-                                    amount: 1,
-                                    walletAddress: account.address,
-                                  },
-                                  {
-                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
-                                    onError: (err) => alert(`❌ Error: ${err}`),
-                                  }
-                                );
-                              }}
-                              style={{
-                                flex:1, padding:"8px", background:"#3a0d0d", border:"1px solid #ff4141",
-                                color:"#ff4141", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
-                                cursor:"pointer"
-                              }}
-                            >
-                              📉 PUT -5%
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {deepbookVault && (
-                      <div style={{
-                        display:"grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap:"10px",
-                        marginTop:"16px", padding:"14px", background:"#050a10",
-                        borderRadius:"8px", border:"1px solid #1a3a5c"
-                      }}>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>VAULT TVL</div>
-                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${(deepbookVault.vault_value / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
-                          </div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>PLP PRICE</div>
-                          <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${deepbookVault.plp_share_price.toFixed(4)}
-                          </div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>UTILIZATION</div>
-                          <div style={{color:"#ffaa00", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            {(deepbookVault.utilization * 100).toFixed(3)}%
-                          </div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>LIQUIDITY</div>
-                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${(deepbookVault.available_liquidity / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
-                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
-                        📦 Package: 0xf5ea2b37...
-                      </span>
-                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
-                        🔮 Predict: 0xc8736204...
-                      </span>
-                      <span style={{color:"#66ff99", fontFamily:"monospace", fontSize:"0.72rem"}}>
-                        ✓ Testnet Live
-                      </span>
-                    </div>
-                  </div>
-                  <div className="zionBetCatTabs" role="tablist" aria-label="Market categories">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "all"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "all" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("all")}
-                    >
-                      All ({zionBetCategoryCounts.all})
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "crypto"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "crypto" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("crypto")}
-                    >
-                      🪙 Crypto ({zionBetCategoryCounts.crypto})
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "clan_wars"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "clan_wars" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("clan_wars")}
-                    >
-                      ⚔️ Clan Wars ({zionBetCategoryCounts.clan_wars})
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "deaths"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "deaths" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("deaths")}
-                    >
-                      💀 Deaths ({zionBetCategoryCounts.deaths})
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "events"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "events" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("events")}
-                    >
-                      🌋 Events ({zionBetCategoryCounts.events})
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zionBetCategoryTab === "politics"}
-                      className={`zionBetCatTab${zionBetCategoryTab === "politics" ? " zionBetCatTabActive" : ""}`}
-                      onClick={() => setZionBetCategoryTab("politics")}
-                    >
-                      🏛️ Politics ({zionBetCategoryCounts.politics})
-                    </button>
+                  <div className="zionBetCatTabs" role="tablist" aria-label="ZionBet market groups" style={{ marginBottom: "16px" }}>
+                    {(
+                      [
+                        ["civilization", "🌍 CIVILIZATION"],
+                        ["crypto", "📈 CRYPTO & MARKETS"],
+                        ["sports", "⚽ SPORTS"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={betTab === key}
+                        className={`zionBetCatTab${betTab === key ? " zionBetCatTabActive" : ""}`}
+                        onClick={() => setBetTab(key)}
+                      >
+                        {label} ({zionbetMarkets[key].length})
+                      </button>
+                    ))}
                   </div>
                   <div
                     style={{
@@ -6753,79 +6619,319 @@ export default function Home() {
                       </div>
                     ) : null}
                   </div>
-                  <div className="zionBetPmRow" style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
-                    <div className="zionBetPmSidebarCol" style={{ width: "160px", flexShrink: 0 }}>
-                      <div
-                        style={{
-                          color: "#ffd700",
-                          fontSize: "0.7rem",
-                          marginBottom: "8px",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        TIMEFRAME
-                      </div>
-                      <nav aria-label="Timeframe filters">
-                        {ZIONBET_TIMEFRAME_SIDEBAR_ROWS.map(({ key: tfKey, label }) => {
-                          const selected = zionBetTimeframeTab === tfKey;
-                          const count = zionBetTimeframeCounts[tfKey];
-                          return (
-                            <div
-                              key={tfKey}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setZionBetTimeframeTab(tfKey)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setZionBetTimeframeTab(tfKey);
-                                }
+                  {betTab === "crypto" ? (
+                  <div style={{
+                    background: "linear-gradient(135deg, #0a0a1a 0%, #0d1117 100%)",
+                    border: "1px solid #1a3a5c",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    marginBottom: "24px",
+                  }}>
+                    <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"16px"}}>
+                      <span style={{fontSize:"1.2rem"}}>⚡</span>
+                      <h3 style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"1rem", margin:0, letterSpacing:"2px"}}>
+                        DEEPBOOK PREDICT — LIVE ORACLES
+                      </h3>
+                      <span style={{
+                        background:"#0d3a6e", color:"#4DA2FF", fontSize:"0.65rem",
+                        padding:"2px 8px", borderRadius:"4px", fontFamily:"monospace"
+                      }}>POWERED BY BLOCK SCHOLES</span>
+                    </div>
+                    <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:"12px"}}>
+                      {deepbookOracles.length === 0 ? (
+                        <p style={{color:"#333", fontFamily:"monospace", fontSize:"0.8rem"}}>Loading DeepBook oracles...</p>
+                      ) : deepbookOracles.map((oracle) => (
+                        <div key={oracle.oracle_id} style={{
+                          background:"#0a0f1a",
+                          border:"1px solid #1a3a5c",
+                          borderRadius:"8px",
+                          padding:"14px",
+                        }}>
+                          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}}>
+                            <span style={{color:"#4DA2FF", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.9rem"}}>
+                              {oracle.underlying_asset}/USD
+                            </span>
+                            <span style={{
+                              background: oracle.status === "active" ? "#0d3a0d" : "#1a1a0d",
+                              color: oracle.status === "active" ? "#00ff41" : "#888",
+                              fontSize:"0.6rem", padding:"2px 6px", borderRadius:"4px", fontFamily:"monospace"
+                            }}>
+                              {oracle.status.toUpperCase()}
+                            </span>
+                          </div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1.3rem", fontWeight:"bold", marginBottom:"4px"}}>
+                            ${oracle.spot_price ? oracle.spot_price.toLocaleString() : "—"}
+                          </div>
+                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.7rem"}}>
+                            Expires: {oracle.expiry_date}
+                          </div>
+                          <div style={{color:"#333", fontFamily:"monospace", fontSize:"0.6rem", marginTop:"4px"}}>
+                            Oracle: {oracle.oracle_id.slice(0,8)}...
+                          </div>
+                          <div style={{marginTop:"10px", display:"flex", gap:"8px"}}>
+                            <button
+                              onClick={() => {
+                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 0.95 * 1e9));
+                                const expiry = BigInt(oracle.expiry);
+                                if (!account?.address) { alert("Connect wallet first"); return; }
+                                executeDeepBookMintBinary(
+                                  signAndExecute as SignAndExecuteFn,
+                                  {
+                                    oracleId: oracle.oracle_id,
+                                    strike,
+                                    expiry,
+                                    isCall: true,
+                                    amount: 1,
+                                    walletAddress: account.address,
+                                  },
+                                  {
+                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
+                                    onError: (err) => alert(`❌ Error: ${err}`),
+                                  }
+                                );
                               }}
                               style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                padding: "8px 12px",
-                                borderRadius: "8px",
-                                cursor: "pointer",
-                                color: selected ? "#00ff41" : "#888",
-                                background: selected ? "rgba(0,255,65,0.08)" : "transparent",
-                                border: selected
-                                  ? "1px solid rgba(0,255,65,0.3)"
-                                  : "1px solid transparent",
-                                marginBottom: "4px",
-                                fontSize: "0.85rem",
+                                flex:1, padding:"8px", background:"#0d3a0d", border:"1px solid #00ff41",
+                                color:"#00ff41", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
+                                cursor:"pointer"
                               }}
                             >
-                              <span>{label}</span>
-                              <span style={{ color: "#555", fontSize: "0.75rem" }}>{count}</span>
-                            </div>
+                              📈 CALL +5%
+                            </button>
+                            <button
+                              onClick={() => {
+                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 1.05 * 1e9));
+                                const expiry = BigInt(oracle.expiry);
+                                if (!account?.address) { alert("Connect wallet first"); return; }
+                                executeDeepBookMintBinary(
+                                  signAndExecute as SignAndExecuteFn,
+                                  {
+                                    oracleId: oracle.oracle_id,
+                                    strike,
+                                    expiry,
+                                    isCall: false,
+                                    amount: 1,
+                                    walletAddress: account.address,
+                                  },
+                                  {
+                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
+                                    onError: (err) => alert(`❌ Error: ${err}`),
+                                  }
+                                );
+                              }}
+                              style={{
+                                flex:1, padding:"8px", background:"#3a0d0d", border:"1px solid #ff4141",
+                                color:"#ff4141", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
+                                cursor:"pointer"
+                              }}
+                            >
+                              📉 PUT -5%
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {deepbookVault && (
+                      <div style={{
+                        display:"grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap:"10px",
+                        marginTop:"16px", padding:"14px", background:"#050a10",
+                        borderRadius:"8px", border:"1px solid #1a3a5c"
+                      }}>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>VAULT TVL</div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${(deepbookVault.vault_value / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>PLP PRICE</div>
+                          <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${deepbookVault.plp_share_price.toFixed(4)}
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>UTILIZATION</div>
+                          <div style={{color:"#ffaa00", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            {(deepbookVault.utilization * 100).toFixed(3)}%
+                          </div>
+                        </div>
+                        <div style={{textAlign:"center"}}>
+                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>LIQUIDITY</div>
+                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
+                            ${(deepbookVault.available_liquidity / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
+                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
+                        📦 Package: 0xf5ea2b37...
+                      </span>
+                      <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
+                        🔮 Predict: 0xc8736204...
+                      </span>
+                      <span style={{color:"#66ff99", fontFamily:"monospace", fontSize:"0.72rem"}}>
+                        ✓ Testnet Live
+                      </span>
+                    </div>
+                  </div>
+                  ) : null}
+                  <div style={{ marginBottom: "24px" }}>
+                    <h3 className="zionBetSectionTitle">Markets</h3>
+                    {zionbetMarkets[betTab].length === 0 ? (
+                      <p style={{ fontSize: "0.78rem", color: "rgba(160,190,175,0.65)", margin: "12px 0" }}>
+                        Loading markets…
+                      </p>
+                    ) : (
+                      <div className="zionBetPmCardGrid"
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))",
+                          gap: "14px",
+                        }}
+                      >
+                        {zionbetMarkets[betTab].map((m) => {
+                          const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
+                          const no = m.no_pct ?? 100 - yes;
+                          const borderColor =
+                            betTab === "civilization" ? "#00ff41" : betTab === "sports" ? "#4DA2FF" : "#ffd700";
+                          const cardBg =
+                            betTab === "civilization"
+                              ? "rgba(0,255,65,0.04)"
+                              : betTab === "sports"
+                                ? "rgba(77,162,255,0.06)"
+                                : "rgba(255,215,0,0.05)";
+                          const market = zionbetApiToMarket(m);
+                          return (
+                            <article
+                              key={m.id}
+                              style={{
+                                border: `1px solid ${borderColor}`,
+                                borderRadius: "12px",
+                                padding: "16px",
+                                background: cardBg,
+                                boxShadow: `0 0 18px ${borderColor}22`,
+                              }}
+                            >
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+                                {m.category ? (
+                                  <span
+                                    style={{
+                                      fontSize: "0.62rem",
+                                      fontFamily: "monospace",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      border: `1px solid ${borderColor}66`,
+                                      color: borderColor,
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.08em",
+                                    }}
+                                  >
+                                    {m.category.replace(/_/g, " ")}
+                                  </span>
+                                ) : null}
+                                {m.timeframe ? (
+                                  <span
+                                    style={{
+                                      fontSize: "0.62rem",
+                                      fontFamily: "monospace",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      background: "rgba(255,255,255,0.06)",
+                                      color: "#aaa",
+                                    }}
+                                  >
+                                    {m.timeframe}
+                                  </span>
+                                ) : null}
+                                {betTab === "civilization" ? (
+                                  <span
+                                    style={{
+                                      fontSize: "0.62rem",
+                                      fontFamily: "monospace",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      background: "rgba(0,255,65,0.15)",
+                                      color: "#00ff41",
+                                      animation: "pulse 2s ease-in-out infinite",
+                                    }}
+                                  >
+                                    ● LIVE FROM ZION
+                                  </span>
+                                ) : null}
+                              </div>
+                              <h4
+                                style={{
+                                  color: "#fff",
+                                  fontSize: "0.95rem",
+                                  fontWeight: 700,
+                                  lineHeight: 1.35,
+                                  margin: "0 0 14px 0",
+                                }}
+                              >
+                                {m.question}
+                              </h4>
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setBetModal({ market, direction: true, open: true })}
+                                  style={{
+                                    flex: 1,
+                                    padding: "10px 8px",
+                                    background: "rgba(0,255,65,0.12)",
+                                    border: "1px solid #00ff41",
+                                    borderRadius: "8px",
+                                    color: "#00ff41",
+                                    fontFamily: "monospace",
+                                    fontSize: "0.8rem",
+                                    fontWeight: "bold",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  YES {yes}¢
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setBetModal({ market, direction: false, open: true })}
+                                  style={{
+                                    flex: 1,
+                                    padding: "10px 8px",
+                                    background: "rgba(255,50,50,0.12)",
+                                    border: "1px solid #ff3232",
+                                    borderRadius: "8px",
+                                    color: "#ff3232",
+                                    fontFamily: "monospace",
+                                    fontSize: "0.8rem",
+                                    fontWeight: "bold",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  NO {no}¢
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setZionBetSelectedMarket(market)}
+                                style={{
+                                  marginTop: "10px",
+                                  width: "100%",
+                                  padding: "6px",
+                                  background: "transparent",
+                                  border: "1px solid #333",
+                                  borderRadius: "6px",
+                                  color: "#666",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.68rem",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                View details →
+                              </button>
+                            </article>
                           );
                         })}
-                      </nav>
-                    </div>
-                    <div className="zionBetPmMain" style={{ flex: 1, minWidth: 0 }}>
-                      <h3 className="zionBetSectionTitle">Markets</h3>
-                      {zionBetFilteredMarkets.length === 0 ? (
-                        <p style={{ fontSize: "0.78rem", color: "rgba(160,190,175,0.65)", margin: "12px 0" }}>
-                          No markets match this category and timeframe.
-                        </p>
-                      ) : (
-                        <div className="zionBetPmCardGrid">
-                          {zionBetFilteredMarkets.map((bet) => (
-                              <ZionBetMarketCard
-                                key={bet.id}
-                                bet={bet}
-                                liveCgUsd={zionBetCgUsd}
-                                onOpenBetModal={(m, direction) =>
-                                  setBetModal({ market: m, direction, open: true })
-                                }
-                                onOpenDetail={() => setZionBetSelectedMarket(bet)}
-                              />
-                            ))}
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   <h3 className="zionBetSectionTitle zionBetSectionTitleSpaced">MY BETS</h3>
                   {!walletAddress.trim() ? (
@@ -10174,22 +10280,37 @@ export default function Home() {
                 const modalDirection = betModal.direction;
                 const amount = parseFloat(betAmount);
                 const marketObjectId = getMarketObjectId(modalMarket.id);
+                const betAmountZion = Number.isFinite(amount) && amount >= 1 ? amount : 1;
                 try {
-                  const res = await fetch("/api/bet", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      wallet: account.address,
-                      market_id: modalMarket.id,
-                      direction: modalDirection,
-                      amount_sui: amount,
-                    }),
-                  });
+                  const res = await fetch(
+                    marketObjectId ? "/api/bet" : "/api/place_bet",
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(
+                        marketObjectId
+                          ? {
+                              wallet: account.address,
+                              market_id: modalMarket.id,
+                              direction: modalDirection,
+                              amount_sui: betAmountZion,
+                            }
+                          : {
+                              wallet: account.address,
+                              event_type: modalMarket.event_type,
+                              question: modalMarket.question,
+                              prediction: modalDirection,
+                              amount: betAmountZion,
+                            }
+                      ),
+                    }
+                  );
                   const data = (await res.json()) as {
                     success?: boolean;
                     message?: string;
                     error?: string;
                     potential_payout?: number;
+                    points_earned?: number;
                   };
                   if (!data.success) {
                     setZionBetToast(
@@ -10206,6 +10327,16 @@ export default function Home() {
                   setBetModal(null);
                   void loadMyBets();
                   void loadZionBetMarkets();
+                  fetch("/api/zionbet/markets")
+                    .then((r) => r.json())
+                    .then((d: ZionbetMarketsBundle) => {
+                      setZionbetMarkets({
+                        crypto: Array.isArray(d.crypto) ? d.crypto : [],
+                        sports: Array.isArray(d.sports) ? d.sports : [],
+                        civilization: Array.isArray(d.civilization) ? d.civilization : [],
+                      });
+                    })
+                    .catch(() => {});
                   const ur = await fetch(`/api/user/${encodeURIComponent(account.address)}`);
                   const ud = await ur.json();
                   const raw = ud.points ?? ud.total_points ?? 0;
