@@ -140,12 +140,15 @@ def food_crisis(cur, prices):
                 """, (agent['id'],))
                 dead += 1
     
-    # Agro corps earn from food sales
+    # Agro corps earn from food sales (90% pool split across agro sector)
     if agro_revenue > 0:
+        cur.execute("SELECT COUNT(*) as cnt FROM corporations WHERE is_active=true AND corp_type='agro'")
+        agro_count = max(cur.fetchone()['cnt'], 1)
+        per_corp = round(agro_revenue * 0.9 / agro_count, 2)
         cur.execute("""
             UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
             WHERE is_active=true AND corp_type='agro'
-        """, (agro_revenue * 0.9, agro_revenue * 0.9))
+        """, (per_corp, per_corp))
     
     if dead > 0:
         log_event(cur, None, 'famine',
