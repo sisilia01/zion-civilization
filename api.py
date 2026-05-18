@@ -2340,19 +2340,30 @@ async def store_walrus_snapshot():
     return {"success": False, "error": result.stderr}
 
 @app.get("/zionbet/polymarkets")
-async def get_polymarkets():
+async def get_polymarkets(category: str | None = None):
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("""
-            SELECT market_id, question, category, yes_price, no_price, volume
-            FROM polymarket_markets 
-            WHERE is_active=true
-            ORDER BY volume DESC LIMIT 20
-        """)
+        if category:
+            cur.execute(
+                """
+                SELECT market_id, question, category, yes_price, no_price, volume, end_date
+                FROM polymarket_markets
+                WHERE is_active=true AND category=%s
+                ORDER BY volume DESC LIMIT 30
+                """,
+                (category,),
+            )
+        else:
+            cur.execute("""
+                SELECT market_id, question, category, yes_price, no_price, volume, end_date
+                FROM polymarket_markets
+                WHERE is_active=true
+                ORDER BY volume DESC LIMIT 50
+            """)
         rows = cur.fetchall()
         return [dict(r) for r in rows]
-    except:
+    except Exception:
         return []
     finally:
         cur.close()
