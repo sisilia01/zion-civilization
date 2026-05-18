@@ -444,6 +444,47 @@ DEFAULT_ACTIVE_BETS = _build_crypto_market_templates() + [
         "timeframe": "7d",
         "category": "politics",
     },
+    # Sports
+    {
+        "id": "sport-1",
+        "question": "Will Real Madrid win their next match?",
+        "event_type": "sport_realmadrid",
+        "timeframe": "7d",
+        "category": "sports",
+        "seed_yes_cents": 60,
+    },
+    {
+        "id": "sport-2",
+        "question": "Will Manchester City win their next match?",
+        "event_type": "sport_mancity",
+        "timeframe": "7d",
+        "category": "sports",
+        "seed_yes_cents": 55,
+    },
+    {
+        "id": "sport-3",
+        "question": "Will LeBron James score 25+ points in his next game?",
+        "event_type": "sport_lebron",
+        "timeframe": "3d",
+        "category": "sports",
+        "seed_yes_cents": 45,
+    },
+    {
+        "id": "sport-4",
+        "question": "Will there be a major upset in UFC this week?",
+        "event_type": "sport_ufc_upset",
+        "timeframe": "7d",
+        "category": "sports",
+        "seed_yes_cents": 35,
+    },
+    {
+        "id": "sport-5",
+        "question": "Will Ferrari win the next F1 race?",
+        "event_type": "sport_ferrari_f1",
+        "timeframe": "7d",
+        "category": "sports",
+        "seed_yes_cents": 30,
+    },
 ]
 
 
@@ -484,32 +525,98 @@ def settle_eligible_user_bets(cur):
     """
     cur.execute(
         """
-        SELECT id, wallet_address, prediction, amount FROM user_bets
+        SELECT id, wallet_address, prediction, amount, event_type, question
+        FROM user_bets
         WHERE settled = FALSE
-          AND resolves_at IS NOT NULL
-          AND GREATEST(created_at + INTERVAL '24 hours', resolves_at) <= NOW()
+          AND GREATEST(
+                created_at + INTERVAL '24 hours',
+                COALESCE(resolves_at, created_at + INTERVAL '7 days')
+              ) <= NOW()
         ORDER BY id
         """
     )
-    pending = cur.fetchall()
-    for row in pending:
-        bet_id = row["id"]
-        wallet_address = row["wallet_address"]
-        prediction = row["prediction"]
-        amount = float(row["amount"])
-        outcome = random.choice([True, False])
-        won = prediction == outcome
+    for row in cur.fetchall():
+        event_type = (row["event_type"] or "").lower()
+        outcome = None
+
+        if "death" in event_type:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE event_type = 'death' AND created_at > NOW() - INTERVAL '24 hours'
+                """
+            )
+            deaths = int(cur.fetchone()["cnt"])
+            outcome = deaths > 5
+
+        elif "clan_war" in event_type:
+            clan_name = event_type.replace("clan_war_", "").replace("_", " ").title()
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE description ILIKE %s AND event_type = 'clan_war'
+                  AND created_at > NOW() - INTERVAL '7 days'
+                """,
+                (f"%{clan_name}%WINS%",),
+            )
+            outcome = int(cur.fetchone()["cnt"]) > 0
+
+        elif "election" in event_type:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE event_type = 'election' AND created_at > NOW() - INTERVAL '7 days'
+                """
+            )
+            outcome = int(cur.fetchone()["cnt"]) > 0
+
+        elif "rebellion" in event_type:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE event_type IN ('rebellion', 'revolution')
+                  AND created_at > NOW() - INTERVAL '7 days'
+                """
+            )
+            outcome = int(cur.fetchone()["cnt"]) > 0
+
+        elif "catastrophe" in event_type:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE event_type = 'catastrophe' AND created_at > NOW() - INTERVAL '24 hours'
+                """
+            )
+            outcome = int(cur.fetchone()["cnt"]) > 0
+
+        elif "blessing" in event_type:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM events
+                WHERE event_type = 'blessing' AND created_at > NOW() - INTERVAL '24 hours'
+                """
+            )
+            outcome = int(cur.fetchone()["cnt"]) > 0
+
+        elif "updown" in event_type or "sui" in event_type or "btc" in event_type or "eth" in event_type:
+            outcome = random.random() > 0.5
+
+        if outcome is None:
+            outcome = random.random() > 0.5
+
+        won = bool(row["prediction"]) == bool(outcome)
         cur.execute(
             """
-            UPDATE user_bets SET settled = TRUE, outcome = %s, settled_at = NOW() WHERE id = %s
+            UPDATE user_bets SET settled = TRUE, outcome = %s, settled_at = NOW()
+            WHERE id = %s
             """,
-            (outcome, bet_id),
+            (outcome, row["id"]),
         )
         if won:
-            win_points = max(1, int(round(amount * 1.98)))
+            win_points = max(1, int(round(float(row["amount"]) * 1.98)))
             cur.execute(
                 "UPDATE users SET points = points + %s WHERE wallet_address = %s",
-                (win_points, wallet_address),
+                (win_points, row["wallet_address"]),
             )
 
 
@@ -927,6 +1034,77 @@ def get_active_bets():
                 row_out["spot_usd"] = spot
             out.append(row_out)
         return out
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zionbet/markets")
+def get_zionbet_markets():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT event_type, COUNT(*) AS cnt FROM events
+            WHERE created_at > NOW() - INTERVAL '24 hours'
+            GROUP BY event_type
+            """
+        )
+        recent_events = {r["event_type"]: int(r["cnt"]) for r in cur.fetchall()}
+
+        cur.execute(
+            """
+            SELECT event_type, COUNT(*) AS cnt FROM events
+            WHERE created_at > NOW() - INTERVAL '7 days'
+            GROUP BY event_type
+            """
+        )
+        weekly_events = {r["event_type"]: int(r["cnt"]) for r in cur.fetchall()}
+
+        cur.execute("SELECT COUNT(*) AS cnt FROM agents WHERE is_alive = true")
+        alive_row = cur.fetchone()
+        _ = int(alive_row["cnt"]) if alive_row else 0
+
+        markets = []
+        for m in DEFAULT_ACTIVE_BETS:
+            market = dict(m)
+            event_type = (m.get("event_type") or "").lower()
+
+            if "death" in event_type:
+                deaths = recent_events.get("death", 0)
+                yes_pct = min(95, max(5, 50 + (deaths - 5) * 5))
+            elif "clan_war" in event_type:
+                yes_pct = int(m.get("seed_yes_cents", 50))
+            elif "rebellion" in event_type or "revolution" in event_type:
+                rebellions = weekly_events.get("rebellion", 0) + weekly_events.get("revolution", 0)
+                yes_pct = min(80, max(10, 20 + rebellions * 15))
+            elif "catastrophe" in event_type:
+                cats = recent_events.get("catastrophe", 0)
+                yes_pct = min(90, max(5, 30 + cats * 20))
+            elif "blessing" in event_type:
+                blessings = recent_events.get("blessing", 0)
+                yes_pct = min(85, max(15, 40 + blessings * 15))
+            elif "election" in event_type:
+                elections = weekly_events.get("election", 0)
+                yes_pct = min(90, max(10, 30 + elections * 20))
+            else:
+                yes_pct = int(m.get("seed_yes_cents", 50))
+
+            market["yes_pct"] = yes_pct
+            market["no_pct"] = 100 - yes_pct
+            markets.append(market)
+
+        crypto = [m for m in markets if m.get("category") == "crypto"]
+        sports = [m for m in markets if m.get("category") == "sports"]
+        civilization = [m for m in markets if m.get("category") not in ("crypto", "sports")]
+
+        return {
+            "crypto": crypto,
+            "sports": sports,
+            "civilization": civilization,
+            "total": len(markets),
+        }
     finally:
         cur.close()
         conn.close()
