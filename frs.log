@@ -182,3 +182,35 @@ CONTEXT:  while updating tuple (1,76) in relation "agents"
 💵 QE: +68640 ZION printed (mode: DEPRESSION)
 
 ✅ ZRS cycle complete! Action: QE
+Traceback (most recent call last):
+  File "/root/zion_backend/frs.py", line 260, in main
+    amount = quantitative_easing(economy, mode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/frs.py", line 126, in quantitative_easing
+    cur.execute("UPDATE agents SET balance = balance + %s WHERE is_alive = true", (emission_per_agent,))
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 609968 waits for ShareLock on transaction 19906; blocked by process 609889.
+Process 609889 waits for ShareLock on transaction 19913; blocked by process 609968.
+HINT:  See server log for query details.
+CONTEXT:  while locking tuple (4,81) in relation "agents"
+
+
+🏦 ZION Reserve System — 2026-05-18 06:56
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 34.8 ZION
+  Poor%: 65.8%
+  Total Money: 152520 ZION
+  Population: 4380 alive
+📈 ZRS rate updated to 0.5%
+❌ Error: deadlock detected
+DETAIL:  Process 609968 waits for ShareLock on transaction 19906; blocked by process 609889.
+Process 609889 waits for ShareLock on transaction 19913; blocked by process 609968.
+HINT:  See server log for query details.
+CONTEXT:  while locking tuple (4,81) in relation "agents"
+
