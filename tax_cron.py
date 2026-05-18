@@ -90,18 +90,32 @@ def apply_daily_tax():
             """, (new_balance, agent_id))
             print(f"💰 {name} ({agent_class}): {balance:.2f} → {new_balance:.2f} ZION")
     
-    # Route tax revenue to president treasury
+    # Route tax revenue: 60% ZRS, 25% president, 10% police, 5% social
     try:
+        zrs_share = round(total_tax_collected * 0.60, 2)
+        pres_share = round(total_tax_collected * 0.25, 2)
+        police_share = round(total_tax_collected * 0.10, 2)
+        social_share = round(total_tax_collected * 0.05, 2)
+        
         cur.execute("""
-            UPDATE president_state SET personal_fund = personal_fund + %s
-            WHERE is_active = true
-        """, (total_tax_collected,))
+            UPDATE state_treasury SET
+                zrs_fund = zrs_fund + %s,
+                president_fund = president_fund + %s,
+                police_fund = police_fund + %s,
+                social_fund = social_fund + %s
+        """, (zrs_share, pres_share, police_share, social_share))
+        
+        # Also update president personal fund
+        cur.execute("UPDATE president_state SET personal_fund = personal_fund + %s WHERE is_active=true",
+                   (pres_share,))
+        
         cur.execute("""
             INSERT INTO events (agent_id, event_type, description, zion_amount)
             VALUES (NULL, 'tax', %s, %s)
-        """, (f"💰 Tax collected: {total_tax_collected:.0f} ZION routed to presidential treasury", total_tax_collected))
+        """, (f"Tax collected: {total_tax_collected:.0f} ZION — ZRS: {zrs_share:.0f} | President: {pres_share:.0f} | Police: {police_share:.0f} | Social: {social_share:.0f}", total_tax_collected))
     except Exception as e:
-        pass  # No active president
+        import sys; sys.stderr.write(f"Tax routing error: {e}
+")
     
     conn.commit()
     

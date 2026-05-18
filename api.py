@@ -2175,3 +2175,34 @@ async def get_sheriff_actions():
     finally:
         cur.close()
         db.close()
+
+@app.get("/police/divisions")
+async def get_police_divisions():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM police_divisions ORDER BY id")
+        divs = cur.fetchall()
+        cur.execute("SELECT * FROM state_treasury LIMIT 1")
+        treasury = cur.fetchone()
+        cur.execute("SELECT corruption_index FROM state_treasury LIMIT 1")
+        corruption = cur.fetchone()
+        return {
+            "divisions": [dict(d) for d in divs],
+            "treasury": dict(treasury) if treasury else {},
+        }
+    finally:
+        cur.close()
+        db.close()
+
+@app.get("/state/treasury")
+async def get_state_treasury():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM state_treasury LIMIT 1")
+        row = cur.fetchone()
+        return dict(row) if row else {}
+    finally:
+        cur.close()
+        db.close()
