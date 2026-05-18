@@ -665,15 +665,26 @@ function zionbetStableVolume(id: string, min: number, max: number): number {
   return min + (Math.abs(h) % (max - min + 1));
 }
 
-/** USD polymarket volume ≈ SUI vol for display. */
+function zionbetPolyVolumeLabel(rawVol: number): string {
+  const vol = rawVol / 1000;
+  if (vol >= 1_000_000) return `${(vol / 1_000_000).toFixed(1)}M SUI vol`;
+  if (vol >= 1_000) return `${(vol / 1_000).toFixed(1)}K SUI vol`;
+  return `${Math.round(vol)} SUI vol`;
+}
+
+/** ZION-native markets keep stable / displayed SUI volume. */
 function zionbetVolumeSuiAmount(volume?: number, id?: string): number {
   const v = Number(volume) || 0;
+  if (id?.startsWith("poly-")) return v / 1000;
   if (v > 0) return Math.round(v);
   if (id) return zionbetStableVolume(id, 500, 2000);
   return 0;
 }
 
 function zionbetVolumeSuiLabel(volume?: number, id?: string): string {
+  if (id?.startsWith("poly-")) {
+    return zionbetPolyVolumeLabel(Number(volume) || 0);
+  }
   const sui = zionbetVolumeSuiAmount(volume, id);
   if (sui >= 1_000_000) return `${(sui / 1_000_000).toFixed(1)}M SUI vol`;
   if (sui >= 1_000) return `${(sui / 1_000).toFixed(1)}K SUI vol`;
@@ -682,6 +693,20 @@ function zionbetVolumeSuiLabel(volume?: number, id?: string): string {
 
 function zionbetCardVolumeSui(_tab: ZionbetBetTab, id: string, volume?: number): number {
   return zionbetVolumeSuiAmount(volume, id);
+}
+
+function zionbetIsPolyMarket(id: string): boolean {
+  return id.startsWith("poly-");
+}
+
+function zionbetResolutionCriteria(m: ZionbetApiMarket): string {
+  if (zionbetIsPolyMarket(m.id)) {
+    return "Market resolves based on real-world outcome. Settlement within 24h of event completion.";
+  }
+  const stem = m.question.replace(/\?+\s*$/, "").trim();
+  const bet = zionbetApiToMarket(m);
+  const detail = zionBetMarketRulesText(bet);
+  return `Resolved by ZION simulation data. ${detail}`;
 }
 
 function zionbetTimeframeEndLabel(tf?: string): string {
@@ -755,6 +780,374 @@ function zionbetTruncateQuestion(q: string, max = 40): string {
   const t = q.trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
+}
+
+function ZionBetMarketDrawer({
+  apiMarket,
+  walletConnected,
+  walletAddress,
+  myBets,
+  betAmount,
+  setBetAmount,
+  betCurrency,
+  setBetCurrency,
+  betLoading,
+  onPlaceBet,
+  onClose,
+}: {
+  apiMarket: ZionbetApiMarket;
+  walletConnected: boolean;
+  walletAddress: string;
+  myBets: ZionBetMyBetRow[];
+  betAmount: string;
+  setBetAmount: (v: string) => void;
+  betCurrency: "SUI" | "USDC";
+  setBetCurrency: (c: "SUI" | "USDC") => void;
+  betLoading: boolean;
+  onPlaceBet: (market: ZionBetMarket, direction: boolean) => void;
+  onClose: () => void;
+}) {
+  const market = useMemo(() => zionbetApiToMarket(apiMarket), [apiMarket]);
+  const yes = apiMarket.yes_pct ?? apiMarket.seed_yes_cents ?? 50;
+  const no = apiMarket.no_pct ?? 100 - yes;
+  const [drawerDirection, setDrawerDirection] = useState(true);
+  const odds = zionBetDisplayOdds(market);
+  const volumeLabel = zionbetVolumeSuiLabel(apiMarket.volume, apiMarket.id);
+  const endLabel = zionbetEndDateLabel(apiMarket.end_date, apiMarket.timeframe);
+  const categoryLabel =
+    apiMarket.category?.replace(/_/g, " ").toUpperCase() ||
+    (zionbetIsPolyMarket(apiMarket.id) ? "MARKET" : "CIVILIZATION");
+  const tfLabel = apiMarket.timeframe
+    ? zionBetTimeframeShort(apiMarket.timeframe)
+    : endLabel.replace(/^Ends /, "");
+
+  const recentBets = useMemo(
+    () =>
+      myBets
+        .filter((b) => b.market_id === apiMarket.id || b.question === apiMarket.question)
+        .slice(0, 3),
+    [myBets, apiMarket]
+  );
+
+  const amt = parseFloat(betAmount || "0");
+  const oddsCents = drawerDirection ? odds.yes : odds.no;
+  const payout = oddsCents > 0 ? amt * (100 / oddsCents) : 0;
+
+  return (
+    <>
+      <div
+        role="presentation"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          zIndex: 1100,
+        }}
+      />
+      <aside
+        className="zionBetMarketDrawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={apiMarket.question}
+        style={{
+          position: "fixed",
+          right: 0,
+          top: 0,
+          width: 400,
+          maxWidth: "100vw",
+          height: "100%",
+          zIndex: 1101,
+          background: "rgba(0,0,0,0.95)",
+          borderLeft: "1px solid #1a3a1a",
+          overflowY: "auto",
+          padding: "20px 18px 28px",
+          boxSizing: "border-box",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 14,
+            right: 14,
+            background: "transparent",
+            border: "1px solid #333",
+            borderRadius: 6,
+            color: "#888",
+            width: 32,
+            height: 32,
+            cursor: "pointer",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12, paddingRight: 36 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              padding: "3px 8px",
+              borderRadius: 4,
+              background: "rgba(0,255,65,0.12)",
+              color: "#00ff41",
+              letterSpacing: "0.08em",
+            }}
+          >
+            {categoryLabel}
+          </span>
+          {tfLabel ? (
+            <span
+              style={{
+                fontSize: 10,
+                fontFamily: "monospace",
+                padding: "3px 8px",
+                borderRadius: 4,
+                background: "rgba(255,255,255,0.06)",
+                color: "#888",
+              }}
+            >
+              {tfLabel}
+            </span>
+          ) : null}
+        </div>
+
+        <h2
+          style={{
+            color: "#fff",
+            fontSize: 20,
+            fontWeight: 600,
+            lineHeight: 1.35,
+            margin: "0 0 14px",
+            paddingRight: 28,
+          }}
+        >
+          {apiMarket.question}
+        </h2>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontFamily: "monospace",
+            fontSize: 11,
+            color: "#888",
+            marginBottom: 16,
+          }}
+        >
+          <span style={{ color: "#00ff41" }}>{volumeLabel}</span>
+          <span>{endLabel}</span>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontFamily: "monospace",
+              fontSize: 12,
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ color: "#00ff41" }}>YES {yes}¢</span>
+            <span style={{ color: "#ff3232" }}>NO {no}¢</span>
+          </div>
+          <div
+            style={{
+              height: 8,
+              borderRadius: 4,
+              overflow: "hidden",
+              display: "flex",
+              background: "#1a1a1a",
+            }}
+          >
+            <div style={{ width: `${yes}%`, background: "#00ff41", minWidth: yes > 0 ? 2 : 0 }} />
+            <div style={{ width: `${no}%`, background: "#ff3232", minWidth: no > 0 ? 2 : 0 }} />
+          </div>
+        </div>
+
+        <section style={{ marginBottom: 20 }}>
+          <h3
+            style={{
+              fontFamily: "Orbitron, monospace",
+              fontSize: 11,
+              letterSpacing: "0.12em",
+              color: "#9de8ff",
+              margin: "0 0 8px",
+            }}
+          >
+            RESOLUTION CRITERIA
+          </h3>
+          <p style={{ color: "#aaa", fontSize: 12, lineHeight: 1.5, margin: 0 }}>
+            {zionbetResolutionCriteria(apiMarket)}
+          </p>
+        </section>
+
+        <section style={{ marginBottom: 20 }}>
+          <h3
+            style={{
+              fontFamily: "Orbitron, monospace",
+              fontSize: 11,
+              letterSpacing: "0.12em",
+              color: "#9de8ff",
+              margin: "0 0 10px",
+            }}
+          >
+            PLACE BET
+          </h3>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <button
+              type="button"
+              onClick={() => setDrawerDirection(true)}
+              style={{
+                flex: 1,
+                padding: "8px",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "monospace",
+                fontWeight: 700,
+                fontSize: 12,
+                background: drawerDirection ? "rgba(0,255,65,0.15)" : "transparent",
+                border: `1px solid ${drawerDirection ? "#00ff41" : "#333"}`,
+                color: drawerDirection ? "#00ff41" : "#666",
+              }}
+            >
+              YES {odds.yes}¢
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerDirection(false)}
+              style={{
+                flex: 1,
+                padding: "8px",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "monospace",
+                fontWeight: 700,
+                fontSize: 12,
+                background: !drawerDirection ? "rgba(255,50,50,0.12)" : "transparent",
+                border: `1px solid ${!drawerDirection ? "#ff3232" : "#333"}`,
+                color: !drawerDirection ? "#ff3232" : "#666",
+              }}
+            >
+              NO {odds.no}¢
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            {(["SUI", "USDC"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setBetCurrency(c)}
+                style={{
+                  flex: 1,
+                  padding: "6px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: "monospace",
+                  fontSize: 11,
+                  fontWeight: "bold",
+                  background: betCurrency === c ? "rgba(0,255,65,0.12)" : "transparent",
+                  border: `1px solid ${betCurrency === c ? "#00ff41" : "#333"}`,
+                  color: betCurrency === c ? "#00ff41" : "#555",
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={betAmount}
+            onChange={(e) => setBetAmount(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 6,
+              background: "#111",
+              border: "1px solid #333",
+              color: "#fff",
+              fontFamily: "monospace",
+              fontSize: 14,
+              boxSizing: "border-box",
+              marginBottom: 10,
+            }}
+          />
+          <p style={{ fontFamily: "monospace", fontSize: 11, color: "#888", margin: "0 0 12px" }}>
+            Potential payout: <span style={{ color: "#00ff41" }}>{payout.toFixed(3)} {betCurrency}</span>
+          </p>
+          <button
+            type="button"
+            disabled={betLoading || !walletConnected}
+            onClick={() => onPlaceBet(market, drawerDirection)}
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 8,
+              cursor: betLoading || !walletConnected ? "not-allowed" : "pointer",
+              fontFamily: "monospace",
+              fontWeight: 700,
+              fontSize: 13,
+              opacity: betLoading || !walletConnected ? 0.5 : 1,
+              background: drawerDirection ? "rgba(0,255,65,0.2)" : "rgba(255,50,50,0.15)",
+              border: `1px solid ${drawerDirection ? "#00ff41" : "#ff3232"}`,
+              color: drawerDirection ? "#00ff41" : "#ff3232",
+            }}
+          >
+            {betLoading ? "Placing…" : `Place ${drawerDirection ? "YES" : "NO"} — ${betAmount} ${betCurrency}`}
+          </button>
+          {!walletConnected ? (
+            <p style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 8 }}>
+              Connect wallet to bet
+            </p>
+          ) : null}
+        </section>
+
+        <section>
+          <h3
+            style={{
+              fontFamily: "Orbitron, monospace",
+              fontSize: 11,
+              letterSpacing: "0.12em",
+              color: "#9de8ff",
+              margin: "0 0 10px",
+            }}
+          >
+            RECENT ACTIVITY
+          </h3>
+          {recentBets.length === 0 ? (
+            <p style={{ color: "#555", fontSize: 12, margin: 0 }}>No bets on this market yet.</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {recentBets.map((b) => (
+                <li
+                  key={b.id}
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: "1px solid #1a1a1a",
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    color: "#aaa",
+                  }}
+                >
+                  <span style={{ color: b.direction === "YES" ? "#00ff41" : "#ff3232" }}>{b.direction}</span>
+                  {" · "}
+                  {b.amount_sui} SUI · {b.status?.toUpperCase() ?? "ACTIVE"}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </aside>
+    </>
+  );
 }
 
 type ZionbetSortKey = "volume" | "ending" | "newest";
@@ -3768,6 +4161,7 @@ export default function Home() {
     direction: boolean;
     open: boolean;
   } | null>(null);
+  const [detailMarket, setDetailMarket] = useState<ZionbetApiMarket | null>(null);
   const [betAmount, setBetAmount] = useState("0.1");
   const [betCurrency, setBetCurrency] = useState<"SUI" | "USDC">("SUI");
   const [betLoading, setBetLoading] = useState(false);
@@ -4738,6 +5132,110 @@ export default function Home() {
       setMyBets([]);
     }
   }, [account?.address]);
+
+  const handlePlaceCardBet = useCallback(
+    async (modalMarket: ZionBetMarket, modalDirection: boolean) => {
+      if (!account?.address) return;
+      setBetLoading(true);
+      const amount = parseFloat(betAmount);
+      const marketObjectId = getMarketObjectId(modalMarket.id);
+      const betAmountZion = Number.isFinite(amount) && amount >= 1 ? amount : 1;
+      try {
+        const res = await fetch(marketObjectId ? "/api/bet" : "/api/place_bet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            marketObjectId
+              ? {
+                  wallet: account.address,
+                  market_id: modalMarket.id,
+                  direction: modalDirection,
+                  amount_sui: betAmountZion,
+                }
+              : {
+                  wallet: account.address,
+                  event_type: modalMarket.event_type,
+                  question: modalMarket.question,
+                  prediction: modalDirection,
+                  amount: betAmountZion,
+                }
+          ),
+        });
+        const data = (await res.json()) as {
+          success?: boolean;
+          message?: string;
+          error?: string;
+          potential_payout?: number;
+          points_earned?: number;
+        };
+        if (!data.success) {
+          setZionBetToast(
+            typeof data.message === "string"
+              ? data.message
+              : typeof data.error === "string"
+                ? data.error
+                : "Could not place bet."
+          );
+          return;
+        }
+
+        setBetResult(data);
+        setBetModal(null);
+        void loadMyBets();
+        void loadZionBetMarkets();
+        fetch("/api/zionbet/markets")
+          .then((r) => r.json())
+          .then((d: ZionbetMarketsBundle) => {
+            setZionbetMarkets({
+              crypto: Array.isArray(d.crypto) ? d.crypto : [],
+              sports: Array.isArray(d.sports) ? d.sports : [],
+              civilization: Array.isArray(d.civilization) ? d.civilization : [],
+            });
+          })
+          .catch(() => {});
+        const ur = await fetch(`/api/user/${encodeURIComponent(account.address)}`);
+        const ud = await ur.json();
+        const raw = ud.points ?? ud.total_points ?? 0;
+        const pts = typeof raw === "number" ? raw : Number(raw);
+        if (Number.isFinite(pts)) setUserPoints(pts);
+
+        if (!marketObjectId) {
+          setZionBetToast(
+            typeof data.potential_payout === "number"
+              ? `Bet placed! Potential win: ${data.potential_payout} SUI`
+              : "Bet placed! Good luck."
+          );
+          return;
+        }
+
+        setZionBetToast("Saved to DB. Submitting on-chain…");
+        executeZionBetOnChain(
+          signAndExecute as SignAndExecuteFn,
+          {
+            marketObjectId,
+            direction: modalDirection,
+            amountSui: betAmountZion,
+            walletAddress: account.address,
+          },
+          {
+            onSuccess: (digest) => {
+              const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
+              setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
+              void loadMyBets();
+            },
+            onError: (message) => {
+              setZionBetToast(`On-chain failed (DB bet saved): ${message}`);
+            },
+          }
+        );
+      } catch {
+        setZionBetToast("Request failed.");
+      } finally {
+        setBetLoading(false);
+      }
+    },
+    [account?.address, betAmount, signAndExecute, loadMyBets, loadZionBetMarkets]
+  );
 
   const handleBankSend = useCallback(async () => {
     if (!account?.address) {
@@ -7275,12 +7773,22 @@ export default function Home() {
                               return (
                                 <article
                                   key={m.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => setDetailMarket(m)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setDetailMarket(m);
+                                    }
+                                  }}
                                   style={{
                                     border: `1px solid ${ZIONBET_CARD_BORDER}`,
                                     borderRadius: "10px",
-                                    padding: "12px",
+                                    padding: "14px 16px",
                                     background: ZIONBET_CARD_BG,
                                     boxShadow: `0 0 12px ${ZIONBET_CARD_BORDER}18`,
+                                    cursor: "pointer",
                                   }}
                                 >
                                   <h4
@@ -7289,11 +7797,33 @@ export default function Home() {
                                       fontSize: "14px",
                                       fontWeight: 500,
                                       lineHeight: 1.3,
-                                      margin: "0 0 8px 0",
+                                      margin: "0 0 6px 0",
+                                      overflow: "hidden",
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: "vertical",
                                     }}
                                   >
                                     {m.question}
                                   </h4>
+                                  <div
+                                    style={{
+                                      height: 3,
+                                      background: "#1a1a1a",
+                                      borderRadius: 2,
+                                      margin: "6px 0",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: `${yes}%`,
+                                        height: "100%",
+                                        background: "#00ff41",
+                                        borderRadius: 2,
+                                      }}
+                                    />
+                                  </div>
                                   <div
                                     style={{
                                       display: "flex",
@@ -7311,10 +7841,13 @@ export default function Home() {
                                   <div style={{ display: "flex", gap: "6px" }}>
                                     <button
                                       type="button"
-                                      onClick={() => setBetModal({ market, direction: true, open: true })}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setBetModal({ market, direction: true, open: true });
+                                      }}
                                       style={{
                                         flex: 1,
-                                        height: "36px",
+                                        height: "32px",
                                         padding: "0 6px",
                                         background: "rgba(0,255,65,0.12)",
                                         border: "1px solid #00ff41",
@@ -7337,10 +7870,13 @@ export default function Home() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setBetModal({ market, direction: false, open: true })}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setBetModal({ market, direction: false, open: true });
+                                      }}
                                       style={{
                                         flex: 1,
-                                        height: "36px",
+                                        height: "32px",
                                         padding: "0 6px",
                                         background: "rgba(255,50,50,0.12)",
                                         border: "1px solid #ff3232",
@@ -10757,6 +11293,22 @@ export default function Home() {
           }
       `}</style>
 
+      {detailMarket ? (
+        <ZionBetMarketDrawer
+          apiMarket={detailMarket}
+          walletConnected={Boolean(walletAddress.trim())}
+          walletAddress={walletAddress}
+          myBets={myBets}
+          betAmount={betAmount}
+          setBetAmount={setBetAmount}
+          betCurrency={betCurrency}
+          setBetCurrency={setBetCurrency}
+          betLoading={betLoading}
+          onPlaceBet={(market, direction) => void handlePlaceCardBet(market, direction)}
+          onClose={() => setDetailMarket(null)}
+        />
+      ) : null}
+
       {betModal?.open && (
         <div
           style={{
@@ -10909,110 +11461,9 @@ export default function Home() {
             <button
               type="button"
               disabled={betLoading || !account?.address}
-              onClick={async () => {
-                if (!betModal || !account?.address) return;
-                setBetLoading(true);
-                const modalMarket = betModal.market;
-                const modalDirection = betModal.direction;
-                const amount = parseFloat(betAmount);
-                const marketObjectId = getMarketObjectId(modalMarket.id);
-                const betAmountZion = Number.isFinite(amount) && amount >= 1 ? amount : 1;
-                try {
-                  const res = await fetch(
-                    marketObjectId ? "/api/bet" : "/api/place_bet",
-                    {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(
-                        marketObjectId
-                          ? {
-                              wallet: account.address,
-                              market_id: modalMarket.id,
-                              direction: modalDirection,
-                              amount_sui: betAmountZion,
-                            }
-                          : {
-                              wallet: account.address,
-                              event_type: modalMarket.event_type,
-                              question: modalMarket.question,
-                              prediction: modalDirection,
-                              amount: betAmountZion,
-                            }
-                      ),
-                    }
-                  );
-                  const data = (await res.json()) as {
-                    success?: boolean;
-                    message?: string;
-                    error?: string;
-                    potential_payout?: number;
-                    points_earned?: number;
-                  };
-                  if (!data.success) {
-                    setZionBetToast(
-                      typeof data.message === "string"
-                        ? data.message
-                        : typeof data.error === "string"
-                          ? data.error
-                          : "Could not place bet."
-                    );
-                    return;
-                  }
-
-                  setBetResult(data);
-                  setBetModal(null);
-                  void loadMyBets();
-                  void loadZionBetMarkets();
-                  fetch("/api/zionbet/markets")
-                    .then((r) => r.json())
-                    .then((d: ZionbetMarketsBundle) => {
-                      setZionbetMarkets({
-                        crypto: Array.isArray(d.crypto) ? d.crypto : [],
-                        sports: Array.isArray(d.sports) ? d.sports : [],
-                        civilization: Array.isArray(d.civilization) ? d.civilization : [],
-                      });
-                    })
-                    .catch(() => {});
-                  const ur = await fetch(`/api/user/${encodeURIComponent(account.address)}`);
-                  const ud = await ur.json();
-                  const raw = ud.points ?? ud.total_points ?? 0;
-                  const pts = typeof raw === "number" ? raw : Number(raw);
-                  if (Number.isFinite(pts)) setUserPoints(pts);
-
-                  if (!marketObjectId) {
-                    setZionBetToast(
-                      typeof data.potential_payout === "number"
-                        ? `Bet placed! Potential win: ${data.potential_payout} SUI`
-                        : "Bet placed! Good luck."
-                    );
-                    return;
-                  }
-
-                  setZionBetToast("Saved to DB. Submitting on-chain…");
-                  executeZionBetOnChain(
-                    signAndExecute as SignAndExecuteFn,
-                    {
-                      marketObjectId,
-                      direction: modalDirection,
-                      amountSui: amount,
-                      walletAddress: account.address,
-                    },
-                    {
-                      onSuccess: (digest) => {
-                        const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
-                        setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
-                        void loadMyBets();
-                      },
-                      onError: (message) => {
-                        setZionBetToast(`On-chain failed (DB bet saved): ${message}`);
-                      },
-                    }
-                  );
-                } catch {
-                  setZionBetToast("Request failed.");
-                } finally {
-                  setBetLoading(false);
-                }
+              onClick={() => {
+                if (!betModal) return;
+                void handlePlaceCardBet(betModal.market, betModal.direction);
               }}
               style={{
                 width: "100%",
