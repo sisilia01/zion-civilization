@@ -5394,19 +5394,14 @@ export default function Home() {
 
 
               {corporations.length > 0 && (
-                <div style={{ marginTop: "24px" }}>
-                  <h3
-                    style={{
-                      color: "#4DA2FF",
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                      letterSpacing: "2px",
-                      marginBottom: "16px",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    🏢 CORPORATIONS
-                  </h3>
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #4DA2FF)" }} />
+                    <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
+                      🏢 CORPORATIONS 🏢
+                    </span>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #4DA2FF)" }} />
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
                     {corporations.map((corp) => (
                       <div
@@ -5418,22 +5413,8 @@ export default function Home() {
                           background: "rgba(77,162,255,0.03)",
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              color: "#4DA2FF",
-                              fontFamily: "monospace",
-                              fontWeight: "bold",
-                              fontSize: "0.85rem",
-                            }}
-                          >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                          <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
                             {corp.name}
                           </span>
                           <span
@@ -5449,16 +5430,14 @@ export default function Home() {
                             {sectorEmoji[corp.corp_type] || "🏢"} {corp.corp_type?.toUpperCase()}
                           </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>EMPLOYEES</div>
-                            <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                              {corp.employees}
-                            </div>
+                            <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{corp.employees}</div>
                           </div>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
-                            <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                            <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
                               {corp.treasury?.toFixed(0)}
                             </div>
                           </div>
@@ -5468,196 +5447,161 @@ export default function Home() {
                               {corp.revenue?.toFixed(0)}
                             </div>
                           </div>
-                          <div style={{ textAlign: "center" }}>
-                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MARKET</div>
-                            <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                              {((corp.market_share ?? 0) * 100).toFixed(0)}%
-                            </div>
-                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </>
               )}
 
-              <div
-                style={{
-                  margin: "28px 0 20px 0",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                }}
-              >
-                <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #00ff41)" }} />
-                <span
-                  style={{
-                    color: "#00ff41",
-                    fontFamily: "monospace",
-                    fontSize: "0.8rem",
-                    letterSpacing: "3px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  ⚔️ CLAN RANKINGS ⚔️
-                </span>
-                <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #00ff41)" }} />
-              </div>
-
-              <section className="clanSection">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-                  {clans.map((clan, idx) => (
-                    <div
-                      key={clan.id}
-                      style={{
-                        border: "1px solid #1a3a1a",
-                        borderRadius: "10px",
-                        padding: "14px",
-                        background: "rgba(0,255,65,0.03)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: "10px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: "#00ff41",
-                            fontFamily: "monospace",
-                            fontWeight: "bold",
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          {idx === 0 ? "👑 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : ""}
-                          {clan.name}
-                        </span>
-                        <span
-                          style={{
-                            background: "rgba(0,255,65,0.1)",
-                            color: "#00ff41",
-                            fontSize: "0.6rem",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            fontFamily: "monospace",
-                          }}
-                        >
-                          W {clan.wins} / L {clan.losses}
-                        </span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MEMBERS</div>
-                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                            {clan.members}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
-                          <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                            {clan.treasury?.toFixed(0)}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
-                          <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
-                            {clan.wins > clan.losses ? "⚔️ DOM" : clan.wins === clan.losses ? "⚖️ TIE" : "💀 WEAK"}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
               {policeDivisions && policeDivisions.divisions.length > 0 && (
-                <div style={{marginTop:"24px"}}>
-                  <div style={{display:"flex", alignItems:"center", gap:"12px", marginBottom:"16px"}}>
-                    <div style={{flex:1, height:"1px", background:"linear-gradient(to right, transparent, #4DA2FF)"}}/>
-                    <span style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.8rem", letterSpacing:"3px", whiteSpace:"nowrap"}}>
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #00cccc)" }} />
+                    <span style={{ color: "#00cccc", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
                       🚔 POLICE DIVISIONS 🚔
                     </span>
-                    <div style={{flex:1, height:"1px", background:"linear-gradient(to left, transparent, #4DA2FF)"}}/>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #00cccc)" }} />
                   </div>
-
-                  {policeDivisions.treasury && (
-                    <div style={{
-                      display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px", marginBottom:"16px"
-                    }}>
-                      {[
-                        {label:"ZRS FUND", value: policeDivisions.treasury.zrs_fund?.toFixed(0), color:"#00ff41"},
-                        {label:"POLICE FUND", value: policeDivisions.treasury.police_fund?.toFixed(0), color:"#4DA2FF"},
-                        {label:"SOCIAL FUND", value: policeDivisions.treasury.social_fund?.toFixed(0), color:"#ffaa00"},
-                        {label:"CORRUPTION", value: `${policeDivisions.treasury.corruption_index?.toFixed(0)}%`,
-                         color: (policeDivisions.treasury.corruption_index || 0) > 50 ? "#ff3232" : "#00ff41"},
-                      ].map(m => (
-                        <div key={m.label} style={{
-                          background:"#050a10", border:"1px solid #1a1a2e",
-                          borderRadius:"8px", padding:"10px", textAlign:"center"
-                        }}>
-                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem", marginBottom:"4px"}}>{m.label}</div>
-                          <div style={{color:m.color, fontFamily:"monospace", fontSize:"0.9rem", fontWeight:"bold"}}>{m.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div style={{background:"#050a10", border:"1px solid #1a3a5c", borderRadius:"10px", padding:"16px"}}>
-                    {policeDivisions.divisions.map((div, i) => {
-                      const emojis: Record<string,string> = {
-                        swat:"🔫", anti_tax:"💼", presidential_guard:"🛡️",
-                        anti_corruption:"🕵️", riot_control:"🪖"
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                    {policeDivisions.divisions.map((div) => {
+                      const emojis: Record<string, string> = {
+                        swat: "🔫",
+                        anti_tax: "💼",
+                        presidential_guard: "🛡️",
+                        anti_corruption: "🕵️",
+                        riot_control: "🪖",
                       };
-                      const labels: Record<string,string> = {
-                        swat:"SWAT — Anti-Clan Operations",
-                        anti_tax:"ANTI-TAX — Revenue Enforcement",
-                        presidential_guard:"PRESIDENTIAL GUARD — Executive Protection",
-                        anti_corruption:"ANTI-CORRUPTION — Internal Affairs",
-                        riot_control:"RIOT CONTROL — Civil Unrest Response"
+                      const labels: Record<string, string> = {
+                        swat: "SWAT",
+                        anti_tax: "ANTI-TAX",
+                        presidential_guard: "PRES. GUARD",
+                        anti_corruption: "ANTI-CORR",
+                        riot_control: "RIOT CTRL",
                       };
-                      const maxOfficers = 50;
-                      const pct = Math.min(100, (div.officers / maxOfficers) * 100);
-                      const effColor = div.effectiveness > 70 ? "#00ff41" : div.effectiveness > 40 ? "#ffaa00" : "#ff3232";
-
                       return (
-                        <div key={div.division} style={{
-                          display:"flex", alignItems:"center", gap:"12px",
-                          padding:"10px 0",
-                          borderBottom: i < policeDivisions.divisions.length - 1 ? "1px solid #0a1a2a" : "none"
-                        }}>
-                          <span style={{fontSize:"1.1rem", width:"24px"}}>{emojis[div.division] || "🚔"}</span>
-                          <div style={{flex:1}}>
-                            <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.72rem", marginBottom:"4px"}}>
-                              {labels[div.division] || div.division.toUpperCase()}
-                            </div>
-                            <div style={{
-                              width:"100%", height:"6px", background:"#111",
-                              borderRadius:"3px", overflow:"hidden"
-                            }}>
-                              <div style={{
-                                width:`${pct}%`, height:"100%",
-                                background: pct > 60 ? "#4DA2FF" : pct > 30 ? "#ffaa00" : "#ff3232",
-                                borderRadius:"3px", transition:"width 0.5s"
-                              }}/>
-                            </div>
+                        <div
+                          key={div.division}
+                          style={{
+                            border: "1px solid #1a4a4a",
+                            borderRadius: "10px",
+                            padding: "14px",
+                            background: "rgba(0,200,200,0.03)",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                            <span style={{ color: "#00cccc", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
+                              {emojis[div.division]} {labels[div.division]}
+                            </span>
+                            <span
+                              style={{
+                                background: "rgba(0,200,200,0.1)",
+                                color: "#00cccc",
+                                fontSize: "0.6rem",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {div.effectiveness?.toFixed(0)}% EFF
+                            </span>
                           </div>
-                          <div style={{textAlign:"right", minWidth:"80px"}}>
-                            <div style={{color:"#fff", fontFamily:"monospace", fontSize:"0.85rem", fontWeight:"bold"}}>
-                              {div.officers} <span style={{color:"#333", fontSize:"0.65rem"}}>officers</span>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>OFFICERS</div>
+                              <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{div.officers}</div>
                             </div>
-                            <div style={{color:effColor, fontFamily:"monospace", fontSize:"0.65rem"}}>
-                              {div.effectiveness?.toFixed(0)}% eff
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>BUDGET</div>
+                              <div style={{ color: "#00cccc", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                                {div.budget?.toFixed(0)}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
+                              <div
+                                style={{
+                                  color: div.officers > 15 ? "#00ff41" : div.officers > 8 ? "#ffaa00" : "#ff3232",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.8rem",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {div.officers > 15 ? "💪 STRONG" : div.officers > 8 ? "⚖️ MID" : "⚠️ LOW"}
+                              </div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
+                </>
               )}
+
+              {clans.length > 0 && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #ffaa00)" }} />
+                    <span style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
+                      ⚔️ CLAN RANKINGS ⚔️
+                    </span>
+                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #ffaa00)" }} />
+                  </div>
+                  <section className="clanSection">
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                      {clans.map((clan, idx) => (
+                        <div
+                          key={clan.id}
+                          style={{
+                            border: "1px solid #3a2a0a",
+                            borderRadius: "10px",
+                            padding: "14px",
+                            background: "rgba(255,170,0,0.03)",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                            <span style={{ color: "#ffaa00", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
+                              {idx === 0 ? "👑 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : ""}
+                              {clan.name}
+                            </span>
+                            <span
+                              style={{
+                                background: "rgba(255,170,0,0.1)",
+                                color: "#ffaa00",
+                                fontSize: "0.6rem",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              W {clan.wins} / L {clan.losses}
+                            </span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MEMBERS</div>
+                              <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{clan.members}</div>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
+                              <div style={{ color: "#ffd700", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
+                                {clan.treasury?.toFixed(0)}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
+                              <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
+                                {clan.wins > clan.losses ? "⚔️ DOM" : clan.wins === clan.losses ? "⚖️ TIE" : "💀 WEAK"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+
 
               <div
                 style={{
