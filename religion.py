@@ -146,6 +146,13 @@ def run_religious_cycle(cur):
                          f"{religion['icon']} {religion['deity']} blessed {believer['name']}! +{blessing:.1f} ZION from church tithe pool!",
                          blessing)
                 total_miracles += 1
+
+        if church_pool > 0.01:
+            cur.execute(
+                "UPDATE state_treasury SET social_fund = social_fund + %s",
+                (round(church_pool, 2),),
+            )
+            church_pool = 0.0
     
     return total_prayers, total_miracles
 

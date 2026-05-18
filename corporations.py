@@ -339,6 +339,10 @@ def zrs_loan(cur, cycle):
             "UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
             (principal, corp["id"]),
         )
+        cur.execute(
+            "UPDATE state_treasury SET zrs_fund = GREATEST(0, zrs_fund - %s)",
+            (principal,),
+        )
         log_event(
             cur,
             None,
@@ -369,6 +373,10 @@ def repay_loans(cur, cycle):
             cur.execute(
                 "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
                 (owed, loan["corp_id"]),
+            )
+            cur.execute(
+                "UPDATE state_treasury SET zrs_fund = zrs_fund + %s",
+                (owed,),
             )
             cur.execute("UPDATE zrs_loans SET is_active = false WHERE id = %s", (loan["id"],))
             log_event(
@@ -431,6 +439,10 @@ def clan_racket(cur):
                 WHERE id = %s
                 """,
                 (POLICE_HIRE_COST, corp["id"]),
+            )
+            cur.execute(
+                "UPDATE state_treasury SET police_fund = police_fund + %s",
+                (POLICE_HIRE_COST,),
             )
             log_event(
                 cur,

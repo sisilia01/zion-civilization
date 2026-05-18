@@ -145,7 +145,7 @@ def food_crisis(cur, prices):
         cur.execute("""
             UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
             WHERE is_active=true AND corp_type='agro'
-        """, (agro_revenue * 0.3, agro_revenue * 0.3))
+        """, (agro_revenue * 0.9, agro_revenue * 0.9))
     
     if dead > 0:
         log_event(cur, None, 'famine',
