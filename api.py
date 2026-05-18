@@ -807,7 +807,7 @@ async def chat_with_agent(request: dict):
         conn.commit()
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
-    OPENROUTER_KEY = "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"
+    OPENROUTER_KEY = "os.getenv("OPENROUTER_KEY","sk-or-placeholder")"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -1824,7 +1824,7 @@ Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer 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",
+                "Authorization": "Bearer os.getenv("OPENROUTER_KEY","sk-or-placeholder")",
                 "HTTP-Referer": "https://zionciv.com",
                 "X-Title": "ZION Civilization"
             }
@@ -1988,7 +1988,7 @@ async def generate_conversations():
         events = cur.fetchall()
         event_context = "; ".join([f"{e['event_type']}: {e['description']}" for e in events])
 
-        OPENROUTER_KEY = "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"
+        OPENROUTER_KEY = "os.getenv("OPENROUTER_KEY","sk-or-placeholder")"
         import urllib.request as req
         conversations = []
 
