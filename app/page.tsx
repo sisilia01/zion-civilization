@@ -1140,7 +1140,14 @@ function AgentTile({
   );
 }
 
-type TabId = "civilization" | "chat" | "zionbet" | "leaderboard" | "faucet" | "press" | "treasury";
+type TabId =
+  | "civilization"
+  | "chat"
+  | "zionbet"
+  | "leaderboard"
+  | "faucet"
+  | "press"
+  | "treasury"; // ECO-POL (display label; id kept for routing)
 
 type ParsedPressArticle = {
   headline: string;
@@ -3896,48 +3903,92 @@ export default function Home() {
   }, [fetchZcoDecisions]);
 
   useEffect(() => {
-    if (showIntro || activeTab !== "civilization") return;
+    if (activeTab !== "civilization") return;
     const canvas = galaxyCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = canvas.offsetWidth || 600;
-    canvas.height = 280;
-
-    const cx = canvas.width / 2;
-    const cy = 140;
-
     const starColors = ["#00ff41", "#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ff3232", "#ffffff", "#88ffaa"];
-    const starCount = Math.min(Math.max(aliveAgents || 500, 100), 2000);
-    const particles = Array.from({ length: starCount }, () => {
-      const arm = Math.floor(Math.random() * 3);
-      const armAngle = (arm / 3) * Math.PI * 2;
-      const t = Math.pow(Math.random(), 0.6);
-      const radius = 15 + t * (canvas.width * 0.44);
-      const spread = (1 - t) * 0.3 + t * 1.2;
-      const angle = armAngle + t * Math.PI * 3 + (Math.random() - 0.5) * spread;
-      return {
-        angle,
-        radius,
-        color: starColors[Math.floor(Math.random() * starColors.length)],
-        size: 0.3 + Math.random() * (t < 0.3 ? 2.5 : 1.2),
-        speed: (0.0002 + (1 - t) * 0.001) * (Math.random() > 0.5 ? 1 : -1),
-      };
-    });
 
-    const neo = {
-      angle: Math.random() * Math.PI * 2,
-      radius: 30 + Math.random() * (canvas.width * 0.35),
+    type GalaxyParticle = {
+      angle: number;
+      radius: number;
+      color: string;
+      size: number;
+      speed: number;
+    };
+
+    let animId = 0;
+    let cancelled = false;
+    let lastW = 0;
+    let lastH = 0;
+    let particles: GalaxyParticle[] = [];
+    let neo = {
+      angle: 0,
+      radius: 0,
       size: 2.5,
       speed: -0.0008,
       trail: [] as { x: number; y: number }[],
     };
 
-    let animId = 0;
-    let cancelled = false;
+    const syncCanvasSize = () => {
+      const w = Math.round(canvas.clientWidth || canvas.offsetWidth || 0);
+      const h = Math.round(canvas.clientHeight || canvas.offsetHeight || 0);
+      if (w < 2 || h < 2) return false;
+      if (w !== lastW || h !== lastH) {
+        canvas.width = w;
+        canvas.height = h;
+        lastW = w;
+        lastH = h;
+        particles = [];
+      }
+      return true;
+    };
+
+    const initScene = () => {
+      const starCount = Math.min(Math.max(aliveAgents || 500, 100), 2000);
+      particles = Array.from({ length: starCount }, () => {
+        const arm = Math.floor(Math.random() * 3);
+        const armAngle = (arm / 3) * Math.PI * 2;
+        const t = Math.pow(Math.random(), 0.6);
+        const radius = 15 + t * (canvas.width * 0.44);
+        const spread = (1 - t) * 0.3 + t * 1.2;
+        const angle = armAngle + t * Math.PI * 3 + (Math.random() - 0.5) * spread;
+        return {
+          angle,
+          radius,
+          color: starColors[Math.floor(Math.random() * starColors.length)]!,
+          size: 0.3 + Math.random() * (t < 0.3 ? 2.5 : 1.2),
+          speed: (0.0002 + (1 - t) * 0.001) * (Math.random() > 0.5 ? 1 : -1),
+        };
+      });
+      neo = {
+        angle: Math.random() * Math.PI * 2,
+        radius: 30 + Math.random() * (canvas.width * 0.35),
+        size: 2.5,
+        speed: -0.0008,
+        trail: [],
+      };
+    };
+
+    const resetScene = () => {
+      lastW = 0;
+      lastH = 0;
+      particles = [];
+    };
+
     const draw = () => {
       if (cancelled) return;
+      if (!syncCanvasSize()) {
+        animId = requestAnimationFrame(draw);
+        return;
+      }
+      if (particles.length === 0) initScene();
+
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+
       ctx.fillStyle = "rgba(0,0,0,0.08)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -3994,13 +4045,18 @@ export default function Home() {
       animId = requestAnimationFrame(draw);
     };
 
-    draw();
+    const ro = new ResizeObserver(resetScene);
+    ro.observe(canvas);
+    window.addEventListener("resize", resetScene);
+    animId = requestAnimationFrame(draw);
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(animId);
+      ro.disconnect();
+      window.removeEventListener("resize", resetScene);
     };
-  }, [showIntro, activeTab, aliveAgents]);
+  }, [activeTab, aliveAgents, isMobile]);
 
   useEffect(() => {
     if (!zionBetToast) return;
@@ -4678,35 +4734,8 @@ export default function Home() {
   const sheriffActionsDisplay = sheriffActions.slice(0, 5);
   const presidentActionsDisplay = presidentActions.slice(0, 5);
 
-  return (
-    <main className="page">
-      {(showWalletMenu || showUserMenu) && (
-        <div
-          onClick={() => {
-            setShowWalletMenu(false);
-            setShowUserMenu(false);
-          }}
-          style={{ position: "fixed", inset: 0, zIndex: 150 }}
-          aria-hidden
-        />
-      )}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          right: 0,
-          display: "flex",
-          flexDirection: "row",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: "8px",
-          padding: "12px",
-          zIndex: showWalletMenu || showUserMenu ? 200 : 100,
-          background: "rgba(0,0,0,0.8)",
-        }}
-        aria-label="Sign in"
-      >
+  const renderAuthToolbar = () => (
+    <>
         {!isGoogleConnected && !isWalletConnected && (
           <>
             <button
@@ -5097,7 +5126,42 @@ export default function Home() {
             </div>
           </>
         ) : null}
-      </div>
+    </>
+  );
+
+  return (
+    <main className="page">
+      {(showWalletMenu || showUserMenu) && (
+        <div
+          onClick={() => {
+            setShowWalletMenu(false);
+            setShowUserMenu(false);
+          }}
+          style={{ position: "fixed", inset: 0, zIndex: 150 }}
+          aria-hidden
+        />
+      )}
+      {!isMobile ? (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            right: 0,
+            display: "flex",
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "8px",
+            padding: "12px",
+            zIndex: showWalletMenu || showUserMenu ? 200 : 100,
+            background: "rgba(0,0,0,0.8)",
+          }}
+          aria-label="Sign in"
+        >
+          {renderAuthToolbar()}
+        </div>
+      ) : null}
       <canvas
         ref={bgCanvasRef}
         style={{ position: "fixed", inset: 0, zIndex: 0, opacity: 0.22, pointerEvents: "none" }}
@@ -5259,55 +5323,141 @@ export default function Home() {
         className={`dashboard ${dashboardVisible ? "show" : ""}`}
         style={isMobile ? { padding: "8px" } : undefined}
       >
-        <header className="header">
-          <h1
+        {isMobile ? (
+          <div
             style={{
               display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "8px",
+              flexDirection: "column",
+              alignItems: "stretch",
+              gap: 8,
+              width: "100%",
             }}
           >
-            ZION CIVILIZATION
-          </h1>
-          <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
-        </header>
-
-        <nav
-          className="mainNav"
-          aria-label="Main navigation"
-          style={{ flexWrap: isMobile ? "wrap" : "nowrap" }}
-        >
-          {(
-            [
-              ["civilization", "🌍 CIVILIZATION"],
-              ["chat", "💬 CHAT"],
-              ["zionbet", "🎰 ZIONBET"],
-              ["treasury", "💰 TREASURY"],
-              ["leaderboard", "🏆 LEADERBOARD"],
-              ["faucet", "🚰 FAUCET"],
-              ["press", "📰 PRESS"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`navTab ${activeTab === id ? "active" : ""}`}
-              onClick={() => setActiveTab(id)}
+            <div
+              aria-label="Sign in"
               style={{
-                fontSize: isMobile ? "0.55rem" : undefined,
-                padding: isMobile ? "6px 8px" : undefined,
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 4px",
+                width: "100%",
+                background: "rgba(0,0,0,0.9)",
+                borderRadius: "8px",
+                border: "1px solid rgba(0, 255, 65, 0.3)",
+                boxSizing: "border-box",
               }}
             >
-              {label}
-            </button>
-          ))}
-        </nav>
+              {renderAuthToolbar()}
+            </div>
+            <header className="header" style={{ width: "100%" }}>
+              <h1
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                ZION CIVILIZATION
+              </h1>
+              <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
+            </header>
+            <nav
+              className="mainNav"
+              aria-label="Main navigation"
+              style={{
+                flexWrap: "wrap",
+                margin: "0 0 12px 0",
+                position: "relative",
+                top: "auto",
+                width: "100%",
+              }}
+            >
+              {(
+                [
+                  ["civilization", "🌍 CIVILIZATION"],
+                  ["chat", "💬 CHAT"],
+                  ["zionbet", "🎰 ZIONBET"],
+                  ["treasury", "💹 ECO-POL"],
+                  ["leaderboard", "🏆 LEADERBOARD"],
+                  ["faucet", "🚰 FAUCET"],
+                  ["press", "📰 PRESS"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`navTab ${activeTab === id ? "active" : ""}`}
+                  onClick={() => setActiveTab(id)}
+                  style={{
+                    fontSize: "0.6rem",
+                    padding: "6px 8px",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        ) : (
+          <>
+            <header className="header">
+              <h1
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                ZION CIVILIZATION
+              </h1>
+              <p style={{ whiteSpace: "nowrap" }}>
+                World&apos;s first autonomous AI civilization on Sui blockchain
+              </p>
+            </header>
+            <nav
+              className="mainNav"
+              aria-label="Main navigation"
+              style={{ flexWrap: "nowrap" }}
+            >
+              {(
+                [
+                  ["civilization", "🌍 CIVILIZATION"],
+                  ["chat", "💬 CHAT"],
+                  ["zionbet", "🎰 ZIONBET"],
+                  ["treasury", "💹 ECO-POL"],
+                  ["leaderboard", "🏆 LEADERBOARD"],
+                  ["faucet", "🚰 FAUCET"],
+                  ["press", "📰 PRESS"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`navTab ${activeTab === id ? "active" : ""}`}
+                  onClick={() => setActiveTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </>
+        )}
 
         <div className="tabPanels">
           {activeTab === "civilization" && (
             <>
-              <section className="statsGrid">
+              <section
+                className="statsGrid"
+                style={
+                  isMobile
+                    ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }
+                    : undefined
+                }
+              >
                 <article className="statCard cyan">
                   <p>ALIVE AGENTS</p>
                   <h3>{stats?.alive ?? agents.length}</h3>
@@ -7257,10 +7407,10 @@ export default function Home() {
               {/* Header */}
               <div style={{ marginBottom: "24px" }}>
                 <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
-                  💰 ZION TREASURY
+                  💹 ZION ECO-POL
                 </h2>
                 <p style={{ color: "#888", fontSize: "0.8rem", margin: 0 }}>
-                  Central Bank · Private Transfers · Economic Monitor · Powered by Sui
+                  Economics · Politics · Central Bank · Powered by Sui & Walrus
                 </p>
               </div>
 
@@ -7283,7 +7433,7 @@ export default function Home() {
                         Rate: {frsStats?.interest_rate || 0}% · ZION Reserve System
                       </div>
                       <div style={{color:"#4a8a4a", fontFamily:"monospace", fontSize:"0.65rem"}}>
-                        Independent from President · Auto-stabilizing economy
+                        Independent monetary authority · Auto-stabilizing · Walrus archived
                       </div>
                     </div>
 
