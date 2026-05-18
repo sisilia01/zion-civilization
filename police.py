@@ -1,162 +1,154 @@
-#!/usr/bin/env python3
-"""
-ZION Police — правопорядок цивилизации
-Заменяет NEO. Арестовывает, штрафует, патрулирует.
-"""
 import psycopg2
 import psycopg2.extras
 import random
 from datetime import datetime
+import sys
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="zion_db",
-    user="zion_user",
-    password="zion2026"
-)
+conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password="zion2026")
 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-POLICE_FUND = 0  # казна полиции
-
-def log_event(cur, agent_id, event_type, description, amount=0):
-    cur.execute("""
-        INSERT INTO events (agent_id, event_type, description, zion_amount)
-        VALUES (%s, %s, %s, %s)
-    """, (agent_id, event_type, description, amount))
-
-def arrest_tax_evaders(cur):
-    """Арестовывает агентов которые не платили налоги (dust_days > 3)"""
-    cur.execute("""
-        SELECT id, name, class, balance FROM agents
-        WHERE is_alive = true AND dust_days > 3
-        ORDER BY RANDOM() LIMIT 3
-    """)
-    evaders = cur.fetchall()
-    arrested = 0
-    total_fines = 0
-    for agent in evaders:
-        fine = min(float(agent['balance']) * 0.3, 50)
-        if fine > 0:
-            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                       (fine, agent['id']))
-            total_fines += fine
-    # Route fines to sheriff budget
-        if fine > 0:
-            log_event(cur, agent['id'], 'police',
-                     f"🚔 Police arrested {agent['name']} for tax evasion! Fine: {fine:.1f} ZION",
-                     fine)
-            arrested += 1
-            print(f"🚔 Arrested {agent['name']} — fine {fine:.1f} ZION")
-    
-    if total_fines > 0:
-        cur.execute("""
-            UPDATE sheriff_state SET police_budget = police_budget + %s 
-            WHERE is_active = true
-        """, (total_fines,))
-    return arrested
-
-def patrol_clans(cur):
-    """Патрулирует кланы — штрафует за нарушения"""
-    cur.execute("""
-        SELECT id, name, treasury FROM clans
-        WHERE treasury > 1000
-        ORDER BY RANDOM() LIMIT 1
-    """)
-    clan = cur.fetchone()
-    if not clan:
-        return False
-    
-    fine = round(float(clan['treasury']) * 0.05, 2)
-    cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s",
-               (fine, clan['id']))
-    log_event(cur, None, 'police',
-             f"🚔 Police raided {clan['name']} clan! Confiscated {fine:.1f} ZION for illegal activities",
-             fine)
-    print(f"🚔 Raided clan {clan['name']} — {fine:.1f} ZION confiscated")
-    return True
-
-def protect_poor(cur):
-    """Protects poor — redistributes from sheriff budget"""
-    cur.execute("SELECT police_budget FROM sheriff_state WHERE is_active=true LIMIT 1")
-    sheriff = cur.fetchone()
-    if not sheriff or float(sheriff['police_budget']) < 50:
-        return
-    
-    cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class = 'critical' AND balance < 2
-        ORDER BY balance ASC LIMIT 5
-    """)
-    poor = cur.fetchall()
-    if not poor:
-        return
-    
-    gift = 5.0
-    total_aid = gift * len(poor)
-    cur.execute("UPDATE sheriff_state SET police_budget = police_budget - %s WHERE is_active=true",
-               (total_aid,))
-    for agent in poor:
-        cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                   (gift, agent['id']))
-        log_event(cur, agent['id'], 'police',
-                 f"🛡️ Police welfare: {agent['name']} received {gift} ZION aid from sheriff budget",
-                 gift)
-        print(f"🛡️ Aid to {agent['name']}: +{gift} ZION (from sheriff budget)")
-
-def fight_corruption(cur):
-    """Борется с коррупцией в элите"""
-    cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class = 'elite' AND balance > 500
-        ORDER BY RANDOM() LIMIT 1
-    """)
-    corrupt = cur.fetchone()
-    if not corrupt:
-        return False
-    
-    # 10% шанс что полиция сама коррумпирована и берёт взятку
-    if random.random() < 0.1:
-        bribe = round(float(corrupt['balance']) * 0.1, 2)
-        cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                   (bribe, corrupt['id']))
-        log_event(cur, corrupt['id'], 'police',
-                 f"💰 {corrupt['name']} paid {bribe:.1f} ZION bribe to corrupt police officer!",
-                 bribe)
-        print(f"💰 Corruption: {corrupt['name']} bribed police {bribe:.1f} ZION")
-    else:
-        fine = round(float(corrupt['balance']) * 0.15, 2)
-        cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                   (fine, corrupt['id']))
-        log_event(cur, corrupt['id'], 'police',
-                 f"⚖️ Police busted {corrupt['name']} for corruption! Fined {fine:.1f} ZION",
-                 fine)
-        print(f"⚖️ Busted {corrupt['name']} for corruption — {fine:.1f} ZION")
-    return True
+def log_event(agent_id, etype, desc, amount=0):
+    cur.execute("INSERT INTO events (agent_id, event_type, description, zion_amount) VALUES (%s,%s,%s,%s)",
+               (agent_id, etype, desc, amount))
 
 def main():
-    print(f"\n🚔 ZION Police — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("=" * 50)
+    sys.stderr.write(f"\n ZION Police v2 - {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
     
-    try:
-        arrested = arrest_tax_evaders(cur)
-        print(f"Tax evaders arrested: {arrested}")
-        
-        patrol_clans(cur)
-        protect_poor(cur)
-        fight_corruption(cur)
-        
-        # Статистика
-        cur.execute("SELECT COUNT(*) as alive FROM agents WHERE is_alive=true")
-        stats = cur.fetchone()
-        print(f"\n✅ Police cycle complete! Alive agents: {stats['alive']}")
-        
-        conn.commit()
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        conn.rollback()
-    finally:
-        cur.close()
-        conn.close()
+    cur.execute("SELECT * FROM state_treasury LIMIT 1")
+    state = cur.fetchone()
+    if not state:
+        sys.stderr.write("No state treasury!\n")
+        return
+    
+    cur.execute("SELECT * FROM police_divisions ORDER BY id")
+    divs = {d['division']: d for d in cur.fetchall()}
+    
+    cur.execute("SELECT * FROM sheriff_state WHERE is_active=true LIMIT 1")
+    sheriff = cur.fetchone()
+    
+    cur.execute("SELECT * FROM president_state WHERE is_active=true LIMIT 1")
+    president = cur.fetchone()
+    
+    police_budget = float(state['police_fund'])
+    sys.stderr.write(f"Police budget: {police_budget:.0f} ZION\n")
+    
+    # Get metrics
+    cur.execute("SELECT COUNT(*) as t, AVG(balance) as avg, COUNT(CASE WHEN class IN ('poor','critical') THEN 1 END) as poor FROM agents WHERE is_alive=true")
+    eco = cur.fetchone()
+    total = max(int(eco['t']), 1)
+    poor_pct = int(eco['poor']) / total * 100
+    
+    cur.execute("SELECT COUNT(*) as cnt, COALESCE(SUM(treasury),0) as tr FROM clans WHERE members_count > 50")
+    clan = cur.fetchone()
+    clan_threat = min(100, int(clan['cnt']) * 15 + int(float(clan['tr'])) // 200)
+    
+    pres_approval = int(president['approval_rating']) if president else 50
+    is_dictator = president['is_dictator'] if president else False
+    sheriff_type = sheriff['sheriff_type'] if sheriff else 'honest'
+    
+    # Ideal division sizes
+    ideal = {
+        'swat': max(5, clan_threat),
+        'anti_tax': max(5, int(poor_pct * 0.5)),
+        'presidential_guard': 30 if is_dictator else (20 if sheriff_type == 'junta' else 10),
+        'anti_corruption': 20 if sheriff_type == 'honest' else (5 if sheriff_type == 'corrupt' else 10),
+        'riot_control': max(5, int((100 - pres_approval) * 0.5)),
+    }
+    
+    total_ideal = max(sum(ideal.values()), 1)
+    budget_officers = max(10, int(police_budget / 8))
+    scale = min(1.5, budget_officers / total_ideal)
+    
+    for div_name, ideal_count in ideal.items():
+        if div_name not in divs:
+            continue
+        current = divs[div_name]['officers']
+        target = max(2, int(ideal_count * scale))
+        change = max(-5, min(5, target - current))
+        new_count = max(2, current + change)
+        div_budget = round((new_count / total_ideal) * police_budget, 2)
+        cur.execute("UPDATE police_divisions SET officers=%s, budget=%s, updated_at=NOW() WHERE division=%s",
+                   (new_count, div_budget, div_name))
+    
+    conn.commit()
+    cur.execute("SELECT * FROM police_divisions ORDER BY id")
+    divs = {d['division']: d for d in cur.fetchall()}
+    
+    # SWAT raids clans
+    cur.execute("SELECT id, name, treasury FROM clans WHERE treasury > 100 ORDER BY treasury DESC LIMIT 2")
+    for clan_row in cur.fetchall():
+        if random.random() < 0.4:
+            eff = float(divs['swat']['effectiveness']) / 100
+            seized = round(float(clan_row['treasury']) * random.uniform(0.05, 0.15) * eff, 2)
+            cur.execute("UPDATE clans SET treasury=treasury-%s WHERE id=%s", (seized, clan_row['id']))
+            cur.execute("UPDATE state_treasury SET police_fund=police_fund+%s", (seized * 0.7,))
+            log_event(None, 'police', f"SWAT raided {clan_row['name']}! Seized {seized:.0f} ZION.", seized)
+            sys.stderr.write(f"SWAT raided {clan_row['name']}: +{seized:.0f} ZION\n")
+    
+    # Anti-tax fines
+    cur.execute("SELECT id, name, balance FROM agents WHERE is_alive=true AND dust_days>1 LIMIT %s",
+               (divs['anti_tax']['officers'],))
+    total_fines = 0
+    for agent in cur.fetchall():
+        fine = round(min(float(agent['balance']) * 0.25, 40), 2)
+        if fine > 0.5:
+            cur.execute("UPDATE agents SET balance=balance-%s, dust_days=0 WHERE id=%s", (fine, agent['id']))
+            total_fines += fine
+            log_event(agent['id'], 'police', f"Anti-Tax arrested {agent['name']}! Fine: {fine:.1f} ZION", fine)
+    if total_fines > 0:
+        cur.execute("UPDATE state_treasury SET police_fund=police_fund+%s", (total_fines,))
+        sys.stderr.write(f"Anti-Tax collected {total_fines:.0f} ZION\n")
+    
+    # Presidential guard vs junta
+    if sheriff and sheriff_type == 'junta' and divs['presidential_guard']['officers'] > 15:
+        if random.random() < 0.4:
+            cur.execute("UPDATE sheriff_state SET approval_rating=GREATEST(0, approval_rating-10) WHERE is_active=true")
+            log_event(None, 'police', f"Presidential Guard repelled coup attempt by Sheriff {sheriff['agent_name']}!", 0)
+            sys.stderr.write("Presidential Guard stopped coup!\n")
+    
+    # Anti-corruption
+    if sheriff and sheriff_type == 'corrupt' and divs['anti_corruption']['officers'] > 5:
+        if random.random() < 0.3:
+            cur.execute("UPDATE sheriff_state SET approval_rating=GREATEST(0, approval_rating-20) WHERE is_active=true")
+            cur.execute("UPDATE state_treasury SET corruption_index=GREATEST(0, corruption_index-5)")
+            log_event(None, 'police', f"Anti-Corruption exposed Sheriff {sheriff['agent_name']}! Approval -20%!", 0)
+            sys.stderr.write("Anti-Corruption exposed corrupt sheriff!\n")
+    
+    # Riot control
+    cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive=true AND class IN ('poor','critical') AND balance < 3")
+    rebels = int(cur.fetchone()['cnt'])
+    rebel_pct = rebels / total * 100
+    if rebel_pct > 30:
+        killed = max(1, int(divs['riot_control']['officers'] * 0.05))
+        cur.execute(f"""UPDATE agents SET is_alive=false, died_at=NOW(), death_cause='riot control'
+            WHERE is_alive=true AND class IN ('poor','critical') AND balance < 3
+            AND id IN (SELECT id FROM agents WHERE is_alive=true ORDER BY RANDOM() LIMIT {killed})""")
+        log_event(None, 'police', f"Riot Control deployed! {rebel_pct:.0f}% rebelling. {killed} casualties.", killed*5)
+        sys.stderr.write(f"Riot Control: {killed} killed ({rebel_pct:.0f}% rebels)\n")
+    
+    # Buy equipment from military corp
+    if float(state['police_fund']) > 200 and random.random() < 0.3:
+        cur.execute("SELECT id, name FROM corporations WHERE is_active=true AND corp_type='military' ORDER BY treasury DESC LIMIT 1")
+        mil = cur.fetchone()
+        if mil:
+            purchase = round(float(state['police_fund']) * 0.1, 2)
+            cur.execute("UPDATE state_treasury SET police_fund=police_fund-%s", (purchase,))
+            cur.execute("UPDATE corporations SET treasury=treasury+%s, revenue=revenue+%s WHERE id=%s",
+                       (purchase, purchase, mil['id']))
+            cur.execute("UPDATE police_divisions SET effectiveness=LEAST(100, effectiveness+5)")
+            log_event(None, 'police', f"Police bought {purchase:.0f} ZION equipment from {mil['name']}! All divisions +5% effectiveness.", purchase)
+            sys.stderr.write(f"Bought equipment from {mil['name']}: {purchase:.0f} ZION\n")
+    
+    # Print division stats
+    sys.stderr.write("\nDIVISIONS:\n")
+    emojis = {'swat':'SWAT', 'anti_tax':'ANTI-TAX', 'presidential_guard':'GUARD', 'anti_corruption':'ANTI-CORR', 'riot_control':'RIOT'}
+    for name, div in divs.items():
+        bar = '#' * (div['officers'] // 3)
+        sys.stderr.write(f"  {emojis.get(name,name):12} {bar:15} {div['officers']:3} officers | {float(div['effectiveness']):.0f}%\n")
+    
+    conn.commit()
+    sys.stderr.write("\nPolice v2 complete!\n")
+    cur.close()
+    conn.close()
 
-if __name__ == "__main__":
-    main()
+main()
