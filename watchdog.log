@@ -44,3 +44,13 @@
 2026-05-18 21:30:04,877 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
 2026-05-18 21:30:34,955 [WATCHDOG] settlement appears stuck — restarting
 2026-05-18 21:30:35,998 [WATCHDOG] Started settlement (settlement.py)
+2026-05-18 21:35:36,687 [WATCHDOG] settlement appears stuck — restarting
+2026-05-18 21:35:37,746 [WATCHDOG] Started settlement (settlement.py)
+2026-05-18 21:40:08,416 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
+2026-05-18 21:40:38,498 [WATCHDOG] settlement appears stuck — restarting
+2026-05-18 21:40:39,559 [WATCHDOG] Started settlement (settlement.py)
+2026-05-18 21:45:40,208 [WATCHDOG] settlement appears stuck — restarting
+2026-05-18 21:45:41,273 [WATCHDOG] Started settlement (settlement.py)
+2026-05-18 21:50:11,866 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
+2026-05-18 21:50:41,977 [WATCHDOG] settlement appears stuck — restarting
+2026-05-18 21:50:43,039 [WATCHDOG] Started settlement (settlement.py)
