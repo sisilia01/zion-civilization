@@ -3161,7 +3161,8 @@ function renderArticle(
   ac: string,
   border: string,
   bodyFont: string,
-  sealEncrypted?: boolean
+  sealEncrypted?: boolean,
+  isMobile?: boolean
 ) {
   const clean = text.replace(/\*\*/g, "");
 
@@ -3241,7 +3242,15 @@ function renderArticle(
         style={{
           display: "grid",
           gridTemplateColumns:
-            columns.length >= 3 ? "1fr 1fr 1fr" : columns.length === 2 ? "1fr 1fr" : "1fr",
+            columns.length >= 3
+              ? isMobile
+                ? "1fr"
+                : "1fr 1fr 1fr"
+              : columns.length === 2
+                ? isMobile
+                  ? "1fr"
+                  : "1fr 1fr"
+                : "1fr",
           gap: "24px",
           marginBottom: "20px",
         }}
@@ -3289,6 +3298,14 @@ export default function Home() {
   const [zkLoginUser, setZkLoginUser] = useState<{ address: string; email: string } | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showWalletMenu, setShowWalletMenu] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const [showIntro, setShowIntro] = useState(true);
   const [introFading, setIntroFading] = useState(false);
@@ -4760,7 +4777,7 @@ export default function Home() {
               justifyContent: "center",
             }}
           >
-              ⚡ CONNECT WALLET
+              ⚡ {isMobile ? "WALLET" : "CONNECT WALLET"}
             </button>
           </>
         )}
@@ -5167,7 +5184,7 @@ export default function Home() {
           <div style={{ position: "relative", zIndex: 2, textAlign: "center" }}>
             <div
               style={{
-                fontSize: "4rem",
+                fontSize: isMobile ? "2.5rem" : "4rem",
                 fontWeight: 900,
                 fontFamily: "monospace",
                 color: "#00ff41",
@@ -5238,7 +5255,10 @@ export default function Home() {
         </div>
       )}
 
-      <div className={`dashboard ${dashboardVisible ? "show" : ""}`}>
+      <div
+        className={`dashboard ${dashboardVisible ? "show" : ""}`}
+        style={isMobile ? { padding: "8px" } : undefined}
+      >
         <header className="header">
           <h1
             style={{
@@ -5253,7 +5273,11 @@ export default function Home() {
           <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
         </header>
 
-        <nav className="mainNav" aria-label="Main navigation">
+        <nav
+          className="mainNav"
+          aria-label="Main navigation"
+          style={{ flexWrap: isMobile ? "wrap" : "nowrap" }}
+        >
           {(
             [
               ["civilization", "🌍 CIVILIZATION"],
@@ -5270,6 +5294,10 @@ export default function Home() {
               type="button"
               className={`navTab ${activeTab === id ? "active" : ""}`}
               onClick={() => setActiveTab(id)}
+              style={{
+                fontSize: isMobile ? "0.55rem" : undefined,
+                padding: isMobile ? "6px 8px" : undefined,
+              }}
             >
               {label}
             </button>
@@ -5298,7 +5326,14 @@ export default function Home() {
                 </article>
               </section>
 
-              <section className="civilizationSidebarRow" aria-label="Live feed sidebar">
+              <section
+                className="civilizationSidebarRow"
+                aria-label="Live feed sidebar"
+                style={{
+                  flexDirection: isMobile ? "column" : undefined,
+                  alignItems: isMobile ? "stretch" : undefined,
+                }}
+              >
                 <div
                   className="civilizationSidebarRowFill"
                   style={{
@@ -5307,6 +5342,9 @@ export default function Home() {
                     padding: "16px",
                     marginBottom: "16px",
                     background: "rgba(0,5,0,0.5)",
+                    width: isMobile ? "100%" : "70%",
+                    flex: isMobile ? "none" : 1,
+                    display: isMobile ? "block" : undefined,
                   }}
                 >
                   <div
@@ -5345,8 +5383,8 @@ export default function Home() {
                   <canvas
                     ref={galaxyCanvasRef}
                     style={{
-                      width: "100%",
-                      height: "280px",
+                      width: isMobile ? "100%" : "100%",
+                      height: isMobile ? "300px" : "280px",
                       borderRadius: "8px",
                       display: "block",
                       marginBottom: "12px",
@@ -5372,7 +5410,10 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <aside className="civilizationSidebar">
+                <aside
+                  className="civilizationSidebar"
+                  style={{ width: isMobile ? "100%" : undefined }}
+                >
                   <div className="sidebarAgentConvWrap">
                     <h2 className="sidebarSectionTitle">AGENT CONVERSATIONS</h2>
                     <p className="sidebarHint">AI pairs · refresh 60s · last 4</p>
@@ -5447,7 +5488,7 @@ export default function Home() {
                     </span>
                     <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #4DA2FF)" }} />
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                     {corporations.map((corp) => (
                       <div
                         key={corp.id}
@@ -5475,7 +5516,7 @@ export default function Home() {
                             {sectorEmoji[corp.corp_type] || "🏢"} {corp.corp_type?.toUpperCase()}
                           </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>EMPLOYEES</div>
                             <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{corp.employees}</div>
@@ -5508,7 +5549,7 @@ export default function Home() {
                     </span>
                     <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #00cccc)" }} />
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                     {policeDivisions.divisions.map((div) => {
                       const emojis: Record<string, string> = {
                         swat: "🔫",
@@ -5551,7 +5592,7 @@ export default function Home() {
                               {div.effectiveness?.toFixed(0)}% EFF
                             </span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
                             <div style={{ textAlign: "center" }}>
                               <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>OFFICERS</div>
                               <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{div.officers}</div>
@@ -5593,7 +5634,7 @@ export default function Home() {
                     <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #ffaa00)" }} />
                   </div>
                   <section className="clanSection">
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                       {clans.map((clan, idx) => (
                         <div
                           key={clan.id}
@@ -5622,7 +5663,7 @@ export default function Home() {
                               W {clan.wins} / L {clan.losses}
                             </span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
                             <div style={{ textAlign: "center" }}>
                               <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MEMBERS</div>
                               <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{clan.members}</div>
@@ -6293,7 +6334,7 @@ export default function Home() {
                     </div>
                     {deepbookVault && (
                       <div style={{
-                        display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"10px",
+                        display:"grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap:"10px",
                         marginTop:"16px", padding:"14px", background:"#050a10",
                         borderRadius:"8px", border:"1px solid #1a3a5c"
                       }}>
@@ -6473,7 +6514,7 @@ export default function Home() {
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "1fr 1fr",
+                            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
                             gap: "10px",
                           }}
                         >
@@ -6881,7 +6922,7 @@ export default function Home() {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "repeat(3, 1fr)",
+                          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
                           gap: "14px",
                           fontSize: "0.78rem",
                           lineHeight: 1.55,
@@ -7190,7 +7231,7 @@ export default function Home() {
                         <div style={{ color: "#666" }}>⌛ Journalist investigating...</div>
                       ) : null}
                       {currentArticle
-                        ? renderArticle(currentArticle, ac, border, bodyFont, isVip && vipCanRead)
+                        ? renderArticle(currentArticle, ac, border, bodyFont, isVip && vipCanRead, isMobile)
                         : null}
                     </>
                   ) : null}
@@ -7225,7 +7266,7 @@ export default function Home() {
 
               {frsStats && (
                 <div style={{ marginBottom: "24px" }}>
-                  <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"16px"}}>
+                  <div style={{display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:"12px", marginBottom:"16px"}}>
 
                     {/* TOP LEFT — ZRS */}
                     <div style={{
@@ -7417,7 +7458,7 @@ export default function Home() {
 
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
                     {[
                       { label: "AVG BALANCE", value: `${frsStats.economy.avg_balance.toFixed(1)} ZION`, color: "#4DA2FF" },
                       {
@@ -7496,7 +7537,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
                     <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
                       <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "8px" }}>
                         🏢 CORPORATIONS
@@ -7527,7 +7568,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginTop: "12px" }}>
                     <div style={{ background: "#050a10", border: "1px solid #2a1a0a", borderRadius: "8px", padding: "14px" }}>
                       <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.7rem", letterSpacing: "1px", marginBottom: "10px" }}>
                         🏛️ PRESIDENTIAL DECREE LOG
@@ -7714,7 +7755,13 @@ export default function Home() {
                 <div style={{ color: "#ffd700", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
                   🔐 HOW IT WORKS
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "1fr 1fr 1fr 1fr",
+                    gap: "12px",
+                  }}
+                >
                   {[
                     { icon: "💸", title: "Send", desc: "Send SUI or USDC to any address" },
                     { icon: "🔐", title: "Encrypt", desc: "Amount & recipient encrypted on-chain" },
@@ -7748,7 +7795,7 @@ export default function Home() {
                 <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
                   ⚙️ POWERED BY
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                   {[
                     { icon: "🔐", title: "Sui zkLogin", desc: "Sign in with Google — no seed phrase needed" },
                     { icon: "🛡️", title: "Seal Protocol", desc: "On-chain encryption for private transfers" },
@@ -7818,7 +7865,7 @@ export default function Home() {
                   />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                   <div>
                     <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
                       AMOUNT
@@ -8059,7 +8106,7 @@ export default function Home() {
 
                 {/* Coming soon form preview */}
                 <div style={{ opacity: 0.4, pointerEvents: "none" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                     <div>
                       <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
                         FROM NETWORK
