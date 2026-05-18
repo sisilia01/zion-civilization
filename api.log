@@ -905,3 +905,31 @@ INFO:     127.0.0.1:59668 - "GET /events/highlights HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59694 - "GET /clans HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59682 - "GET /agents HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59660 - "GET /markets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57256 - "GET /clans HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57270 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60752 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60766 - "GET /leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60736 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60782 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60746 - "GET /events/highlights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60802 - "GET /clans HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60798 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60760 - "GET /markets HTTP/1.1" 200 OK
+Sui TX error: 
+Sui TX error: 
+Sui TX error: 
+INFO:     127.0.0.1:48252 - "GET /stats HTTP/1.1" 200 OK
+Sui TX error: 
+[CACHE] zco_events updated at 2026-05-18T11:38:12.530199+00:00
+Sui TX error: 
+Sui TX error: 
+INFO:     127.0.0.1:53252 - "GET /zco/events/fast HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36234 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36208 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36244 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36254 - "GET /leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36228 - "GET /events/highlights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36270 - "GET /clans HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36260 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36222 - "GET /markets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33692 - "GET /stats HTTP/1.1" 200 OK
