@@ -41,3 +41,6 @@
 2026-05-18 21:25:33,154 [WATCHDOG] Running police (interval 1800s)
 2026-05-18 21:25:34,227 [WATCHDOG] Started police (police.py)
 2026-05-18 21:25:34,228 [WATCHDOG] Coin manager started
+2026-05-18 21:30:04,877 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
+2026-05-18 21:30:34,955 [WATCHDOG] settlement appears stuck — restarting
+2026-05-18 21:30:35,998 [WATCHDOG] Started settlement (settlement.py)

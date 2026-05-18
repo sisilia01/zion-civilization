@@ -283,14 +283,14 @@ def main():
         amount = 0
         
         if mode in ["DEPRESSION", "CRISIS", "RECESSION"]:
-            # Only QE if truly needed - avg balance < 5 ZION
-            if economy['avg_balance'] < 5:
+            # Only QE if truly needed - avg balance < 8 ZION
+            if economy['avg_balance'] < 8:
                 amount = quantitative_easing(economy, mode)
                 action = "QE"
             else:
-                log_event(f"🏦 ZRS {mode}: Monitoring economy. Avg {economy['avg_balance']:.1f} ZION — holding QE until avg < 5 ZION", 0)
+                log_event(f"🏦 ZRS {mode}: Monitoring economy. Avg {economy['avg_balance']:.1f} ZION — holding QE until avg < 8 ZION", 0)
                 action = "HOLD"
-                print(f"⚖️ {mode} but avg {economy['avg_balance']:.1f} > 5 — holding QE")
+                print(f"⚖️ {mode} but avg {economy['avg_balance']:.1f} > 8 — holding QE")
             
         elif mode == "HYPERINFLATION":
             # Emergency QT - confiscate from richest
