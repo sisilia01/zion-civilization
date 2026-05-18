@@ -124,3 +124,12 @@ Process 609916 waits for ShareLock on transaction 19906; blocked by process 6098
 HINT:  See server log for query details.
 CONTEXT:  while updating tuple (55,2) in relation "agents"
 
+
+📦 ZION Market — 2026-05-18 11:19
+==================================================
+🌾 Food: 10.2 | 💊 Medicine: 27.6 | Inflation: x1.0
+Prices: food=10.2 water=6.3 energy=11.7
+🌾 Food: 8 starved, 11 hungry (price: 10.2)
+📦 Amara Diop traded — profit 5.3 ZION
+
+✅ Market cycle complete!
