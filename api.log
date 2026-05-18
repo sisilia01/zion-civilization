@@ -1,34 +1,4 @@
-INFO:     Started server process [670436]
+INFO:     Started server process [673366]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:37518 - "GET /zionbet/polymarkets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52548 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52552 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52540 - "GET /markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52558 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52566 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52556 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52574 - "GET /zionbet/markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52598 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52590 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53308 - "GET / HTTP/1.1" 200 OK
-[CACHE] zco_events updated at 2026-05-18T17:50:09.813658+00:00
-INFO:     127.0.0.1:52940 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52920 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52904 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52926 - "GET /zionbet/markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52944 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52954 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52940 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52958 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52926 - "GET /markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44858 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44866 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44846 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44892 - "GET /zionbet/markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44888 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44898 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44916 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44914 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44878 - "GET /markets HTTP/1.1" 200 OK
