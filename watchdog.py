@@ -136,6 +136,7 @@ def main():
             log.info(f"Heartbeat — API:{api_status} | Scripts monitored: {len(SCRIPTS)}")
         
         # Coin manager каждые 4 часа
+        global last_coin_manager
         if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
             subprocess.Popen(
                 ["python3", f"{BACKEND_DIR}/coin_manager.py"],
