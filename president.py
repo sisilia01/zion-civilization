@@ -491,6 +491,26 @@ def main():
             if result == "early_election":
                 run_election(cur, forced=True)
         
+        # Auto-spend if fund too large (prevent hoarding)
+        president = get_president(cur)
+        if president and float(president['personal_fund']) > 5000:
+            excess = float(president['personal_fund']) - 2000
+            # Redistribute excess to ZRS and social fund
+            zrs_share = round(excess * 0.5, 2)
+            social_share = round(excess * 0.3, 2)
+            police_share = round(excess * 0.2, 2)
+            cur.execute("""
+                UPDATE state_treasury SET
+                    zrs_fund = zrs_fund + %s,
+                    social_fund = social_fund + %s,
+                    police_fund = police_fund + %s
+            """, (zrs_share, social_share, police_share))
+            cur.execute("UPDATE president_state SET personal_fund = 2000 WHERE is_active=true")
+            log_event(cur, None, 'president',
+                     f"🏦 President {president['agent_name']} redistributes excess treasury! ZRS +{zrs_share:.0f} | Social +{social_share:.0f} | Police +{police_share:.0f} ZION",
+                     excess)
+            print(f"🏦 Auto-redistribute: {excess:.0f} ZION excess → ZRS/social/police")
+        
         conn.commit()
         print("\n✅ President cycle complete!")
         
