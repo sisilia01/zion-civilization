@@ -162,6 +162,11 @@ def quantitative_easing(economy, mode):
         print(f"⚠️ QE capped at 10% of money supply: {max_qe:.0f} ZION max")
     
     total_printed = total_emission + corp_stimulus
+
+    cur.execute(
+        "UPDATE state_treasury SET zrs_fund = GREATEST(0, zrs_fund - %s)",
+        (total_printed,),
+    )
     
     cur.execute("""
         INSERT INTO frs_actions (action, amount, reason)
@@ -198,6 +203,11 @@ def quantitative_tightening(economy, mode):
     """, (1 - from_corps,))
     
     total_collected = elite_collected
+
+    cur.execute(
+        "UPDATE state_treasury SET zrs_fund = zrs_fund + %s",
+        (total_collected,),
+    )
     
     cur.execute("""
         INSERT INTO frs_actions (action, amount, reason)

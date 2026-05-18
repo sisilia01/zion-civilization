@@ -183,9 +183,9 @@ def president_actions(cur, president):
     # Собираем налоги
     tax_rate = 0.05 if not is_dictator else 0.20
     
-    cur.execute("SELECT SUM(balance) as total FROM agents WHERE is_alive = true")
-    total_balance = float(cur.fetchone()['total'] or 0)
-    tax_collected = round(total_balance * tax_rate * 0.1, 2)
+    cur.execute("SELECT SUM(balance) as total FROM agents WHERE is_alive = true AND class = 'elite'")
+    elite_total = float(cur.fetchone()['total'] or 0)
+    tax_collected = round(elite_total * tax_rate * 0.1, 2)
     
     cur.execute("""
         UPDATE agents SET balance = balance * %s
@@ -231,13 +231,18 @@ def president_actions(cur, president):
     
     if decision == "fund_police":
         amount = min(police_fund * 0.25, 150)
-        cur.execute("UPDATE president_state SET police_fund = police_fund - %s WHERE is_active = true", (amount,))
-        # Бедные вступают в полицию чтобы выжить
+        new_cops = 15
+        total_given = new_cops * 12
+        cur.execute(
+            "UPDATE president_state SET police_fund = police_fund - %s - %s WHERE is_active = true",
+            (amount, total_given),
+        )
+        # Бедные вступают в полицию чтобы выжить (paid from police_fund)
         cur.execute("""
             UPDATE agents SET balance = balance + 12, class = 'poor'
             WHERE is_alive = true AND class = 'critical'
-            AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT 15)
-        """)
+            AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
+        """, (new_cops,))
         log_event(cur, pid, 'president',
                  f"🚔 President {name} allocated {amount:.0f} ZION to police! Desperate poor join police force to survive.",
                  amount)
@@ -259,11 +264,17 @@ def president_actions(cur, president):
         
     elif decision == "help_poor":
         amount = min(personal_fund * 0.3, 120)
+        recipients = max(1, int(amount / 4))
         cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true", (amount,))
         cur.execute("""
             UPDATE agents SET balance = balance + 4
             WHERE is_alive = true AND class IN ('poor', 'critical')
-        """)
+            AND id IN (
+                SELECT id FROM agents
+                WHERE is_alive = true AND class IN ('poor', 'critical')
+                ORDER BY RANDOM() LIMIT %s
+            )
+        """, (recipients,))
         log_event(cur, pid, 'president',
                  f"❤️ President {name} distributed {amount:.0f} ZION welfare to the poor!",
                  amount)
@@ -286,6 +297,10 @@ def president_actions(cur, president):
         
     elif decision == "corrupt":
         stolen = min(personal_fund * 0.5, 400)
+        cur.execute(
+            "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
+            (stolen,),
+        )
         cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s", (stolen, pid))
         log_event(cur, pid, 'president',
                  f"💀 CORRUPTION EXPOSED: President {name} embezzled {stolen:.0f} ZION from state treasury! Citizens outraged!",
@@ -294,8 +309,19 @@ def president_actions(cur, president):
         print(f"💀 Corruption: {name} stole {stolen:.0f} ZION!")
         
     elif decision == "raise_taxes":
-        cur.execu
-    
+        cur.execute(
+            """
+            UPDATE agents SET balance = balance * %s
+            WHERE is_alive = true AND class IN ('middle', 'poor', 'critical')
+            """,
+            (0.95,),
+        )
+        log_event(cur, pid, 'president',
+                 f"📈 President {name} raised taxes! Middle and poor classes pay more.",
+                 0)
+        approval_change = -10
+        print(f"📈 {name} raised taxes")
+
     # Normal presidents can't have 100% approval - someone always disagrees
     if not is_dictator:
         max_approval = 85

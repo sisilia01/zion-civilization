@@ -39,9 +39,11 @@ def run_espionage(cur):
     success_chance = min(0.7, 0.3 + float(spy['aggression'] or 50) / 200)
     if random.random() < success_chance:
         stolen = round(float(victim['treasury']) * random.uniform(0.05, 0.2), 2)
+        spy_cut = round(stolen * 0.1, 2)
+        clan_share = round(stolen - spy_cut, 2)
         cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s", (stolen, victim['id']))
-        cur.execute("UPDATE clans SET treasury = treasury + %s WHERE id = %s", (stolen, attacker['id']))
-        cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s", (stolen * 0.1, spy['id']))
+        cur.execute("UPDATE clans SET treasury = treasury + %s WHERE id = %s", (clan_share, attacker['id']))
+        cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s", (spy_cut, spy['id']))
         log_event(cur, spy['id'], 'espionage',
                  f"🕵️ {spy['name']} infiltrated {victim['name']}! Stole {stolen:.1f} ZION for {attacker['name']}!",
                  stolen)

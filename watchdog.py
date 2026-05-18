@@ -25,7 +25,6 @@ BACKEND_DIR = "/root/zion_backend"
 SCRIPTS = {
     "tax":          ("tax_cron.py",    3600),   # каждый час
     "birth":        ("birth.py",       1800),   # каждые 30 мин
-    "police":       ("police.py",      3600),   # каждый час
     "corporations": ("corporations.py", 1800),   # каждые 30 мин
     "epidemics":    ("epidemics.py",    7200),   # каждые 2 часа
     "marriages":    ("marriages.py",    3600),   # каждый час
@@ -41,7 +40,7 @@ SCRIPTS = {
     "frs":          ("frs.py",          1800),   # каждые 30 мин
     "president":    ("president.py",    3600),   # каждый час
     "sheriff":      ("sheriff.py",      3600),   # каждый час
-    "police_v2":    ("police.py",       1800),   # каждые 30 минждые 5 мин
+    "police":       ("police.py",       1800),   # каждые 30 мин
 }
 
 # Время последнего запуска каждого скрипта
