@@ -3282,6 +3282,21 @@ export default function Home() {
       market_share: number;
     }>
   >([]);
+  const [policeDivisions, setPoliceDivisions] = useState<{
+    divisions: Array<{
+      division: string;
+      officers: number;
+      budget: number;
+      effectiveness: number;
+    }>;
+    treasury: {
+      zrs_fund: number;
+      president_fund: number;
+      police_fund: number;
+      social_fund: number;
+      corruption_index: number;
+    };
+  } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -3314,6 +3329,7 @@ export default function Home() {
         if (Array.isArray(d)) setCorporations(d);
       })
       .catch(() => {});
+    fetch("/api/police/divisions").then(r => r.json()).then(d => setPoliceDivisions(d)).catch(() => {});
   }, []);
 
   const [userPoints, setUserPoints] = useState(0);
@@ -5557,6 +5573,91 @@ export default function Home() {
                 </div>
               </section>
 
+              {policeDivisions && policeDivisions.divisions.length > 0 && (
+                <div style={{marginTop:"24px"}}>
+                  <div style={{display:"flex", alignItems:"center", gap:"12px", marginBottom:"16px"}}>
+                    <div style={{flex:1, height:"1px", background:"linear-gradient(to right, transparent, #4DA2FF)"}}/>
+                    <span style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.8rem", letterSpacing:"3px", whiteSpace:"nowrap"}}>
+                      🚔 POLICE DIVISIONS 🚔
+                    </span>
+                    <div style={{flex:1, height:"1px", background:"linear-gradient(to left, transparent, #4DA2FF)"}}/>
+                  </div>
+
+                  {policeDivisions.treasury && (
+                    <div style={{
+                      display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px", marginBottom:"16px"
+                    }}>
+                      {[
+                        {label:"ZRS FUND", value: policeDivisions.treasury.zrs_fund?.toFixed(0), color:"#00ff41"},
+                        {label:"POLICE FUND", value: policeDivisions.treasury.police_fund?.toFixed(0), color:"#4DA2FF"},
+                        {label:"SOCIAL FUND", value: policeDivisions.treasury.social_fund?.toFixed(0), color:"#ffaa00"},
+                        {label:"CORRUPTION", value: `${policeDivisions.treasury.corruption_index?.toFixed(0)}%`,
+                         color: (policeDivisions.treasury.corruption_index || 0) > 50 ? "#ff3232" : "#00ff41"},
+                      ].map(m => (
+                        <div key={m.label} style={{
+                          background:"#050a10", border:"1px solid #1a1a2e",
+                          borderRadius:"8px", padding:"10px", textAlign:"center"
+                        }}>
+                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem", marginBottom:"4px"}}>{m.label}</div>
+                          <div style={{color:m.color, fontFamily:"monospace", fontSize:"0.9rem", fontWeight:"bold"}}>{m.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{background:"#050a10", border:"1px solid #1a3a5c", borderRadius:"10px", padding:"16px"}}>
+                    {policeDivisions.divisions.map((div, i) => {
+                      const emojis: Record<string,string> = {
+                        swat:"🔫", anti_tax:"💼", presidential_guard:"🛡️",
+                        anti_corruption:"🕵️", riot_control:"🪖"
+                      };
+                      const labels: Record<string,string> = {
+                        swat:"SWAT — Anti-Clan Operations",
+                        anti_tax:"ANTI-TAX — Revenue Enforcement",
+                        presidential_guard:"PRESIDENTIAL GUARD — Executive Protection",
+                        anti_corruption:"ANTI-CORRUPTION — Internal Affairs",
+                        riot_control:"RIOT CONTROL — Civil Unrest Response"
+                      };
+                      const maxOfficers = 50;
+                      const pct = Math.min(100, (div.officers / maxOfficers) * 100);
+                      const effColor = div.effectiveness > 70 ? "#00ff41" : div.effectiveness > 40 ? "#ffaa00" : "#ff3232";
+
+                      return (
+                        <div key={div.division} style={{
+                          display:"flex", alignItems:"center", gap:"12px",
+                          padding:"10px 0",
+                          borderBottom: i < policeDivisions.divisions.length - 1 ? "1px solid #0a1a2a" : "none"
+                        }}>
+                          <span style={{fontSize:"1.1rem", width:"24px"}}>{emojis[div.division] || "🚔"}</span>
+                          <div style={{flex:1}}>
+                            <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.72rem", marginBottom:"4px"}}>
+                              {labels[div.division] || div.division.toUpperCase()}
+                            </div>
+                            <div style={{
+                              width:"100%", height:"6px", background:"#111",
+                              borderRadius:"3px", overflow:"hidden"
+                            }}>
+                              <div style={{
+                                width:`${pct}%`, height:"100%",
+                                background: pct > 60 ? "#4DA2FF" : pct > 30 ? "#ffaa00" : "#ff3232",
+                                borderRadius:"3px", transition:"width 0.5s"
+                              }}/>
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right", minWidth:"80px"}}>
+                            <div style={{color:"#fff", fontFamily:"monospace", fontSize:"0.85rem", fontWeight:"bold"}}>
+                              {div.officers} <span style={{color:"#333", fontSize:"0.65rem"}}>officers</span>
+                            </div>
+                            <div style={{color:effColor, fontFamily:"monospace", fontSize:"0.65rem"}}>
+                              {div.effectiveness?.toFixed(0)}% eff
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div
                 style={{
