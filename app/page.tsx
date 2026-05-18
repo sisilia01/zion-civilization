@@ -1776,6 +1776,17 @@ const ZIONBET_TIMEFRAME_SIDEBAR_ROWS: { key: ZionBetTimeframeFilterKey; label: s
   { key: "1y", label: "Yearly" },
 ];
 
+const ZIONBET_BET_TIMEFRAME_SIDEBAR: { icon: string; label: string; tf: string }[] = [
+  { icon: "⬛", label: "All", tf: "all" },
+  { icon: "⏱️", label: "15 min", tf: "15m" },
+  { icon: "🕐", label: "1 hour", tf: "1h" },
+  { icon: "🕓", label: "4 hours", tf: "4h" },
+  { icon: "📅", label: "Daily", tf: "24h" },
+  { icon: "📊", label: "Weekly", tf: "7d" },
+  { icon: "📈", label: "Monthly", tf: "30d" },
+  { icon: "🗓️", label: "Yearly", tf: "1y" },
+];
+
 const ZIONBET_TIMEFRAME_MAP: Record<string, string[]> = {
   "15min": ["15m"],
   "1h": ["1h"],
@@ -5583,7 +5594,7 @@ export default function Home() {
     [zionbetMarkets, polyByCat, myBets.length]
   );
 
-  const zionbetDisplayedMarkets = useMemo(() => {
+  const zionbetTabMarketsBase = useMemo(() => {
     if (betTab === "history") return [];
     let list: ZionbetApiMarket[] = [];
     if (betTab === "civilization") {
@@ -5605,7 +5616,27 @@ export default function Home() {
     } else {
       list = zionbetPolyMarketsForTab("world", polyByCat).map(polyToApiMarket);
     }
-    const sorted = [...list];
+    return list;
+  }, [zionbetMarkets, polyByCat, betTab]);
+
+  const betTimeframeCounts = useMemo(() => {
+    const list = zionbetTabMarketsBase;
+    const counts: Record<string, number> = {};
+    for (const { tf } of ZIONBET_BET_TIMEFRAME_SIDEBAR) {
+      if (tf === "all") {
+        counts[tf] = list.length;
+      } else {
+        const tfKey = zionbetBetTimeframeToFilterKey(tf);
+        counts[tf] = list.filter((m) =>
+          zionBetMarketMatchesTimeframeFilter(m.timeframe, tfKey)
+        ).length;
+      }
+    }
+    return counts;
+  }, [zionbetTabMarketsBase]);
+
+  const zionbetDisplayedMarkets = useMemo(() => {
+    const sorted = [...zionbetTabMarketsBase];
     if (betSort === "volume") {
       sorted.sort(
         (a, b) =>
@@ -5621,7 +5652,7 @@ export default function Home() {
       return sorted.filter((m) => zionBetMarketMatchesTimeframeFilter(m.timeframe, tfKey));
     }
     return sorted;
-  }, [zionbetMarkets, polyByCat, betTab, betSort, betTimeframe]);
+  }, [zionbetTabMarketsBase, betTab, betSort, betTimeframe]);
 
   const zionbetHeaderStats = useMemo(() => {
     const all = [
@@ -8433,36 +8464,87 @@ export default function Home() {
                         <div
                           style={{
                             display: "flex",
-                            gap: "6px",
-                            marginBottom: "16px",
-                            flexWrap: "wrap",
-                            alignItems: "center",
+                            gap: "16px",
+                            alignItems: "flex-start",
                           }}
                         >
-                          <span style={{ color: "#8b9ab1", fontSize: "11px", marginRight: "4px" }}>
-                            TIMEFRAME:
-                          </span>
-                          {(["all", "15m", "1h", "4h", "24h", "7d", "30d", "1y"] as const).map((tf) => (
-                            <button
-                              key={tf}
-                              type="button"
-                              onClick={() => setBetTimeframe(tf)}
-                              style={{
-                                padding: "4px 10px",
-                                borderRadius: "14px",
-                                fontSize: "11px",
-                                fontWeight: 500,
-                                cursor: "pointer",
-                                background: betTimeframe === tf ? "#4DA2FF" : "#1e2d3d",
-                                color: betTimeframe === tf ? "white" : "#8b9ab1",
-                                border: betTimeframe === tf ? "none" : "1px solid #2d3f55",
-                              }}
-                            >
-                              {tf === "all" ? "All" : tf}
-                            </button>
-                          ))}
-                        </div>
-                        {zionbetDisplayedMarkets.length === 0 &&
+                          <div
+                            style={{
+                              width: "180px",
+                              flexShrink: 0,
+                              background: "#0d1117",
+                              border: "1px solid #1e2d3d",
+                              borderRadius: "10px",
+                              padding: "8px",
+                              position: "sticky",
+                              top: "80px",
+                            }}
+                          >
+                            {ZIONBET_BET_TIMEFRAME_SIDEBAR.map(({ icon, label, tf }) => {
+                              const active = betTimeframe === tf;
+                              return (
+                                <div
+                                  key={tf}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => setBetTimeframe(tf)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      setBetTimeframe(tf);
+                                    }
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!active) e.currentTarget.style.background = "#1a2535";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!active) e.currentTarget.style.background = "transparent";
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    padding: "8px 12px",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    marginBottom: "2px",
+                                    background: active ? "#1e2d3d" : "transparent",
+                                    color: active ? "#e6edf3" : "#8b9ab1",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: "16px",
+                                      width: "20px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    {icon}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: "13px",
+                                      fontWeight: active ? 500 : 400,
+                                    }}
+                                  >
+                                    {label}
+                                  </span>
+                                  <span
+                                    style={{
+                                      color: "#4b5563",
+                                      fontSize: "12px",
+                                      marginLeft: "auto",
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    {betTimeframeCounts[tf] ?? 0}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            {zionbetDisplayedMarkets.length === 0 &&
                         zionbetMarkets.civilization.length === 0 &&
                         zionbetMarkets.crypto.length === 0 &&
                         zionbetMarkets.sports.length === 0 &&
@@ -8506,7 +8588,9 @@ export default function Home() {
                               );
                             })}
                           </div>
-                        )}
+                            )}
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>
