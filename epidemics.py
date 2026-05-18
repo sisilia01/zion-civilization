@@ -31,60 +31,80 @@ def log_event(cur, agent_id, event_type, description, amount=0):
     """, (agent_id, event_type, description, amount))
 
 def spread_epidemic(cur):
-    """10% шанс начала эпидемии"""
+    """10% chance of epidemic"""
     if random.random() > 0.10:
         print("No epidemic this cycle")
         return
     
     disease_name, spread_rate, death_rate = random.choice(DISEASES)
-    
-    # Находим жертв
     infected_count = random.randint(20, 100)
+    
+    # Check pharma corps - they reduce death rate
+    cur.execute("""
+        SELECT SUM(treasury) as total FROM corporations 
+        WHERE is_active=true AND corp_type='pharma'
+    """)
+    pharma = cur.fetchone()
+    pharma_treasury = float(pharma['total'] or 0)
+    if pharma_treasury > 500:
+        death_rate *= 0.6  # Pharma reduces deaths 40%
+        # Pharma earns revenue from epidemic
+        cur.execute("""
+            UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
+            WHERE is_active=true AND corp_type='pharma'
+        """, (infected_count * 2, infected_count * 2))
+        print(f"💊 Pharma corps profit from epidemic: +{infected_count*2} ZION")
+    
+    # Check if president funded healthcare
+    cur.execute("SELECT police_fund FROM president_state WHERE is_active=true LIMIT 1")
+    pres = cur.fetchone()
+    if pres and float(pres['police_fund']) > 200:
+        death_rate *= 0.8  # Healthcare funding reduces deaths 20%
+    
     cur.execute("""
         SELECT id, name, class, balance FROM agents
-        WHERE is_alive = true
-        ORDER BY RANDOM() LIMIT %s
+        WHERE is_alive = true ORDER BY RANDOM() LIMIT %s
     """, (infected_count,))
     infected = cur.fetchall()
     
     dead = 0
     treated = 0
     
+    # Get medicine price from market
+    cur.execute("""
+        SELECT price FROM market_prices WHERE resource='medicine' 
+        ORDER BY recorded_at DESC LIMIT 1
+    """)
+    med_price_row = cur.fetchone()
+    treatment_cost = float(med_price_row['price']) if med_price_row else 20.0
+    
     for agent in infected:
-        if agent['class'] == 'elite':
-            # Элита покупает лечение
-            treatment_cost = 20.0
-            if float(agent['balance']) >= treatment_cost:
-                cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                           (treatment_cost, agent['id']))
-                treated += 1
-            else:
-                # Элита не может позволить лечение — умирает
-                if random.random() < death_rate * 0.3:
-                    cur.execute("""
-                        UPDATE agents SET is_alive = false, died_at = NOW(),
-                        death_cause = %s WHERE id = %s
-                    """, (f"died from {disease_name}", agent['id']))
-                    dead += 1
+        bal = float(agent['balance'])
         
-        elif agent['class'] == 'middle':
-            if random.random() < death_rate * 0.5:
+        if bal >= treatment_cost:
+            # Can afford treatment
+            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+                       (treatment_cost, agent['id']))
+            treated += 1
+            # Revenue to pharma
+            cur.execute("""
+                UPDATE corporations SET treasury = treasury + %s
+                WHERE is_active=true AND corp_type='pharma'
+                ORDER BY treasury DESC LIMIT 1
+            """, (treatment_cost * 0.5,))
+        else:
+            # Cannot afford - death based on class
+            dr = death_rate * (0.3 if agent['class']=='elite' else 
+                              0.5 if agent['class']=='middle' else 1.0)
+            if random.random() < dr:
                 cur.execute("""
-                    UPDATE agents SET is_alive = false, died_at = NOW(),
-                    death_cause = %s WHERE id = %s
-                """, (f"died from {disease_name}", agent['id']))
-                dead += 1
-        
-        else:  # poor/critical
-            if random.random() < death_rate:
-                cur.execute("""
-                    UPDATE agents SET is_alive = false, died_at = NOW(),
-                    death_cause = %s WHERE id = %s
+                    UPDATE agents SET is_alive=false, died_at=NOW(),
+                    death_cause=%s WHERE id=%s
                 """, (f"died from {disease_name}", agent['id']))
                 dead += 1
     
     log_event(cur, None, 'epidemic',
-             f"🦠 {disease_name} outbreak! {infected_count} infected, {dead} dead, {treated} treated",
+             f"🦠 {disease_name} outbreak! {infected_count} infected, {dead} dead, {treated} treated (pharma: {'active' if pharma_treasury>500 else 'none'})",
              dead * 5)
     print(f"🦠 {disease_name}: {infected_count} infected, {dead} dead, {treated} treated")
 

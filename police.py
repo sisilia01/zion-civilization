@@ -33,16 +33,26 @@ def arrest_tax_evaders(cur):
     """)
     evaders = cur.fetchall()
     arrested = 0
+    total_fines = 0
     for agent in evaders:
         fine = min(float(agent['balance']) * 0.3, 50)
         if fine > 0:
             cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
                        (fine, agent['id']))
+            total_fines += fine
+    # Route fines to sheriff budget
+        if fine > 0:
             log_event(cur, agent['id'], 'police',
                      f"🚔 Police arrested {agent['name']} for tax evasion! Fine: {fine:.1f} ZION",
                      fine)
             arrested += 1
             print(f"🚔 Arrested {agent['name']} — fine {fine:.1f} ZION")
+    
+    if total_fines > 0:
+        cur.execute("""
+            UPDATE sheriff_state SET police_budget = police_budget + %s 
+            WHERE is_active = true
+        """, (total_fines,))
     return arrested
 
 def patrol_clans(cur):
@@ -66,7 +76,12 @@ def patrol_clans(cur):
     return True
 
 def protect_poor(cur):
-    """Защищает бедных — перераспределяет конфискованное"""
+    """Protects poor — redistributes from sheriff budget"""
+    cur.execute("SELECT police_budget FROM sheriff_state WHERE is_active=true LIMIT 1")
+    sheriff = cur.fetchone()
+    if not sheriff or float(sheriff['police_budget']) < 50:
+        return
+    
     cur.execute("""
         SELECT id, name, balance FROM agents
         WHERE is_alive = true AND class = 'critical' AND balance < 2
@@ -77,13 +92,16 @@ def protect_poor(cur):
         return
     
     gift = 5.0
+    total_aid = gift * len(poor)
+    cur.execute("UPDATE sheriff_state SET police_budget = police_budget - %s WHERE is_active=true",
+               (total_aid,))
     for agent in poor:
         cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
                    (gift, agent['id']))
         log_event(cur, agent['id'], 'police',
-                 f"🛡️ Police social program: {agent['name']} received {gift} ZION aid",
+                 f"🛡️ Police welfare: {agent['name']} received {gift} ZION aid from sheriff budget",
                  gift)
-        print(f"🛡️ Aid to {agent['name']}: +{gift} ZION")
+        print(f"🛡️ Aid to {agent['name']}: +{gift} ZION (from sheriff budget)")
 
 def fight_corruption(cur):
     """Борется с коррупцией в элите"""

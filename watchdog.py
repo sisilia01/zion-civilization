@@ -34,7 +34,6 @@ SCRIPTS = {
     "espionage":    ("espionage.py",    3600),   # каждый час
     "casino":       ("casino.py",       1800),   # каждые 30 мин
     "religion":     ("religion.py",    1800),   # каждые 30 мин
-    "politics":     ("politics.py",    3600),   # каждый час
     "catastrophes": ("catastrophes.py",7200),   # каждые 2 часа
     "clans":        ("clans.py",       3600),   # каждый час
     "zionwork":     ("zionwork.py",    1800),   # каждые 30 мин

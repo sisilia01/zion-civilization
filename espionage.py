@@ -13,26 +13,31 @@ def log_event(cur, agent_id, event_type, description, amount=0):
                (agent_id, event_type, description, amount))
 
 def run_espionage(cur):
-    cur.execute("SELECT id, name, treasury FROM clans WHERE treasury > 100 ORDER BY RANDOM() LIMIT 2")
+    # Target clans with most tension (highest treasury difference)
+    cur.execute("""
+        SELECT id, name, treasury FROM clans 
+        WHERE treasury > 100 ORDER BY treasury DESC LIMIT 4
+    """)
     clans = cur.fetchall()
     if len(clans) < 2:
         return
 
-    attacker = clans[0]
-    victim = clans[1]
+    attacker = clans[0]  # Richest attacks
+    victim = random.choice(clans[1:])  # Random target
 
-    # Находим шпиона
+    # Find spy with highest aggression
     cur.execute("""
-        SELECT id, name FROM agents
+        SELECT id, name, aggression FROM agents
         WHERE is_alive = true AND clan_id = %s
-        ORDER BY RANDOM() LIMIT 1
+        ORDER BY aggression DESC LIMIT 1
     """, (attacker['id'],))
     spy = cur.fetchone()
     if not spy:
         return
 
-    # 40% успех
-    if random.random() < 0.4:
+    # Success based on aggression
+    success_chance = min(0.7, 0.3 + float(spy['aggression'] or 50) / 200)
+    if random.random() < success_chance:
         stolen = round(float(victim['treasury']) * random.uniform(0.05, 0.2), 2)
         cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s", (stolen, victim['id']))
         cur.execute("UPDATE clans SET treasury = treasury + %s WHERE id = %s", (stolen, attacker['id']))
@@ -42,14 +47,19 @@ def run_espionage(cur):
                  stolen)
         print(f"🕵️ {spy['name']} stole {stolen:.1f} ZION from {victim['name']}")
     else:
-        # Провал — шпиона поймали
-        fine = 10.0
-        if fine > 0:
-            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s", (fine, spy['id']))
+        # Caught - attacker clan pays penalty
+        penalty = round(float(attacker['treasury']) * 0.05, 2)
+        cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s",
+                   (penalty, attacker['id']))
+        cur.execute("UPDATE clans SET treasury = treasury + %s WHERE id = %s",
+                   (penalty, victim['id']))
+        # Spy loses aggression
+        cur.execute("UPDATE agents SET aggression = GREATEST(10, aggression - 10) WHERE id = %s",
+                   (spy['id'],))
         log_event(cur, spy['id'], 'espionage',
-                 f"🚨 Spy {spy['name']} caught by {victim['name']}! Fined {fine:.1f} ZION",
-                 fine)
-        print(f"🚨 Spy {spy['name']} caught! Fine: {fine:.1f} ZION")
+                 f"🚨 Spy {spy['name']} caught by {victim['name']}! {attacker['name']} pays {penalty:.1f} ZION penalty!",
+                 penalty)
+        print(f"🚨 Spy caught! {attacker['name']} pays {penalty:.1f} ZION")
 
 def main():
     print(f"\n🕵️ ZION Espionage — {datetime.now().strftime('%Y-%m-%d %H:%M')}")

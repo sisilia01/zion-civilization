@@ -33,49 +33,99 @@ def ensure_market_table(cur):
     """)
 
 def update_prices(cur):
-    """Обновляем цены на ресурсы"""
+    """Update prices based on supply/demand and corporations"""
+    # Agro corps reduce food price
+    cur.execute("""
+        SELECT SUM(treasury) as total, SUM(employees) as workers 
+        FROM corporations WHERE is_active=true AND corp_type='agro'
+    """)
+    agro = cur.fetchone()
+    agro_power = float(agro['total'] or 0) + float(agro['workers'] or 0) * 10
+    
+    # Pharma corps reduce medicine price
+    cur.execute("""
+        SELECT SUM(treasury) as total FROM corporations 
+        WHERE is_active=true AND corp_type='pharma'
+    """)
+    pharma = cur.fetchone()
+    pharma_power = float(pharma['total'] or 0)
+    
+    # Military corps affect weapons price
+    cur.execute("""
+        SELECT SUM(treasury) as total FROM corporations 
+        WHERE is_active=true AND corp_type='military'
+    """)
+    military = cur.fetchone()
+    military_power = float(military['total'] or 0)
+    
+    # Base prices modified by corp power
+    food_price = max(1, round(random.uniform(3, 20) * (1 - min(agro_power/5000, 0.6)), 2))
+    medicine_price = max(5, round(random.uniform(15, 60) * (1 - min(pharma_power/3000, 0.5)), 2))
+    weapons_price = max(10, round(random.uniform(20, 100) * (1 - min(military_power/3000, 0.4)), 2))
+    
     resources = {
-        "food": random.uniform(1, 15),
-        "water": random.uniform(0.5, 8),
-        "energy": random.uniform(2, 20),
-        "medicine": random.uniform(10, 50),
-        "weapons": random.uniform(20, 100),
+        "food": food_price,
+        "water": round(random.uniform(0.5, 8), 2),
+        "energy": round(random.uniform(2, 20), 2),
+        "medicine": medicine_price,
+        "weapons": weapons_price,
     }
     for resource, price in resources.items():
         cur.execute("""
             INSERT INTO market_prices (resource, price) VALUES (%s, %s)
-        """, (resource, round(price, 2)))
+        """, (resource, price))
+    
+    print(f"🌾 Food: {food_price} | 💊 Medicine: {medicine_price} | ⚔️ Weapons: {weapons_price}")
     return resources
 
 def food_crisis(cur, prices):
-    """Голод убивает бедных если еда дорогая"""
-    if prices['food'] < 10:
-        print(f"🌾 Food price normal: {prices['food']:.1f} ZION")
-        return
+    """All agents must buy food - starvation if cant afford"""
+    food_price = prices['food']
     
-    # Еда дорогая — бедные голодают
+    # Everyone needs food - deduct from balance
     cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class IN ('poor', 'critical')
-        AND balance < %s
-        ORDER BY RANDOM() LIMIT 30
-    """, (prices['food'],))
-    starving = cur.fetchall()
+        SELECT id, name, class, balance FROM agents
+        WHERE is_alive = true
+        ORDER BY balance ASC LIMIT 200
+    """)
+    agents = cur.fetchall()
     
     dead = 0
-    for agent in starving:
-        if random.random() < 0.3:
-            cur.execute("""
-                UPDATE agents SET is_alive = false, died_at = NOW(),
-                death_cause = 'starvation' WHERE id = %s
-            """, (agent['id'],))
-            dead += 1
+    starving = 0
+    agro_revenue = 0
+    
+    for agent in agents:
+        bal = float(agent['balance'])
+        if bal >= food_price:
+            # Can afford food
+            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+                       (food_price, agent['id']))
+            agro_revenue += food_price
+        else:
+            # Cannot afford - starvation risk
+            starving += 1
+            death_chance = 0.1 if agent['class'] == 'elite' else 0.2 if agent['class'] == 'middle' else 0.35
+            if random.random() < death_chance:
+                cur.execute("""
+                    UPDATE agents SET is_alive=false, died_at=NOW(),
+                    death_cause='starvation' WHERE id=%s
+                """, (agent['id'],))
+                dead += 1
+    
+    # Agro corps earn from food sales
+    if agro_revenue > 0:
+        cur.execute("""
+            UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
+            WHERE is_active=true AND corp_type='agro'
+        """, (agro_revenue * 0.3, agro_revenue * 0.3))
     
     if dead > 0:
         log_event(cur, None, 'famine',
-                 f"🌾 Food Crisis! Price: {prices['food']:.1f} ZION. {dead} agents died of starvation!",
-                 dead * prices['food'])
-        print(f"🌾 Famine: {dead} dead (food price: {prices['food']:.1f} ZION)")
+                 f"🌾 Food market: price {food_price:.1f} ZION. {starving} couldnt afford. {dead} starved to death!",
+                 dead * food_price)
+        print(f"🌾 Food: {dead} starved, {starving} hungry (price: {food_price:.1f})")
+    else:
+        print(f"🌾 Food market normal: {food_price:.1f} ZION, {starving} struggling")
 
 def trade_resources(cur, prices):
     """Богатые торгуют ресурсами и зарабатывают"""

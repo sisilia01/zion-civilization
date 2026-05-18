@@ -124,24 +124,26 @@ def run_religious_cycle(cur):
         if not believers:
             continue
         
+        # Collect tithes into church pool
+        church_pool = 0.0
         for believer in believers:
-            # Десятина
             tithe = round(float(believer['balance']) * religion['tithe_rate'], 2)
             if tithe > 0.1:
                 cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
                            (tithe, believer['id']))
-            
-            # Молитва
+                church_pool += tithe
             total_prayers += 1
-            
-            # Чудо
-            if random.random() < religion['miracle_chance']:
-                blessing = religion['blessing_amount'] * random.uniform(0.5, 2.0)
+        
+        # Miracles paid FROM church pool (no money creation)
+        for believer in believers:
+            if random.random() < religion['miracle_chance'] and church_pool > 0:
+                blessing = min(religion['blessing_amount'] * random.uniform(0.5, 2.0), church_pool)
                 blessing = round(blessing, 2)
                 cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
                            (blessing, believer['id']))
+                church_pool -= blessing
                 log_event(cur, believer['id'], 'prayer',
-                         f"{religion['icon']} {religion['deity']} blessed {believer['name']}! +{blessing:.1f} ZION miracle!",
+                         f"{religion['icon']} {religion['deity']} blessed {believer['name']}! +{blessing:.1f} ZION from church tithe pool!",
                          blessing)
                 total_miracles += 1
     

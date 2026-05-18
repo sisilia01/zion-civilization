@@ -31,8 +31,9 @@ def run_casino(cur):
         # Казино всегда выигрывает в среднем (55% проигрыш)
         if random.random() < 0.45:  # выиграл
             winnings = round(bet * random.uniform(1.5, 3.0), 2)
+            net_win = round(winnings - bet, 2)  # net profit only
             cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                       (winnings, gambler['id']))
+                       (net_win, gambler['id']))
             log_event(cur, gambler['id'], 'casino',
                      f"🎰 {gambler['name']} won {winnings:.1f} ZION at underground casino!",
                      winnings)
@@ -51,10 +52,16 @@ def run_casino(cur):
     
     # Полиция иногда накрывает казино
     if random.random() < 0.2:
+        confiscated = abs(jackpot)
+        if confiscated > 0:
+            cur.execute("""
+                UPDATE sheriff_state SET police_budget = police_budget + %s 
+                WHERE is_active = true
+            """, (confiscated,))
         log_event(cur, None, 'police',
-                 f"🚔 Police raided underground casino! Confiscated {abs(jackpot):.1f} ZION!",
-                 abs(jackpot))
-        print(f"🚔 Police raided the casino!")
+                 f"🚔 Police raided underground casino! Confiscated {confiscated:.1f} ZION for police budget!",
+                 confiscated)
+        print(f"🚔 Police raided the casino! +{confiscated:.1f} to police budget")
     
     return winners, losers
 
