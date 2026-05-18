@@ -20,6 +20,60 @@ export function getSealClient(): SealClient {
   return sealClient;
 }
 
+// Encrypt VIP press article content using Seal
+export async function encryptArticle(
+  content: string,
+  allowlistObjectId: string,
+  signer: any
+): Promise<{ encryptedData: Uint8Array; encryptedKey: Uint8Array } | null> {
+  try {
+    const client = getSealClient();
+    const contentBytes = new TextEncoder().encode(content);
+
+    // Create identity from allowlist object
+    const { encryptedObject, key } = await client.encrypt({
+      threshold: 2,
+      packageId: "0x06a2b2c52b6e7d71b4d4e6a8e60c77c1a5f7a65b3bfea1c0ea87d6eb4c56f23",
+      id: allowlistObjectId,
+      data: contentBytes,
+    });
+
+    return {
+      encryptedData: encryptedObject,
+      encryptedKey: key,
+    };
+  } catch (error) {
+    console.error("Seal encrypt error:", error);
+    return null;
+  }
+}
+
+// Decrypt VIP content using Seal
+export async function decryptArticle(
+  encryptedData: Uint8Array,
+  signer: any
+): Promise<string | null> {
+  try {
+    const client = getSealClient();
+
+    const decrypted = await client.decrypt({
+      data: encryptedData,
+      sessionKey: signer,
+      txBytes: new Uint8Array(),
+    });
+
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error("Seal decrypt error:", error);
+    return null;
+  }
+}
+
+// Check if content is Seal encrypted (starts with Seal header)
+export function isSealEncrypted(data: string): boolean {
+  return data.startsWith("SEAL:");
+}
+
 export const SILVER_THRESHOLD = 0.1;
 export const GOLD_THRESHOLD = 1;
 
