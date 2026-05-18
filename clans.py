@@ -11,6 +11,14 @@ conn = psycopg2.connect(
 
 def join_clans():
     cur = conn.cursor()
+    # Update real member counts first
+    cur.execute("""
+        UPDATE clans c SET members_count = (
+            SELECT COUNT(*) FROM agents 
+            WHERE clan_id = c.id AND is_alive = true
+        )
+    """)
+    conn.commit()
     
     # Get agents without clan
     cur.execute("""
