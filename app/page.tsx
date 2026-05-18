@@ -667,6 +667,190 @@ function zionbetOddsTrendIndicator(yes: number): { symbol: string; color: string
   return { symbol: "—", color: "#888" };
 }
 
+type ZionPolyMarket = {
+  market_id: string;
+  question: string;
+  category: string;
+  yes_price: number;
+  no_price: number;
+  volume?: number;
+};
+
+function polyMarketToBetMarket(m: ZionPolyMarket): ZionBetMarket {
+  const yes = Math.round(Number(m.yes_price) || 50);
+  const no = Math.round(Number(m.no_price) || 100 - yes);
+  return {
+    id: `poly-${m.market_id}`,
+    question: m.question,
+    event_type: `polymarket_${m.market_id}`,
+    yes_cents: yes,
+    no_cents: no,
+    category: m.category === "crypto" ? "crypto" : "events",
+  };
+}
+
+function zionbetPolyVolumeLabel(volume?: number): string {
+  const v = Number(volume) || 0;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M vol`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K vol`;
+  return v > 0 ? `$${v.toFixed(0)} vol` : "Polymarket";
+}
+
+function ZionBetPolyMarketBlock({
+  header,
+  markets,
+  isMobile,
+  setBetModal,
+}: {
+  header: string;
+  markets: ZionPolyMarket[];
+  isMobile: boolean;
+  setBetModal: (v: { market: ZionBetMarket; direction: boolean; open: boolean } | null) => void;
+}) {
+  if (markets.length === 0) return null;
+  const borderColor = "#4DA2FF";
+  const cardBg = "rgba(77,162,255,0.06)";
+  return (
+    <div style={{ marginTop: "16px", borderTop: "1px solid #1a3a5c", paddingTop: "12px" }}>
+      <div
+        style={{
+          color: "#6b8fa3",
+          fontFamily: "monospace",
+          fontSize: "10px",
+          letterSpacing: "1px",
+          marginBottom: "8px",
+        }}
+      >
+        {header}
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+          gap: "10px",
+        }}
+      >
+        {markets.map((m) => {
+          const yes = Math.round(Number(m.yes_price) || 50);
+          const no = Math.round(Number(m.no_price) || 100 - yes);
+          const trend = zionbetOddsTrendIndicator(yes);
+          const market = polyMarketToBetMarket(m);
+          return (
+            <article
+              key={m.market_id}
+              style={{
+                border: `1px solid ${borderColor}`,
+                borderRadius: "10px",
+                padding: "12px",
+                background: cardBg,
+                boxShadow: `0 0 12px ${borderColor}18`,
+              }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "6px" }}>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontFamily: "monospace",
+                    padding: "1px 5px",
+                    borderRadius: "3px",
+                    background: "rgba(77,162,255,0.15)",
+                    color: "#4DA2FF",
+                  }}
+                >
+                  🌐 Polymarket
+                </span>
+              </div>
+              <h4
+                style={{
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  lineHeight: 1.3,
+                  margin: "0 0 8px 0",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={m.question}
+              >
+                {m.question}
+              </h4>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                  color: "#888",
+                }}
+              >
+                <span style={{ color: borderColor }}>{zionbetPolyVolumeLabel(m.volume)}</span>
+                <span>External</span>
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  type="button"
+                  onClick={() => setBetModal({ market, direction: true, open: true })}
+                  style={{
+                    flex: 1,
+                    height: "36px",
+                    padding: "0 6px",
+                    background: "rgba(77,162,255,0.12)",
+                    border: `1px solid ${borderColor}`,
+                    borderRadius: "6px",
+                    color: borderColor,
+                    fontFamily: "monospace",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span>YES {yes}¢</span>
+                  <span style={{ color: trend.color, fontSize: "12px" }} aria-hidden>
+                    {trend.symbol}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBetModal({ market, direction: false, open: true })}
+                  style={{
+                    flex: 1,
+                    height: "36px",
+                    padding: "0 6px",
+                    background: "rgba(255,50,50,0.12)",
+                    border: "1px solid #ff3232",
+                    borderRadius: "6px",
+                    color: "#ff3232",
+                    fontFamily: "monospace",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span>NO {no}¢</span>
+                  <span style={{ color: "#888", fontSize: "12px" }} aria-hidden>
+                    {yes > 60 ? "↓" : yes < 40 ? "↑" : "—"}
+                  </span>
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type ZionbetBetTimeframeKey = ZionBetTimeframeFilterKey;
 type ZionbetSortKey = "volume" | "ending" | "newest";
 
@@ -3722,6 +3906,7 @@ export default function Home() {
     sports: [],
     civilization: [],
   });
+  const [polyMarkets, setPolyMarkets] = useState<ZionPolyMarket[]>([]);
   const [zionBetCgUsd, setZionBetCgUsd] = useState<{ SUI?: number }>({});
   const [deepbookOracles, setDeepbookOracles] = useState<Array<{
     oracle_id: string;
@@ -4418,6 +4603,16 @@ export default function Home() {
     load();
     const interval = window.setInterval(load, 30000);
     return () => clearInterval(interval);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "zionbet") return;
+    fetch("/api/zionbet/polymarkets")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setPolyMarkets(d);
+      })
+      .catch(() => {});
   }, [activeTab]);
 
   const zionbetTimeframeCounts = useMemo(() => {
@@ -7352,6 +7547,24 @@ export default function Home() {
                             })}
                           </div>
                         )}
+                        {betTab === "sports" ? (
+                          <ZionBetPolyMarketBlock
+                            header="🌐 LIVE FROM POLYMARKET · Real odds · Updated every 2h"
+                            markets={polyMarkets.filter((m) => m.category === "sports")}
+                            isMobile={isMobile}
+                            setBetModal={setBetModal}
+                          />
+                        ) : null}
+                        {betTab === "crypto" ? (
+                          <ZionBetPolyMarketBlock
+                            header="🌐 POLYMARKET DATA · Real odds · Updated every 2h"
+                            markets={polyMarkets.filter(
+                              (m) => m.category === "crypto" || m.category === "events"
+                            )}
+                            isMobile={isMobile}
+                            setBetModal={setBetModal}
+                          />
+                        ) : null}
                       </div>
                     </div>
                   </div>
