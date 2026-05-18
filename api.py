@@ -2338,3 +2338,22 @@ async def store_walrus_snapshot():
         blob_id = result.stdout.split("Blob ID:")[1].split("\n")[0].strip()
         return {"success": True, "blob_id": blob_id}
     return {"success": False, "error": result.stderr}
+
+@app.get("/zionbet/polymarkets")
+async def get_polymarkets():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT market_id, question, category, yes_price, no_price, volume
+            FROM polymarket_markets 
+            WHERE is_active=true
+            ORDER BY volume DESC LIMIT 20
+        """)
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except:
+        return []
+    finally:
+        cur.close()
+        db.close()
