@@ -3330,6 +3330,12 @@ export default function Home() {
       })
       .catch(() => {});
     fetch("/api/police/divisions").then(r => r.json()).then(d => setPoliceDivisions(d)).catch(() => {});
+    fetch("/api/walrus/blobs")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setWalrusBlobs(d);
+      })
+      .catch(() => {});
   }, []);
 
   const [userPoints, setUserPoints] = useState(0);
@@ -3346,6 +3352,13 @@ export default function Home() {
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
+  const [walrusBlobs, setWalrusBlobs] = useState<Array<{
+    blob_id: string;
+    blob_type: string;
+    content_summary: string;
+    sui_object_id: string;
+    created_at: string;
+  }>>([]);
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [markets, setMarkets] = useState<ZionBetMarket[]>([]);
@@ -5684,6 +5697,59 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+                {walrusBlobs.length > 0 && (
+                  <div
+                    style={{
+                      margin: "8px 0 4px 0",
+                      padding: "8px 12px",
+                      background: "rgba(0,255,65,0.03)",
+                      border: "1px solid #1a3a1a",
+                      borderRadius: "8px",
+                      display: "flex",
+                      gap: "8px",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#00ff41",
+                        fontFamily: "monospace",
+                        fontSize: "0.65rem",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      🐋 WALRUS:
+                    </span>
+                    {walrusBlobs.slice(0, 3).map((blob, i) => (
+                      <a
+                        key={i}
+                        href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blob.blob_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "#4DA2FF",
+                          fontFamily: "monospace",
+                          fontSize: "0.6rem",
+                          textDecoration: "none",
+                          background: "rgba(77,162,255,0.1)",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          border: "1px solid rgba(77,162,255,0.3)",
+                        }}
+                      >
+                        📦 {blob.blob_type.replace("_", " ")} ·{" "}
+                        {new Date(blob.created_at).toLocaleTimeString("en", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </a>
+                    ))}
+                    <span style={{ color: "#333", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                      Civilization state archived on Walrus testnet
+                    </span>
+                  </div>
+                )}
                 <div style={{ overflow: "hidden", padding: "10px 0" }}>
                   <div
                     style={{
