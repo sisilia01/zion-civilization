@@ -66,6 +66,7 @@ def run_sheriff_election(forced=False):
         """
         SELECT id, name, class, charisma, balance FROM agents
         WHERE is_alive = true AND charisma > 50
+        AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active=true)
         ORDER BY charisma DESC, RANDOM() LIMIT 6
         """
     )
