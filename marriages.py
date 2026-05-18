@@ -53,15 +53,18 @@ def marry_agents(cur):
             a1 = singles[i]
             a2 = singles[i+1]
             
-            # Объединяем 10% капитала
-            gift = round(min(float(a1['balance']), float(a2['balance'])) * 0.1, 2)
+            # Transfer 5% from each to partner (no money creation)
+            gift = round(min(float(a1['balance']), float(a2['balance'])) * 0.05, 2)
             
             cur.execute("""
                 INSERT INTO marriages (agent1_id, agent2_id) VALUES (%s, %s)
             """, (a1['id'], a2['id']))
             
+            # Transfer from a2 to a1 and vice versa (net zero)
             cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s", (gift, a1['id']))
+            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s", (gift, a2['id']))
             cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s", (gift, a2['id']))
+            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s", (gift, a1['id']))
             
             log_event(cur, a1['id'], 'marriage',
                      f"💍 {a1['name']} married {a2['name']}! Combined wealth: {gift*2:.1f} ZION",

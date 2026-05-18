@@ -17,6 +17,7 @@ def apply_daily_tax():
     
     print(f"\n🌍 ZION Tax Cycle - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"Processing {len(agents)} alive agents...\n")
+    total_tax_collected = 0.0
     
     for agent_id, name, agent_class, balance, dust_days in agents:
         balance = float(balance)
@@ -33,6 +34,7 @@ def apply_daily_tax():
         
         tax_amount = balance * tax_rate
         new_balance = balance - tax_amount
+        total_tax_collected += tax_amount
         
         # Dust threshold < 1 ZION
         if new_balance < 1:
@@ -87,6 +89,19 @@ def apply_daily_tax():
                 WHERE id = %s
             """, (new_balance, agent_id))
             print(f"💰 {name} ({agent_class}): {balance:.2f} → {new_balance:.2f} ZION")
+    
+    # Route tax revenue to president treasury
+    try:
+        cur.execute("""
+            UPDATE president_state SET personal_fund = personal_fund + %s
+            WHERE is_active = true
+        """, (total_tax_collected,))
+        cur.execute("""
+            INSERT INTO events (agent_id, event_type, description, zion_amount)
+            VALUES (NULL, 'tax', %s, %s)
+        """, (f"💰 Tax collected: {total_tax_collected:.0f} ZION routed to presidential treasury", total_tax_collected))
+    except Exception as e:
+        pass  # No active president
     
     conn.commit()
     

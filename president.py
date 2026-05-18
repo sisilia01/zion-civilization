@@ -262,8 +262,15 @@ def president_actions(cur, president):
     elif decision == "fund_health":
         amount = min(personal_fund * 0.2, 80)
         cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true", (amount,))
+        # Give medicine to sick - reduce critical class deaths
+        healed = int(amount / 5)
+        cur.execute("""
+            UPDATE agents SET balance = balance + 3, class = 'poor'
+            WHERE is_alive=true AND class='critical'
+            AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
+        """, (healed,))
         log_event(cur, pid, 'president',
-                 f"🏥 President {name} allocated {amount:.0f} ZION to fight epidemics and improve healthcare!",
+                 f"🏥 President {name} allocated {amount:.0f} ZION to healthcare! {healed} critical agents treated.",
                  amount)
         approval_change = 7
         
