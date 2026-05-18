@@ -146,8 +146,14 @@ def main():
         bar = '#' * (div['officers'] // 3)
         sys.stderr.write(f"  {emojis.get(name,name):12} {bar:15} {div['officers']:3} officers | {float(div['effectiveness']):.0f}%\n")
     
+    # Sync total officers to sheriff state
+    cur.execute("SELECT SUM(officers) as total FROM police_divisions")
+    row = cur.fetchone()
+    total_officers = int(row['total'] or 0)
+    cur.execute("UPDATE sheriff_state SET police_count = %s WHERE is_active=true", (total_officers,))
+    
     conn.commit()
-    sys.stderr.write("\nPolice v2 complete!\n")
+    sys.stderr.write(f"\nPolice v2 complete! Total officers: {total_officers}\n")
     cur.close()
     conn.close()
 
