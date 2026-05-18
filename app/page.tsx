@@ -881,29 +881,31 @@ function ZionBetMyBetsSection({
         activeBets.length === 0 ? (
           <p className="zionBetMyBetsEmpty">No active bets. Place your first bet above! ↑</p>
         ) : (
-          <div className="zionBetMyBetsGrid zionBetMyBetsGridActive">
+          <div className="zionBetMyBetsList">
             {activeBets.map((bet) => {
               const yes = isYes(bet.direction);
-              const posColor = yes ? "#00ff41" : "#ff4141";
-              const odds = bet.odds ?? 50;
               return (
-                <article key={bet.id} className="zionBetMyBetCard zionBetMyBetCardActive">
-                  <p className="zionBetMyBetQuestion">{bet.question}</p>
-                  <p className="zionBetMyBetPosition" style={{ color: posColor }}>
-                    Your position: {bet.direction} {yes ? "↑" : "↓"}
+                <article
+                  key={bet.id}
+                  className={`zionBetMyBetCard zionBetMyBetCardActive zionBetMyBetCard--${yes ? "yes" : "no"}`}
+                >
+                  <p className="zionBetMyBetQuestion" title={bet.question}>
+                    {bet.question}
                   </p>
-                  <p className="zionBetMyBetMeta">
-                    Amount: {bet.amount_sui} SUI @ {odds}¢
-                  </p>
-                  <p className="zionBetMyBetPayout">
-                    Potential win: → {(bet.potential_payout ?? 0).toFixed(3)} SUI
-                  </p>
-                  <div className="zionBetMyBetFooter">
+                  <div className="zionBetMyBetRow">
+                    <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
+                      {bet.direction}
+                    </span>
+                    <span className="zionBetMyBetAmt">{bet.amount_sui} SUI</span>
+                    <span className="zionBetMyBetArrow">→</span>
+                    <span className="zionBetMyBetPayout">
+                      {(bet.potential_payout ?? 0).toFixed(3)} SUI
+                    </span>
+                    <span className="zionBetMyBetResolve">{zionbetMyBetResolvesInLabel(bet)}</span>
                     <span className="zionBetMyBetStatusPending">
                       <span className="zionBetPendingDot" aria-hidden />
                       PENDING
                     </span>
-                    <span className="zionBetMyBetResolve">{zionbetMyBetResolvesInLabel(bet)}</span>
                   </div>
                 </article>
               );
@@ -913,36 +915,44 @@ function ZionBetMyBetsSection({
       ) : settledBets.length === 0 ? (
         <p className="zionBetMyBetsEmpty">No settled bets yet.</p>
       ) : (
-        <div className="zionBetMyBetsGrid zionBetMyBetsGridSettled">
+        <div className="zionBetMyBetsList">
           {settledBets.map((bet) => {
+            const yes = isYes(bet.direction);
             const won = bet.status === "won";
             const claimed = claimedBetIds.has(bet.id);
             const payout = bet.payout ?? bet.potential_payout ?? 0;
+            const profit = Math.max(0, payout - bet.amount_sui);
             return (
               <article
                 key={bet.id}
-                className={`zionBetMyBetCard ${won ? "zionBetMyBetCardWon" : "zionBetMyBetCardLost"}`}
+                className={`zionBetMyBetCard zionBetMyBetCard--${yes ? "yes" : "no"} ${
+                  won ? "zionBetMyBetCardWon" : "zionBetMyBetCardLost"
+                }`}
               >
-                <div className="zionBetMyBetSettledTop">
-                  <span className={won ? "zionBetMyBetBadgeWon" : "zionBetMyBetBadgeLost"}>
-                    {won ? "WON" : "LOST"}
+                <p className="zionBetMyBetQuestion" title={bet.question}>
+                  {bet.question}
+                </p>
+                <div className="zionBetMyBetRow">
+                  <span className={`zionBetMyBetPill zionBetMyBetPill--${yes ? "yes" : "no"}`}>
+                    {bet.direction}
                   </span>
+                  <span className="zionBetMyBetAmt">{bet.amount_sui} SUI</span>
+                  {won ? (
+                    <span className="zionBetMyBetProfit">+{profit.toFixed(3)} SUI profit</span>
+                  ) : (
+                    <span className="zionBetMyBetLostAmt">-{bet.amount_sui} SUI</span>
+                  )}
+                  <span className={won ? "zionBetMyBetOutcomeWon" : "zionBetMyBetOutcomeLost"}>
+                    {won ? "✓ WON" : "✗ LOST"}
+                  </span>
+                  {won && !claimed ? (
+                    <button type="button" className="zionBetClaimBtnInline" onClick={() => handleClaim(bet)}>
+                      CLAIM
+                    </button>
+                  ) : won && claimed ? (
+                    <span className="zionBetClaimedLabel">CLAIMED</span>
+                  ) : null}
                 </div>
-                <p className="zionBetMyBetQuestion">{bet.question}</p>
-                {won ? (
-                  <>
-                    <p className="zionBetMyBetWonAmount">+{payout.toFixed(3)} SUI</p>
-                    {!claimed ? (
-                      <button type="button" className="zionBetClaimBtn" onClick={() => handleClaim(bet)}>
-                        CLAIM
-                      </button>
-                    ) : (
-                      <span className="zionBetClaimedLabel">CLAIMED</span>
-                    )}
-                  </>
-                ) : (
-                  <p className="zionBetMyBetLostAmount">-{bet.amount_sui} SUI</p>
-                )}
               </article>
             );
           })}
@@ -9400,54 +9410,87 @@ export default function Home() {
           border-color: #00ff41;
           color: #00ff41;
         }
-        .zionBetMyBetsGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-        }
-        @media (max-width: 640px) {
-          .zionBetMyBetsGrid {
-            grid-template-columns: 1fr;
-          }
+        .zionBetMyBetsList {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
         .zionBetMyBetCard {
-          border-radius: 12px;
-          padding: 14px 16px;
-          border: 1px solid rgba(0, 255, 65, 0.15);
-          background: rgba(12, 18, 12, 0.95);
+          border-radius: 8px;
+          padding: 10px 12px 10px 14px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(10, 14, 10, 0.95);
+          border-left-width: 3px;
+          border-left-style: solid;
+        }
+        .zionBetMyBetCard--yes {
+          border-left-color: #00ff41;
+        }
+        .zionBetMyBetCard--no {
+          border-left-color: #ff4141;
         }
         .zionBetMyBetQuestion {
           font-weight: 700;
           color: #e8fff0;
-          font-size: 0.88rem;
-          margin: 0 0 10px;
-          line-height: 1.35;
+          font-size: 14px;
+          margin: 0 0 8px;
+          line-height: 1.25;
           font-family: ui-sans-serif, system-ui, sans-serif;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-        .zionBetMyBetPosition {
-          font-family: ui-monospace, monospace;
-          font-size: 0.78rem;
-          margin: 0 0 6px;
-          font-weight: 600;
-        }
-        .zionBetMyBetMeta,
-        .zionBetMyBetPayout {
+        .zionBetMyBetRow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
           font-family: ui-monospace, monospace;
           font-size: 0.72rem;
-          margin: 0 0 4px;
+          color: #9aa39a;
         }
-        .zionBetMyBetMeta {
-          color: #888;
+        .zionBetMyBetPill {
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 0.65rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          font-family: Orbitron, monospace;
+        }
+        .zionBetMyBetPill--yes {
+          background: rgba(0, 255, 65, 0.15);
+          color: #00ff41;
+          border: 1px solid rgba(0, 255, 65, 0.35);
+        }
+        .zionBetMyBetPill--no {
+          background: rgba(255, 65, 65, 0.12);
+          color: #ff4141;
+          border: 1px solid rgba(255, 65, 65, 0.35);
+        }
+        .zionBetMyBetAmt {
+          color: #ccc;
+        }
+        .zionBetMyBetArrow {
+          color: #555;
         }
         .zionBetMyBetPayout {
           color: #7ec8e3;
-          margin-bottom: 12px;
         }
-        .zionBetMyBetFooter {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 8px;
+        .zionBetMyBetProfit {
+          color: #00ff41;
+        }
+        .zionBetMyBetLostAmt {
+          color: #ff4141;
+        }
+        .zionBetMyBetOutcomeWon {
+          color: #00ff41;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+        }
+        .zionBetMyBetOutcomeLost {
+          color: #ff4141;
+          font-weight: 700;
+          letter-spacing: 0.06em;
         }
         .zionBetMyBetStatusPending {
           display: inline-flex;
@@ -9487,59 +9530,31 @@ export default function Home() {
           text-align: center;
           padding: 24px 12px;
         }
-        .zionBetMyBetSettledTop {
-          margin-bottom: 8px;
-        }
         .zionBetMyBetCardWon {
-          border-color: rgba(0, 255, 65, 0.45);
-          background: linear-gradient(145deg, rgba(0, 40, 14, 0.9), rgba(8, 20, 8, 0.95));
-          box-shadow: 0 0 28px rgba(0, 255, 65, 0.18);
+          border-color: rgba(0, 255, 65, 0.25);
+          background: linear-gradient(90deg, rgba(0, 40, 14, 0.55), rgba(8, 20, 8, 0.95));
+          box-shadow: 0 0 16px rgba(0, 255, 65, 0.12);
         }
         .zionBetMyBetCardLost {
           border-color: #2a2a2a;
           background: rgba(8, 8, 8, 0.85);
           opacity: 0.72;
         }
-        .zionBetMyBetBadgeWon {
-          font-family: Orbitron, monospace;
-          font-size: 1.1rem;
-          font-weight: 700;
-          letter-spacing: 0.2em;
-          color: #00ff41;
-          text-shadow: 0 0 16px rgba(0, 255, 65, 0.6);
-        }
-        .zionBetMyBetBadgeLost {
-          font-family: Orbitron, monospace;
-          font-size: 0.85rem;
-          letter-spacing: 0.18em;
-          color: #ff4141;
-        }
-        .zionBetMyBetWonAmount {
-          font-family: ui-monospace, monospace;
-          font-size: 1rem;
-          color: #00ff41;
-          margin: 0 0 12px;
-        }
-        .zionBetMyBetLostAmount {
-          font-family: ui-monospace, monospace;
-          color: #ff4141;
-          font-size: 0.9rem;
-          margin: 0;
-        }
-        .zionBetClaimBtn {
-          width: 100%;
-          padding: 10px;
+        .zionBetClaimBtnInline {
+          margin-left: auto;
+          padding: 4px 12px;
           border: none;
-          border-radius: 8px;
+          border-radius: 6px;
           background: #00ff41;
           color: #001a08;
           font-family: Orbitron, monospace;
           font-weight: 700;
-          letter-spacing: 0.2em;
+          font-size: 0.62rem;
+          letter-spacing: 0.14em;
           cursor: pointer;
           animation: zionBetClaimPulse 1.5s ease-in-out infinite;
         }
-        .zionBetClaimBtn:hover {
+        .zionBetClaimBtnInline:hover {
           filter: brightness(1.08);
         }
         @keyframes zionBetClaimPulse {
