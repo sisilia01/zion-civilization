@@ -56,3 +56,41 @@
 📚 Sidney Davis 9790 promoted critical→poor
 
 ✅ Education complete! Promoted: 5
+
+🎓 ZION Education — 2026-05-18 06:41
+==================================================
+📚 Dana Jones 9348 promoted critical→poor
+📚 Morgan White 4398 promoted critical→poor
+📚 Sam Robinson 9785 promoted critical→poor
+📚 Pat Robinson 5678 promoted critical→poor
+📚 Luna Robinson 326 promoted critical→poor
+📚 Nova Anderson 3515 promoted critical→poor
+
+✅ Education complete! Promoted: 6
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 134, in main
+    promoted = educate_agents(cur)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 47, in educate_agents
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 608291 waits for ShareLock on transaction 19868; blocked by process 608447.
+Process 608447 waits for ShareLock on transaction 19864; blocked by process 608396.
+Process 608396 waits for ShareLock on transaction 19856; blocked by process 608291.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (164,54) in relation "agents"
+
+
+🎓 ZION Education — 2026-05-18 06:49
+==================================================
+🎓 Jay Rowe promoted poor→middle via Void College
+❌ Error: deadlock detected
+DETAIL:  Process 608291 waits for ShareLock on transaction 19868; blocked by process 608447.
+Process 608447 waits for ShareLock on transaction 19864; blocked by process 608396.
+Process 608396 waits for ShareLock on transaction 19856; blocked by process 608291.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (164,54) in relation "agents"
+
