@@ -322,6 +322,71 @@ def president_actions(cur, president):
         approval_change = -10
         print(f"📈 {name} raised taxes")
 
+    elif decision == "help_corps":
+        amount = min(personal_fund * 0.25, 100)
+        cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true", (amount,))
+        cur.execute("SELECT COUNT(*) as cnt FROM corporations WHERE is_active = true")
+        corp_count = max(int(cur.fetchone()['cnt'] or 0), 1)
+        per_corp = round(amount / min(corp_count, 5), 2)
+        cur.execute("""
+            UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
+            WHERE is_active = true
+            AND id IN (
+                SELECT id FROM corporations WHERE is_active = true
+                ORDER BY treasury DESC LIMIT 5
+            )
+        """, (per_corp, per_corp))
+        log_event(cur, pid, 'president',
+                 f"🏢 President {name} subsidized corporations with {amount:.0f} ZION! Business leaders celebrate.",
+                 amount)
+        approval_change = -6
+        print(f"🏢 Corp subsidy: {amount:.0f} ZION")
+
+    elif decision == "crisis_response":
+        amount = min(personal_fund * 0.35, 150)
+        cur.execute("UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true", (amount,))
+        crisis = random.choice(["food", "health", "security"])
+        recipients = max(1, int(amount / 5))
+        if crisis == "food":
+            cur.execute("""
+                UPDATE agents SET balance = balance + 5
+                WHERE is_alive = true AND class IN ('poor', 'critical')
+                AND id IN (
+                    SELECT id FROM agents
+                    WHERE is_alive = true AND class IN ('poor', 'critical')
+                    ORDER BY RANDOM() LIMIT %s
+                )
+            """, (recipients,))
+            crisis_desc = "food relief to the hungry"
+        elif crisis == "health":
+            healed = max(1, int(amount / 5))
+            cur.execute("""
+                UPDATE agents SET balance = balance + 4, class = 'poor'
+                WHERE is_alive = true AND class = 'critical'
+                AND id IN (
+                    SELECT id FROM agents WHERE is_alive = true AND class = 'critical'
+                    ORDER BY RANDOM() LIMIT %s
+                )
+            """, (healed,))
+            crisis_desc = f"emergency healthcare for {healed} critical citizens"
+        else:
+            cur.execute("""
+                UPDATE president_state SET police_fund = police_fund + %s WHERE is_active = true
+            """, (amount * 0.5,))
+            crisis_desc = "security surge funding"
+        log_event(cur, pid, 'president',
+                 f"🚨 President {name} launched crisis response! Spent {amount:.0f} ZION on {crisis_desc}.",
+                 amount)
+        approval_change = random.randint(6, 14)
+        print(f"🚨 Crisis response ({crisis}): {amount:.0f} ZION")
+
+    elif decision == "do_nothing":
+        log_event(cur, pid, 'president',
+                 f"😴 President {name} took no major action today. Citizens grumble about inaction.",
+                 0)
+        approval_change = -3
+        print(f"😴 {name} did nothing")
+
     # Normal presidents can't have 100% approval - someone always disagrees
     if not is_dictator:
         max_approval = 85
@@ -490,11 +555,12 @@ def main():
             result = president_actions(cur, president)
             if result == "early_election":
                 run_election(cur, forced=True)
+            interact_with_sheriff(cur, get_president(cur))
         
         # Auto-spend if fund too large (prevent hoarding)
         president = get_president(cur)
-        if president and float(president['personal_fund']) > 5000:
-            excess = float(president['personal_fund']) - 2000
+        if president and float(president['personal_fund']) > 3000:
+            excess = float(president['personal_fund']) - 1500
             # Redistribute excess to ZRS and social fund
             zrs_share = round(excess * 0.5, 2)
             social_share = round(excess * 0.3, 2)
@@ -505,7 +571,7 @@ def main():
                     social_fund = social_fund + %s,
                     police_fund = police_fund + %s
             """, (zrs_share, social_share, police_share))
-            cur.execute("UPDATE president_state SET personal_fund = 2000 WHERE is_active=true")
+            cur.execute("UPDATE president_state SET personal_fund = 1500 WHERE is_active=true")
             log_event(cur, None, 'president',
                      f"🏦 President {president['agent_name']} redistributes excess treasury! ZRS +{zrs_share:.0f} | Social +{social_share:.0f} | Police +{police_share:.0f} ZION",
                      excess)

@@ -130,11 +130,6 @@ def clan_war():
     conn.commit()
     cur.close()
 
-if __name__ == "__main__":
-    join_clans()
-    if random.random() > 0.70:  # 30% chance of war
-        clan_war()
-
 NEW_CLAN_NAMES = [
     "Neon Syndicate", "Void Brotherhood", "Crimson Legion",
     "Azure Collective", "Steel Covenant", "Phantom Council",
@@ -234,3 +229,19 @@ def clan_bankruptcy():
     
     conn.commit()
     cur.close()
+
+
+if __name__ == "__main__":
+    cur2 = conn.cursor()
+    cur2.execute("""
+        UPDATE clans c SET members_count = (
+            SELECT COUNT(*) FROM agents WHERE clan_id = c.id AND is_alive = true
+        )
+    """)
+    conn.commit()
+    cur2.close()
+    clan_bankruptcy()
+    auto_create_clans()
+    join_clans()
+    clan_war()
+    conn.close()

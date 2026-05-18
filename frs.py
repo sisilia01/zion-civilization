@@ -236,6 +236,7 @@ def emergency_measures(economy):
         # Цивилизация на грани — экстренная эмиссия
         stimulus = 50.0
         cur.execute("UPDATE agents SET balance = balance + %s WHERE is_alive = true", (stimulus,))
+        cur.execute("UPDATE state_treasury SET zrs_fund = GREATEST(0, zrs_fund - %s)", (stimulus * alive,))
         log_event(f"🚨 ZRS EMERGENCY! Only {alive} agents alive! Printing {stimulus} ZION per agent. Civilization must survive!", stimulus * alive)
         print(f"🚨 EMERGENCY: {alive} survivors, +{stimulus} ZION each!")
         return True

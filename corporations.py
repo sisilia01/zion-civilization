@@ -390,6 +390,10 @@ def repay_loans(cur, cycle):
         else:
             cur.execute("UPDATE corporations SET is_active = false WHERE id = %s", (loan["corp_id"],))
             cur.execute("UPDATE zrs_loans SET is_active = false WHERE id = %s", (loan["id"],))
+            cur.execute(
+                "UPDATE state_treasury SET zrs_fund = zrs_fund + %s",
+                (owed * 0.3,),
+            )
             log_event(
                 cur,
                 loan["owner_id"],

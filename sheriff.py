@@ -512,6 +512,16 @@ def main():
             f"Day: {sheriff['days_in_office']} | Term: {sheriff['term_number']}"
         )
 
+        if sheriff and sheriff['approval_rating'] <= 0:
+            cur.execute("UPDATE sheriff_state SET is_active=false WHERE is_active=true")
+            log_event(sheriff['agent_id'], 'police',
+                     f"🗳️ Sheriff {sheriff['agent_name']} removed from office! Approval hit 0%. Emergency election called!",
+                     0)
+            conn.commit()
+            run_sheriff_election(forced=True)
+            conn.commit()
+            return
+
         sheriff_actions(sheriff)
         check_interaction_with_president()
         check_term_end(sheriff)
