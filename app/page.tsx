@@ -632,6 +632,41 @@ function zionbetApiToMarket(m: ZionbetApiMarket): ZionBetMarket {
   };
 }
 
+function zionbetStableVolume(id: string, min: number, max: number): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return min + (Math.abs(h) % (max - min + 1));
+}
+
+function zionbetCardVolumeDisplay(tab: "crypto" | "sports" | "civilization", id: string): string {
+  if (tab === "crypto") return "12.4K SUI vol";
+  if (tab === "sports") return "3.2K SUI vol";
+  return `${zionbetStableVolume(id, 500, 2000).toLocaleString()} SUI vol`;
+}
+
+function zionbetCardVolumeSui(tab: "crypto" | "sports" | "civilization", id: string): number {
+  if (tab === "crypto") return 12400;
+  if (tab === "sports") return 3200;
+  return zionbetStableVolume(id, 500, 2000);
+}
+
+function zionbetTimeframeEndLabel(tf?: string): string {
+  const k = (tf || "").toLowerCase();
+  if (k === "24h") return "Ends tomorrow";
+  if (k === "7d") return "Ends in 7 days";
+  if (k === "30d") return "Ends in 30 days";
+  if (k === "1y") return "Ends Dec 2026";
+  if (k === "3d") return "Ends in 3 days";
+  if (k === "1h" || k === "15m") return "Ends soon";
+  return tf ? `Ends · ${tf}` : "Open";
+}
+
+function zionbetOddsTrendIndicator(yes: number): { symbol: string; color: string } {
+  if (yes > 60) return { symbol: "↑", color: "#00ff41" };
+  if (yes < 40) return { symbol: "↓", color: "#ff3232" };
+  return { symbol: "—", color: "#888" };
+}
+
 const ZIONBET_TIMEFRAME_SIDEBAR_ROWS: { key: ZionBetTimeframeFilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "15min", label: "15 min" },
@@ -4166,6 +4201,26 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [activeTab]);
 
+  const zionbetHeaderStats = useMemo(() => {
+    const all = [
+      ...zionbetMarkets.civilization,
+      ...zionbetMarkets.crypto,
+      ...zionbetMarkets.sports,
+    ];
+    const totalMarkets = all.length;
+    let totalVol = 0;
+    zionbetMarkets.civilization.forEach((m) => {
+      totalVol += zionbetCardVolumeSui("civilization", m.id);
+    });
+    totalVol += zionbetMarkets.crypto.length * 12400;
+    totalVol += zionbetMarkets.sports.length * 3200;
+    const volLabel =
+      totalVol >= 1000
+        ? `${(totalVol / 1000).toFixed(1)}K SUI total volume`
+        : `${totalVol.toLocaleString()} SUI total volume`;
+    return `${totalMarkets} markets · ${volLabel}`;
+  }, [zionbetMarkets]);
+
   useEffect(() => {
     void loadZionBetMarkets();
     const interval = window.setInterval(() => {
@@ -6386,7 +6441,9 @@ export default function Home() {
             <section className="zionBetTab" aria-label="ZionBet prediction markets">
               <header className="zionBetHeader">
                 <h2 className="zionBetTitle">⚡ ZIONBET — Predict the Civilization</h2>
-                <p className="zionBetSubtitle">Market-style odds · Win up to 1.98× stake · +2 points per order</p>
+                <p className="zionBetSubtitle">
+                  {zionbetHeaderStats} · Win up to 1.98× stake · +2 points per order
+                </p>
               </header>
               {zionBetToast ? (
                 <div className="zionBetToast" role="status">
@@ -6783,16 +6840,22 @@ export default function Home() {
                         Loading markets…
                       </p>
                     ) : (
-                      <div className="zionBetPmCardGrid"
+                      <div
+                        className="zionBetPmCardGrid"
                         style={{
                           display: "grid",
-                          gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))",
+                          gridTemplateColumns: isMobile
+                            ? "1fr"
+                            : betTab === "civilization"
+                              ? "repeat(2, minmax(280px, 1fr))"
+                              : "repeat(auto-fill, minmax(280px, 1fr))",
                           gap: "14px",
                         }}
                       >
-                        {zionbetMarkets[betTab].map((m) => {
+                        {zionbetMarkets[betTab].map((m, cardIdx) => {
                           const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
                           const no = m.no_pct ?? 100 - yes;
+                          const trend = zionbetOddsTrendIndicator(yes);
                           const borderColor =
                             betTab === "civilization" ? "#00ff41" : betTab === "sports" ? "#4DA2FF" : "#ffd700";
                           const cardBg =
@@ -6802,18 +6865,46 @@ export default function Home() {
                                 ? "rgba(77,162,255,0.06)"
                                 : "rgba(255,215,0,0.05)";
                           const market = zionbetApiToMarket(m);
+                          const isFeatured = betTab === "civilization" && cardIdx === 0 && !isMobile;
+                          const isTrending = betTab === "civilization" && cardIdx < 3;
+                          const volumeLabel = zionbetCardVolumeDisplay(betTab, m.id);
+                          const endLabel = zionbetTimeframeEndLabel(m.timeframe);
                           return (
                             <article
                               key={m.id}
                               style={{
                                 border: `1px solid ${borderColor}`,
-                                borderRadius: "12px",
-                                padding: "16px",
+                                borderRadius: isFeatured ? "14px" : "12px",
+                                padding: isFeatured ? "22px 20px" : "16px",
                                 background: cardBg,
-                                boxShadow: `0 0 18px ${borderColor}22`,
+                                boxShadow: `0 0 ${isFeatured ? 28 : 18}px ${borderColor}${isFeatured ? "33" : "22"}`,
+                                gridColumn: isFeatured ? "span 2" : undefined,
                               }}
                             >
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                  marginBottom: "10px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                {isTrending ? (
+                                  <span
+                                    style={{
+                                      fontSize: "0.62rem",
+                                      fontFamily: "monospace",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      background: "rgba(255,100,0,0.2)",
+                                      color: "#ffaa44",
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    🔥 TRENDING
+                                  </span>
+                                ) : null}
                                 {m.category ? (
                                   <span
                                     style={{
@@ -6863,50 +6954,90 @@ export default function Home() {
                               <h4
                                 style={{
                                   color: "#fff",
-                                  fontSize: "0.95rem",
+                                  fontSize: isFeatured ? "1.15rem" : "0.95rem",
                                   fontWeight: 700,
                                   lineHeight: 1.35,
-                                  margin: "0 0 14px 0",
+                                  margin: isFeatured ? "0 0 12px 0" : "0 0 10px 0",
                                 }}
                               >
                                 {m.question}
                               </h4>
-                              <div style={{ display: "flex", gap: "8px" }}>
+                              {isFeatured ? (
+                                <p
+                                  style={{
+                                    color: "rgba(186,233,255,0.75)",
+                                    fontSize: "0.78rem",
+                                    lineHeight: 1.45,
+                                    margin: "0 0 14px 0",
+                                  }}
+                                >
+                                  Live odds from the ZION simulation · {volumeLabel} · {endLabel}
+                                </p>
+                              ) : null}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "12px",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.68rem",
+                                  color: "#888",
+                                }}
+                              >
+                                <span style={{ color: borderColor }}>{volumeLabel}</span>
+                                <span>{endLabel}</span>
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", alignItems: "stretch" }}>
                                 <button
                                   type="button"
                                   onClick={() => setBetModal({ market, direction: true, open: true })}
                                   style={{
                                     flex: 1,
-                                    padding: "10px 8px",
+                                    padding: isFeatured ? "12px 10px" : "10px 8px",
                                     background: "rgba(0,255,65,0.12)",
                                     border: "1px solid #00ff41",
                                     borderRadius: "8px",
                                     color: "#00ff41",
                                     fontFamily: "monospace",
-                                    fontSize: "0.8rem",
+                                    fontSize: isFeatured ? "0.88rem" : "0.8rem",
                                     fontWeight: "bold",
                                     cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px",
                                   }}
                                 >
-                                  YES {yes}¢
+                                  <span>YES {yes}¢</span>
+                                  <span style={{ color: trend.color, fontSize: "0.95rem" }} aria-hidden>
+                                    {trend.symbol}
+                                  </span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setBetModal({ market, direction: false, open: true })}
                                   style={{
                                     flex: 1,
-                                    padding: "10px 8px",
+                                    padding: isFeatured ? "12px 10px" : "10px 8px",
                                     background: "rgba(255,50,50,0.12)",
                                     border: "1px solid #ff3232",
                                     borderRadius: "8px",
                                     color: "#ff3232",
                                     fontFamily: "monospace",
-                                    fontSize: "0.8rem",
+                                    fontSize: isFeatured ? "0.88rem" : "0.8rem",
                                     fontWeight: "bold",
                                     cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "6px",
                                   }}
                                 >
-                                  NO {no}¢
+                                  <span>NO {no}¢</span>
+                                  <span style={{ color: "#888", fontSize: "0.95rem" }} aria-hidden>
+                                    {yes > 60 ? "↓" : yes < 40 ? "↑" : "—"}
+                                  </span>
                                 </button>
                               </div>
                               <button
