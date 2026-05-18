@@ -273,6 +273,34 @@ def sheriff_actions(sheriff):
         print(f"Corrupt sheriff: {bribes:.0f} ZION in bribes")
 
     elif stype == "junta":
+        # Junta actively builds military power
+        if budget > 80:
+            new_cops = random.randint(5, 15)
+            cost = new_cops * 8
+            cur.execute("UPDATE sheriff_state SET police_count = police_count + %s, police_budget = police_budget - %s WHERE is_active=true",
+                       (new_cops, cost))
+            cur.execute("""
+                UPDATE agents SET balance = balance + 10, class = 'poor'
+                WHERE is_alive=true AND class='critical'
+                AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
+            """, (new_cops,))
+            log_event(sid, 'police',
+                     f"⚔️ Junta Sheriff {name} expands military! Recruited {new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
+                     cost)
+            print(f"⚔️ Junta: +{new_cops} officers hired")
+        
+        # Raid clans for funding
+        cur.execute("SELECT id, name, treasury FROM clans WHERE treasury > 200 ORDER BY RANDOM() LIMIT 1")
+        clan_target = cur.fetchone()
+        if clan_target:
+            seized = round(float(clan_target['treasury']) * 0.15, 2)
+            cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s", (seized, clan_target['id']))
+            cur.execute("UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active=true", (seized,))
+            log_event(sid, 'police',
+                     f"⚔️ Junta forces seized {seized:.0f} ZION from {clan_target['name']}! Military growing stronger.",
+                     seized)
+            print(f"⚔️ Junta seized {seized:.0f} from {clan_target['name']}")
+        
         if approval < 30 or random.random() < 0.1:
             cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
             president = cur.fetchone()
