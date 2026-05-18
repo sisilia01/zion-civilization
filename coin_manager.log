@@ -10,3 +10,13 @@
 2026-05-18 15:31:35,006 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
 2026-05-18 15:31:35,167 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
 2026-05-18 15:31:38,707 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-18 21:25:34,301 [COIN_MANAGER] === Coin Manager started ===
+2026-05-18 21:25:34,301 [COIN_MANAGER] === Coin Manager started ===
+2026-05-18 21:25:34,301 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-18 21:25:34,301 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-18 21:25:34,443 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-18 21:25:34,443 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-18 21:25:54,810 [COIN_MANAGER] Only 0 coins, skip merge
+2026-05-18 21:25:54,810 [COIN_MANAGER] Only 0 coins, skip merge
+2026-05-18 21:25:54,810 [COIN_MANAGER] === Done ===
+2026-05-18 21:25:54,810 [COIN_MANAGER] === Done ===

@@ -328,3 +328,40 @@ Police v2 complete!
   Riot Ctrl.         0          0    80  [░░░░░░░░░░░░░░░░░░░░]
 
 ✅ Police cycle complete!
+
+🚔 ZION Police v2 — 2026-05-18 21:25
+============================================================
+  Sheriff: Amara Diop (honest) | Budget: 1516 | Approval: 100%
+  President: Murat Aksoy | Approval: 100% | Dictator: False
+  State police_fund: 25952 | corruption: 10
+
+── Division Sizing ──
+  Division sizing: budget=1516, max_officers=189, poor=63.6%
+
+── Operations ──
+  🎯 SWAT raided Iron Fist: -288.8 ZION
+  🎯 SWAT raided Void Brotherhood: -283.8 ZION
+  SWAT routed 572.6 ZION to police_fund (100% of 572.6)
+  💰 Anti-Tax fined Drew Rodriguez 7759: 0.0 ZION
+  💰 Anti-Tax fined Avery Jackson 4424: 0.0 ZION
+  💰 Anti-Tax fined Rex Smith 851: 0.0 ZION
+  💰 Anti-Tax fined Kai Lin: 0.0 ZION
+  💰 Anti-Tax fined Jin White 4031: 0.0 ZION
+  💰 Anti-Tax fined Gaia Hadley 2: 0.0 ZION
+  💰 Anti-Tax fined Neil Chavez 2: 0.0 ZION
+  💰 Anti-Tax fined Blake Harris 3943: 0.0 ZION
+  💰 Anti-Tax fined Sera Zabala 3: 0.0 ZION
+  💰 Anti-Tax fined Lee Wynn: 0.0 ZION
+  Anti-Tax collected 0.1 ZION → police_fund
+
+── Equipment ──
+
+  Division          Officers  Budget   Eff   Chart
+  ----------------------------------------------------------
+  SWAT              63        926    80  [████████████████████]
+  Anti-Tax          31        280    80  [█████████░░░░░░░░░░░]
+  Pres.Guard        10         88    80  [███░░░░░░░░░░░░░░░░░]
+  Anti-Corr.        25        221    80  [███████░░░░░░░░░░░░░]
+  Riot Ctrl.         0          0    80  [░░░░░░░░░░░░░░░░░░░░]
+
+✅ Police cycle complete!
