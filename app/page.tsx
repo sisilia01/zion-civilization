@@ -3443,6 +3443,12 @@ export default function Home() {
     term_number: number;
     days_in_office: number;
   } | null>(null);
+  const [stateTreasury, setStateTreasury] = useState<{
+    corruption_index: number;
+    zrs_fund: number;
+    police_fund: number;
+    social_fund: number;
+  } | null>(null);
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
@@ -3507,6 +3513,7 @@ export default function Home() {
           if (Array.isArray(d)) setSheriffActions(d);
         })
         .catch(() => {});
+      fetch("/api/state/treasury").then(r => r.json()).then(d => setStateTreasury(d)).catch(() => {});
       fetch("/api/frs/stats")
         .then((r) => r.json())
         .then((d) => {
@@ -7163,52 +7170,78 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* BOTTOM LEFT — Crime Rate */}
+                    {/* BOTTOM LEFT — Corruption & Crime Rate */}
                     <div style={{
                       padding:"14px 16px", background:"#050a10",
                       border:"1px solid #1a1a1a", borderRadius:"10px",
                     }}>
-                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px"}}>
-                        <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.7rem", letterSpacing:"2px"}}>🔍 CRIME RATE INDEX</span>
-                        <span style={{
-                          color: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
-                                 (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
-                                 (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
-                          fontFamily:"monospace", fontSize:"0.75rem", fontWeight:"bold"
-                        }}>
-                          {(frsStats?.economy.poor_pct ?? 0) < 20 ? "🟢 LOW" :
-                           (frsStats?.economy.poor_pct ?? 0) < 40 ? "🟡 MODERATE" :
-                           (frsStats?.economy.poor_pct ?? 0) < 60 ? "🟠 HIGH" : "🔴 CRITICAL"}
-                        </span>
+                      {/* Corruption rate */}
+                      <div style={{marginBottom:"12px"}}>
+                        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px"}}>
+                          <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.65rem", letterSpacing:"1px"}}>🕵️ CORRUPTION INDEX</span>
+                          <span style={{
+                            color: (stateTreasury?.corruption_index ?? 20) < 30 ? "#00ff41" :
+                                   (stateTreasury?.corruption_index ?? 20) < 60 ? "#ffaa00" : "#ff3232",
+                            fontFamily:"monospace", fontSize:"0.7rem", fontWeight:"bold"
+                          }}>
+                            {(stateTreasury?.corruption_index ?? 20) < 30 ? "🟢 LOW" :
+                             (stateTreasury?.corruption_index ?? 20) < 60 ? "🟡 MODERATE" : "🔴 HIGH"}
+                          </span>
+                        </div>
+                        <div style={{width:"100%", height:"8px", background:"#111", borderRadius:"4px", overflow:"hidden", marginBottom:"4px"}}>
+                          <div style={{
+                            width:`${Math.min(stateTreasury?.corruption_index ?? 20, 100)}%`,
+                            height:"100%",
+                            background: (stateTreasury?.corruption_index ?? 20) < 30 ? "#00ff41" :
+                                        (stateTreasury?.corruption_index ?? 20) < 60 ? "#ffaa00" : "#ff3232",
+                            borderRadius:"4px", transition:"width 1s",
+                          }}/>
+                        </div>
+                        <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem"}}>
+                          {(stateTreasury?.corruption_index ?? 20).toFixed(1)}% — {
+                            (stateTreasury?.corruption_index ?? 20) < 30 ? "Officials are clean" :
+                            (stateTreasury?.corruption_index ?? 20) < 60 ? "Bribes common" : "System is corrupt!"
+                          }
+                        </div>
                       </div>
-                      <div style={{width:"100%", height:"10px", background:"#111", borderRadius:"5px", overflow:"hidden", marginBottom:"8px"}}>
-                        <div style={{
-                          width:`${Math.min(frsStats?.economy.poor_pct ?? 0, 100)}%`,
-                          height:"100%",
-                          background: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
-                                      (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
-                                      (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
-                          borderRadius:"5px", transition:"width 1s, background 1s",
-                        }}/>
-                      </div>
-                      <div style={{display:"flex", justifyContent:"space-between"}}>
-                        <span style={{color:"#444", fontFamily:"monospace", fontSize:"0.6rem"}}>0% SAFE</span>
-                        <span style={{color:"#888", fontFamily:"monospace", fontSize:"0.65rem"}}>
-                          {(frsStats?.economy.poor_pct ?? 0).toFixed(1)}% poverty index
-                        </span>
-                        <span style={{color:"#444", fontFamily:"monospace", fontSize:"0.6rem"}}>100% CHAOS</span>
-                      </div>
-                      <div style={{marginTop:"8px", color: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
-                                                    (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
-                                                    (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
-                                   fontFamily:"monospace", fontSize:"0.7rem"}}>
-                        {(frsStats?.economy.poor_pct ?? 0) < 20 ? "City is peaceful. Crime at all-time low." :
-                         (frsStats?.economy.poor_pct ?? 0) < 40 ? "Police active. Minor criminal activity." :
-                         (frsStats?.economy.poor_pct ?? 0) < 60 ? "Crime rising. Citizens afraid." :
-                         "CITY IN CHAOS! Law enforcement overwhelmed!"}
+
+                      {/* Divider */}
+                      <div style={{borderTop:"1px solid #1a1a1a", marginBottom:"12px"}}/>
+
+                      {/* Crime rate */}
+                      <div>
+                        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px"}}>
+                          <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.65rem", letterSpacing:"1px"}}>🔍 CRIME RATE INDEX</span>
+                          <span style={{
+                            color: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
+                                   (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
+                                   (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
+                            fontFamily:"monospace", fontSize:"0.7rem", fontWeight:"bold"
+                          }}>
+                            {(frsStats?.economy.poor_pct ?? 0) < 20 ? "🟢 LOW" :
+                             (frsStats?.economy.poor_pct ?? 0) < 40 ? "🟡 MODERATE" :
+                             (frsStats?.economy.poor_pct ?? 0) < 60 ? "🟠 HIGH" : "🔴 CRITICAL"}
+                          </span>
+                        </div>
+                        <div style={{width:"100%", height:"8px", background:"#111", borderRadius:"4px", overflow:"hidden", marginBottom:"4px"}}>
+                          <div style={{
+                            width:`${Math.min(frsStats?.economy.poor_pct ?? 0, 100)}%`,
+                            height:"100%",
+                            background: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
+                                        (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
+                                        (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
+                            borderRadius:"4px", transition:"width 1s",
+                          }}/>
+                        </div>
+                        <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem"}}>
+                          {(frsStats?.economy.poor_pct ?? 0).toFixed(1)}% poverty index — {
+                            (frsStats?.economy.poor_pct ?? 0) < 20 ? "City is safe" :
+                            (frsStats?.economy.poor_pct ?? 0) < 40 ? "Police active" :
+                            (frsStats?.economy.poor_pct ?? 0) < 60 ? "Crime rising" : "City in chaos!"
+                          }
+                        </div>
                       </div>
                     </div>
-
                     {/* BOTTOM RIGHT — Sheriff */}
                     {sheriffState && (
                       <div style={{
@@ -7259,7 +7292,7 @@ export default function Home() {
                           </div>
                           <div>
                             <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem"}}>💰 BUDGET</div>
-                            <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"0.9rem", fontWeight:"bold"}}>{sheriffState.police_budget?.toFixed(0)}</div>
+                            <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"0.9rem", fontWeight:"bold"}}>{sheriffState.police_budget?.toFixed(0)} ZION</div>
                           </div>
                         </div>
                       </div>
