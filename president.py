@@ -212,9 +212,19 @@ def president_actions(cur, president):
     
     # Решение президента
     if is_dictator:
-        decisions = ["fund_police", "fund_police", "corrupt", "raise_taxes", "raise_taxes"]
+        decisions = ["fund_police", "fund_police", "corrupt", "raise_taxes", "raise_taxes", "corrupt"]
     else:
-        decisions = ["fund_police", "fund_education", "help_poor", "fund_health", "corrupt", "raise_taxes", "do_nothing"]
+        decisions = [
+            "fund_police",    # moderate approval
+            "fund_education", # poor/middle like it
+            "help_poor",      # poor loves it, elite hates it
+            "fund_health",    # everyone likes
+            "corrupt",        # everyone hates when exposed
+            "raise_taxes",    # everyone hates
+            "do_nothing",     # everyone slightly unhappy
+            "help_corps",     # elite loves it, poor hates it
+            "crisis_response" # random crisis
+        ]
     
     decision = random.choice(decisions)
     approval_change = 0
@@ -286,7 +296,13 @@ def president_actions(cur, president):
     elif decision == "raise_taxes":
         cur.execu
     
-    new_approval = max(0, min(100, approval + approval_change))
+    # Normal presidents can't have 100% approval - someone always disagrees
+    if not is_dictator:
+        max_approval = 85
+    else:
+        max_approval = 70  # Dictators are always hated by some
+    
+    new_approval = max(0, min(max_approval, approval + approval_change))
     cur.execute("UPDATE president_state SET approval_rating = %s WHERE is_active = true", (new_approval,))
     print(f"📊 Approval: {approval} → {new_approval}")
     
