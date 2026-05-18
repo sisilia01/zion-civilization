@@ -28,25 +28,28 @@ def log_event(cur, agent_id, event_type, description, amount=0):
     """, (agent_id, event_type, description, amount))
 
 def educate_agents(cur):
-    """Агенты платят за образование и повышают класс"""
+    """Agents pay for education - success based on ambition+charisma"""
     # poor → middle
     cur.execute("""
-        SELECT id, name, balance FROM agents
+        SELECT id, name, balance, ambition, charisma FROM agents
         WHERE is_alive = true AND class = 'poor' AND balance > 30
-        ORDER BY balance DESC LIMIT 5
+        ORDER BY ambition DESC, balance DESC LIMIT 10
     """)
     poor_students = cur.fetchall()
     
     promoted = 0
     for agent in poor_students:
-        if random.random() < 0.4:  # 40% шанс успешного обучения
+        # Success based on ambition and charisma
+        success_chance = min(0.7, (float(agent['ambition'] or 50) + float(agent['charisma'] or 50)) / 300)
+        if random.random() < success_chance:
             cost = 25.0
             uni = random.choice(UNIVERSITIES)
             cur.execute("""
-                UPDATE agents SET class = 'middle', balance = balance - %s WHERE id = %s
+                UPDATE agents SET class = 'middle', balance = balance - %s,
+                ambition = LEAST(100, ambition + 10) WHERE id = %s
             """, (cost, agent['id']))
             log_event(cur, agent['id'], 'education',
-                     f"🎓 {agent['name']} graduated from {uni}! Promoted to middle class! Cost: {cost} ZION",
+                     f"🎓 {agent['name']} graduated from {uni}! Promoted poor→middle! Ambition drives success.",
                      cost)
             print(f"🎓 {agent['name']} promoted poor→middle via {uni}")
             promoted += 1

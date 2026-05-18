@@ -95,7 +95,7 @@ def run_birth_cycle(base_balance=50):
     cur.execute("""
         SELECT id, name, class, balance FROM agents 
         WHERE is_alive = TRUE AND balance > 0
-        ORDER BY balance DESC
+        ORDER BY balance DESC LIMIT 300
     """)
     agents = cur.fetchall()
     
