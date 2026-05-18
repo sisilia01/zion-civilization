@@ -32,8 +32,36 @@ def ensure_market_table(cur):
         )
     """)
 
+def get_inflation_multiplier(cur):
+    """Calculate inflation based on total money supply"""
+    cur.execute("SELECT SUM(balance) as total, COUNT(*) as cnt FROM agents WHERE is_alive=true")
+    row = cur.fetchone()
+    total_money = float(row['total'] or 0)
+    alive = max(int(row['cnt']), 1)
+    avg_balance = total_money / alive
+    
+    # Normal economy: avg 10-20 ZION
+    # Inflation starts above 30 ZION avg
+    if avg_balance < 10:
+        return 0.7   # Deflation - prices drop
+    elif avg_balance < 20:
+        return 1.0   # Normal
+    elif avg_balance < 50:
+        return 1.3   # Mild inflation
+    elif avg_balance < 100:
+        return 1.8   # High inflation
+    elif avg_balance < 200:
+        return 2.5   # Hyperinflation
+    else:
+        return 4.0   # Extreme hyperinflation
+
 def update_prices(cur):
     """Update prices based on supply/demand and corporations"""
+    inflation = get_inflation_multiplier(cur)
+    if inflation > 1.5:
+        log_event(cur, None, 'market',
+                 f"📈 INFLATION ALERT! Money supply too high. Prices x{inflation:.1f}! ZRS must act!",
+                 0)
     # Agro corps reduce food price
     cur.execute("""
         SELECT SUM(treasury) as total, SUM(employees) as workers 
@@ -64,18 +92,18 @@ def update_prices(cur):
     weapons_price = max(10, round(random.uniform(20, 100) * (1 - min(military_power/3000, 0.4)), 2))
     
     resources = {
-        "food": food_price,
-        "water": round(random.uniform(0.5, 8), 2),
-        "energy": round(random.uniform(2, 20), 2),
-        "medicine": medicine_price,
-        "weapons": weapons_price,
+        "food": round(food_price * inflation, 2),
+        "water": round(random.uniform(0.5, 8) * inflation, 2),
+        "energy": round(random.uniform(2, 20) * inflation, 2),
+        "medicine": round(medicine_price * inflation, 2),
+        "weapons": round(weapons_price * inflation, 2),
     }
     for resource, price in resources.items():
         cur.execute("""
             INSERT INTO market_prices (resource, price) VALUES (%s, %s)
         """, (resource, price))
     
-    print(f"🌾 Food: {food_price} | 💊 Medicine: {medicine_price} | ⚔️ Weapons: {weapons_price}")
+    print(f"🌾 Food: {round(food_price*inflation,1)} | 💊 Medicine: {round(medicine_price*inflation,1)} | Inflation: x{inflation:.1f}")
     return resources
 
 def food_crisis(cur, prices):

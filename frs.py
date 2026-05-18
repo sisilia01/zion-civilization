@@ -47,7 +47,7 @@ def ensure_tables():
     """)
 
 def analyze_economy():
-    """Анализируем экономику"""
+    """Analyze economy including inflation"""
     cur.execute("""
         SELECT 
             COUNT(*) as total,
@@ -76,12 +76,25 @@ def analyze_economy():
     }
 
 def determine_policy(economy):
-    """Определяем монетарную политику"""
+    """Determine monetary policy based on economy state"""
     avg = economy['avg_balance']
     poor = economy['poor_pct']
+    total = economy['total_money']
     
-    # Определяем режим
-    if poor > 60 or avg < 2:
+    # Inflation check - too much money = hyperinflation
+    if avg > 200:
+        mode = "HYPERINFLATION"
+        rate = 20.0
+    elif avg > 100:
+        mode = "INFLATION"
+        rate = 15.0
+    elif avg > 50:
+        mode = "BOOM"
+        rate = 12.0
+    elif avg > 30:
+        mode = "GROWTH"
+        rate = 8.0
+    elif poor > 60 or avg < 2:
         mode = "DEPRESSION"
         rate = 0.5
     elif poor > 45 or avg < 5:
@@ -93,18 +106,9 @@ def determine_policy(economy):
     elif poor > 25 or avg < 30:
         mode = "SLOW"
         rate = 4.0
-    elif avg < 80:
+    else:
         mode = "NORMAL"
         rate = 6.0
-    elif avg < 150:
-        mode = "GROWTH"
-        rate = 8.0
-    elif avg < 300:
-        mode = "BOOM"
-        rate = 12.0
-    else:
-        mode = "INFLATION"
-        rate = 15.0
     
     return mode, rate
 
@@ -113,13 +117,13 @@ def quantitative_easing(economy, mode):
     total = economy['total']
     
     if mode == "DEPRESSION":
-        emission_per_agent = 15.0
+        emission_per_agent = 2.0
         target = "all"
     elif mode == "CRISIS":
-        emission_per_agent = 8.0
+        emission_per_agent = 1.5
         target = "poor"
     else:  # RECESSION/SLOW
-        emission_per_agent = 4.0
+        emission_per_agent = 1.0
         target = "poor"
     
     if target == "all":
@@ -141,10 +145,21 @@ def quantitative_easing(economy, mode):
     corps = cur.fetchall()
     corp_stimulus = 0
     for corp in corps:
-        corp_amount = round(corp['employees'] * emission_per_agent * 2, 2)
+        corp_amount = round(min(corp['employees'] * emission_per_agent * 0.5, 50), 2)
         cur.execute("UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
                    (corp_amount, corp['id']))
         corp_stimulus += corp_amount
+    
+    # Cap QE at 10% of total money supply
+    cur.execute("SELECT SUM(balance) as total FROM agents WHERE is_alive=true")
+    total_supply = float(cur.fetchone()['total'] or 1)
+    max_qe = total_supply * 0.10
+    
+    if total_emission + corp_stimulus > max_qe:
+        ratio = max_qe / (total_emission + corp_stimulus)
+        total_emission = round(total_emission * ratio, 2)
+        corp_stimulus = round(corp_stimulus * ratio, 2)
+        print(f"⚠️ QE capped at 10% of money supply: {max_qe:.0f} ZION max")
     
     total_printed = total_emission + corp_stimulus
     
@@ -259,6 +274,21 @@ def main():
         if mode in ["DEPRESSION", "CRISIS", "RECESSION"]:
             amount = quantitative_easing(economy, mode)
             action = "QE"
+            
+        elif mode == "HYPERINFLATION":
+            # Emergency QT - confiscate from richest
+            cur.execute("""
+                UPDATE agents SET balance = balance * 0.5
+                WHERE is_alive=true AND class='elite'
+            """)
+            cur.execute("""
+                UPDATE corporations SET treasury = treasury * 0.6
+                WHERE is_active=true AND treasury > 1000
+            """)
+            amount = economy['total_money'] * 0.3
+            log_event(f"🚨 HYPERINFLATION EMERGENCY! ZRS confiscates 50% from elite and 40% from rich corps! Avg balance was {economy['avg_balance']:.1f} ZION!", amount)
+            action = "EMERGENCY_QT"
+            print(f"🚨 HYPERINFLATION: Emergency QT!")
             
         elif mode in ["BOOM", "INFLATION"]:
             amount = quantitative_tightening(economy, mode)
