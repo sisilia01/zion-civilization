@@ -1,129 +1,312 @@
 #!/usr/bin/env python3
 """
-Full Polymarket sync — all categories
-Runs every 2 hours via watchdog
+Polymarket Gamma API sync — active + closed markets into polymarket_markets.
+Runs every 2 hours via watchdog.
 """
-import urllib.request, json, psycopg2, psycopg2.extras
+import json
+import urllib.request
 from datetime import datetime
 
-POLYMARKET_API = "https://gamma-api.polymarket.com"
-conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password="zion2026")
-cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+import psycopg2
+import psycopg2.extras
 
-SKIP_WORDS = [
-    'set 1','set 2','map 1','map 2','game 1','game 2',
-    'spread:','odd/even','completed match','1st half','2nd half',
-    'total kills','total rounds','exact score','quarter final',
-    'half time','corner kick','yellow card','red card',
-    'first goal','last goal','anytime scorer'
+GAMMA_API = "https://gamma-api.polymarket.com"
+
+CATEGORY_KEYWORDS = [
+    (
+        "crypto",
+        [
+            "bitcoin", "btc", "ethereum", "eth", "crypto", "token", "blockchain", "coin",
+            "defi", "nft", "web3", "price", "solana", "sui", "bnb", "xrp", "doge", "altcoin",
+        ],
+    ),
+    (
+        "sports",
+        [
+            "nba", "nfl", "nhl", "mlb", "fifa", "tennis", "f1", "formula", "golf", "ufc", "mma",
+            "championship", "league", "cup", "match", "game", "team", "player", "win", "season",
+            "tournament", "esports", "gaming", "counter-strike", "dota", "lol", "valorant",
+            "worlds", "major", "playoff",
+        ],
+    ),
+    (
+        "politics",
+        [
+            "election", "president", "vote", "senate", "congress", "republican", "democrat",
+            "trump", "biden", "governor", "minister", "party", "poll", "candidate", "primary",
+            "ballot", "referendum", "coalition",
+            # crime / legal / religion (not culture)
+            "crime", "criminal", "murder", "trial", "convicted", "indictment", "prison",
+            "felony", "guilty", "verdict", "prosecution", "weinstein", "harvey",
+            "jesus", "christ", "messiah", "pope", "church", "religion", "bible", "gospel",
+            "catholic", "evangelical", "impeach", "scandal",
+        ],
+    ),
+    (
+        "economics",
+        [
+            "stock", "gdp", "inflation", "fed", "interest rate", "nasdaq", "s&p", "s&p 500",
+            "gold", "silver", "oil", "dollar", "euro", "recession", "economy", "trade",
+            "tariff", "budget", "debt", "unemployment", "reserve", "treasury", "yield",
+            "cpi", "jobs report", "earnings", "ipo",
+            # tech → economics tab
+            "tech", "technology", "semiconductor", "nvidia", "apple", "microsoft", "google",
+            "meta", "amazon", "openai", "chatgpt", "artificial intelligence", "chip",
+        ],
+    ),
+    (
+        "geopolitics",
+        [
+            "war", "russia", "ukraine", "china", "taiwan", "nato", "military", "sanction",
+            "nuclear", "missile", "treaty", "conflict", "invasion", "ceasefire",
+            "middle east", "israel", "iran", "north korea", "territory",
+        ],
+    ),
+    (
+        "culture",
+        [
+            "oscar", "grammy", "emmy", "award", "music", "album", "artist", "movie", "film",
+            "box office", "netflix", "spotify", "celebrity", "fashion", "viral", "tiktok",
+            "youtube", "rihanna", "taylor", "beyonce", "kanye", "drake", "playboi", "rapper",
+            "singer", "actor",
+        ],
+    ),
 ]
 
-def categorize(question):
-    q = question.lower()
-    if any(w in q for w in ['bitcoin','btc','ethereum','eth','crypto','token','usd','tvl','defi','nft','blockchain','web3','sui','solana','price above','price below','market cap']):
-        return 'crypto'
-    if any(w in q for w in ['election','president','minister','senator','vote','party','congress','parliament','governor','mayor','campaign','ballot','democrat','republican','trump','biden','harris']):
-        return 'politics'
-    if any(w in q for w in ['win','champion','playoff','tournament','nba','nfl','ufc','f1','grand prix','wimbledon','roland garros','world cup','premier league','la liga','serie a','bundesliga','nhl','mlb','tennis','formula','race','match','game','score','goals']):
-        return 'sports'
-    if any(w in q for w in ['war','conflict','military','attack','missile','invasion','ceasefire','nato','ukraine','russia','israel','gaza','china','taiwan','sanctions','troops']):
-        return 'geopolitics'
-    if any(w in q for w in ['oscar','emmy','grammy','award','movie','film','album','artist','singer','actor','actress','music','box office','spotify','netflix','streaming']):
-        return 'culture'
-    if any(w in q for w in ['fed','interest rate','inflation','gdp','recession','unemployment','stock','s&p','nasdaq','dow','ipo','earnings','revenue','merger','acquisition','oil','gold','silver']):
-        return 'finance'
-    if any(w in q for w in ['ai','artificial intelligence','openai','gpt','claude','gemini','elon','spacex','tesla','apple','google','microsoft','amazon','meta','startup','launch','release']):
-        return 'tech'
-    return 'events'
+# Force politics before broad keyword passes (crime, religion, Weinstein, etc.)
+POLITICS_FORCE = [
+    "weinstein", "harvey weinstein", "jesus christ", "second coming", "messiah",
+    "criminal case", "sexual assault", "rape charge", "indicted", "convicted of",
+]
 
-def is_good(m):
-    q = m.get('question','').lower()
-    if len(q) < 15: return False
-    if any(s in q for s in SKIP_WORDS): return False
-    try:
-        prices = json.loads(m.get('outcomePrices','[0.5,0.5]'))
-        yes = float(prices[0])
-        if yes >= 0.97 or yes <= 0.03: return False
-    except: pass
-    return True
+SKIP_SUBSTRINGS = [
+    "set 1", "set 2", "map 1", "map 2", "game 1", "game 2",
+    "spread:", "odd/even", "completed match", "1st half", "2nd half",
+    "total kills", "total rounds", "exact score",
+]
 
-def fetch(limit=100, offset=0):
-    url = f"{POLYMARKET_API}/markets?active=true&limit={limit}&offset={offset}&order=volume&ascending=false"
+
+def get_db():
+    return psycopg2.connect(
+        host="localhost", database="zion_db", user="zion_user", password="zion2026"
+    )
+
+
+def ensure_table(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS polymarket_markets (
+            market_id TEXT PRIMARY KEY,
+            question TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'culture',
+            yes_price INTEGER NOT NULL DEFAULT 50,
+            no_price INTEGER NOT NULL DEFAULT 50,
+            volume DOUBLE PRECISION NOT NULL DEFAULT 0,
+            end_date TIMESTAMPTZ,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            closed BOOLEAN NOT NULL DEFAULT false,
+            winner TEXT,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS closed BOOLEAN NOT NULL DEFAULT false")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS winner TEXT")
+
+
+def categorize(question: str) -> str:
+    q = (question or "").lower()
+    if any(kw in q for kw in POLITICS_FORCE):
+        return "politics"
+    for cat, keywords in CATEGORY_KEYWORDS:
+        if any(kw in q for kw in keywords):
+            return cat
+    return "geopolitics"
+
+
+def fetch_markets(active: bool, limit: int) -> list:
+    closed = "false" if active else "true"
+    url = (
+        f"{GAMMA_API}/markets?active={'true' if active else 'false'}"
+        f"&limit={limit}&closed={closed}"
+    )
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ZionBet/1.0"})
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read())
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+            return data if isinstance(data, list) else []
     except Exception as e:
-        print(f"  Fetch error: {e}")
+        print(f"  Fetch error ({'active' if active else 'closed'}): {e}")
         return []
 
-def sync():
-    # Деактивируем старые
-    cur.execute("UPDATE polymarket_markets SET is_active=false WHERE synced_at < NOW() - INTERVAL '6 hours'")
-    
-    all_markets = []
-    for offset in [0, 100, 200]:
-        batch = fetch(100, offset)
-        if not batch: break
-        all_markets.extend(batch)
-        print(f"  Fetched {len(all_markets)} total...")
-    
-    good = [m for m in all_markets if is_good(m)]
-    print(f"  Good markets: {len(good)}/{len(all_markets)}")
-    
-    synced = 0
-    for m in good[:150]:
+
+def parse_prices(m: dict) -> tuple[int, int]:
+    try:
+        raw = m.get("outcomePrices") or "[0.5,0.5]"
+        prices = json.loads(raw) if isinstance(raw, str) else raw
+        yes = round(float(prices[0]) * 100)
+        yes = max(1, min(99, yes))
+        return yes, 100 - yes
+    except Exception:
+        return 50, 50
+
+
+def parse_end_date(m: dict):
+    for field in ("endDate", "end_date_iso", "endDateIso"):
+        val = m.get(field)
+        if not val:
+            continue
         try:
-            prices = json.loads(m.get('outcomePrices','[0.5,0.5]'))
-            yes = round(float(prices[0]) * 100)
-            no = 100 - yes
-        except:
-            yes, no = 50, 50
-        
-        end_date = None
-        for field in ['endDate','end_date_iso','endDateIso']:
-            val = m.get(field)
-            if val:
-                try:
-                    end_date = datetime.fromisoformat(val.replace('Z','+00:00'))
-                    break
-                except: pass
-        
-        vol = float(m.get('volume', 0) or 0)
-        question = m.get('question','')
-        cat = categorize(question)
-        mid = str(m.get('id',''))
-        
-        cur.execute("""
-            INSERT INTO polymarket_markets 
-                (market_id, question, category, yes_price, no_price, volume, end_date, is_active, synced_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, true, NOW())
-            ON CONFLICT (market_id) DO UPDATE SET
-                yes_price=EXCLUDED.yes_price,
-                no_price=EXCLUDED.no_price,
-                volume=EXCLUDED.volume,
-                end_date=EXCLUDED.end_date,
-                is_active=true,
-                synced_at=NOW()
-        """, (mid, question, cat, yes, no, vol, end_date))
-        synced += 1
-    
+            return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+        except Exception:
+            pass
+    return None
+
+
+def parse_winner(m: dict) -> str | None:
+    if not m.get("closed"):
+        return None
+    idx = m.get("winnerIndex")
+    if idx is None:
+        return None
+    try:
+        i = int(idx)
+        if i == 0:
+            return "YES"
+        if i == 1:
+            return "NO"
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def build_question(m: dict) -> str:
+    q = (m.get("question") or "").strip()
+    sub = (m.get("groupItemTitle") or "").strip()
+    if sub and sub.lower() not in q.lower():
+        return f"{q} — {sub}"
+    return q or sub or "Unknown market"
+
+
+def is_usable(m: dict, active: bool) -> bool:
+    q = build_question(m).lower()
+    if len(q) < 12:
+        return False
+    if any(s in q for s in SKIP_SUBSTRINGS):
+        return False
+    if active:
+        yes, _ = parse_prices(m)
+        if yes >= 97 or yes <= 3:
+            return False
+    return True
+
+
+def upsert_market(cur, m: dict, active_batch: bool):
+    raw_id = str(m.get("id", "")).strip()
+    if not raw_id:
+        return False
+    market_id = f"poly-{raw_id}"
+    question = build_question(m)
+    yes, no = parse_prices(m)
+    vol = float(m.get("volume") or 0)
+    end_date = parse_end_date(m)
+    closed = bool(m.get("closed"))
+    winner = parse_winner(m)
+    category = categorize(question)
+    is_active = active_batch and not closed
+
+    cur.execute(
+        """
+        INSERT INTO polymarket_markets (
+            market_id, question, category, yes_price, no_price, volume,
+            end_date, is_active, closed, winner, synced_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (market_id) DO UPDATE SET
+            question = EXCLUDED.question,
+            category = EXCLUDED.category,
+            yes_price = EXCLUDED.yes_price,
+            no_price = EXCLUDED.no_price,
+            volume = EXCLUDED.volume,
+            end_date = EXCLUDED.end_date,
+            is_active = EXCLUDED.is_active,
+            closed = EXCLUDED.closed,
+            winner = EXCLUDED.winner,
+            synced_at = NOW()
+        """,
+        (market_id, question, category, yes, no, vol, end_date, is_active, closed, winner),
+    )
+    return True
+
+
+def sync():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    ensure_table(cur)
     conn.commit()
-    
-    print(f"\n✅ Synced {synced} markets")
+
+    cur.execute(
+        "UPDATE polymarket_markets SET is_active = false WHERE synced_at < NOW() - INTERVAL '6 hours'"
+    )
+    cur.execute(
+        "UPDATE polymarket_markets SET category = 'economics' WHERE category IN ('finance', 'tech')"
+    )
+    cur.execute("SELECT market_id, question FROM polymarket_markets WHERE category = 'events'")
+    events_remapped = 0
+    for row in cur.fetchall():
+        new_cat = categorize(row["question"])
+        cur.execute(
+            "UPDATE polymarket_markets SET category = %s WHERE market_id = %s",
+            (new_cat, row["market_id"]),
+        )
+        events_remapped += 1
+    if events_remapped:
+        print(f"  Re-categorized {events_remapped} legacy events rows (keyword logic)")
+
+    active_markets = fetch_markets(active=True, limit=100)
+    closed_markets = fetch_markets(active=False, limit=50)
+    print(f"  Fetched {len(active_markets)} active, {len(closed_markets)} closed")
+
+    synced = 0
+    for m in active_markets:
+        if is_usable(m, active=True) and upsert_market(cur, m, active_batch=True):
+            synced += 1
+
+    settled = 0
+    for m in closed_markets:
+        if upsert_market(cur, m, active_batch=False):
+            settled += 1
+
     cur.execute("""
-        SELECT category, COUNT(*) as cnt 
-        FROM polymarket_markets WHERE is_active=true 
+        UPDATE polymarket_markets SET category = CASE
+          WHEN question ILIKE ANY(ARRAY['%bitcoin%','%btc%','%ethereum%','%eth%','%solana%','%monero%','%crypto%','%token%','%coin%','%defi%','%fdv%','%airdrop%','%silver%','%gold%']) THEN 'economics'
+          WHEN question ILIKE ANY(ARRAY['%premier league%','%epl%','%nba%','%nfl%','%tennis%','%f1%','%cup%','%relegated%']) THEN 'sports'
+          WHEN question ILIKE ANY(ARRAY['%strike%','%iran%','%irgc%','%colombia%','%terrorist%','%nato%','%war%','%military%']) THEN 'geopolitics'
+          WHEN question ILIKE ANY(ARRAY['%acquired%','%ipo%','%startup%','%company%','%lovable%']) THEN 'economics'
+          ELSE 'geopolitics'
+        END
+        WHERE category = 'events'
+    """)
+    events_sql = cur.rowcount
+    if events_sql:
+        print(f"  SQL re-categorized {events_sql} remaining events rows")
+
+    conn.commit()
+    print(f"\n✅ Synced {synced} active markets, {settled} closed/settled rows")
+
+    cur.execute("""
+        SELECT category, COUNT(*) AS cnt
+        FROM polymarket_markets
+        WHERE is_active = true AND closed = false
         GROUP BY category ORDER BY cnt DESC
     """)
     total = 0
-    for r in cur.fetchall():
-        print(f"  {r['category']:15} {r['cnt']}")
-        total += r['cnt']
-    print(f"  {'TOTAL':15} {total}")
+    for row in cur.fetchall():
+        print(f"  {row['category']:15} {row['cnt']}")
+        total += row["cnt"]
+    print(f"  {'TOTAL active':15} {total}")
+
+    cur.close()
+    conn.close()
+
 
 if __name__ == "__main__":
     print(f"🔄 Polymarket sync — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     sync()
-    cur.close()
-    conn.close()

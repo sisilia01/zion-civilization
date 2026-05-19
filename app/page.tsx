@@ -2912,7 +2912,10 @@ type ZionBetActivityRow = {
 };
 type ZionBetHolderRow = { wallet: string; total_vol: number; yes_vol: number; no_vol: number };
 
-const ZIONBET_PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78";
+const ZIONBET_PACKAGE = "0x5fe02e40df89feb516bf14ba8adf53375accf8365816b903c0fefd5a56a320f7";
+const BET_HOUSE = "0xe0791c693aa4727da9aa5450e4b3015e10e0488feefbde1619677717ba2aa43f";
+const BET_ADMIN_CAP = "0xb2b5883d02933b0fdea6b1ef4096267b515cd240f9ba2773754f487d5ce15922";
+const SUI_CLOCK = "0x6";
 const DEEPBOOK_PREDICT_PACKAGE = "0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138";
 const DEEPBOOK_PREDICT_ID = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a";
 const DEEPBOOK_REGISTRY = "0x43af14fed5480c20ff77e2263d5f794c35b9fab7e2212903127062f4fe2a6e64";
@@ -5963,7 +5966,7 @@ export default function Home() {
         const amountZion = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000_000));
         tx.moveCall({
           target: "0x2::coin::transfer",
-          typeArguments: ["0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78::zion::ZION"],
+          typeArguments: [`${ZIONBET_PACKAGE}::civilization::CIVILIZATION`],
           arguments: [tx.pure.u64(amountZion), tx.pure.address(bankRecipient)],
         });
       }

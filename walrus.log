@@ -40,3 +40,201 @@
   civilization_snapshot: 7V0-xPlt0cVlHPKDfGgf... (15:35)
 
 ✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-18 22:25
+==================================================
+Walrus store error: HTTPSConnectionPool(host='publisher.walrus-testnet.walrus.space', port=443): Read timed out. (read timeout=30)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-18 23:25
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: nV4zA8F3GbXKuqMJkIbaCJD8ZjH89I1IpdeGFKw6UIk
+   Sui Object: 0x88041e7cc28bf58886593c70f30c20077215bada279745cfde3516a37d9e3686
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/nV4zA8F3GbXKuqMJkIbaCJD8ZjH89I1IpdeGFKw6UIk
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: nV4zA8F3GbXKuqMJkIba... (23:25)
+  civilization_snapshot: eHe-CVvvaB_u2vy9au8R... (21:25)
+  civilization_snapshot: m-dAABzRUTkS8Kl6kpNL... (17:25)
+  civilization_snapshot: Jums-DnOT9RahmdzD_Ik... (15:39)
+  civilization_snapshot: 7V0-xPlt0cVlHPKDfGgf... (15:35)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 00:26
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: QTHhJ0YtnZsO1kYQTX4GY9c5R16Bym6ENZVdaqBs43E
+   Sui Object: 0xfef6247bd0a7d0303a9f035436bd1168605fb399968dfacf7d3b75713eccde62
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/QTHhJ0YtnZsO1kYQTX4GY9c5R16Bym6ENZVdaqBs43E
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: QTHhJ0YtnZsO1kYQTX4G... (00:26)
+  civilization_snapshot: nV4zA8F3GbXKuqMJkIba... (23:25)
+  civilization_snapshot: eHe-CVvvaB_u2vy9au8R... (21:25)
+  civilization_snapshot: m-dAABzRUTkS8Kl6kpNL... (17:25)
+  civilization_snapshot: Jums-DnOT9RahmdzD_Ik... (15:39)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 01:26
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: HnMwjhY0qG3xkC77wPXgoP4nRI_NZaMSuFip22U2ewQ
+   Sui Object: 0x4dbaee55ee4a1935c64f1456edb8464e13819e6a66f33ec54f1e45bd379c0f23
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/HnMwjhY0qG3xkC77wPXgoP4nRI_NZaMSuFip22U2ewQ
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: HnMwjhY0qG3xkC77wPXg... (01:26)
+  civilization_snapshot: QTHhJ0YtnZsO1kYQTX4G... (00:26)
+  civilization_snapshot: nV4zA8F3GbXKuqMJkIba... (23:25)
+  civilization_snapshot: eHe-CVvvaB_u2vy9au8R... (21:25)
+  civilization_snapshot: m-dAABzRUTkS8Kl6kpNL... (17:25)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 02:26
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: H6SepHsFBubj6DTuQv0Z1kojakepXdM0ABo2uPV2Geg
+   Sui Object: 0xcac4725161c19fdafa48ce804e2d0028399a28f914fd37b5bb74f058809fb20d
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/H6SepHsFBubj6DTuQv0Z1kojakepXdM0ABo2uPV2Geg
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: H6SepHsFBubj6DTuQv0Z... (02:26)
+  civilization_snapshot: HnMwjhY0qG3xkC77wPXg... (01:26)
+  civilization_snapshot: QTHhJ0YtnZsO1kYQTX4G... (00:26)
+  civilization_snapshot: nV4zA8F3GbXKuqMJkIba... (23:25)
+  civilization_snapshot: eHe-CVvvaB_u2vy9au8R... (21:25)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 03:27
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: jUf8VOI8HbaHQ_1ou-phvoiNLwT9WTjMjafjzBf21lo
+   Sui Object: 0x1aa2e20ac70f31f9eca6ae770b719d3a1f8668264da59fe904d3bf3a9b604672
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/jUf8VOI8HbaHQ_1ou-phvoiNLwT9WTjMjafjzBf21lo
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: jUf8VOI8HbaHQ_1ou-ph... (03:27)
+  civilization_snapshot: H6SepHsFBubj6DTuQv0Z... (02:26)
+  civilization_snapshot: HnMwjhY0qG3xkC77wPXg... (01:26)
+  civilization_snapshot: QTHhJ0YtnZsO1kYQTX4G... (00:26)
+  civilization_snapshot: nV4zA8F3GbXKuqMJkIba... (23:25)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 04:27
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: _4-tYeVos-XgR8p03Tu4qTiyddVgHegMRhU912mSgLk
+   Sui Object: 0xf9e4627f7c70685355f99aeec15235fdfd4b483d671aab46b3963577d2b95e7a
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/_4-tYeVos-XgR8p03Tu4qTiyddVgHegMRhU912mSgLk
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: _4-tYeVos-XgR8p03Tu4... (04:27)
+  civilization_snapshot: jUf8VOI8HbaHQ_1ou-ph... (03:27)
+  civilization_snapshot: H6SepHsFBubj6DTuQv0Z... (02:26)
+  civilization_snapshot: HnMwjhY0qG3xkC77wPXg... (01:26)
+  civilization_snapshot: QTHhJ0YtnZsO1kYQTX4G... (00:26)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 05:27
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: _ZQkUJ9XaJukB4nB94P-82tqsOEIKM0zUljyv7qrk_I
+   Sui Object: 0xd1c4dda3d15e5949bb780686071fc0c0d2941a8d13d162b7411f6a002af1f9c5
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/_ZQkUJ9XaJukB4nB94P-82tqsOEIKM0zUljyv7qrk_I
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: _ZQkUJ9XaJukB4nB94P-... (05:27)
+  civilization_snapshot: _4-tYeVos-XgR8p03Tu4... (04:27)
+  civilization_snapshot: jUf8VOI8HbaHQ_1ou-ph... (03:27)
+  civilization_snapshot: H6SepHsFBubj6DTuQv0Z... (02:26)
+  civilization_snapshot: HnMwjhY0qG3xkC77wPXg... (01:26)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 06:06
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: 0KA3_LHSTYeG9zjxyApR86fDYxRcT5BNy3XJsY6qcKg
+   Sui Object: 0x143dea7561166e2232034292779bb2d6a490d6e156f141e937cd4d7d985fd325
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/0KA3_LHSTYeG9zjxyApR86fDYxRcT5BNy3XJsY6qcKg
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: 0KA3_LHSTYeG9zjxyApR... (06:06)
+  civilization_snapshot: _ZQkUJ9XaJukB4nB94P-... (05:27)
+  civilization_snapshot: _4-tYeVos-XgR8p03Tu4... (04:27)
+  civilization_snapshot: jUf8VOI8HbaHQ_1ou-ph... (03:27)
+  civilization_snapshot: H6SepHsFBubj6DTuQv0Z... (02:26)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 06:19
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: AYLZFvcemh6K85UnsQ6CMLDOHvzeaQNL0mo9V7LtvMk
+   Sui Object: 0xf0d08859dbd6a4a5aec8bdeb6977a0220ed6bc455536da78b3b6ad502200eb2f
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/AYLZFvcemh6K85UnsQ6CMLDOHvzeaQNL0mo9V7LtvMk
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: AYLZFvcemh6K85UnsQ6C... (06:19)
+  civilization_snapshot: 0KA3_LHSTYeG9zjxyApR... (06:06)
+  civilization_snapshot: _ZQkUJ9XaJukB4nB94P-... (05:27)
+  civilization_snapshot: _4-tYeVos-XgR8p03Tu4... (04:27)
+  civilization_snapshot: jUf8VOI8HbaHQ_1ou-ph... (03:27)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 07:19
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: 2oF10u5Q0YPpIa_9zwJFU0XyEoLGddpqkkFzxu1huSk
+   Sui Object: 0x0780f65fe385c7d819347941ce681c176e47dfe8e1aa771b5dbeded5aa781a7f
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/2oF10u5Q0YPpIa_9zwJFU0XyEoLGddpqkkFzxu1huSk
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: 2oF10u5Q0YPpIa_9zwJF... (07:19)
+  civilization_snapshot: AYLZFvcemh6K85UnsQ6C... (06:19)
+  civilization_snapshot: 0KA3_LHSTYeG9zjxyApR... (06:06)
+  civilization_snapshot: _ZQkUJ9XaJukB4nB94P-... (05:27)
+  civilization_snapshot: _4-tYeVos-XgR8p03Tu4... (04:27)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 08:08
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: vjJiRhadjyj7R4QlQGaQJUrRmdIQVmI4R0uMhAiJkEw
+   Sui Object: 0xbd780c5b77b0c05b60b6608375733c92c5b954e057c5bb842c086cb8fb2f047f
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/vjJiRhadjyj7R4QlQGaQJUrRmdIQVmI4R0uMhAiJkEw
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: vjJiRhadjyj7R4QlQGaQ... (08:08)
+  civilization_snapshot: 2oF10u5Q0YPpIa_9zwJF... (07:19)
+  civilization_snapshot: AYLZFvcemh6K85UnsQ6C... (06:19)
+  civilization_snapshot: 0KA3_LHSTYeG9zjxyApR... (06:06)
+  civilization_snapshot: _ZQkUJ9XaJukB4nB94P-... (05:27)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 08:10
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: qLx4--KMIG6XHOHHuHb9pYONXBc3gqQ_9I_M1VyTNP4
+   Sui Object: 0xf3508f3bbffabdc59e9d3de08095b41d5604e9e86a287131781e9a909e6b065a
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/qLx4--KMIG6XHOHHuHb9pYONXBc3gqQ_9I_M1VyTNP4
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: qLx4--KMIG6XHOHHuHb9... (08:10)
+  civilization_snapshot: vjJiRhadjyj7R4QlQGaQ... (08:08)
+  civilization_snapshot: 2oF10u5Q0YPpIa_9zwJF... (07:19)
+  civilization_snapshot: AYLZFvcemh6K85UnsQ6C... (06:19)
+  civilization_snapshot: 0KA3_LHSTYeG9zjxyApR... (06:06)
+
+✅ Walrus cycle complete!

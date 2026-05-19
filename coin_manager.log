@@ -20,3 +20,131 @@
 2026-05-18 21:25:54,810 [COIN_MANAGER] Only 0 coins, skip merge
 2026-05-18 21:25:54,810 [COIN_MANAGER] === Done ===
 2026-05-18 21:25:54,810 [COIN_MANAGER] === Done ===
+2026-05-19 01:25:27,492 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 01:25:27,492 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 01:25:27,492 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 01:25:27,492 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 01:25:27,646 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 01:25:27,646 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 01:25:31,569 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 01:25:31,569 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+Traceback (most recent call last):
+  File "/root/zion_backend/coin_manager.py", line 69, in <module>
+    merge_coins()
+  File "/root/zion_backend/coin_manager.py", line 58, in merge_coins
+    subprocess.run([
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['sui', 'client', 'merge-coin', '--primary-coin', '0x373e2ab564a2f99bb27f2289715d314830d2f27c6854ca4f2ccc26b9b348e0fd', '--coin-to-merge', '0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50', '--gas-budget', '3000000']' timed out after 120 seconds
+2026-05-19 05:25:40,044 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 05:25:40,044 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 05:25:40,044 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 05:25:40,044 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 05:25:40,198 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 05:25:40,198 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 05:25:44,011 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 05:25:44,011 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+Traceback (most recent call last):
+  File "/root/zion_backend/coin_manager.py", line 69, in <module>
+    merge_coins()
+  File "/root/zion_backend/coin_manager.py", line 58, in merge_coins
+    subprocess.run([
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['sui', 'client', 'merge-coin', '--primary-coin', '0x373e2ab564a2f99bb27f2289715d314830d2f27c6854ca4f2ccc26b9b348e0fd', '--coin-to-merge', '0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50', '--gas-budget', '3000000']' timed out after 120 seconds
+2026-05-19 06:06:06,988 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 06:06:06,988 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 06:06:06,988 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 06:06:06,988 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 06:06:07,129 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 06:06:07,129 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 06:06:10,976 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 06:06:10,976 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+Traceback (most recent call last):
+  File "/root/zion_backend/coin_manager.py", line 69, in <module>
+    merge_coins()
+  File "/root/zion_backend/coin_manager.py", line 58, in merge_coins
+    subprocess.run([
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['sui', 'client', 'merge-coin', '--primary-coin', '0x373e2ab564a2f99bb27f2289715d314830d2f27c6854ca4f2ccc26b9b348e0fd', '--coin-to-merge', '0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50', '--gas-budget', '3000000']' timed out after 120 seconds
+2026-05-19 06:19:13,515 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 06:19:13,515 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 06:19:13,515 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 06:19:13,515 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 06:19:13,658 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 06:19:13,658 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 06:19:17,839 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 06:19:17,839 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+Traceback (most recent call last):
+  File "/root/zion_backend/coin_manager.py", line 69, in <module>
+    merge_coins()
+  File "/root/zion_backend/coin_manager.py", line 58, in merge_coins
+    subprocess.run([
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['sui', 'client', 'merge-coin', '--primary-coin', '0x373e2ab564a2f99bb27f2289715d314830d2f27c6854ca4f2ccc26b9b348e0fd', '--coin-to-merge', '0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50', '--gas-budget', '3000000']' timed out after 120 seconds
+2026-05-19 08:08:10,775 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 08:08:10,775 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 08:08:10,781 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 08:08:10,781 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 08:08:10,941 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 08:08:10,941 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 08:08:15,024 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 08:08:15,024 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 08:10:05,728 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 08:10:05,728 [COIN_MANAGER] === Coin Manager started ===
+2026-05-19 08:10:05,728 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 08:10:05,728 [COIN_MANAGER] Requesting faucet (every 4h regardless of balance)...
+2026-05-19 08:10:05,869 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 08:10:05,869 [COIN_MANAGER] Faucet API failed: HTTP Error 429: Too Many Requests
+2026-05-19 08:10:10,035 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+2026-05-19 08:10:10,035 [COIN_MANAGER] Merging 10 coins into 0x373e2a...
+Traceback (most recent call last):
+  File "/root/zion_backend/coin_manager.py", line 69, in <module>
+    merge_coins()
+  File "/root/zion_backend/coin_manager.py", line 58, in merge_coins
+    subprocess.run([
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['sui', 'client', 'merge-coin', '--primary-coin', '0x373e2ab564a2f99bb27f2289715d314830d2f27c6854ca4f2ccc26b9b348e0fd', '--coin-to-merge', '0xf3f22016084674170e57b7cb209f6bbdaaaf987b718c690c26f0a6833f9bce50', '--gas-budget', '3000000']' timed out after 120 seconds

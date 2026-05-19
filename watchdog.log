@@ -1,56 +1,57 @@
-2026-05-18 21:25:12,618 [WATCHDOG] === ZION Watchdog started ===
-2026-05-18 21:25:12,618 [WATCHDOG] Monitoring 20 scripts + API
-2026-05-18 21:25:12,707 [WATCHDOG] Running tax (interval 3600s)
-2026-05-18 21:25:13,771 [WATCHDOG] Started tax (tax_cron.py)
-2026-05-18 21:25:13,802 [WATCHDOG] Running birth (interval 1800s)
-2026-05-18 21:25:14,836 [WATCHDOG] Started birth (birth.py)
-2026-05-18 21:25:14,857 [WATCHDOG] Running corporations (interval 1800s)
-2026-05-18 21:25:15,904 [WATCHDOG] Started corporations (corporations.py)
-2026-05-18 21:25:15,939 [WATCHDOG] Running epidemics (interval 7200s)
-2026-05-18 21:25:16,974 [WATCHDOG] Started epidemics (epidemics.py)
-2026-05-18 21:25:17,001 [WATCHDOG] Running marriages (interval 3600s)
-2026-05-18 21:25:18,044 [WATCHDOG] Started marriages (marriages.py)
-2026-05-18 21:25:18,075 [WATCHDOG] Running education (interval 3600s)
-2026-05-18 21:25:19,134 [WATCHDOG] Started education (education.py)
-2026-05-18 21:25:19,165 [WATCHDOG] Running market (interval 1800s)
-2026-05-18 21:25:20,220 [WATCHDOG] Started market (market.py)
-2026-05-18 21:25:20,246 [WATCHDOG] Running espionage (interval 3600s)
-2026-05-18 21:25:21,297 [WATCHDOG] Started espionage (espionage.py)
-2026-05-18 21:25:21,328 [WATCHDOG] Running casino (interval 1800s)
-2026-05-18 21:25:22,373 [WATCHDOG] Started casino (casino.py)
-2026-05-18 21:25:22,404 [WATCHDOG] Running religion (interval 1800s)
-2026-05-18 21:25:23,448 [WATCHDOG] Started religion (religion.py)
-2026-05-18 21:25:23,471 [WATCHDOG] Running catastrophes (interval 7200s)
-2026-05-18 21:25:24,514 [WATCHDOG] Started catastrophes (catastrophes.py)
-2026-05-18 21:25:24,542 [WATCHDOG] Running clans (interval 3600s)
-2026-05-18 21:25:25,590 [WATCHDOG] Started clans (clans.py)
-2026-05-18 21:25:25,614 [WATCHDOG] Running zionwork (interval 1800s)
-2026-05-18 21:25:26,660 [WATCHDOG] Started zionwork (zionwork.py)
-2026-05-18 21:25:26,680 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:25:27,723 [WATCHDOG] Started settlement (settlement.py)
-2026-05-18 21:25:27,745 [WATCHDOG] Running frs (interval 1800s)
-2026-05-18 21:25:28,811 [WATCHDOG] Started frs (frs.py)
-2026-05-18 21:25:28,844 [WATCHDOG] Running president (interval 3600s)
-2026-05-18 21:25:29,905 [WATCHDOG] Started president (president.py)
-2026-05-18 21:25:29,930 [WATCHDOG] Running sheriff (interval 3600s)
-2026-05-18 21:25:30,974 [WATCHDOG] Started sheriff (sheriff.py)
-2026-05-18 21:25:31,002 [WATCHDOG] Running walrus (interval 3600s)
-2026-05-18 21:25:32,046 [WATCHDOG] Started walrus (walrus.py)
-2026-05-18 21:25:32,075 [WATCHDOG] Running polymarket (interval 7200s)
-2026-05-18 21:25:33,125 [WATCHDOG] Started polymarket (polymarket_sync.py)
-2026-05-18 21:25:33,154 [WATCHDOG] Running police (interval 1800s)
-2026-05-18 21:25:34,227 [WATCHDOG] Started police (police.py)
-2026-05-18 21:25:34,228 [WATCHDOG] Coin manager started
-2026-05-18 21:30:04,877 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
-2026-05-18 21:30:34,955 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:30:35,998 [WATCHDOG] Started settlement (settlement.py)
-2026-05-18 21:35:36,687 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:35:37,746 [WATCHDOG] Started settlement (settlement.py)
-2026-05-18 21:40:08,416 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
-2026-05-18 21:40:38,498 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:40:39,559 [WATCHDOG] Started settlement (settlement.py)
-2026-05-18 21:45:40,208 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:45:41,273 [WATCHDOG] Started settlement (settlement.py)
-2026-05-18 21:50:11,866 [WATCHDOG] Heartbeat — API:✅ | Scripts monitored: 20
-2026-05-18 21:50:41,977 [WATCHDOG] settlement appears stuck — restarting
-2026-05-18 21:50:43,039 [WATCHDOG] Started settlement (settlement.py)
+2026-05-19 08:09:41,892 [WATCHDOG] === ZION Watchdog started ===
+2026-05-19 08:09:41,892 [WATCHDOG] Monitoring 2 daemons + 22 cron scripts
+2026-05-19 08:09:41,974 [WATCHDOG] Running tax (interval 3600s)
+2026-05-19 08:09:43,038 [WATCHDOG] Started tax (tax_cron.py)
+2026-05-19 08:09:43,071 [WATCHDOG] Running birth (interval 1800s)
+2026-05-19 08:09:44,134 [WATCHDOG] Started birth (birth.py)
+2026-05-19 08:09:44,153 [WATCHDOG] Running corporations (interval 1800s)
+2026-05-19 08:09:45,195 [WATCHDOG] Started corporations (corporations.py)
+2026-05-19 08:09:45,211 [WATCHDOG] Running epidemics (interval 7200s)
+2026-05-19 08:09:46,277 [WATCHDOG] Started epidemics (epidemics.py)
+2026-05-19 08:09:46,307 [WATCHDOG] Running marriages (interval 3600s)
+2026-05-19 08:09:47,370 [WATCHDOG] Started marriages (marriages.py)
+2026-05-19 08:09:47,400 [WATCHDOG] Running education (interval 3600s)
+2026-05-19 08:09:48,449 [WATCHDOG] Started education (education.py)
+2026-05-19 08:09:48,478 [WATCHDOG] Running market (interval 1800s)
+2026-05-19 08:09:49,522 [WATCHDOG] Started market (market.py)
+2026-05-19 08:09:49,546 [WATCHDOG] Running espionage (interval 3600s)
+2026-05-19 08:09:50,590 [WATCHDOG] Started espionage (espionage.py)
+2026-05-19 08:09:50,618 [WATCHDOG] Running casino (interval 1800s)
+2026-05-19 08:09:51,671 [WATCHDOG] Started casino (casino.py)
+2026-05-19 08:09:51,701 [WATCHDOG] Running religion (interval 1800s)
+2026-05-19 08:09:52,752 [WATCHDOG] Started religion (religion.py)
+2026-05-19 08:09:52,781 [WATCHDOG] Running catastrophes (interval 7200s)
+2026-05-19 08:09:53,833 [WATCHDOG] Started catastrophes (catastrophes.py)
+2026-05-19 08:09:53,863 [WATCHDOG] Running clans (interval 3600s)
+2026-05-19 08:09:54,909 [WATCHDOG] Started clans (clans.py)
+2026-05-19 08:09:54,922 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-19 08:09:55,950 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-19 08:09:55,966 [WATCHDOG] Running neo (interval 3600s)
+2026-05-19 08:09:57,022 [WATCHDOG] Started neo (neo.py)
+2026-05-19 08:09:57,056 [WATCHDOG] Running politics (interval 3600s)
+2026-05-19 08:09:58,118 [WATCHDOG] Started politics (politics.py)
+2026-05-19 08:09:58,148 [WATCHDOG] Running frs (interval 1800s)
+2026-05-19 08:09:59,194 [WATCHDOG] Started frs (frs.py)
+2026-05-19 08:09:59,223 [WATCHDOG] Running president (interval 3600s)
+2026-05-19 08:10:00,275 [WATCHDOG] Started president (president.py)
+2026-05-19 08:10:00,304 [WATCHDOG] Running sheriff (interval 3600s)
+2026-05-19 08:10:01,334 [WATCHDOG] Started sheriff (sheriff.py)
+2026-05-19 08:10:01,364 [WATCHDOG] Running walrus (interval 3600s)
+2026-05-19 08:10:02,425 [WATCHDOG] Started walrus (walrus.py)
+2026-05-19 08:10:02,455 [WATCHDOG] Running polymarket (interval 7200s)
+2026-05-19 08:10:03,505 [WATCHDOG] Started polymarket (polymarket_sync.py)
+2026-05-19 08:10:03,530 [WATCHDOG] Running settlements (interval 3600s)
+2026-05-19 08:10:04,580 [WATCHDOG] Started settlements (settlement_check.py)
+2026-05-19 08:10:04,606 [WATCHDOG] Running police (interval 1800s)
+2026-05-19 08:10:05,655 [WATCHDOG] Started police (police.py)
+2026-05-19 08:10:05,656 [WATCHDOG] Coin manager started
+2026-05-19 08:16:06,376 [WATCHDOG] Daemon zion-api screen not running — starting
+2026-05-19 08:16:06,376 [WATCHDOG] Starting zion-api daemon...
+2026-05-19 08:16:08,409 [WATCHDOG] zion-api daemon started
+2026-05-19 08:20:08,985 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:22
+2026-05-19 08:22:39,248 [WATCHDOG] Daemon zion-api screen not running — starting
+2026-05-19 08:22:39,248 [WATCHDOG] Starting zion-api daemon...
+2026-05-19 08:22:41,294 [WATCHDOG] zion-api daemon started
+2026-05-19 08:23:11,361 [WATCHDOG] Daemon zion-api screen not running — starting
+2026-05-19 08:23:11,361 [WATCHDOG] Starting zion-api daemon...
+2026-05-19 08:23:13,419 [WATCHDOG] zion-api daemon started

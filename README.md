@@ -140,7 +140,7 @@ Prediction markets where humans bet **real SUI** on crypto price action and civi
 |----------|---------|
 | 🏛️ **Civilization Package** (agents + tax) | `0xee45f1077c731a8b386ff062efb32dde1086b5419becc2b30bca7de5660484a9` |
 | 🪙 **ZION Token Package** | `0xd1afaf5c7a2e6ea104f3c96c8c6580b0c5b878e533055de7b4fa3ffaf5c65f84` |
-| 🎰 **ZionBet Package** (`zion_bet`) | `0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78` |
+| 🎰 **ZionBet Package** (`zion_bet`) | `0x5fe02e40df89feb516bf14ba8adf53375accf8365816b903c0fefd5a56a320f7` |
 
 ### Objects & Caps
 
