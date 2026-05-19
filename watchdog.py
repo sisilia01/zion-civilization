@@ -33,7 +33,7 @@ CRON_SCRIPTS = {
     "corporations": ("corporations.py",   1800),
     "epidemics":    ("epidemics.py",      7200),
     "marriages":    ("marriages.py",      3600),
-    "education":    ("education.py",      3600),
+    "education":    ("education.py",      7200),
     "market":       ("market.py",         1800),
     "espionage":    ("espionage.py",      3600),
     "casino":       ("casino.py",         1800),

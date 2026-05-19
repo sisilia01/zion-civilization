@@ -257,13 +257,37 @@ def print_report(economy, mode, rate):
     print(f"  Total Money: {economy['total_money']:.0f} ZION")
     print(f"  Population: {economy['total']} alive")
 
+def zrs_recently_active():
+    """Avoid dual central-bank policy when zrs.py ran recently."""
+    try:
+        cur.execute(
+            """
+            SELECT 1 FROM zrs_state
+            WHERE id = 1 AND updated_at > NOW() - INTERVAL '3 hours'
+            """
+        )
+        return cur.fetchone() is not None
+    except Exception:
+        conn.rollback()
+        return False
+
+
 def main():
-    print(f"\n🏦 ZION Reserve System — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"\n🏦 ZION Reserve System (legacy FRS) — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
     
     try:
         ensure_tables()
         conn.commit()
+
+        if zrs_recently_active():
+            log_event(
+                "🏦 FRS: Skipping monetary action — ZRS ran within 3 hours (use zrs.py as canonical bank)",
+                0,
+            )
+            conn.commit()
+            print("⏭️ FRS skipped — ZRS is active. No duplicate QE/QT.")
+            return
         
         # Экстренные меры если мало агентов
         economy = analyze_economy()

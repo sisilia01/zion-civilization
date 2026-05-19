@@ -158,6 +158,10 @@ def run_election(cur, forced=False):
     cur.execute("""
         SELECT id, name, class, charisma, balance FROM agents
         WHERE is_alive = true
+        AND id NOT IN (
+            SELECT agent_id FROM president_state
+            WHERE agent_id IS NOT NULL AND is_active = false
+        )
         ORDER BY charisma DESC, balance DESC LIMIT 8
     """)
     candidates = cur.fetchall()

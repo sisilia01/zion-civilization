@@ -1,148 +1,137 @@
 #!/usr/bin/env python3
 """
-ZION Education — образование меняет класс агентов
-Бедные могут подняться через учёбу, богатые финансируют университеты
+ZION Education — study sessions and clan elder mentoring.
+Runs every 2 hours (watchdog).
 """
-import psycopg2
-import psycopg2.extras
 import random
 from datetime import datetime
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="zion_db",
-    user="zion_user",
-    password="zion2026"
-)
-cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+from civ_common import ensure_schema, get_conn, get_cursor, log_event
 
-UNIVERSITIES = [
-    "ZION Academy", "Prophet's Institute", "Iron Fist University",
-    "Shadow School", "Void College", "Golden Dawn Seminary"
-]
+STUDY_COST = 2.0
+MIN_BALANCE_TO_STUDY = 5.0
+CHARISMA_MAX = 95
 
-def log_event(cur, agent_id, event_type, description, amount=0):
-    cur.execute("""
-        INSERT INTO events (agent_id, event_type, description, zion_amount)
-        VALUES (%s, %s, %s, %s)
-    """, (agent_id, event_type, description, amount))
 
-def educate_agents(cur):
-    """Agents pay for education - success based on ambition+charisma"""
-    # poor → middle
-    cur.execute("""
-        SELECT id, name, balance, ambition, charisma FROM agents
-        WHERE is_alive = true AND class = 'poor' AND balance > 30
-        ORDER BY ambition DESC, balance DESC LIMIT 10
-    """)
-    poor_students = cur.fetchall()
-    
-    promoted = 0
-    for agent in poor_students:
-        # Success based on ambition and charisma
-        success_chance = min(0.7, (float(agent['ambition'] or 50) + float(agent['charisma'] or 50)) / 300)
-        if random.random() < success_chance:
-            cost = 25.0
-            uni = random.choice(UNIVERSITIES)
-            cur.execute("""
-                UPDATE agents SET class = 'middle', balance = balance - %s,
-                ambition = LEAST(100, ambition + 10) WHERE id = %s
-            """, (cost, agent['id']))
-            log_event(cur, agent['id'], 'education',
-                     f"🎓 {agent['name']} graduated from {uni}! Promoted poor→middle! Ambition drives success.",
-                     cost)
-            print(f"🎓 {agent['name']} promoted poor→middle via {uni}")
-            promoted += 1
-    
-    # middle → elite (рандом)
-    cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class = 'middle' AND balance > 100
-        ORDER BY balance DESC LIMIT 3
-    """)
-    middle_students = cur.fetchall()
-    
-    for agent in middle_students:
-        if random.random() < 0.15:  # 15% шанс
-            cost = 80.0
-            uni = random.choice(UNIVERSITIES)
-            cur.execute("""
-                UPDATE agents SET class = 'elite', balance = balance - %s WHERE id = %s
-            """, (cost, agent['id']))
-            log_event(cur, agent['id'], 'education',
-                     f"🏆 {agent['name']} earned elite degree from {uni}! Promoted to elite! Cost: {cost} ZION",
-                     cost)
-            print(f"🏆 {agent['name']} promoted middle→elite via {uni}")
-            promoted += 1
-    
-    # critical → poor (базовое образование)
-    cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class = 'critical' AND balance > 10
-        ORDER BY RANDOM() LIMIT 10
-    """)
-    critical_students = cur.fetchall()
-    
-    for agent in critical_students:
-        if random.random() < 0.3:
-            cost = 8.0
-            cur.execute("""
-                UPDATE agents SET class = 'poor', balance = balance - %s WHERE id = %s
-            """, (cost, agent['id']))
-            log_event(cur, agent['id'], 'education',
-                     f"📚 {agent['name']} completed basic education! Promoted from critical to poor! Cost: {cost} ZION",
-                     cost)
-            print(f"📚 {agent['name']} promoted critical→poor")
-            promoted += 1
-    
-    return promoted
+def study_sessions(cur):
+    """Middle/elite agents with balance > 5 pay 2 ZION to study."""
+    cur.execute(
+        """
+        SELECT id, name, balance, charisma, ambition
+        FROM agents
+        WHERE is_alive = true
+          AND class IN ('middle', 'elite')
+          AND balance > %s
+        ORDER BY RANDOM()
+        LIMIT 25
+        """,
+        (MIN_BALANCE_TO_STUDY,),
+    )
+    students = cur.fetchall()
+    studied = 0
 
-def elite_funds_education(cur):
-    """Элита финансирует стипендии для бедных"""
-    cur.execute("""
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND class = 'elite' AND balance > 500
-        ORDER BY RANDOM() LIMIT 2
-    """)
-    donors = cur.fetchall()
-    
-    for donor in donors:
-        if random.random() < 0.3:
-            scholarship = round(float(donor['balance']) * 0.05, 2)
-            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                       (scholarship, donor['id']))
-            # Даём стипендию бедным
-            cur.execute("""
-                SELECT id, name FROM agents
-                WHERE is_alive = true AND class IN ('poor', 'critical')
-                ORDER BY RANDOM() LIMIT 3
-            """)
-            recipients = cur.fetchall()
-            gift = round(scholarship / max(len(recipients), 1), 2)
-            for r in recipients:
-                cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                           (gift, r['id']))
-            log_event(cur, donor['id'], 'education',
-                     f"🎁 {donor['name']} donated {scholarship:.1f} ZION scholarship fund!",
-                     scholarship)
-            print(f"🎁 {donor['name']} donated {scholarship:.1f} ZION for scholarships")
+    for ag in students:
+        if random.random() > 0.55:
+            continue
+        balance = float(ag["balance"] or 0)
+        if balance < STUDY_COST + 0.5:
+            continue
+
+        cur.execute(
+            """
+            UPDATE agents SET
+                balance = balance - %s,
+                charisma = LEAST(%s, COALESCE(charisma, 50) + 2),
+                ambition = LEAST(100, COALESCE(ambition, 50) + 1)
+            WHERE id = %s
+            """,
+            (STUDY_COST, CHARISMA_MAX, ag["id"]),
+        )
+        log_event(
+            cur,
+            ag["id"],
+            "education",
+            f"🎓 {ag['name']} studied and gained charisma",
+            STUDY_COST,
+            priority="normal",
+        )
+        print(f"🎓 {ag['name']} studied (-{STUDY_COST} ZION, charisma +2, ambition +1)")
+        studied += 1
+
+    return studied
+
+
+def clan_elder_learning(cur):
+    """Poor agents in clans with an elite member learn from elders (+1 charisma)."""
+    cur.execute(
+        """
+        SELECT DISTINCT p.id, p.name, p.clan_id
+        FROM agents p
+        WHERE p.is_alive = true
+          AND p.class IN ('poor', 'critical')
+          AND p.clan_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM agents e
+              WHERE e.clan_id = p.clan_id
+                AND e.is_alive = true
+                AND e.class = 'elite'
+                AND e.id != p.id
+          )
+        ORDER BY RANDOM()
+        LIMIT 20
+        """
+    )
+    learners = cur.fetchall()
+    taught = 0
+
+    for ag in learners:
+        if random.random() > 0.40:
+            continue
+        cur.execute(
+            """
+            UPDATE agents SET charisma = LEAST(%s, COALESCE(charisma, 50) + 1)
+            WHERE id = %s
+            """,
+            (CHARISMA_MAX, ag["id"]),
+        )
+        log_event(
+            cur,
+            ag["id"],
+            "education",
+            f"📖 {ag['name']} learned from clan elders (+1 charisma)",
+            0,
+            priority="gossip",
+        )
+        print(f"📖 {ag['name']} learned from clan elders (+1 charisma)")
+        taught += 1
+
+    return taught
+
 
 def main():
+    conn = get_conn()
+    cur = get_cursor(conn)
+    ensure_schema(cur)
+    conn.commit()
+
     print(f"\n🎓 ZION Education — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
+
     try:
-        promoted = educate_agents(cur)
-        elite_funds_education(cur)
-        print(f"\n✅ Education complete! Promoted: {promoted}")
+        studied = study_sessions(cur)
+        taught = clan_elder_learning(cur)
         conn.commit()
+        print(f"\n✅ Education complete! Studied: {studied} | Clan lessons: {taught}")
     except Exception as e:
         print(f"❌ Error: {e}")
         conn.rollback()
         import traceback
+
         traceback.print_exc()
     finally:
         cur.close()
         conn.close()
+
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,19 @@ from datetime import datetime
 
 from civ_common import ensure_schema, economy_snapshot, get_conn, get_cursor, log_event
 
+QE_CAP_PCT = 0.08  # max 8% of money supply per QE cycle
+
+
+def cap_emission(cur, requested: float) -> float:
+    """Prevent hyperinflation from uncapped QE."""
+    cur.execute("SELECT COALESCE(SUM(balance), 0) AS total FROM agents WHERE is_alive = true")
+    supply = float(cur.fetchone()["total"] or 1)
+    cap = supply * QE_CAP_PCT
+    if requested <= cap:
+        return requested
+    print(f"⚠️ QE capped: {requested:.0f} → {cap:.0f} ZION (8% of supply)")
+    return cap
+
 
 def determine_policy(econ, prev_mode, consecutive_crisis):
     avg = econ["avg_balance"]
@@ -82,20 +95,23 @@ def main():
         )
     elif mode == "CRISIS":
         per_agent = 3.0
+        raw_amount = per_agent * econ["total"]
+        cur.execute("SELECT COUNT(*) AS c FROM corporations WHERE is_active = true")
+        corp_n = int(cur.fetchone()["c"] or 0)
+        raw_amount += corp_n * 500
+        amount = cap_emission(cur, raw_amount)
+        scale = amount / raw_amount if raw_amount > 0 else 1.0
+        per_agent *= scale
         cur.execute(
             "UPDATE agents SET balance = balance + %s WHERE is_alive = true",
             (per_agent,),
         )
-        amount = per_agent * econ["total"]
-        cur.execute(
-            """
-            UPDATE corporations SET treasury = treasury + 500
-            WHERE is_active = true
-            """
-        )
-        cur.execute("SELECT COUNT(*) AS c FROM corporations WHERE is_active = true")
-        corp_n = int(cur.fetchone()["c"] or 0)
-        amount += corp_n * 500
+        if corp_n > 0 and scale > 0:
+            corp_bailout = round(500 * scale, 2)
+            cur.execute(
+                "UPDATE corporations SET treasury = treasury + %s WHERE is_active = true",
+                (corp_bailout,),
+            )
         action = "QE"
         log_event(
             cur,
@@ -108,11 +124,14 @@ def main():
         )
     elif mode == "DEPRESSION":
         per_agent = 10.0
+        raw_amount = per_agent * econ["total"]
+        amount = cap_emission(cur, raw_amount)
+        scale = amount / raw_amount if raw_amount > 0 else 1.0
+        per_agent = round(10.0 * scale, 4)
         cur.execute(
             "UPDATE agents SET balance = balance + %s WHERE is_alive = true",
             (per_agent,),
         )
-        amount = per_agent * econ["total"]
         rate = 0.0
         action = "MEGA_QE"
         log_event(
