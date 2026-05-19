@@ -638,8 +638,9 @@ type ZionbetBetTab =
   | "crypto"
   | "sports"
   | "politics"
-  | "economics"
   | "geopolitics"
+  | "finance"
+  | "tech"
   | "culture";
 
 const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
@@ -647,8 +648,9 @@ const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
   crypto: "₿ CRYPTO",
   sports: "🏆 SPORTS",
   politics: "🗳 POLITICS",
-  economics: "📈 ECONOMICS",
   geopolitics: "🗺️ GEOPOLITICS",
+  finance: "💰 FINANCE",
+  tech: "💻 TECH",
   culture: "🌍 WORLD",
 };
 
@@ -664,45 +666,111 @@ const DEEPBOOK_BINARY_MARKETS: ZionbetApiMarket[] = [
 const isDeepbookCryptoMarket = (marketId: string) =>
   marketId.startsWith("btc") || marketId.startsWith("eth") || marketId.startsWith("sui");
 
-const CryptoIcon = ({ marketId }: { marketId: string }) => {
-  const getBgColor = () => {
-    if (marketId.startsWith("btc")) return "#F7931A";
-    if (marketId.startsWith("eth")) return "#627EEA";
-    if (marketId.startsWith("sui")) return "#4DA2FF";
-    return "#666";
-  };
-  const getSymbol = () => {
-    if (marketId.startsWith("btc")) return "₿";
-    if (marketId.startsWith("eth")) return "Ξ";
-    if (marketId.startsWith("sui")) return "SUI";
-    return "?";
-  };
+const cryptoIconWrapStyle: CSSProperties = {
+  border: "2px solid gold",
+  borderRadius: "50%",
+  boxShadow: "0 0 8px gold",
+  flexShrink: 0,
+  width: 40,
+  height: 40,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const SUI_LOGO_URLS = [
+  "https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg",
+  "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+  "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/sui/info/logo.png",
+] as const;
+
+const SuiLogo = () => {
+  const [imgIdx, setImgIdx] = useState(0);
+  const imgSrc = SUI_LOGO_URLS[imgIdx];
+
   return (
     <div
       style={{
         width: 40,
         height: 40,
         borderRadius: "50%",
-        background: getBgColor(),
         border: "2px solid gold",
+        boxShadow: "0 0 8px gold",
+        overflow: "hidden",
+        flexShrink: 0,
+        background: "#4DA2FF",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "white",
-        fontWeight: "bold",
-        fontSize: marketId.startsWith("sui") ? 10 : 18,
-        flexShrink: 0,
-        boxShadow: "0 0 8px gold",
       }}
       aria-hidden
     >
-      {getSymbol()}
+      <img
+        src={imgSrc}
+        alt="SUI"
+        style={{
+          objectFit: "cover",
+          objectPosition: "center",
+          width: "100%",
+          height: "100%",
+        }}
+        onError={() => {
+          setImgIdx((i) => Math.min(i + 1, SUI_LOGO_URLS.length - 1));
+        }}
+      />
     </div>
   );
 };
 
+const CryptoIcon = ({ marketId }: { marketId: string }) => {
+  const wrap = (svg: ReactNode) => (
+    <div style={cryptoIconWrapStyle} aria-hidden>
+      {svg}
+    </div>
+  );
+
+  if (marketId.startsWith("btc")) {
+    return wrap(
+      <svg viewBox="0 0 32 32" width="40" height="40">
+        <circle cx="16" cy="16" r="16" fill="#F7931A" />
+        <path
+          fill="white"
+          d="M22.8 14.5c.3-2.1-1.3-3.2-3.5-4l.7-2.8-1.7-.4-.7 2.7-.9-.2.7-2.8-1.7-.4-.7 2.8-.7-.2-2.4-.6-.4 1.8s1.3.3 1.2.3c.7.2.8.6.8 1l-.8 3.3c0 .1.1.1.1.2h-.2l-1.2 4.7c-.1.2-.3.6-.9.4 0 .1-1.2-.3-1.2-.3l-.8 2 2.2.6.7.2-.7 2.8 1.7.4.7-2.8.9.2-.7 2.8 1.7.4.7-2.8c2.9.5 5 .3 5.9-2.3.7-2-.1-3.2-1.5-3.9 1.1-.3 1.9-1 2.1-2.5zm-3.7 5.2c-.5 2-3.8 1-4.9.7l.9-3.5c1.1.3 4.5.8 4 2.8zm.5-5.2c-.5 1.8-3.2 1-4.1.7l.8-3.2c.9.2 3.8.7 3.3 2.5z"
+        />
+      </svg>
+    );
+  }
+  if (marketId.startsWith("eth")) {
+    return wrap(
+      <svg viewBox="0 0 32 32" width="40" height="40">
+        <circle cx="16" cy="16" r="16" fill="#627EEA" />
+        <path fill="white" fillOpacity=".6" d="M16.498 4v8.87l7.497 3.35z" />
+        <path fill="white" d="M16.498 4L9 16.22l7.498-3.35z" />
+        <path fill="white" fillOpacity=".6" d="M16.498 21.968v6.027L24 17.616z" />
+        <path fill="white" d="M16.498 27.995v-6.028L9 17.616z" />
+        <path fill="white" fillOpacity=".2" d="M16.498 20.573l7.497-4.353-7.497-3.348z" />
+        <path fill="white" fillOpacity=".6" d="M9 16.22l7.498 4.353v-7.701z" />
+      </svg>
+    );
+  }
+  if (marketId.startsWith("sui")) {
+    return <SuiLogo />;
+  }
+  return wrap(
+    <svg viewBox="0 0 32 32" width="40" height="40">
+      <circle cx="16" cy="16" r="16" fill="#666" />
+    </svg>
+  );
+};
+
 const POLY_TABS: ZionbetBetTab[] = [
-  "crypto", "sports", "politics", "economics", "geopolitics", "culture",
+  "crypto",
+  "sports",
+  "politics",
+  "geopolitics",
+  "finance",
+  "tech",
+  "culture",
 ];
 
 const ZIONBET_CARD_BORDER = "#00ff41";
@@ -882,10 +950,10 @@ function zionbetEmojiTint(category: string): string {
     crypto: "#fef3c7",
     sports: "#dbeafe",
     politics: "#fce7f3",
-    economics: "#d1fae5",
     finance: "#d1fae5",
     geopolitics: "#e0e7ff",
     tech: "#ede9fe",
+    iran: "#fecaca",
     culture: "#fce7f3",
     world: "#e0f2fe",
   };
@@ -926,8 +994,9 @@ function zionbetSportsEmoji(q: string): string {
 const ZIONBET_CATEGORY_FALLBACK: Record<string, string> = {
   sports: "🏆",
   politics: "🗳️",
-  economics: "📈",
+  finance: "💰",
   geopolitics: "🌍",
+  tech: "💻",
   culture: "🎭",
   crypto: "₿",
   civilization: "🏛️",
@@ -989,16 +1058,18 @@ function zionbetMarketEmoji(
   if (tab === "politics" || cat === "politics") {
     return { emoji: zionbetPoliticsEmoji(q), tint: zionbetEmojiTint("politics") };
   }
-  if (tab === "economics" || cat === "economics" || cat === "finance") {
-    return { emoji: "📈", tint: zionbetEmojiTint("economics") };
-  }
   if (tab === "geopolitics" || cat === "geopolitics") {
     return { emoji: "🌍", tint: zionbetEmojiTint("geopolitics") };
+  }
+  if (tab === "finance" || cat === "finance") {
+    return { emoji: "💰", tint: zionbetEmojiTint("finance") };
+  }
+  if (tab === "tech" || cat === "tech") {
+    return { emoji: "💻", tint: zionbetEmojiTint("tech") };
   }
   if (tab === "culture" || cat === "culture") {
     return { emoji: "🎭", tint: zionbetEmojiTint("culture") };
   }
-  if (cat === "tech") return { emoji: "💻", tint: zionbetEmojiTint("tech") };
   return { emoji: "🌐", tint: zionbetEmojiTint("geopolitics") };
 }
 
@@ -5162,13 +5233,35 @@ export default function Home() {
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
   const [policeNews, setPoliceNews] = useState<string[]>([]);
 
+  const fetchEcoPol = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/eco-pol?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.president?.agent_name) {
+        setPresidentState(data.president);
+      }
+      if (data.sheriff?.agent_name && data.sheriff.agent_name !== "No Sheriff") {
+        setSheriffState(data.sheriff);
+      } else {
+        setSheriffState(null);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const fetchPoliceNews = useCallback(async () => {
     try {
       const [sheriffRes, eventsRes] = await Promise.all([
-        fetch("/api/sheriff/state"),
+        fetch(`/api/eco-pol?t=${Date.now()}`, { cache: "no-store" }),
         fetch("/api/sheriff/actions"),
       ]);
-      const sheriffData = await sheriffRes.json();
+      const ecoData = await sheriffRes.json();
+      const sheriffData = ecoData?.sheriff ?? ecoData;
+      if (ecoData?.sheriff?.agent_name && ecoData.sheriff.agent_name !== "No Sheriff") {
+        setSheriffState(ecoData.sheriff);
+      }
       const events = await eventsRes.json();
 
       const pNews: string[] = [];
@@ -5199,16 +5292,8 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === "treasury") {
-      fetch("/api/president/state")
-        .then((r) => r.json())
-        .then((d) => setPresidentState(d))
-        .catch(() => {});
-      fetch("/api/sheriff/state")
-        .then((r) => r.json())
-        .then((d) => {
-          if (d && d.agent_name) setSheriffState(d);
-        })
-        .catch(() => {});
+      fetchEcoPol();
+      const ecoInterval = setInterval(fetchEcoPol, 60_000);
       fetch("/api/president/actions")
         .then((r) => r.json())
         .then((d) => {
@@ -5257,8 +5342,9 @@ export default function Home() {
           setTreasuryNews(news);
         })
         .catch(() => {});
+      return () => clearInterval(ecoInterval);
     }
-  }, [activeTab]);
+  }, [activeTab, fetchEcoPol]);
 
   useEffect(() => {
     if (activeTab === "treasury") {
@@ -5832,8 +5918,9 @@ export default function Home() {
       crypto: DEEPBOOK_BINARY_MARKETS.length + (polyByTab.crypto?.length ?? 0),
       sports: polyByTab.sports?.length ?? 0,
       politics: polyByTab.politics?.length ?? 0,
-      economics: polyByTab.economics?.length ?? 0,
       geopolitics: polyByTab.geopolitics?.length ?? 0,
+      finance: polyByTab.finance?.length ?? 0,
+      tech: polyByTab.tech?.length ?? 0,
       culture: polyByTab.culture?.length ?? 0,
     }),
     [zionbetMarkets, polyByTab]
