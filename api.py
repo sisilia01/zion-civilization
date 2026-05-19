@@ -2476,39 +2476,46 @@ VALID_POLY_CATEGORIES = frozenset({
 
 
 @app.get("/zionbet/polymarkets")
-async def get_polymarkets(category: str | None = None):
+async def get_polymarkets(category: str | None = None, limit: int = 50):
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cat = (category or "").strip().lower()
+        row_limit = max(1, min(int(limit or 50), 100))
         if cat and cat not in VALID_POLY_CATEGORIES:
             return []
 
         if cat:
             cur.execute(
                 """
-                SELECT market_id, question, category, yes_price, no_price, volume, end_date
+                SELECT market_id, question, category, yes_price, no_price,
+                       volume, end_date, image_url, is_active, closed
                 FROM polymarket_markets
                 WHERE is_active = true AND closed = false AND category = %s
                 ORDER BY volume DESC
-                LIMIT 50
+                LIMIT %s
                 """,
-                (cat,),
+                (cat, row_limit),
             )
         else:
-            cur.execute("""
-                SELECT market_id, question, category, yes_price, no_price, volume, end_date
+            cur.execute(
+                """
+                SELECT market_id, question, category, yes_price, no_price,
+                       volume, end_date, image_url, is_active, closed
                 FROM polymarket_markets
                 WHERE is_active = true AND closed = false
                 ORDER BY volume DESC
-                LIMIT 50
-            """)
+                LIMIT %s
+                """,
+                (row_limit,),
+            )
         rows = cur.fetchall()
         out = []
         for r in rows:
             d = dict(r)
             vol = float(d.get("volume") or 0)
             d["volume_sui"] = round(vol / 1000, 2)
+            d["image_url"] = d.get("image_url") or None
             out.append(d)
         return out
     except Exception:
