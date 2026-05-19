@@ -75,18 +75,6 @@ def run_cycle():
         expenses = round(emp * SALARY_PER_EMP + loan_interest, 2)
 
         treasury = float(corp["treasury"] or 0) + revenue - expenses
-        if emp > 0 and revenue > expenses:
-            pay_each = round((revenue - loan_interest) / max(emp, 1) * 0.3, 2)
-            cur.execute(
-                """
-                UPDATE agents SET balance = balance + %s
-                WHERE is_alive = true AND id IN (
-                    SELECT id FROM agents WHERE is_alive = true
-                    ORDER BY RANDOM() LIMIT %s
-                )
-                """,
-                (min(pay_each, SALARY_PER_EMP * 2), emp),
-            )
 
         neg = int(corp["negative_cycles"] or 0)
         if treasury < 0:
@@ -207,46 +195,10 @@ def run_cycle():
                     (missed, loan["id"]),
                 )
 
-    extort_corps(cur)
     conn.commit()
     print(f"✅ Corporations cycle {cycle} complete!\n")
     cur.close()
     conn.close()
-
-
-def extort_corps(cur):
-    cur.execute(
-        """
-        SELECT c.id, c.name, c.treasury, ct.clan_id, cl.name AS clan_name
-        FROM corporations c
-        JOIN clan_territory ct ON ct.corp_id = c.id
-        JOIN clans cl ON cl.id = ct.clan_id
-        WHERE c.is_active = true
-        """
-    )
-    for row in cur.fetchall():
-        treasury = float(row["treasury"] or 0)
-        if treasury < 5:
-            continue
-        tribute = round(treasury * 0.15, 2)
-        if random.random() < 0.25:
-            log_event(
-                cur,
-                None,
-                "clan_war",
-                f"⚔️ {row['clan_name']} attacked {row['name']} — refused tribute!",
-                tribute,
-                priority="urgent",
-            )
-            continue
-        cur.execute(
-            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
-            (tribute, row["id"]),
-        )
-        cur.execute(
-            "UPDATE clans SET treasury = treasury + %s WHERE id = %s",
-            (tribute, row["clan_id"]),
-        )
 
 
 if __name__ == "__main__":

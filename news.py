@@ -48,6 +48,7 @@ def main():
                COALESCE(priority, 'normal') AS priority, created_at
         FROM events
         WHERE created_at >= %s
+          AND event_type NOT IN ('news', 'neo_prophecy')
         ORDER BY created_at DESC
         LIMIT 200
         """,

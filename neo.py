@@ -55,22 +55,33 @@ def neo_help_poor(cur):
     print(f"   Action: HELP THE POOR")
     print(f"   Taking from: {rich_name} ({float(rich_balance):.2f} ZION)")
     
+    total_gift = round(float(rich_balance) * 0.05, 2)
+    per_poor = round(total_gift / len(poor_agents), 2)
+    if per_poor < 0.01:
+        return False
+
+    cur.execute(
+        "UPDATE agents SET balance = balance - %s WHERE id = %s",
+        (total_gift, rich_id),
+    )
+
     for poor_id, poor_name, poor_balance in poor_agents:
-        gift = round(float(rich_balance) * 0.05, 2)
-        
-        cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                   (gift, rich_id))
-        cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                   (gift, poor_id))
-        
-        cur.execute("""
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (per_poor, poor_id),
+        )
+        cur.execute(
+            """
             INSERT INTO events (agent_id, event_type, description, zion_amount)
             VALUES (%s, 'neo', %s, %s)
-        """, (poor_id, 
-              f"[{neo_hash}] NEO transferred {gift} ZION to {poor_name}",
-              gift))
-        
-        print(f"   → {poor_name} received {gift:.2f} ZION")
+            """,
+            (
+                poor_id,
+                f"[{neo_hash}] NEO transferred {per_poor} ZION to {poor_name}",
+                per_poor,
+            ),
+        )
+        print(f"   → {poor_name} received {per_poor:.2f} ZION")
     
     return True
 

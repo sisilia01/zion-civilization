@@ -3179,3 +3179,20 @@ Active corporations: 1
   Total active: 10
 
 ✅ Corporations cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 253, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 51, in run_cycle
+    ensure_corp_tables(cur)
+  File "/root/zion_backend/corporations.py", line 22, in ensure_corp_tables
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 78, in ensure_schema
+    cur.execute("ALTER TABLE corporations ADD COLUMN IF NOT EXISTS debt NUMERIC(20,2) DEFAULT 0")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 880623 waits for AccessExclusiveLock on relation 16662 of database 16388; blocked by process 880651.
+Process 880651 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 880623.
+HINT:  See server log for query details.
+

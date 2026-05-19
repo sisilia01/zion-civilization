@@ -446,3 +446,19 @@ Walrus store error: HTTPSConnectionPool(host='publisher.walrus-testnet.walrus.sp
   civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
 
 ✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 18:29
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: cgACw9VSMGOZo2Du92MulHeG0kmV21I8WqFBVGD7KYE
+   Sui Object: 0xb7ba9b0ac1450fc9d5e644f02ffe5c62407e8777dcf67e54b660e32b4ee35406
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/cgACw9VSMGOZo2Du92MulHeG0kmV21I8WqFBVGD7KYE
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: cgACw9VSMGOZo2Du92Mu... (18:29)
+  civilization_snapshot: NCDOOdekcr7AWmYDuQ7u... (18:04)
+  civilization_snapshot: DxU9kIlkxsJF0obM-J_p... (17:04)
+  civilization_snapshot: JwdezyihwS8T1lM4pgcf... (16:04)
+  civilization_snapshot: NElpNlF8vy26HzXSxzMG... (15:04)
+
+✅ Walrus cycle complete!

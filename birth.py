@@ -131,12 +131,13 @@ def run_birth_cycle(base_balance=50):
         child_name = unique_child_name(cur, child_first, surnames)
         
         # Create child
+        child_charisma = random.randint(10, 30)
         cur.execute("""
             INSERT INTO agents (name, class, balance, parent_id, charisma, aggression, faith, ambition, loyalty)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 50)
         """, (
             child_name, child_class, child_balance, agent_id,
-            random.randint(30, 80),
+            child_charisma,
             random.randint(20, 80),
             random.randint(20, 80),
             random.randint(30, 90)
@@ -152,7 +153,10 @@ def run_birth_cycle(base_balance=50):
             VALUES (%s, 'birth', %s, %s)
         """, (agent_id, f"{name} gave birth to {child_name}", child_balance))
         
-        print(f"👶 {name} ({agent_class}) → {child_name} ({child_class}) born with {child_balance:.2f} ZION")
+        print(
+            f"👶 {name} ({agent_class}) → {child_name} ({child_class}) born with "
+            f"{child_balance:.2f} ZION (charisma {child_charisma})"
+        )
         births += 1
     
     conn.commit()

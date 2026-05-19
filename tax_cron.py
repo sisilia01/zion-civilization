@@ -8,6 +8,7 @@ from civ_common import (
     ensure_schema,
     get_conn,
     get_cursor,
+    get_zrs_state,
     log_event,
     route_tax_revenue,
     tax_rate_for_balance,
@@ -22,6 +23,9 @@ def apply_tax_cycle():
     cur = get_cursor(conn)
     ensure_schema(cur)
     conn.commit()
+
+    zrs = get_zrs_state(cur) or {}
+    tax_modifier_pct = float(zrs.get("tax_modifier") or 0) / 100.0
 
     cur.execute(
         "SELECT id, name, class, balance, COALESCE(debt, 0) AS debt FROM agents WHERE is_alive = TRUE"
@@ -38,7 +42,7 @@ def apply_tax_cycle():
     for ag in agents:
         balance = float(ag["balance"] or 0)
         debt = float(ag["debt"] or 0)
-        rate = tax_rate_for_balance(balance)
+        rate = max(0.0, tax_rate_for_balance(balance) + tax_modifier_pct)
         tax_amount = round(balance * rate, 4)
 
         paid = min(tax_amount, balance)

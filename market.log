@@ -595,3 +595,30 @@ Prices: food=1.7 water=5.2 energy=7.5
 📦 Amara Diop traded — profit 25.4 ZION
 
 ✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 188, in main
+    trade_resources(cur, prices)
+  File "/root/zion_backend/market.py", line 172, in trade_resources
+    cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 880688 waits for ShareLock on transaction 22477; blocked by process 880663.
+Process 880663 waits for ShareLock on transaction 22474; blocked by process 880688.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (403,5) in relation "agents"
+
+
+📦 ZION Market — 2026-05-19 18:29
+==================================================
+🌾 Food: 3.5 | 💊 Medicine: 20.2 | Inflation: x1.0
+Prices: food=3.5 water=3.9 energy=9.6
+🌾 Food: 40 starved, 145 hungry (price: 3.5)
+📦 Amara Diop traded — profit 14.6 ZION
+❌ Error: deadlock detected
+DETAIL:  Process 880688 waits for ShareLock on transaction 22477; blocked by process 880663.
+Process 880663 waits for ShareLock on transaction 22474; blocked by process 880688.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (403,5) in relation "agents"
+
