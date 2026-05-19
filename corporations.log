@@ -3215,3 +3215,22 @@ DETAIL:  Process 886691 waits for AccessExclusiveLock on relation 16408 of datab
 Process 886737 waits for RowShareLock on relation 16391 of database 16388; blocked by process 886691.
 HINT:  See server log for query details.
 
+
+🏢 ZION Corporations — 2026-05-19 19:01
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 99, in run_cycle
+    pay_payroll(cur, emp, salary_pool)
+  File "/root/zion_backend/corporations.py", line 27, in pay_payroll
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+LINE 2:         UPDATE agents SET balance = balance + 1.2
+                       ^
+DETAIL:  Process 887083 waits for RowExclusiveLock on relation 16391 of database 16388; blocked by process 887115.
+Process 887115 waits for AccessExclusiveLock on relation 16662 of database 16388; blocked by process 887083.
+HINT:  See server log for query details.
+

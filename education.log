@@ -326,3 +326,36 @@ CONTEXT:  while updating tuple (164,54) in relation "agents"
 ==================================================
 
 ✅ Education complete! Promoted: 0
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-19 19:01
+==================================================
+🎓 Dot Sunn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Finn More 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Quinn Jackson 1705 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Luna Garcia 702 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Beck Hadley 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Rex Martinez 7279 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Bex Vance 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Iris Harris 9428 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Quinn Wilson 8251 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pat Taylor 183 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Avery Brown 7686 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Nova Jackson 5911 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Max Rodriguez 134 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+

@@ -696,3 +696,17 @@ psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expression
 LINE 8:         ORDER BY RANDOM()
                          ^
 
+
+⚒️  ZionWork - 2026-05-19 19:01
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+

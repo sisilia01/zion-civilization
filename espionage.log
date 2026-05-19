@@ -274,3 +274,12 @@
 🕵️ Reid Yoon 2 stole 2223.0 ZION from Iron Fist
 🚨 Spy caught! Void Brotherhood pays 1102.8 ZION
 ✅ Espionage cycle complete!
+
+🕵️ ZION Espionage — 2026-05-19 19:01
+❌ Error: deadlock detected
+LINE 2:         SELECT id, name, aggression FROM agents
+                                                 ^
+DETAIL:  Process 887151 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 887115.
+Process 887115 waits for AccessExclusiveLock on relation 16424 of database 16388; blocked by process 887151.
+HINT:  See server log for query details.
+
