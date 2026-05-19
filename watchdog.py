@@ -44,12 +44,14 @@ CRON_SCRIPTS = {
     "neo":          ("neo.py",            3600),
     "politics":     ("politics.py",       3600),
     "frs":          ("frs.py",            1800),
+    "zrs":          ("zrs.py",            7200),
     "president":    ("president.py",      3600),
     "sheriff":      ("sheriff.py",        3600),
+    "news":         ("news.py",           1800),
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),
-    "police":       ("police.py",            1800),
+    "police":       ("police.py",            3600),
 }
 
 last_run = {name: 0 for name in CRON_SCRIPTS}

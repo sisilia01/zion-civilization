@@ -9,6 +9,13 @@ import psycopg2.extras
 import random
 from datetime import datetime
 
+from civ_common import ensure_schema
+from civ_governance import (
+    check_compliance,
+    issue_president_orders,
+    update_revolution_meter,
+)
+
 conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
@@ -681,6 +688,7 @@ def main():
     
     try:
         ensure_tables(cur)
+        ensure_schema(cur)
         conn.commit()
         
         president = get_president(cur)
@@ -725,6 +733,13 @@ def main():
             if result == "early_election":
                 run_election(cur, forced=True)
             interact_with_sheriff(cur, get_president(cur))
+
+        president = get_president(cur)
+        if president:
+            issue_president_orders(cur, president)
+            if update_revolution_meter(cur, president):
+                run_election(cur, forced=True)
+            check_compliance(cur, president)
         
         # Auto-spend if fund too large (prevent hoarding)
         president = get_president(cur)
