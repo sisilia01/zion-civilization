@@ -1,97 +1,12 @@
-INFO:     Started server process [823658]
+INFO:     Started server process [828940]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:45616 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45622 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45626 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37902 - "GET /corporations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37918 - "GET /walrus/blobs HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37932 - "GET /police/divisions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37896 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37968 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37952 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37984 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37950 - "GET /markets HTTP/1.1" 200 OK
-Sui TX error: 
-INFO:     127.0.0.1:37994 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:38008 - "GET /user/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37992 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:38034 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:38020 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46660 - "GET /agents?class_filter=elite&limit=50 HTTP/1.1" 200 OK
-Sui TX error: 
-Sui TX error: 
-[CACHE] zco_events updated at 2026-05-19T12:41:20.571942+00:00
-INFO:     127.0.0.1:46674 - "GET /stats HTTP/1.1" 200 OK
-Chat OPENROUTER_KEY prefix: sk-or-v1-8... (from env: True)
-INFO:     127.0.0.1:46700 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46694 - "GET /agents HTTP/1.1" 200 OK
-Chat OK: agent=13689 response_len=181
-INFO:     127.0.0.1:46686 - "POST /chat HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50034 - "GET /user/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-Sui TX error: 
-INFO:     127.0.0.1:50040 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50070 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50056 - "GET /agents HTTP/1.1" 200 OK
-Sui TX error: 
-INFO:     127.0.0.1:37948 - "GET /zco/events/fast HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36710 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36718 - "GET /agents?class_filter=middle&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36742 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36732 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36756 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36746 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54698 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54718 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54712 - "GET /agents HTTP/1.1" 200 OK
-Chat OPENROUTER_KEY prefix: sk-or-v1-8... (from env: True)
-INFO:     127.0.0.1:37540 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37554 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37544 - "GET /agents HTTP/1.1" 200 OK
-Chat OK: agent=26337 response_len=199
-INFO:     127.0.0.1:37538 - "POST /chat HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37566 - "GET /user/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39332 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37538 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39340 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39322 - "GET /markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39366 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39356 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39388 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39378 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54692 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54716 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54706 - "GET /agents HTTP/1.1" 200 OK
-Chat OPENROUTER_KEY prefix: sk-or-v1-8... (from env: True)
-INFO:     127.0.0.1:51090 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51104 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51120 - "GET /clans HTTP/1.1" 200 OK
-Chat OK: agent=26337 response_len=132
-INFO:     127.0.0.1:51084 - "POST /chat HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51134 - "GET /user/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40134 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40152 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40144 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40170 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40160 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56918 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56930 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56928 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37102 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37122 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37116 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55474 - "GET /conversations HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55462 - "GET /events/highlights HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55452 - "GET /markets HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55482 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55504 - "GET /leaderboard HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55490 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55512 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55510 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46480 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46504 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46494 - "GET /agents HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58852 - "GET /stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58856 - "GET /clans HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58862 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47386 - "GET /conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47382 - "GET /leaderboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47366 - "GET /stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47402 - "GET /my_bets/0x67c5c21778202ec72d90a21ae4fea6fb7b563e43920056f5504cea3b2b643cf9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47400 - "GET /events/highlights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47418 - "GET /clans HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47410 - "GET /agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47384 - "GET /markets HTTP/1.1" 200 OK

@@ -200,3 +200,78 @@
   TOTAL active    245
 
   Images: 245 with image_url, 0 without
+🔄 Polymarket sync — 2026-05-19 12:55
+  Resolving Polymarket tag IDs...
+  tag geopolitics     -> id 100265 (geopolitics)
+  tag politics        -> id 2 (politics)
+  tag sports          -> id 1 (sports)
+  tag crypto          -> id 21 (crypto)
+  tag economics       -> id 225 (economics)
+  tag pop-culture     -> id 596 (culture)
+  geopolitics     tag_id=100265: 100 active, 15 closed
+  politics        tag_id=2: 100 active, 15 closed
+  sports          tag_id=1: 100 active, 15 closed
+  crypto          tag_id=21: 100 active, 15 closed
+  economics       tag_id=225: 1 active, 15 closed
+  culture         tag_id=596: 100 active, 15 closed
+  Backfilled/updated image_url on 335 rows
+
+✅ Synced 244 active markets (244 unique), 90 closed/settled rows
+  crypto          90
+  geopolitics     56
+  culture         46
+  sports          32
+  politics        21
+  TOTAL active    245
+
+  Images: 245 with image_url, 0 without
+🔄 Polymarket sync — 2026-05-19 13:00
+  Resolving Polymarket tag IDs...
+  tag geopolitics     -> id 100265 (geopolitics)
+  tag politics        -> id 2 (politics)
+  tag sports          -> id 1 (sports)
+  tag crypto          -> id 21 (crypto)
+  tag economics       -> id 225 (economics)
+  tag pop-culture     -> id 596 (culture)
+  geopolitics     tag_id=100265: 100 active, 15 closed
+  politics        tag_id=2: 100 active, 15 closed
+  sports          tag_id=1: 100 active, 15 closed
+  crypto          tag_id=21: 100 active, 15 closed
+  economics       tag_id=225: 1 active, 15 closed
+  culture         tag_id=596: 100 active, 15 closed
+  Backfilled/updated image_url on 335 rows
+
+✅ Synced 244 active markets (244 unique), 90 closed/settled rows
+  crypto          90
+  geopolitics     56
+  culture         46
+  sports          32
+  politics        21
+  TOTAL active    245
+
+  Images: 245 with image_url, 0 without
+🔄 Polymarket sync — 2026-05-19 13:03
+  Resolving Polymarket tag IDs...
+  tag geopolitics     -> id 100265 (geopolitics)
+  tag politics        -> id 2 (politics)
+  tag sports          -> id 1 (sports)
+  tag crypto          -> id 21 (crypto)
+  tag economics       -> id 225 (economics)
+  tag pop-culture     -> id 596 (culture)
+  geopolitics     tag_id=100265: 100 active, 15 closed
+  politics        tag_id=2: 100 active, 15 closed
+  sports          tag_id=1: 100 active, 15 closed
+  crypto          tag_id=21: 100 active, 15 closed
+  economics       tag_id=225: 1 active, 15 closed
+  culture         tag_id=596: 100 active, 15 closed
+  Backfilled/updated image_url on 335 rows
+
+✅ Synced 244 active markets (244 unique), 90 closed/settled rows
+  crypto          90
+  geopolitics     56
+  culture         46
+  sports          32
+  politics        21
+  TOTAL active    245
+
+  Images: 245 with image_url, 0 without

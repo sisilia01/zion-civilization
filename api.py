@@ -2357,6 +2357,42 @@ async def get_frs_stats():
         cur.close()
         db.close()
 
+# ============ ECO / POLITICS (live president + sheriff) ============
+@app.get("/eco-pol")
+async def get_eco_pol():
+    """Fresh president + sheriff for treasury UI (no cache)."""
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT agent_name, party, term_number, is_dictator,
+                   approval_rating, days_in_power, police_fund, personal_fund
+            FROM president_state WHERE is_active = true LIMIT 1
+        """)
+        pres = cur.fetchone()
+        cur.execute("""
+            SELECT agent_name, sheriff_type, approval_rating,
+                   police_budget, police_count, term_number, days_in_office
+            FROM sheriff_state WHERE is_active = true LIMIT 1
+        """)
+        sher = cur.fetchone()
+        return {
+            "president": dict(pres) if pres else None,
+            "sheriff": dict(sher) if sher else {
+                "agent_name": "No Sheriff",
+                "sheriff_type": "none",
+                "approval_rating": 0,
+                "police_budget": 0,
+                "police_count": 0,
+                "term_number": 0,
+                "days_in_office": 0,
+            },
+        }
+    finally:
+        cur.close()
+        db.close()
+
+
 # ============ PRESIDENT ============
 @app.get("/president/state")
 async def get_president_state():

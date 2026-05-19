@@ -46,6 +46,97 @@ def ensure_tables(cur):
         cur.execute("ALTER TABLE president_state ADD COLUMN IF NOT EXISTS phase VARCHAR(20) DEFAULT 'ruling'")
     except:
         pass
+    cur.execute(
+        "ALTER TABLE president_state ADD COLUMN IF NOT EXISTS tax_rate NUMERIC(6,4) DEFAULT 0.05"
+    )
+
+
+def get_economy_metrics(cur, personal_fund: float, police_fund: float) -> dict:
+    """Crime/poverty proxies and treasury health for approval + decisions."""
+    cur.execute("SELECT COUNT(*) AS cnt FROM agents WHERE is_alive = true")
+    total = max(int(cur.fetchone()["cnt"] or 0), 1)
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt FROM agents
+        WHERE is_alive = true AND class IN ('poor', 'critical')
+        """
+    )
+    poor = int(cur.fetchone()["cnt"] or 0)
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt FROM agents
+        WHERE is_alive = true AND class = 'critical'
+        """
+    )
+    critical = int(cur.fetchone()["cnt"] or 0)
+    cur.execute(
+        "SELECT COALESCE(AVG(balance), 0) AS avg_bal FROM agents WHERE is_alive = true"
+    )
+    avg_balance = float(cur.fetchone()["avg_bal"] or 0)
+
+    poverty_rate = (poor / total) * 100
+    crime_rate = poverty_rate  # proxy: high poor/critical share = high crime pressure
+    treasury_low = personal_fund < 300 or police_fund < 100
+    good_economy = avg_balance > 50 and poverty_rate < 35 and not treasury_low
+
+    return {
+        "total": total,
+        "poor": poor,
+        "critical": critical,
+        "crime_rate": crime_rate,
+        "poverty_rate": poverty_rate,
+        "avg_balance": avg_balance,
+        "treasury_low": treasury_low,
+        "good_economy": good_economy,
+    }
+
+
+def apply_daily_approval_pressure(cur, approval: int, metrics: dict) -> int:
+    """Environmental approval drift — clamp 0–100."""
+    delta = 0
+    if metrics["crime_rate"] > 50:
+        delta -= random.randint(5, 15)
+    if metrics["poverty_rate"] > 50:
+        delta -= random.randint(3, 8)
+    if metrics["treasury_low"]:
+        delta -= random.randint(2, 5)
+    if metrics["good_economy"]:
+        delta += random.randint(1, 5)
+
+    new_approval = max(0, min(100, approval + delta))
+    cur.execute(
+        "UPDATE president_state SET approval_rating = %s WHERE is_active = true",
+        (new_approval,),
+    )
+    if delta != 0:
+        print(
+            f"📉 Daily pressure: crime {metrics['crime_rate']:.0f}% poverty {metrics['poverty_rate']:.0f}% "
+            f"→ approval {approval} → {new_approval} ({delta:+d})"
+        )
+    return new_approval
+
+
+def choose_president_decision(metrics: dict, approval: int, personal_fund: float, police_fund: float, is_dictator: bool) -> str:
+    """Pick action from situation — new policy actions + legacy fallbacks."""
+    if is_dictator:
+        return random.choice(["fund_police", "fund_police", "corrupt", "raise_taxes", "austerity"])
+
+    if approval < 30:
+        return "populism"
+    if metrics["crime_rate"] > 50 and personal_fund >= 200:
+        return "infrastructure"
+    if metrics["treasury_low"] and police_fund > 150:
+        return "austerity"
+    if metrics["good_economy"] and approval < 70:
+        return "tax_relief"
+    if metrics["crime_rate"] > 40:
+        return random.choice(["infrastructure", "fund_police"])
+    if metrics["poverty_rate"] > 45:
+        return random.choice(["populism", "help_poor"])
+    return random.choice(
+        ["tax_relief", "infrastructure", "fund_health", "help_poor", "fund_education", "do_nothing"]
+    )
+
 
 def get_president(cur):
     cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
@@ -127,15 +218,32 @@ def run_election(cur, forced=False):
     
     party = "blue" if winner['class'] in ['middle', 'poor'] else "red"
     party_name = "🔵 Blue Alliance" if party == "blue" else "🔴 Red Coalition"
-    
-    # Деактивируем старого
+
+    # Incumbent re-elected → term 2; new winner → term 1
+    cur.execute(
+        "SELECT agent_id, term_number FROM president_state WHERE is_active = true LIMIT 1"
+    )
+    outgoing = cur.fetchone()
+    new_term = 1
+    if (
+        outgoing
+        and outgoing["agent_id"] == winner_id
+        and int(outgoing["term_number"] or 1) == 1
+    ):
+        new_term = 2
+        print(f"🔄 Incumbent {winner['name']} re-elected — term 2")
+    else:
+        print(f"🆕 New president {winner['name']} — term 1")
+
     cur.execute("UPDATE president_state SET is_active = false WHERE is_active = true")
-    
-    # Создаём нового
+
     cur.execute("""
-        INSERT INTO president_state (agent_id, agent_name, party, term_number, police_fund, personal_fund, phase, days_in_power)
-        VALUES (%s, %s, %s, 1, 500, 1000, 'ruling', 0)
-    """, (winner['id'], winner['name'], party))
+        INSERT INTO president_state (
+            agent_id, agent_name, party, term_number, police_fund, personal_fund,
+            phase, days_in_power, tax_rate, approval_rating, is_dictator
+        )
+        VALUES (%s, %s, %s, %s, 500, 1000, 'ruling', 0, 0.05, 60, false)
+    """, (winner['id'], winner['name'], party, new_term))
     
     # Награда победителю
     cur.execute("UPDATE agents SET balance = balance + 100 WHERE id = %s", (winner['id'],))
@@ -176,57 +284,48 @@ def president_actions(cur, president):
     pid = president['agent_id']
     name = president['agent_name']
     is_dictator = president['is_dictator']
-    approval = president['approval_rating']
+    approval = int(president['approval_rating'] or 60)
     police_fund = float(president['police_fund'])
     personal_fund = float(president['personal_fund'])
-    
-    # Собираем налоги
-    tax_rate = 0.05 if not is_dictator else 0.20
-    
+
+    tax_rate = float(president.get('tax_rate') or 0.05)
+    if is_dictator:
+        tax_rate = max(tax_rate, 0.20)
+
     cur.execute("SELECT SUM(balance) as total FROM agents WHERE is_alive = true AND class = 'elite'")
     elite_total = float(cur.fetchone()['total'] or 0)
     tax_collected = round(elite_total * tax_rate * 0.1, 2)
-    
+
     cur.execute("""
         UPDATE agents SET balance = balance * %s
         WHERE is_alive = true AND class = 'elite'
     """, (1 - tax_rate,))
-    
+
     cur.execute("""
-        UPDATE president_state SET 
+        UPDATE president_state SET
             personal_fund = personal_fund + %s,
             police_fund = police_fund + %s,
-            days_in_power = days_in_power + 1
+            days_in_power = days_in_power + 1,
+            tax_rate = %s
         WHERE is_active = true
-    """, (tax_collected * 0.3, tax_collected * 0.7))
-    
-    print(f"💰 Tax: {tax_collected:.1f} ZION")
-    
-    # Досрочные выборы если рейтинг упал ниже 15%
+    """, (tax_collected * 0.3, tax_collected * 0.7, tax_rate))
+
+    print(f"💰 Tax at {tax_rate*100:.1f}%: {tax_collected:.1f} ZION")
+
+    metrics = get_economy_metrics(cur, personal_fund + tax_collected * 0.3, police_fund)
+    approval = apply_daily_approval_pressure(cur, approval, metrics)
+    personal_fund += tax_collected * 0.3
+    police_fund += tax_collected * 0.7
+
     if approval < 15 and not is_dictator:
         log_event(cur, pid, 'election',
                  f"🚨 CRISIS: President {name} approval collapsed to {approval}%! Early elections called!",
                  0)
         print(f"🚨 Early election! Approval: {approval}%")
         return "early_election"
-    
-    # Решение президента
-    if is_dictator:
-        decisions = ["fund_police", "fund_police", "corrupt", "raise_taxes", "raise_taxes", "corrupt"]
-    else:
-        decisions = [
-            "fund_police",    # moderate approval
-            "fund_education", # poor/middle like it
-            "help_poor",      # poor loves it, elite hates it
-            "fund_health",    # everyone likes
-            "corrupt",        # everyone hates when exposed
-            "raise_taxes",    # everyone hates
-            "do_nothing",     # everyone slightly unhappy
-            "help_corps",     # elite loves it, poor hates it
-            "crisis_response" # random crisis
-        ]
-    
-    decision = random.choice(decisions)
+
+    decision = choose_president_decision(metrics, approval, personal_fund, police_fund, is_dictator)
+    print(f"📋 Decision: {decision} (crime {metrics['crime_rate']:.0f}%, approval {approval}%)")
     approval_change = 0
     
     if decision == "fund_police":
@@ -387,16 +486,86 @@ def president_actions(cur, president):
         approval_change = -3
         print(f"😴 {name} did nothing")
 
-    # Normal presidents can't have 100% approval - someone always disagrees
-    if not is_dictator:
-        max_approval = 85
-    else:
-        max_approval = 70  # Dictators are always hated by some
-    
-    new_approval = max(0, min(max_approval, approval + approval_change))
+    elif decision == "tax_relief":
+        new_rate = max(0.01, tax_rate - 0.01)
+        refund = round(elite_total * 0.01 * 0.1, 2) if elite_total else 0
+        cur.execute("""
+            UPDATE agents SET balance = balance * 1.01
+            WHERE is_alive = true AND class = 'elite'
+        """)
+        cur.execute(
+            "UPDATE president_state SET tax_rate = %s WHERE is_active = true",
+            (new_rate,),
+        )
+        log_event(cur, pid, 'president',
+                 f"📉 President {name} cut elite taxes to {new_rate*100:.1f}%! Approval surges.",
+                 refund)
+        approval_change = 10
+        print(f"📉 Tax relief: {tax_rate*100:.1f}% → {new_rate*100:.1f}%")
+
+    elif decision == "infrastructure":
+        amount = min(200, personal_fund)
+        crime_cut = max(1, int(metrics["total"] * 0.05))
+        cur.execute(
+            "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
+            (amount,),
+        )
+        cur.execute("""
+            UPDATE agents SET balance = balance + 6, class = 'poor'
+            WHERE is_alive = true AND class = 'critical'
+            AND id IN (
+                SELECT id FROM agents WHERE is_alive = true AND class = 'critical'
+                ORDER BY RANDOM() LIMIT %s
+            )
+        """, (crime_cut,))
+        cur.execute(
+            "UPDATE president_state SET police_fund = police_fund + %s WHERE is_active = true",
+            (amount * 0.3,),
+        )
+        log_event(cur, pid, 'president',
+                 f"🏗️ President {name} spent {amount:.0f} ZION on infrastructure! Crime pressure -5% ({crime_cut} lifted from critical).",
+                 amount)
+        approval_change = 8
+        print(f"🏗️ Infrastructure: {amount:.0f} ZION, {crime_cut} agents helped")
+
+    elif decision == "austerity":
+        cut = min(100, police_fund)
+        cur.execute(
+            "UPDATE president_state SET police_fund = GREATEST(0, police_fund - %s) WHERE is_active = true",
+            (cut,),
+        )
+        log_event(cur, pid, 'president',
+                 f"✂️ President {name} imposed austerity! Police budget cut {cut:.0f} ZION. Public furious.",
+                 cut)
+        approval_change = -15
+        print(f"✂️ Austerity: police -{cut:.0f} ZION")
+
+    elif decision == "populism":
+        amount = 100
+        recipients = 20
+        cur.execute(
+            "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
+            (amount,),
+        )
+        cur.execute("""
+            UPDATE agents SET balance = balance + 5
+            WHERE is_alive = true AND class IN ('poor', 'critical')
+            AND id IN (
+                SELECT id FROM agents
+                WHERE is_alive = true AND class IN ('poor', 'critical')
+                ORDER BY RANDOM() LIMIT %s
+            )
+        """, (recipients,))
+        log_event(cur, pid, 'president',
+                 f"🎤 President {name} populist handout! 5 ZION each to {recipients} poor agents ({amount:.0f} ZION total).",
+                 amount)
+        approval_change = 20
+        print(f"🎤 Populism: {recipients} agents × 5 ZION")
+
+    new_approval = max(0, min(100, approval + approval_change))
     cur.execute("UPDATE president_state SET approval_rating = %s WHERE is_active = true", (new_approval,))
-    print(f"📊 Approval: {approval} → {new_approval}")
-    
+    print(f"📊 Approval: {approval} → {new_approval} (action {approval_change:+d})")
+
     return "continue"
 
 def check_dictatorship(cur, president):
