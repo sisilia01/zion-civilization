@@ -649,7 +649,7 @@ const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
   politics: "🗳 POLITICS",
   economics: "📈 ECONOMICS",
   geopolitics: "🌍 GEOPOLITICS",
-  culture: "🎭 CULTURE",
+  culture: "🌍 WORLD",
 };
 
 /** On-chain binary markets (DeepBook / zion_bet) — crypto tab top section */
