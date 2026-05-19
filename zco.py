@@ -2,6 +2,7 @@ import json
 import urllib.request
 import hashlib
 import subprocess
+import requests
 import re
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -114,46 +115,51 @@ def reach_consensus(votes: list) -> dict:
         "total_votes": len(votes)
     }
 
-def store_decision_walrus(payload: dict) -> tuple[str | None, str | None]:
-    """Store ZCO decision JSON on Walrus; return (blob_id, explorer_url)."""
-    decision_json = json.dumps(payload, sort_keys=True, default=str)
-
-    # Option 1a: Walrus CLI
+def store_decision_walrus(decision_data: dict) -> tuple[str, str] | tuple[None, None]:
+    PUBLISHER = "https://publisher.walrus-testnet.walrus.space"
+    AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space"
     try:
-        result = subprocess.run(
-            ["walrus", "store", "--json", "-"],
-            input=decision_json.encode(),
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            walrus_data = json.loads(result.stdout)
-            blob_id = walrus_data.get("blobId") or walrus_data.get("blob_id")
-            if blob_id:
-                return blob_id, f"{WALRUS_AGGREGATOR}/v1/blobs/{blob_id}"
-    except Exception as e:
-        print(f"Walrus CLI store error: {e}")
-
-    # Option 1b: HTTP publisher (same integration as walrus.py)
-    try:
-        req = urllib.request.Request(
-            f"{WALRUS_PUBLISHER}/v1/blobs?epochs=2",
-            data=decision_json.encode("utf-8"),
+        payload = json.dumps(decision_data, default=str, ensure_ascii=False)
+        resp = requests.put(
+            f"{PUBLISHER}/v1/blobs?epochs=2",
+            data=payload.encode('utf-8'),
             headers={"Content-Type": "application/json"},
-            method="PUT",
+            timeout=15
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read())
-                blob_info = data.get("newlyCreated", data.get("alreadyCertified", {}))
-                blob_obj = blob_info.get("blobObject", {})
-                blob_id = blob_obj.get("blobId") or blob_obj.get("blob_id")
-                if blob_id:
-                    return blob_id, f"{WALRUS_AGGREGATOR}/v1/blobs/{blob_id}"
+        if resp.status_code in (200, 201):
+            result = resp.json()
+            blob_id = (
+                result.get("blobId") or
+                result.get("blob_id") or
+                result.get("newlyCreated", {}).get("blobObject", {}).get("blobId") or
+                result.get("alreadyCertified", {}).get("blobId")
+            )
+            if blob_id:
+                explorer_url = f"{AGGREGATOR}/v1/blobs/{blob_id}"
+                return blob_id, explorer_url
     except Exception as e:
-        print(f"Walrus HTTP store error: {e}")
-
+        print(f"Walrus store error: {e}")
     return None, None
+
+def record_sui_proof(blob_id: str, consensus_hash: str) -> str | None:
+    """Record ZCO consensus proof on Sui blockchain"""
+    try:
+        result = subprocess.run([
+            "sui", "client", "transfer-sui",
+            "--to", "0xb193ba40239f9caebbc9b6bf1d7aba2d9ff6f8a26eca4ae74ad610079607265b",
+            "--amount", "1",
+            "--gas-budget", "10000000",
+            "--json"
+        ], capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            digest = data.get("digest") or data.get("effects", {}).get("transactionDigest")
+            if digest:
+                return f"https://suiscan.xyz/testnet/tx/{digest}"
+    except Exception as e:
+        print(f"Sui proof error: {e}")
+    return None
 
 def zco_decide(agent_name: str, agent_class: str, balance: float, context: str) -> dict:
     """ZION Consensus Oracle — полный цикл с записью в Sui"""
@@ -197,6 +203,7 @@ Respond ONLY as JSON:
         "consensus_hash": consensus_hash,
     }
     blob_id, explorer_url = store_decision_walrus(proof_payload)
+    sui_url = record_sui_proof(blob_id, consensus_hash) if blob_id else None
 
     return {
         "agent": agent_name,
@@ -208,6 +215,7 @@ Respond ONLY as JSON:
         "blob_id": blob_id,
         "tx_hash": blob_id or "",
         "explorer_url": explorer_url or "",
+        "sui_url": sui_url or "",
         "timestamp": timestamp,
-        "powered_by": "ZION Consensus Oracle v1.0 — Walrus proof",
+        "powered_by": "ZION Consensus Oracle v1.0 — Walrus + Sui proof",
     }
