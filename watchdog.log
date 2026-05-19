@@ -224,3 +224,25 @@
 2026-05-19 19:01:56,584 [WATCHDOG] Running police (interval 3600s)
 2026-05-19 19:01:57,593 [WATCHDOG] Started police (police.py)
 2026-05-19 19:01:57,594 [WATCHDOG] Coin manager started
+2026-05-19 19:10:27,787 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:23
+2026-05-19 19:20:28,013 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:23
+2026-05-19 19:30:28,237 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:23
+2026-05-19 19:31:58,265 [WATCHDOG] Running birth (interval 1800s)
+2026-05-19 19:31:59,273 [WATCHDOG] Started birth (birth.py)
+2026-05-19 19:31:59,277 [WATCHDOG] Running corporations (interval 1800s)
+2026-05-19 19:32:00,284 [WATCHDOG] Started corporations (corporations.py)
+2026-05-19 19:32:00,289 [WATCHDOG] Running market (interval 1800s)
+2026-05-19 19:32:01,296 [WATCHDOG] Started market (market.py)
+2026-05-19 19:32:01,301 [WATCHDOG] Running casino (interval 1800s)
+2026-05-19 19:32:02,307 [WATCHDOG] Started casino (casino.py)
+2026-05-19 19:32:02,313 [WATCHDOG] Running religion (interval 1800s)
+2026-05-19 19:32:03,321 [WATCHDOG] Started religion (religion.py)
+2026-05-19 19:32:03,324 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-19 19:32:04,329 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-19 19:32:04,333 [WATCHDOG] Running news (interval 1800s)
+2026-05-19 19:32:05,339 [WATCHDOG] Started news (news.py)
+2026-05-19 19:40:05,540 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:23
+2026-05-19 19:49:05,681 [WATCHDOG] Daemon zion-api screen not running — starting
+2026-05-19 19:49:05,681 [WATCHDOG] Starting zion-api daemon...
+2026-05-19 19:49:07,716 [WATCHDOG] zion-api daemon started
+2026-05-19 19:50:07,802 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:23

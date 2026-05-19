@@ -644,3 +644,30 @@ Prices: food=4.9 water=1.8 energy=13.3
 📦 Orion Mercer traded — profit 18.0 ZION
 
 ✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 137, in food_crisis
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 891259 waits for ShareLock on transaction 22561; blocked by process 891252.
+Process 891252 waits for ShareLock on transaction 22563; blocked by process 891275.
+Process 891275 waits for ShareLock on transaction 22562; blocked by process 891259.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (144,61) in relation "agents"
+
+
+📦 ZION Market — 2026-05-19 19:32
+==================================================
+🌾 Food: 4.7 | 💊 Medicine: 28.1 | Inflation: x1.0
+Prices: food=4.7 water=4.4 energy=7.5
+❌ Error: deadlock detected
+DETAIL:  Process 891259 waits for ShareLock on transaction 22561; blocked by process 891252.
+Process 891252 waits for ShareLock on transaction 22563; blocked by process 891275.
+Process 891275 waits for ShareLock on transaction 22562; blocked by process 891259.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (144,61) in relation "agents"
+
