@@ -648,7 +648,7 @@ const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
   sports: "🏆 SPORTS",
   politics: "🗳 POLITICS",
   economics: "📈 ECONOMICS",
-  geopolitics: "🌍 GEOPOLITICS",
+  geopolitics: "🗺️ GEOPOLITICS",
   culture: "🌍 WORLD",
 };
 
