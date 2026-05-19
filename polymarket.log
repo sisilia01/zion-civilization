@@ -132,3 +132,46 @@
   culture         7
   geopolitics     4
   TOTAL active    221
+🔄 Polymarket sync — 2026-05-19 10:10
+  Fetched 100 active, 50 closed
+  Backfilled/updated image_url on 77 rows
+  Re-categorized 58 active markets (force rules + fallback)
+
+✅ Synced 32 active markets, 50 closed/settled rows
+  sports          55
+  crypto          45
+  politics        43
+  geopolitics     42
+  economics       12
+  culture         5
+  TOTAL active    202
+  Backfilled images: 0/10
+
+  Images: 192 with image_url, 10 without
+🔄 Polymarket sync — 2026-05-19 12:10
+  Resolving Polymarket tag IDs...
+  tag geopolitics     -> id 100265 (geopolitics)
+  tag politics        -> id 2 (politics)
+  tag sports          -> id 1 (sports)
+  tag crypto          -> id 21 (crypto)
+  tag economics       -> id 225 (economics)
+  tag pop-culture     -> id 596 (culture)
+  geopolitics     tag_id=100265: 100 active, 15 closed
+  politics        tag_id=2: 100 active, 15 closed
+  sports          tag_id=1: 100 active, 15 closed
+  crypto          tag_id=21: 100 active, 15 closed
+  economics       tag_id=225: 1 active, 15 closed
+  culture         tag_id=596: 100 active, 15 closed
+  Backfilled/updated image_url on 334 rows
+
+✅ Synced 244 active markets (244 unique), 90 closed/settled rows
+  crypto          128
+  geopolitics     93
+  sports          62
+  politics        51
+  culture         48
+  economics       12
+  TOTAL active    394
+  Backfilled images: 0/10
+
+  Images: 384 with image_url, 10 without

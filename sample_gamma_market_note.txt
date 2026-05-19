@@ -1,0 +1,1 @@
+Run: curl -s 'https://gamma-api.polymarket.com/markets?active=true&limit=1' | python3 -m json.tool > sample_market.json

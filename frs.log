@@ -672,3 +672,74 @@ CONTEXT:  while locking tuple (4,81) in relation "agents"
 💵 QE: +3368 ZION printed (mode: DEPRESSION)
 
 ✅ ZRS cycle complete! Action: QE
+
+🏦 ZION Reserve System — 2026-05-19 09:40
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 9.1 ZION
+  Poor%: 62.0%
+  Total Money: 33593 ZION
+  Population: 3697 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 9.1 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 10:10
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 7.8 ZION
+  Poor%: 61.9%
+  Total Money: 28500 ZION
+  Population: 3657 alive
+📈 ZRS rate updated to 0.5%
+⚠️ QE capped at 10% of money supply: 3581 ZION max
+💵 QE: +3581 ZION printed (mode: DEPRESSION)
+
+✅ ZRS cycle complete! Action: QE
+
+🏦 ZION Reserve System — 2026-05-19 10:41
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 9.8 ZION
+  Poor%: 61.8%
+  Total Money: 35423 ZION
+  Population: 3631 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 9.8 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 11:11
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 8.4 ZION
+  Poor%: 61.5%
+  Total Money: 30123 ZION
+  Population: 3573 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 8.4 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 11:41
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 8.4 ZION
+  Poor%: 61.3%
+  Total Money: 29930 ZION
+  Population: 3551 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 8.4 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
