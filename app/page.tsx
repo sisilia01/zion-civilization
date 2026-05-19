@@ -196,6 +196,7 @@ interface ZcoDecision {
   powered_by?: string;
   tx_hash?: string;
   explorer_url?: string;
+  sui_url?: string;
 }
 
 const ZCO_ACCENT = "#a78bfa";
@@ -8218,41 +8219,69 @@ export default function Home() {
                                 {agreementPct}%
                               </span>
                             </div>
-                            {decision.explorer_url ? (
-                              <a
-                                href={decision.explorer_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  background: "rgba(167,139,250,0.1)",
-                                  border: "1px solid #a78bfa44",
-                                  color: "#a78bfa",
-                                  fontFamily: "monospace",
-                                  fontSize: "0.7rem",
-                                  padding: "4px 10px",
-                                  borderRadius: "4px",
-                                  textDecoration: "none",
-                                  marginTop: "8px",
-                                }}
-                              >
-                                🔗 View Proof ↗
-                              </a>
-                            ) : (
-                              <span
-                                style={{
-                                  fontFamily: "monospace",
-                                  fontSize: "0.68rem",
-                                  color: "#888",
-                                  marginTop: "8px",
-                                  display: "inline-block",
-                                }}
-                              >
-                                ⏳ Storing proof…
-                              </span>
-                            )}
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "8px",
+                                marginTop: "8px",
+                              }}
+                            >
+                              {decision.explorer_url ? (
+                                <a
+                                  href={decision.explorer_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    background: "rgba(167,139,250,0.1)",
+                                    border: "1px solid #a78bfa44",
+                                    color: "#a78bfa",
+                                    fontFamily: "monospace",
+                                    fontSize: "0.7rem",
+                                    padding: "4px 10px",
+                                    borderRadius: "4px",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  View in Explorer ↗
+                                </a>
+                              ) : (
+                                <span
+                                  style={{
+                                    fontFamily: "monospace",
+                                    fontSize: "0.68rem",
+                                    color: "#888",
+                                  }}
+                                >
+                                  ⏳ Storing proof…
+                                </span>
+                              )}
+                              {decision.sui_url ? (
+                                <a
+                                  href={decision.sui_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    background: "rgba(79, 195, 247, 0.1)",
+                                    border: "1px solid #4FC3F744",
+                                    color: "#4FC3F7",
+                                    fontFamily: "monospace",
+                                    fontSize: "0.7rem",
+                                    padding: "4px 10px",
+                                    borderRadius: "4px",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  🔗 Sui TX ↗
+                                </a>
+                              ) : null}
+                            </div>
                           </article>
                         );
                       })}
