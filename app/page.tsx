@@ -1077,19 +1077,33 @@ function ZionBetMarketCardItem({
     position: "relative",
     display: "flex",
     flexDirection: "column",
-    background: "#0d1117",
-    border: "1px solid #1e2d3d",
+    background: showCryptoIcon
+      ? "linear-gradient(135deg, rgba(255,215,0,0.08) 0%, rgba(20,20,20,1) 100%)"
+      : "#0d1117",
     borderRadius: "10px",
     padding: "14px 16px",
     cursor: "pointer",
     transition: "all 0.15s ease",
+    ...(showCryptoIcon
+      ? {
+          border: "2px solid #FFD700",
+          boxShadow:
+            "0 0 20px rgba(255, 215, 0, 0.6), inset 0 0 20px rgba(255, 215, 0, 0.05)",
+        }
+      : { border: "1px solid #1e2d3d" }),
   };
   const cardStyle: CSSProperties = hovered
-    ? {
-        ...cardBase,
-        borderColor: "#4DA2FF",
-        boxShadow: "0 0 0 1px #4DA2FF22, 0 4px 16px rgba(77,162,255,0.08)",
-      }
+    ? showCryptoIcon
+      ? {
+          ...cardBase,
+          boxShadow:
+            "0 0 28px rgba(255, 215, 0, 0.75), inset 0 0 24px rgba(255, 215, 0, 0.08)",
+        }
+      : {
+          ...cardBase,
+          borderColor: "#4DA2FF",
+          boxShadow: "0 0 0 1px #4DA2FF22, 0 4px 16px rgba(77,162,255,0.08)",
+        }
     : cardBase;
 
   return (
