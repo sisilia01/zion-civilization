@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Polymarket Gamma API sync — active + closed markets into polymarket_markets.
+Fetches by Polymarket tag_id (official categories), not keyword matching.
 Runs every 2 hours via watchdog.
 """
 import json
@@ -14,73 +15,18 @@ import psycopg2.extras
 GAMMA_API = "https://gamma-api.polymarket.com"
 POLYMARKET_API = GAMMA_API
 
-# Priority order: crypto → politics → sports → economics → geopolitics → culture
-CATEGORY_KEYWORDS = [
-    (
-        "crypto",
-        [
-            "bitcoin", "btc", "ethereum", "eth", "crypto", "token", "blockchain", "coin",
-            "defi", "nft", "web3", "price", "solana", "sui", "bnb", "xrp", "doge", "altcoin",
-        ],
-    ),
-    (
-        "politics",
-        [
-            "election", "president", "presidential", "nomination", "vote", "senate", "congress",
-            "republican", "democrat", "democratic", "trump", "biden", "governor", "minister",
-            "party", "poll", "candidate", "primary", "ballot", "referendum", "coalition",
-            # crime / legal / religion (not culture)
-            "crime", "criminal", "murder", "trial", "convicted", "indictment", "prison",
-            "felony", "guilty", "verdict", "prosecution", "weinstein", "harvey",
-            "jesus", "christ", "messiah", "pope", "church", "religion", "bible", "gospel",
-            "catholic", "evangelical", "impeach", "scandal",
-        ],
-    ),
-    (
-        "sports",
-        [
-            "nba", "nfl", "nhl", "mlb", "fifa", "tennis", "f1", "formula", "golf", "ufc", "mma",
-            "championship", "league", "cup", "match", "game", "team", "player", "win", "season",
-            "tournament", "esports", "gaming", "counter-strike", "dota", "lol", "valorant",
-            "worlds", "major", "playoff",
-        ],
-    ),
-    (
-        "economics",
-        [
-            "stock", "gdp", "inflation", "fed", "interest rate", "nasdaq", "s&p", "s&p 500",
-            "gold", "silver", "oil", "dollar", "euro", "recession", "economy", "trade",
-            "tariff", "budget", "debt", "unemployment", "reserve", "treasury", "yield",
-            "cpi", "jobs report", "earnings", "ipo",
-            # tech → economics tab
-            "tech", "technology", "semiconductor", "nvidia", "apple", "microsoft", "google",
-            "meta", "amazon", "openai", "chatgpt", "artificial intelligence", "chip",
-        ],
-    ),
-    (
-        "geopolitics",
-        [
-            "war", "russia", "ukraine", "china", "taiwan", "nato", "military", "sanction",
-            "nuclear", "missile", "treaty", "conflict", "invasion", "ceasefire",
-            "middle east", "israel", "iran", "north korea", "territory",
-        ],
-    ),
-    (
-        "culture",
-        [
-            "oscar", "grammy", "emmy", "award", "music", "album", "artist", "movie", "film",
-            "box office", "netflix", "spotify", "celebrity", "fashion", "viral", "tiktok",
-            "youtube", "rihanna", "taylor", "beyonce", "kanye", "drake", "playboi", "rapper",
-            "singer", "actor",
-        ],
-    ),
+# DB category -> Gamma tag slug (see GET /tags/slug/{slug})
+CATEGORY_TAG_SLUGS = [
+    ("geopolitics", "geopolitics"),
+    ("politics", "politics"),
+    ("sports", "sports"),
+    ("crypto", "crypto"),
+    ("economics", "economics"),
+    ("culture", "pop-culture"),  # Polymarket slug is pop-culture, label "Culture"
 ]
 
-# Force politics before broad keyword passes (crime, religion, Weinstein, etc.)
-POLITICS_FORCE = [
-    "weinstein", "harvey weinstein", "jesus christ", "second coming", "messiah",
-    "criminal case", "sexual assault", "rape charge", "indicted", "convicted of",
-]
+ACTIVE_LIMIT_PER_TAG = 100
+CLOSED_LIMIT_PER_TAG = 15
 
 SKIP_SUBSTRINGS = [
     "set 1", "set 2", "map 1", "map 2", "game 1", "game 2",
@@ -116,30 +62,38 @@ def ensure_table(cur):
     cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS image_url TEXT")
 
 
-def categorize(question: str) -> str:
-    q = (question or "").lower()
-    if any(kw in q for kw in POLITICS_FORCE):
-        return "politics"
-    for cat, keywords in CATEGORY_KEYWORDS:
-        if any(kw in q for kw in keywords):
-            return cat
-    return "geopolitics"
-
-
-def fetch_markets(active: bool, limit: int) -> list:
-    closed = "false" if active else "true"
-    url = (
-        f"{GAMMA_API}/markets?active={'true' if active else 'false'}"
-        f"&limit={limit}&closed={closed}"
-    )
+def gamma_get(path: str, timeout: int = 120) -> dict | list | None:
+    url = f"{GAMMA_API}{path}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ZionBet/1.0"})
-        with urllib.request.urlopen(req, timeout=120) as r:
-            data = json.loads(r.read())
-            return data if isinstance(data, list) else []
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
     except Exception as e:
-        print(f"  Fetch error ({'active' if active else 'closed'}): {e}")
-        return []
+        print(f"  Gamma GET {path}: {e}")
+        return None
+
+
+def resolve_tag_ids() -> dict[str, int]:
+    """Map DB category names to Gamma tag_id integers."""
+    out: dict[str, int] = {}
+    for category, slug in CATEGORY_TAG_SLUGS:
+        data = gamma_get(f"/tags/slug/{slug}", timeout=30)
+        if isinstance(data, dict) and data.get("id") is not None:
+            out[category] = int(data["id"])
+            print(f"  tag {slug:15} -> id {data['id']} ({category})")
+        else:
+            print(f"  WARNING: could not resolve tag slug {slug!r} for {category}")
+    return out
+
+
+def fetch_markets_by_tag(tag_id: int, active: bool, limit: int) -> list:
+    closed = "false" if active else "true"
+    path = (
+        f"/markets?active={'true' if active else 'false'}"
+        f"&closed={closed}&limit={limit}&tag_id={tag_id}"
+    )
+    data = gamma_get(path)
+    return data if isinstance(data, list) else []
 
 
 def parse_prices(m: dict) -> tuple[int, int]:
@@ -219,7 +173,7 @@ def is_usable(m: dict, active: bool) -> bool:
     return True
 
 
-def upsert_market(cur, m: dict, active_batch: bool):
+def upsert_market(cur, m: dict, category: str, active_batch: bool):
     raw_id = str(m.get("id", "")).strip()
     if not raw_id:
         return False
@@ -230,7 +184,6 @@ def upsert_market(cur, m: dict, active_batch: bool):
     end_date = parse_end_date(m)
     closed = bool(m.get("closed"))
     winner = parse_winner(m)
-    category = categorize(question)
     is_active = active_batch and not closed
     image_url = parse_image_url(m)
 
@@ -327,71 +280,51 @@ def sync():
     cur.execute(
         "UPDATE polymarket_markets SET category = 'economics' WHERE category IN ('finance', 'tech')"
     )
-    cur.execute("SELECT market_id, question FROM polymarket_markets WHERE category = 'events'")
-    events_remapped = 0
-    for row in cur.fetchall():
-        new_cat = categorize(row["question"])
-        cur.execute(
-            "UPDATE polymarket_markets SET category = %s WHERE market_id = %s",
-            (new_cat, row["market_id"]),
-        )
-        events_remapped += 1
-    if events_remapped:
-        print(f"  Re-categorized {events_remapped} legacy events rows (keyword logic)")
 
-    active_markets = fetch_markets(active=True, limit=500)
-    closed_markets = fetch_markets(active=False, limit=50)
-    print(f"  Fetched {len(active_markets)} active, {len(closed_markets)} closed")
+    print("  Resolving Polymarket tag IDs...")
+    tag_ids = resolve_tag_ids()
+    if not tag_ids:
+        print("  ERROR: no tags resolved, aborting sync")
+        cur.close()
+        conn.close()
+        return
 
     synced = 0
-    images_backfilled = 0
-    for m in active_markets:
-        if is_usable(m, active=True) and upsert_market(cur, m, active_batch=True):
-            synced += 1
-        if backfill_image_url(cur, m):
-            images_backfilled += 1
-
     settled = 0
-    for m in closed_markets:
-        if upsert_market(cur, m, active_batch=False):
-            settled += 1
-        if backfill_image_url(cur, m):
-            images_backfilled += 1
+    images_backfilled = 0
+    seen_active: set[str] = set()
+
+    for category, _slug in CATEGORY_TAG_SLUGS:
+        tag_id = tag_ids.get(category)
+        if tag_id is None:
+            continue
+        active_markets = fetch_markets_by_tag(tag_id, active=True, limit=ACTIVE_LIMIT_PER_TAG)
+        closed_markets = fetch_markets_by_tag(tag_id, active=False, limit=CLOSED_LIMIT_PER_TAG)
+        print(f"  {category:15} tag_id={tag_id}: {len(active_markets)} active, {len(closed_markets)} closed")
+
+        for m in active_markets:
+            raw_id = str(m.get("id", "")).strip()
+            if not raw_id or raw_id in seen_active:
+                continue
+            if is_usable(m, active=True) and upsert_market(cur, m, category, active_batch=True):
+                seen_active.add(raw_id)
+                synced += 1
+            if backfill_image_url(cur, m):
+                images_backfilled += 1
+
+        for m in closed_markets:
+            if upsert_market(cur, m, category, active_batch=False):
+                settled += 1
+            if backfill_image_url(cur, m):
+                images_backfilled += 1
+
+        time.sleep(0.2)
 
     if images_backfilled:
         print(f"  Backfilled/updated image_url on {images_backfilled} rows")
 
-    cur.execute("""
-        UPDATE polymarket_markets SET category = CASE
-          WHEN question ILIKE ANY(ARRAY['%bitcoin%','%btc%','%ethereum%','%eth%','%solana%','%monero%','%crypto%','%token%','%coin%','%defi%','%fdv%','%airdrop%','%silver%','%gold%']) THEN 'economics'
-          WHEN question ILIKE ANY(ARRAY['%premier league%','%epl%','%nba%','%nfl%','%tennis%','%f1%','%cup%','%relegated%']) THEN 'sports'
-          WHEN question ILIKE ANY(ARRAY['%strike%','%iran%','%irgc%','%colombia%','%terrorist%','%nato%','%war%','%military%']) THEN 'geopolitics'
-          WHEN question ILIKE ANY(ARRAY['%acquired%','%ipo%','%startup%','%company%','%lovable%']) THEN 'economics'
-          ELSE 'geopolitics'
-        END
-        WHERE category = 'events'
-    """)
-    events_sql = cur.rowcount
-    if events_sql:
-        print(f"  SQL re-categorized {events_sql} remaining events rows")
-
-    cur.execute(
-        "SELECT market_id, question, category FROM polymarket_markets WHERE is_active = true"
-    )
-    recategorized = 0
-    for row in cur.fetchall():
-        new_cat = categorize(row["question"])
-        if new_cat != row["category"]:
-            cur.execute(
-                "UPDATE polymarket_markets SET category = %s WHERE market_id = %s",
-                (new_cat, row["market_id"]),
-            )
-            recategorized += 1
-    if recategorized:
-        print(f"  Re-categorized {recategorized} active markets (keyword priority)")
-
     conn.commit()
-    print(f"\n✅ Synced {synced} active markets, {settled} closed/settled rows")
+    print(f"\n✅ Synced {synced} active markets ({len(seen_active)} unique), {settled} closed/settled rows")
 
     cur.execute("""
         SELECT category, COUNT(*) AS cnt
