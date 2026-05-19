@@ -1,30 +1,24 @@
-import subprocess
 import json
 import urllib.request
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timezone
 import time
+import sys
 
-PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78"
-ADMIN_CAP = "0x252e23431bbe8252e003e8c179f6dfafd8dcfefc068eb862fe329504f8391892"
+from zion_bet_config import (
+    PACKAGE_ID,
+    BET_HOUSE,
+    BET_ADMIN_CAP,
+    market_id_to_u64,
+    price_to_u64,
+    exit_price_for_bool,
+)
+from sui_tx import sui_call
 
-MARKET_OBJECTS = {
-    "btc_15m":   "0xe919326a4dcc86ec864d02dbb74e03a1fe68a6c75fe63b35614c710ef46fc3e2",
-    "btc_1h":    "0x9a4d41099234c2440f9304bf97f9074da134bf717f83ca0bc10b4a739f0c6f0f",
-    "btc_24h":   "0xb793080c46a464b6397c09004c2a844f667d373bdea34bf7a606e40201c6459a",
-    "btc_7d":    "0x5eb0c489f1fab1b62c6471d69b71476c19385905f52da8c0e6bc6314087002f7",
-    "eth_15m":   "0xa13f46cbbc7accd9476faca624a5699f68822e2c1654c6836b37a1a25281b9a2",
-    "eth_1h":    "0xafb20c1cb3617c504edb266f7eea49676fd0f48098c8e42cbf6bef53b58c110a",
-    "eth_24h":   "0x9646bcba74f372f6a92de1744ad261ca585403be00089eee86ae3e3b489f6af6",
-    "sui_15m":   "0xcae3da89b633a4c7f251203490ae9e39de28ec67c31e988f89e399190eea5491",
-    "sui_1h":    "0xd7a512b38dbc469b7704434a22275444cb52640c693e02fb5a1a89dac98a004c",
-    "sui_24h":   "0xca3d4d349b6a8d0e50edeacf901dd24ba5e69b0ae0ce728f2b8e0d4fa50c38d5",
-    "sui_7d":    "0xa9a44c27411fce1e121bf2f9b6ff7a071b6802caf5022b5fcfd13747839b17fb",
-    "cetus_24h": "0x8d96356b4e732409c9ddf95d2ca7091ec27093f6f918e0c7d4ad4513545005ca",
-    "walrus_24h":"0x3fad377d72b8bd7af81a069455c7278e895210cf1638674be7d3907b3eace2e5",
-    "deep_7d":   "0x0cbb00e6f66d93e97b3b32fca6c3d266029525a49a72480986bc2ae5d09dcf0b",
-}
+NETWORK_TIMEOUT = 15
+SUI_TIMEOUT = 30
+RUN_BUDGET_SEC = 60
 
 CRYPTO_MARKETS = {
     "btc_15m":  {"cg_id": "bitcoin",        "minutes": 15},
@@ -43,283 +37,403 @@ CRYPTO_MARKETS = {
     "deep_7d":  {"cg_id": "deepbook",       "minutes": 10080},
 }
 
+_deadline = 0.0
+
+
+def log(msg: str):
+    print(msg, flush=True)
+
+
+def time_left() -> float:
+    return max(0.0, _deadline - time.monotonic())
+
+
+def budget_exhausted(min_sec: float = 1.0) -> bool:
+    return time_left() < min_sec
+
+
 def get_db():
     return psycopg2.connect(
-        host="localhost", database="zion_db",
-        user="zion_user", password="zion2026"
+        host="localhost",
+        database="zion_db",
+        user="zion_user",
+        password="zion2026",
+        connect_timeout=5,
+        options="-c statement_timeout=15000",
     )
+
+
+def ensure_indexes(cur):
+    try:
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_bets_settle
+            ON user_bets (market_id, settled, resolves_at)
+            WHERE settled = false
+        """)
+        cur.connection.commit()
+    except Exception as e:
+        log(f"Index ensure skipped: {e}")
+        try:
+            cur.connection.rollback()
+        except Exception:
+            pass
+
+
+def fetch_url_json(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+    with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT) as r:
+        return json.loads(r.read())
+
 
 def get_price_change(cg_id):
+    if budget_exhausted(5):
+        return 0.0
     try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd&include_24hr_change=true"
-        req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-            return float(data[cg_id].get("usd_24h_change", 0) or 0)
+        url = (
+            f"https://api.coingecko.com/api/v3/simple/price"
+            f"?ids={cg_id}&vs_currencies=usd&include_24hr_change=true"
+        )
+        data = fetch_url_json(url)
+        return float(data[cg_id].get("usd_24h_change", 0) or 0)
     except Exception as e:
-        print(f"Price error {cg_id}: {e}")
+        log(f"Price error {cg_id}: {e}")
         return 0.0
 
-def resolve_onchain(market_id, result):
-    obj_id = MARKET_OBJECTS.get(market_id)
-    if not obj_id:
+
+def resolve_onchain(market_id, up_wins: bool, exit_price_usd: float | None = None):
+    if budget_exhausted(SUI_TIMEOUT + 2):
+        log(f"⏭️ {market_id} on-chain skipped (time budget)")
+        return False
+    sui_timeout = min(SUI_TIMEOUT, int(time_left()) - 1)
+    if sui_timeout < 5:
+        log(f"⏭️ {market_id} on-chain skipped (only {sui_timeout}s left)")
         return False
     try:
-        r = subprocess.run([
-            "sui", "client", "call",
-            "--package", PACKAGE,
-            "--module", "zion_bet",
-            "--function", "resolve_market",
-            "--args", ADMIN_CAP, obj_id, "true" if result else "false",
-            "--gas-budget", "10000000"
-        ], capture_output=True, text=True, timeout=30)
-        if r.returncode == 0:
-            print(f"✅ Resolved {market_id} → {'YES' if result else 'NO'} on-chain")
-            return True
+        market_u64 = market_id_to_u64(market_id)
+        if exit_price_usd is not None:
+            exit_u64 = price_to_u64(exit_price_usd)
         else:
-            print(f"❌ {market_id} resolve failed: {r.stderr[:80]}")
-            return False
+            exit_u64 = exit_price_for_bool(100, up_wins)
+        ok, out, digest = sui_call(
+            PACKAGE_ID,
+            "zion_bet",
+            "resolve_market",
+            [BET_ADMIN_CAP, BET_HOUSE, market_u64, exit_u64],
+            timeout=sui_timeout,
+        )
+        if ok:
+            log(f"✅ Resolved {market_id} exit={exit_u64} UP={'win' if up_wins else 'lose'} digest={digest}")
+            return True
+        log(f"❌ {market_id} resolve failed: {out[:120]}")
+        return False
     except Exception as e:
-        print(f"❌ {market_id} error: {e}")
+        log(f"❌ {market_id} error: {e}")
         return False
 
-def settle_market(market_id, result):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        UPDATE user_bets SET
-            settled = true,
-            outcome = %s,
-            settled_at = NOW(),
-            status = CASE WHEN prediction = %s THEN 'won' ELSE 'lost' END,
-            payout = CASE WHEN prediction = %s THEN potential_payout ELSE 0 END
-        WHERE market_id = %s AND settled = false
-        RETURNING id, wallet_address, prediction, potential_payout
-    """, (result, result, result, market_id))
-    rows = cur.fetchall()
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    winners = [r for r in rows if r[2] == result]
-    print(f"   Settled {len(rows)} bets, {len(winners)} winners")
-    for w in winners:
-        print(f"   🏆 {w[1][:20]}... +{w[3]} SUI")
-    return len(rows)
 
-def settle_civ_deaths(market_id: str):
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
-        (market_id,),
-    )
-    if cur.fetchone()["cnt"] == 0:
-        cur.close()
-        conn.close()
-        return
-
-    cur.execute("SELECT deaths_today FROM stats ORDER BY id DESC LIMIT 1")
-    row = cur.fetchone()
-    deaths = row["deaths_today"] if row else 0
-    result = deaths > 50
-    print(f"Deaths today: {deaths} > 50: {result}")
-    resolve_onchain(market_id, result)
-    settle_market(market_id, result)
-    cur.close()
-    conn.close()
-
-def settle_civ_election(market_id: str):
-    """Settle election market - check if election happened"""
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
-        (market_id,),
-    )
-    if cur.fetchone()["cnt"] == 0:
-        cur.close()
-        conn.close()
-        return
-
-    cur.execute("""
-        SELECT COUNT(*) as cnt,
-               MAX(description) as desc
-        FROM events
-        WHERE event_type = 'election'
-        AND created_at > NOW() - INTERVAL '24 hours'
-    """)
-    row = cur.fetchone()
-    result = (row["cnt"] or 0) > 0
-    print(f"Election happened: {result} - {row['desc']}")
-
-    resolve_onchain(market_id, result)
-    settle_market(market_id, result)
-    cur.close()
-    conn.close()
-
-def settle_civ_rebellion(market_id: str):
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
-        (market_id,),
-    )
-    if cur.fetchone()["cnt"] == 0:
-        cur.close()
-        conn.close()
-        return
-
-    cur.execute("""
-        SELECT COUNT(*) as cnt FROM events
-        WHERE event_type = 'rebellion'
-        AND created_at > NOW() - INTERVAL '7 days'
-    """)
-    result = (cur.fetchone()["cnt"] or 0) > 0
-    print(f"Rebellion happened: {result}")
-
-    resolve_onchain(market_id, result)
-    settle_market(market_id, result)
-    cur.close()
-    conn.close()
-
-def settle_civ_clan_war(market_id: str):
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
-        (market_id,),
-    )
-    if cur.fetchone()["cnt"] == 0:
-        cur.close()
-        conn.close()
-        return
-
-    cur.execute("""
-        SELECT clan_name, COUNT(*) as members
-        FROM agents WHERE is_alive = true AND clan_name IS NOT NULL
-        GROUP BY clan_name ORDER BY members DESC LIMIT 1
-    """)
-    row = cur.fetchone()
-    result = row and "Golden Dawn" in (row["clan_name"] or "")
-    print(f"Golden Dawn winning: {result}")
-
-    resolve_onchain(market_id, result)
-    settle_market(market_id, result)
-    cur.close()
-    conn.close()
-
-def settle_civ_population(market_id: str, threshold: int = 11000):
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(
-        "SELECT COUNT(*) as cnt FROM user_bets WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
-        (market_id,),
-    )
-    if cur.fetchone()["cnt"] == 0:
-        cur.close()
-        conn.close()
-        return
-
-    cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive = true")
-    population = cur.fetchone()["cnt"] or 0
-    result = population >= threshold
-    print(f"Population {population} >= {threshold}: {result}")
-
-    resolve_onchain(market_id, result)
-    settle_market(market_id, result)
-    cur.close()
-    conn.close()
-
-def run_settlement():
-    print(f"\n{'='*50}")
-    print(f"Settlement: {datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}")
-    
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    
-    for market_id, config in CRYPTO_MARKETS.items():
+def settle_market(conn, market_id, result):
+    if budget_exhausted(2):
+        log(f"⏭️ {market_id} DB settle skipped (time budget)")
+        return 0
+    try:
+        cur = conn.cursor()
         cur.execute("""
-            SELECT id, prediction, entry_price, amount_sui, potential_payout, wallet_address
-            FROM user_bets
+            UPDATE user_bets SET
+                settled = true,
+                outcome = %s,
+                settled_at = NOW(),
+                status = CASE WHEN prediction = %s THEN 'won' ELSE 'lost' END,
+                payout = CASE WHEN prediction = %s THEN potential_payout ELSE 0 END
             WHERE market_id = %s AND settled = false
-            AND resolves_at < NOW()
-        """, (market_id,))
-        bets = cur.fetchall()
-        
-        if bets:
-            print(f"\nSettling {market_id} ({len(bets)} bets)...")
-            # Получаем текущую цену
-            try:
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={config['cg_id']}&vs_currencies=usd"
-                req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    current_price = float(json.loads(r.read())[config["cg_id"]]["usd"])
-            except:
-                print(f"  Price fetch failed, skipping")
-                continue
-            
-            for bet in bets:
-                bet_id, prediction, entry_price, amount_sui, potential_payout, wallet = bet
-                if entry_price and entry_price > 0:
-                    # Сравниваем с ценой в момент ставки
-                    result = current_price > float(entry_price)
-                    print(f"  Entry: {entry_price} → Now: {current_price} → {'UP' if result else 'DOWN'}")
-                else:
-                    # Нет entry price — используем 24h change
-                    change = get_price_change(config["cg_id"])
-                    result = change > 0
-                    print(f"  24h change: {change:.2f}% → {'YES' if result else 'NO'}")
-                
-                resolve_onchain(market_id, result)
-                settle_market(market_id, result)
-                break  # Один resolve на весь рынок
-    
-    # Civilization markets
-    settle_civ_deaths("civ_deaths_24h")
-    settle_civ_election("civ_election_24h")
-    settle_civ_rebellion("civ_rebellion")
-    settle_civ_clan_war("civ_clan_war")
-    settle_civ_population("civ_birth_auto", 11000)
+            RETURNING id, wallet_address, prediction, potential_payout
+        """, (result, result, result, market_id))
+        rows = cur.fetchall()
+        conn.commit()
+        cur.close()
 
-    cur.execute("""
-        SELECT DISTINCT market_id FROM user_bets
-        WHERE settled = false AND resolves_at < NOW()
-        AND (
-            market_id LIKE 'auto_election%'
-            OR market_id LIKE 'auto_rebellion%'
-            OR market_id LIKE 'auto_clan_war%'
+        winners = [r for r in rows if r[2] == result]
+        log(f"   Settled {len(rows)} bets, {len(winners)} winners")
+        for w in winners:
+            log(f"   🏆 {w[1][:20]}... +{w[3]} SUI")
+        return len(rows)
+    except Exception as e:
+        log(f"   DB settle error {market_id}: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
+
+
+def settle_civ_deaths(conn, market_id: str):
+    if budget_exhausted(5):
+        return
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM user_bets "
+            "WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+            (market_id,),
         )
-    """)
-    for row in cur.fetchall():
-        market_id = row["market_id"]
-        if market_id.startswith("auto_election"):
-            settle_civ_election(market_id)
-        elif market_id.startswith("auto_rebellion"):
-            settle_civ_rebellion(market_id)
-        elif market_id.startswith("auto_clan_war"):
-            settle_civ_clan_war(market_id)
+        if cur.fetchone()["cnt"] == 0:
+            cur.close()
+            return
 
-    cur.close()
-    conn.close()
-    print("Done!")
+        cur.execute("SELECT deaths_today FROM stats ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        deaths = row["deaths_today"] if row else 0
+        result = deaths > 50
+        log(f"Deaths today: {deaths} > 50: {result}")
+        resolve_onchain(market_id, result)
+        settle_market(conn, market_id, result)
+        cur.close()
+    except Exception as e:
+        log(f"civ_deaths error: {e}")
 
-if __name__ == "__main__":
-    print("🏦 ZION Settlement Service")
-    run_settlement()
-    while True:
-        time.sleep(900)  # каждые 15 минут
-        run_settlement()
+
+def settle_civ_election(conn, market_id: str):
+    if budget_exhausted(5):
+        return
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM user_bets "
+            "WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+            (market_id,),
+        )
+        if cur.fetchone()["cnt"] == 0:
+            cur.close()
+            return
+
+        cur.execute("""
+            SELECT COUNT(*) as cnt,
+                   MAX(description) as desc
+            FROM events
+            WHERE event_type = 'election'
+            AND created_at > NOW() - INTERVAL '24 hours'
+        """)
+        row = cur.fetchone()
+        result = (row["cnt"] or 0) > 0
+        log(f"Election happened: {result} - {row['desc']}")
+
+        resolve_onchain(market_id, result)
+        settle_market(conn, market_id, result)
+        cur.close()
+    except Exception as e:
+        log(f"civ_election error: {e}")
+
+
+def settle_civ_rebellion(conn, market_id: str):
+    if budget_exhausted(5):
+        return
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM user_bets "
+            "WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+            (market_id,),
+        )
+        if cur.fetchone()["cnt"] == 0:
+            cur.close()
+            return
+
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM events
+            WHERE event_type = 'rebellion'
+            AND created_at > NOW() - INTERVAL '7 days'
+        """)
+        result = (cur.fetchone()["cnt"] or 0) > 0
+        log(f"Rebellion happened: {result}")
+
+        resolve_onchain(market_id, result)
+        settle_market(conn, market_id, result)
+        cur.close()
+    except Exception as e:
+        log(f"civ_rebellion error: {e}")
+
+
+def settle_civ_clan_war(conn, market_id: str):
+    if budget_exhausted(5):
+        return
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM user_bets "
+            "WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+            (market_id,),
+        )
+        if cur.fetchone()["cnt"] == 0:
+            cur.close()
+            return
+
+        cur.execute("""
+            SELECT clan_name, COUNT(*) as members
+            FROM agents WHERE is_alive = true AND clan_name IS NOT NULL
+            GROUP BY clan_name ORDER BY members DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        result = row and "Golden Dawn" in (row["clan_name"] or "")
+        log(f"Golden Dawn winning: {result}")
+
+        resolve_onchain(market_id, result)
+        settle_market(conn, market_id, result)
+        cur.close()
+    except Exception as e:
+        log(f"civ_clan_war error: {e}")
+
+
+def settle_civ_population(conn, market_id: str, threshold: int = 11000):
+    if budget_exhausted(5):
+        return
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute(
+            "SELECT COUNT(*) as cnt FROM user_bets "
+            "WHERE market_id = %s AND settled = false AND resolves_at < NOW()",
+            (market_id,),
+        )
+        if cur.fetchone()["cnt"] == 0:
+            cur.close()
+            return
+
+        cur.execute("SELECT COUNT(*) as cnt FROM agents WHERE is_alive = true")
+        population = cur.fetchone()["cnt"] or 0
+        result = population >= threshold
+        log(f"Population {population} >= {threshold}: {result}")
+
+        resolve_onchain(market_id, result)
+        settle_market(conn, market_id, result)
+        cur.close()
+    except Exception as e:
+        log(f"civ_population error: {e}")
+
 
 def generate_new_civ_markets():
-    """Генерируем новые рынки из свежих событий"""
+    if budget_exhausted(5):
+        return
     try:
-        import urllib.request as ur
-        req = ur.Request("http://localhost:8000/auto_markets", method="POST")
-        with ur.urlopen(req, timeout=10) as r:
+        req = urllib.request.Request("http://localhost:8000/auto_markets", method="POST")
+        with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT) as r:
             data = json.loads(r.read())
-            if data.get('count', 0) > 0:
-                print(f"✅ Generated {data['count']} new civilization markets")
+            if data.get("count", 0) > 0:
+                log(f"✅ Generated {data['count']} new civilization markets")
     except Exception as e:
-        print(f"Market generation error: {e}")
+        log(f"Market generation error: {e}")
+
+
+def run_settlement():
+    global _deadline
+    _deadline = time.monotonic() + RUN_BUDGET_SEC
+
+    log(f"\n{'='*50}")
+    log(f"Settlement: {datetime.now(timezone.utc).strftime('%H:%M:%S UTC')}")
+
+    conn = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        ensure_indexes(cur)
+
+        for market_id, config in CRYPTO_MARKETS.items():
+            if budget_exhausted(5):
+                log("⏭️ Crypto markets skipped (time budget)")
+                break
+            try:
+                cur.execute("""
+                    SELECT id, prediction, entry_price, amount_sui, potential_payout, wallet_address
+                    FROM user_bets
+                    WHERE market_id = %s AND settled = false
+                    AND resolves_at < NOW()
+                """, (market_id,))
+                bets = cur.fetchall()
+            except Exception as e:
+                log(f"  Query error {market_id}: {e}")
+                continue
+
+            if not bets:
+                continue
+
+            log(f"\nSettling {market_id} ({len(bets)} bets)...")
+            current_price = None
+            try:
+                url = (
+                    f"https://api.coingecko.com/api/v3/simple/price"
+                    f"?ids={config['cg_id']}&vs_currencies=usd"
+                )
+                data = fetch_url_json(url)
+                current_price = float(data[config["cg_id"]]["usd"])
+            except Exception:
+                log("  Price fetch failed, skipping")
+                continue
+
+            for bet in bets:
+                if budget_exhausted(SUI_TIMEOUT + 5):
+                    log("  ⏭️ Remaining bets deferred (time budget)")
+                    break
+                bet_id, prediction, entry_price, amount_sui, potential_payout, wallet = bet
+                if entry_price and entry_price > 0:
+                    result = current_price > float(entry_price)
+                    log(f"  Entry: {entry_price} → Now: {current_price} → {'UP' if result else 'DOWN'}")
+                else:
+                    change = get_price_change(config["cg_id"])
+                    result = change > 0
+                    log(f"  24h change: {change:.2f}% → {'YES' if result else 'NO'}")
+
+                resolve_onchain(market_id, result, current_price)
+                settle_market(conn, market_id, result)
+                break
+
+        settle_civ_deaths(conn, "civ_deaths_24h")
+        settle_civ_election(conn, "civ_election_24h")
+        settle_civ_rebellion(conn, "civ_rebellion")
+        settle_civ_clan_war(conn, "civ_clan_war")
+        settle_civ_population(conn, "civ_birth_auto", 11000)
+
+        if not budget_exhausted(5):
+            try:
+                cur.execute("""
+                    SELECT DISTINCT market_id FROM user_bets
+                    WHERE settled = false AND resolves_at < NOW()
+                    AND (
+                        market_id LIKE 'auto_election%'
+                        OR market_id LIKE 'auto_rebellion%'
+                        OR market_id LIKE 'auto_clan_war%'
+                    )
+                """)
+                for row in cur.fetchall():
+                    if budget_exhausted(5):
+                        break
+                    market_id = row["market_id"]
+                    if market_id.startswith("auto_election"):
+                        settle_civ_election(conn, market_id)
+                    elif market_id.startswith("auto_rebellion"):
+                        settle_civ_rebellion(conn, market_id)
+                    elif market_id.startswith("auto_clan_war"):
+                        settle_civ_clan_war(conn, market_id)
+            except Exception as e:
+                log(f"Auto markets query error: {e}")
+
+        generate_new_civ_markets()
+        cur.close()
+    except Exception as e:
+        log(f"Settlement error: {e}")
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    elapsed = RUN_BUDGET_SEC - time_left()
+    log(f"Done! ({elapsed:.1f}s)")
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(line_buffering=True)
+    log("🏦 ZION Settlement Service")
+    run_settlement()
+    while True:
+        for minute in range(15, 0, -1):
+            time.sleep(60)
+            log(f"💤 Next settlement in {minute} min...")
+        run_settlement()

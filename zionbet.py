@@ -2,6 +2,8 @@ import psycopg2
 import random
 from datetime import datetime
 
+from zion_bet_config import PACKAGE_ID, BET_HOUSE, BET_ADMIN_CAP
+
 conn = psycopg2.connect(
     host="localhost",
     database="zion_db",

@@ -807,7 +807,7 @@ async def chat_with_agent(request: dict):
         conn.commit()
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
-    OPENROUTER_KEY = "os.getenv("OPENROUTER_KEY","sk-or-placeholder")"
+    OPENROUTER_KEY = os.getenv("OPENROUTER_KEY", "sk-or-placeholder")
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -1022,7 +1022,11 @@ def get_zionbet_markets():
 
         crypto = [m for m in markets if m.get("category") == "crypto"]
         sports = [m for m in markets if m.get("category") == "sports"]
-        civilization = [m for m in markets if m.get("category") not in ("crypto", "sports")]
+        civilization = [
+            m for m in markets
+            if m.get("category") not in ("crypto", "sports")
+            and not str(m.get("id", "")).startswith("poly-")
+        ]
 
         return {
             "crypto": crypto,
@@ -1372,6 +1376,7 @@ def get_markets():
     return markets
 
 @app.post("/bet")
+@app.post("/api/bet")
 async def place_user_bet(request: Request):
     """Разместить ставку пользователя"""
     body = await request.json()
@@ -1383,28 +1388,51 @@ async def place_user_bet(request: Request):
     if not wallet or not market_id or direction is None:
         return {"error": "Missing fields"}
     
-    # Найдём рынок
     market = next((m for m in MARKETS_CONFIG if m["id"] == market_id), None)
     if not market:
-        return {"error": "Market not found"}
+        market = {
+            "id": market_id,
+            "question": body.get("question") or str(market_id),
+            "token": "POLY" if str(market_id).startswith("poly-") else "ZION",
+            "timeframe": body.get("timeframe", "24h"),
+            "category": "polymarket" if str(market_id).startswith("poly-") else "events",
+        }
     
     yes, no = 50, 50
     entry_price = 0.0
     if market.get("cg_id"):
         yes, no = get_crypto_odds(market["cg_id"])
-        # Записываем текущую цену для правильного settlement
         try:
             url = f"https://api.coingecko.com/api/v3/simple/price?ids={market['cg_id']}&vs_currencies=usd"
             req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
             with urllib.request.urlopen(req, timeout=5) as r:
                 entry_price = float(json.loads(r.read())[market["cg_id"]]["usd"])
-        except:
+        except Exception:
             pass
+    elif _needs_onchain_market_create(market_id):
+        entry_price = 100.0
+
+    if _needs_onchain_market_create(market_id):
+        tf = market.get("timeframe", "24h")
+        deadline_map = {
+            "15m": 15,
+            "1h": 60,
+            "4h": 240,
+            "24h": 1440,
+            "7d": 10080,
+            "30d": 43200,
+        }
+        deadline_min = deadline_map.get(tf, 1440)
+        onchain_entry = entry_price if entry_price > 0 else 100.0
+        if not ensure_onchain_market(market_id, onchain_entry, deadline_min):
+            return {
+                "success": False,
+                "error": "Could not prepare on-chain market. Try again shortly.",
+            }
     
     odds = yes if direction else no
     potential_payout = amount_sui * (100 / odds)
     
-    # Правильный resolves_at в зависимости от таймфрейма
     timeframe = market.get("timeframe", "24h")
     intervals = {"15m": "15 minutes", "1h": "1 hour", "4h": "4 hours", 
                  "24h": "24 hours", "7d": "7 days", "30d": "30 days"}
@@ -1635,31 +1663,134 @@ def get_event_highlights():
         return {"error": str(e)}
 
 
-# === AUTO CIVILIZATION MARKETS ===
+# === ZION BET ON-CHAIN ===
+import subprocess
 import hashlib
 
-def create_civ_market_onchain(market_id: str, question: str):
-    """Создаём рынок on-chain"""
+from zion_bet_config import (
+    PACKAGE_ID,
+    BET_HOUSE,
+    BET_ADMIN_CAP,
+    MARKET_ID_NUMERIC,
+    market_id_to_u64,
+    price_to_u64,
+    deadline_unix,
+)
+from sui_tx import sui_call, is_abort_code
+
+# market_ids we already created (or confirmed exist) on BetHouse this process lifetime
+_onchain_markets_ready: set[str] = set()
+
+
+def _needs_onchain_market_create(market_id: str) -> bool:
+    """Poly and dynamic markets need create_market before place_bet."""
+    if str(market_id).startswith("poly-"):
+        return True
+    return market_id not in MARKET_ID_NUMERIC
+
+
+def ensure_onchain_market(
+    market_id: str,
+    entry_price_usd: float = 100.0,
+    deadline_minutes: int = 10080,
+) -> bool:
+    """Create BetHouse market on-chain if missing; cache successes and abort-1 (exists)."""
+    if market_id in _onchain_markets_ready:
+        return True
     try:
-        PACKAGE = "0xa72560fc86cb9cbbe3755cf8f0bc69d72ed987dee0ed1a2dccf3b0b90d9d2b78"
-        ADMIN = "0x252e23431bbe8252e003e8c179f6dfafd8dcfefc068eb862fe329504f8391892"
-        result = subprocess.run([
-            "sui", "client", "call",
-            "--package", PACKAGE,
-            "--module", "zion_bet",
-            "--function", "create_market",
-            "--args", ADMIN, question, market_id, "0",
-            "--gas-budget", "10000000"
-        ], capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            # Извлекаем object ID
-            import re
-            match = re.search(r'ID: (0x[a-f0-9]{64})', result.stdout)
-            if match:
-                return match.group(1)
+        ok, out, digest = sui_call(
+            PACKAGE_ID,
+            "zion_bet",
+            "create_market",
+            [
+                BET_ADMIN_CAP,
+                BET_HOUSE,
+                market_id_to_u64(market_id),
+                price_to_u64(entry_price_usd),
+                deadline_unix(deadline_minutes),
+            ],
+        )
+        if ok or is_abort_code(out, 1):
+            _onchain_markets_ready.add(market_id)
+            if digest:
+                print(f"✅ On-chain market ready: {market_id} digest={digest}")
+            else:
+                print(f"✅ On-chain market already exists: {market_id}")
+            return True
+        print(f"ensure_onchain_market failed {market_id}: {out[:300]}")
+    except Exception as e:
+        print(f"ensure_onchain_market error {market_id}: {e}")
+    return False
+
+
+def create_civ_market_onchain(market_id: str, entry_price_usd: float = 100.0, deadline_minutes: int = 1440):
+    """Create binary market on-chain (BetHouse table entry)."""
+    try:
+        ok, out, digest = sui_call(
+            PACKAGE_ID,
+            "zion_bet",
+            "create_market",
+            [
+                BET_ADMIN_CAP,
+                BET_HOUSE,
+                market_id_to_u64(market_id),
+                price_to_u64(entry_price_usd),
+                deadline_unix(deadline_minutes),
+            ],
+        )
+        if ok or is_abort_code(out, 1):
+            _onchain_markets_ready.add(market_id)
+            return digest
+        print(f"Market creation error: {out[:200]}")
     except Exception as e:
         print(f"Market creation error: {e}")
     return None
+
+
+@app.post("/api/zionbet/create_market")
+async def zionbet_create_market(request: dict):
+    """Admin: create on-chain market in BetHouse."""
+    try:
+        market_id = request.get("market_id")
+        entry_price = float(request.get("entry_price", 0))
+        deadline_minutes = int(request.get("deadline_minutes", 60))
+    except (TypeError, ValueError) as e:
+        return {"success": False, "error": f"invalid parameters: {e}"}
+
+    if market_id is None:
+        return {"success": False, "error": "market_id is required"}
+    if entry_price <= 0:
+        return {"success": False, "error": "entry_price must be positive"}
+
+    try:
+        ok, out, digest = sui_call(
+            PACKAGE_ID,
+            "zion_bet",
+            "create_market",
+            [
+                BET_ADMIN_CAP,
+                BET_HOUSE,
+                market_id_to_u64(market_id),
+                price_to_u64(entry_price),
+                deadline_unix(deadline_minutes),
+            ],
+        )
+        if ok or is_abort_code(out, 1):
+            _onchain_markets_ready.add(str(market_id))
+            return {
+                "success": True,
+                "digest": digest,
+                "already_exists": is_abort_code(out, 1) and not ok,
+                "market_id": market_id,
+                "market_id_u64": market_id_to_u64(market_id),
+                "entry_price_u64": price_to_u64(entry_price),
+            }
+        return {"success": False, "error": out[:500]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# === AUTO CIVILIZATION MARKETS ===
 
 @app.post("/auto_markets")
 def generate_auto_markets():
@@ -1824,7 +1955,7 @@ Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer os.getenv("OPENROUTER_KEY","sk-or-placeholder")",
+                "Authorization": f"Bearer {os.getenv('OPENROUTER_KEY', 'sk-or-placeholder')}",
                 "HTTP-Referer": "https://zionciv.com",
                 "X-Title": "ZION Civilization"
             }
@@ -1988,7 +2119,7 @@ async def generate_conversations():
         events = cur.fetchall()
         event_context = "; ".join([f"{e['event_type']}: {e['description']}" for e in events])
 
-        OPENROUTER_KEY = "os.getenv("OPENROUTER_KEY","sk-or-placeholder")"
+        OPENROUTER_KEY = os.getenv("OPENROUTER_KEY", "sk-or-placeholder")
         import urllib.request as req
         conversations = []
 
@@ -2339,30 +2470,47 @@ async def store_walrus_snapshot():
         return {"success": True, "blob_id": blob_id}
     return {"success": False, "error": result.stderr}
 
+VALID_POLY_CATEGORIES = frozenset({
+    "crypto", "sports", "politics", "economics", "geopolitics", "culture",
+})
+
+
 @app.get("/zionbet/polymarkets")
 async def get_polymarkets(category: str | None = None):
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        if category:
+        cat = (category or "").strip().lower()
+        if cat and cat not in VALID_POLY_CATEGORIES:
+            return []
+
+        if cat:
             cur.execute(
                 """
                 SELECT market_id, question, category, yes_price, no_price, volume, end_date
                 FROM polymarket_markets
-                WHERE is_active=true AND category=%s
-                ORDER BY volume DESC LIMIT 30
+                WHERE is_active = true AND closed = false AND category = %s
+                ORDER BY volume DESC
+                LIMIT 50
                 """,
-                (category,),
+                (cat,),
             )
         else:
             cur.execute("""
                 SELECT market_id, question, category, yes_price, no_price, volume, end_date
                 FROM polymarket_markets
-                WHERE is_active=true
-                ORDER BY volume DESC LIMIT 50
+                WHERE is_active = true AND closed = false
+                ORDER BY volume DESC
+                LIMIT 50
             """)
         rows = cur.fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            vol = float(d.get("volume") or 0)
+            d["volume_sui"] = round(vol / 1000, 2)
+            out.append(d)
+        return out
     except Exception:
         return []
     finally:
