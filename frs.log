@@ -815,3 +815,75 @@ CONTEXT:  while locking tuple (4,81) in relation "agents"
 ⚖️ DEPRESSION but avg 8.5 > 8 — holding QE
 
 ✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 13:34
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 8.6 ZION
+  Poor%: 62.3%
+  Total Money: 29376 ZION
+  Population: 3425 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 8.6 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 14:04
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 7.5 ZION
+  Poor%: 62.8%
+  Total Money: 25296 ZION
+  Population: 3389 alive
+📈 ZRS rate updated to 0.5%
+⚠️ QE capped at 10% of money supply: 3207 ZION max
+💵 QE: +3207 ZION printed (mode: DEPRESSION)
+
+✅ ZRS cycle complete! Action: QE
+
+🏦 ZION Reserve System — 2026-05-19 14:34
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 9.3 ZION
+  Poor%: 62.9%
+  Total Money: 31577 ZION
+  Population: 3392 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 9.3 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD
+
+🏦 ZION Reserve System — 2026-05-19 15:04
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 6.5 ZION
+  Poor%: 63.1%
+  Total Money: 22021 ZION
+  Population: 3362 alive
+📈 ZRS rate updated to 0.5%
+⚠️ QE capped at 10% of money supply: 2875 ZION max
+💵 QE: +2874 ZION printed (mode: DEPRESSION)
+
+✅ ZRS cycle complete! Action: QE
+
+🏦 ZION Reserve System — 2026-05-19 15:35
+==================================================
+
+📊 ZRS ECONOMIC REPORT:
+  Mode: DEPRESSION | Rate: 0.5%
+  Avg Balance: 8.5 ZION
+  Poor%: 63.2%
+  Total Money: 28515 ZION
+  Population: 3367 alive
+📈 ZRS rate updated to 0.5%
+⚖️ DEPRESSION but avg 8.5 > 8 — holding QE
+
+✅ ZRS cycle complete! Action: HOLD

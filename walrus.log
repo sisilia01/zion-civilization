@@ -366,3 +366,35 @@ Walrus store error: HTTPSConnectionPool(host='publisher.walrus-testnet.walrus.sp
   civilization_snapshot: 2gEh9NevugmONtnEDesr... (12:10)
 
 ✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 14:03
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: 9oTb8xQIy8SjjlTiYx4ElFf57PATbW03HnusaURNdGs
+   Sui Object: 0x44dcf578eed1255ec969360f1b6ce19399af3288ed1790da79e63ca140c444bb
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/9oTb8xQIy8SjjlTiYx4ElFf57PATbW03HnusaURNdGs
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
+  civilization_snapshot: us10_R2jJ1JGHI2FjXaO... (13:03)
+  civilization_snapshot: J5krtpoFqXUZMhAzMd0p... (13:00)
+  civilization_snapshot: NP_e7X8oBeNjO3wuj4cL... (12:55)
+  civilization_snapshot: bNQiUDdWZUKkTl9hrlmG... (12:40)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 15:04
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: NElpNlF8vy26HzXSxzMG05M4V_cmVarU0Kj9QcsS-L4
+   Sui Object: 0xba7f1198595d9dffd3949ae948dba24e8bd15b3f7b6416b0d0817d8e5d57178d
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/NElpNlF8vy26HzXSxzMG05M4V_cmVarU0Kj9QcsS-L4
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: NElpNlF8vy26HzXSxzMG... (15:04)
+  civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
+  civilization_snapshot: us10_R2jJ1JGHI2FjXaO... (13:03)
+  civilization_snapshot: J5krtpoFqXUZMhAzMd0p... (13:00)
+  civilization_snapshot: NP_e7X8oBeNjO3wuj4cL... (12:55)
+
+✅ Walrus cycle complete!

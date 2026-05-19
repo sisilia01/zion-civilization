@@ -2540,7 +2540,7 @@ async def store_walrus_snapshot():
     return {"success": False, "error": result.stderr}
 
 VALID_POLY_CATEGORIES = frozenset({
-    "crypto", "sports", "politics", "economics", "geopolitics", "culture",
+    "crypto", "sports", "politics", "geopolitics", "finance", "tech", "iran", "culture",
 })
 
 

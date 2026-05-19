@@ -15,14 +15,17 @@ import psycopg2.extras
 GAMMA_API = "https://gamma-api.polymarket.com"
 POLYMARKET_API = GAMMA_API
 
-# DB category -> Gamma tag slug (see GET /tags/slug/{slug})
-CATEGORY_TAG_SLUGS = [
-    ("geopolitics", "geopolitics"),
-    ("politics", "politics"),
-    ("sports", "sports"),
-    ("crypto", "crypto"),
-    ("economics", "economics"),
-    ("culture", "pop-culture"),  # Polymarket slug is pop-culture, label "Culture"
+# DB category -> Gamma tag slug (GET /tags/slug/{slug} → tag_id)
+# finance=120, technology=22, tech=1401, ai=439, iran=resolved at sync time
+CATEGORY_TAG_SOURCES: list[tuple[str, dict]] = [
+    ("geopolitics", {"slugs": ["geopolitics"]}),
+    ("politics", {"slugs": ["politics"]}),
+    ("sports", {"slugs": ["sports"]}),
+    ("crypto", {"slugs": ["crypto"]}),
+    ("finance", {"slugs": ["finance"]}),
+    ("tech", {"slugs": ["technology", "tech", "ai"]}),  # tag_id 22, 1401, 439
+    ("iran", {"slugs": ["iran"]}),
+    ("culture", {"slugs": ["pop-culture"]}),  # Polymarket label "Culture"
 ]
 
 ACTIVE_LIMIT_PER_TAG = 100
@@ -73,16 +76,38 @@ def gamma_get(path: str, timeout: int = 120) -> dict | list | None:
         return None
 
 
-def resolve_tag_ids() -> dict[str, int]:
-    """Map DB category names to Gamma tag_id integers."""
-    out: dict[str, int] = {}
-    for category, slug in CATEGORY_TAG_SLUGS:
-        data = gamma_get(f"/tags/slug/{slug}", timeout=30)
-        if isinstance(data, dict) and data.get("id") is not None:
-            out[category] = int(data["id"])
-            print(f"  tag {slug:15} -> id {data['id']} ({category})")
+def resolve_category_tag_ids() -> dict[str, list[int]]:
+    """Map DB category -> list of Gamma tag_id integers (deduped)."""
+    out: dict[str, list[int]] = {}
+    for category, spec in CATEGORY_TAG_SOURCES:
+        ids: list[int] = []
+        seen: set[int] = set()
+
+        def add(tid: int, label: str) -> None:
+            if tid not in seen:
+                seen.add(tid)
+                ids.append(tid)
+                print(f"  tag {label:20} -> id {tid} ({category})")
+
+        for slug in spec.get("slugs") or []:
+            data = gamma_get(f"/tags/slug/{slug}", timeout=30)
+            if isinstance(data, dict) and data.get("id") is not None:
+                add(int(data["id"]), slug)
+            else:
+                print(f"  WARNING: could not resolve tag slug {slug!r} for {category}")
+
+        for tid in spec.get("ids") or []:
+            data = gamma_get(f"/tags/{tid}", timeout=30)
+            if isinstance(data, dict) and data.get("id") is not None:
+                label = f"{data.get('slug', tid)}"
+                add(int(data["id"]), label)
+            else:
+                add(int(tid), str(tid))
+
+        if ids:
+            out[category] = ids
         else:
-            print(f"  WARNING: could not resolve tag slug {slug!r} for {category}")
+            print(f"  WARNING: no tag ids for category {category}")
     return out
 
 
@@ -278,12 +303,12 @@ def sync():
         "UPDATE polymarket_markets SET is_active = false WHERE synced_at < NOW() - INTERVAL '6 hours'"
     )
     cur.execute(
-        "UPDATE polymarket_markets SET category = 'economics' WHERE category IN ('finance', 'tech')"
+        "UPDATE polymarket_markets SET category = 'finance' WHERE category = 'economics'"
     )
 
     print("  Resolving Polymarket tag IDs...")
-    tag_ids = resolve_tag_ids()
-    if not tag_ids:
+    category_tags = resolve_category_tag_ids()
+    if not category_tags:
         print("  ERROR: no tags resolved, aborting sync")
         cur.close()
         conn.close()
@@ -294,31 +319,43 @@ def sync():
     images_backfilled = 0
     seen_active: set[str] = set()
 
-    for category, _slug in CATEGORY_TAG_SLUGS:
-        tag_id = tag_ids.get(category)
-        if tag_id is None:
-            continue
-        active_markets = fetch_markets_by_tag(tag_id, active=True, limit=ACTIVE_LIMIT_PER_TAG)
-        closed_markets = fetch_markets_by_tag(tag_id, active=False, limit=CLOSED_LIMIT_PER_TAG)
-        print(f"  {category:15} tag_id={tag_id}: {len(active_markets)} active, {len(closed_markets)} closed")
+    for category, tag_id_list in category_tags.items():
+        seen_before = len(seen_active)
+        cat_active = 0
+        cat_closed = 0
+        for tag_id in tag_id_list:
+            active_markets = fetch_markets_by_tag(tag_id, active=True, limit=ACTIVE_LIMIT_PER_TAG)
+            closed_markets = fetch_markets_by_tag(tag_id, active=False, limit=CLOSED_LIMIT_PER_TAG)
+            print(
+                f"  {category:15} tag_id={tag_id}: "
+                f"{len(active_markets)} active, {len(closed_markets)} closed"
+            )
+            cat_active += len(active_markets)
+            cat_closed += len(closed_markets)
 
-        for m in active_markets:
-            raw_id = str(m.get("id", "")).strip()
-            if not raw_id or raw_id in seen_active:
-                continue
-            if is_usable(m, active=True) and upsert_market(cur, m, category, active_batch=True):
-                seen_active.add(raw_id)
-                synced += 1
-            if backfill_image_url(cur, m):
-                images_backfilled += 1
+            for m in active_markets:
+                raw_id = str(m.get("id", "")).strip()
+                if not raw_id or raw_id in seen_active:
+                    continue
+                if is_usable(m, active=True) and upsert_market(cur, m, category, active_batch=True):
+                    seen_active.add(raw_id)
+                    synced += 1
+                if backfill_image_url(cur, m):
+                    images_backfilled += 1
 
-        for m in closed_markets:
-            if upsert_market(cur, m, category, active_batch=False):
-                settled += 1
-            if backfill_image_url(cur, m):
-                images_backfilled += 1
+            for m in closed_markets:
+                if upsert_market(cur, m, category, active_batch=False):
+                    settled += 1
+                if backfill_image_url(cur, m):
+                    images_backfilled += 1
 
-        time.sleep(0.2)
+            time.sleep(0.15)
+
+        if len(tag_id_list) > 1:
+            print(
+                f"  {category:15} merged: {cat_active} active rows fetched, "
+                f"+{len(seen_active) - seen_before} unique usable"
+            )
 
     if images_backfilled:
         print(f"  Backfilled/updated image_url on {images_backfilled} rows")
