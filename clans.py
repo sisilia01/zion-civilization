@@ -8,7 +8,7 @@ from civ_common import ensure_schema, get_conn, get_cursor, log_event
 RECRUIT_BONUS = 5.0
 SIGNING_BALANCE_MAX = 3.0
 MAX_DOMINANT_GANGS = 3
-EXTORT_RATE = 0.15
+EXTORT_RATE = 0.08  # was 0.15 — hourly 15% bankrupted corps in <12h sim
 
 
 def sync_member_counts(cur):

@@ -242,25 +242,24 @@ def check_compliance(cur, president):
     if not president:
         return
 
+    # Use order table timestamps (president and sheriff run in separate crons)
     cur.execute(
         """
-        SELECT COALESCE(orders_given_cycle, 0) AS given
-        FROM president_state WHERE is_active = true LIMIT 1
+        SELECT COUNT(*) AS c FROM sheriff_orders
+        WHERE issued_at > NOW() - INTERVAL '2 hours'
         """
     )
-    given = int(cur.fetchone()["given"] or 0)
+    given = int(cur.fetchone()["c"] or 0)
     cur.execute(
         """
-        SELECT COALESCE(orders_executed_cycle, 0) AS ex
-        FROM sheriff_state WHERE is_active = true LIMIT 1
+        SELECT COUNT(*) AS c FROM sheriff_orders
+        WHERE issued_at > NOW() - INTERVAL '2 hours'
+          AND status IN ('executed', 'faked')
         """
     )
-    executed = int(cur.fetchone()["ex"] or 0)
+    executed = int(cur.fetchone()["c"] or 0)
 
     if given == 0:
-        cur.execute(
-            "UPDATE president_state SET orders_given_cycle = 0 WHERE is_active = true"
-        )
         return
 
     rate = executed / given
@@ -307,7 +306,16 @@ def check_compliance(cur, president):
         )
 
     cur.execute(
-        "UPDATE president_state SET orders_given_cycle = 0 WHERE is_active = true"
+        """
+        UPDATE president_state SET orders_given_cycle = 0, compliance_low_cycles = 0
+        WHERE is_active = true
+        """
+    )
+    cur.execute(
+        """
+        UPDATE sheriff_state SET orders_executed_cycle = 0, orders_ignored_cycle = 0
+        WHERE is_active = true
+        """
     )
 
 

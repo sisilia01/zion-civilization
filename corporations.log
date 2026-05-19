@@ -3196,3 +3196,22 @@ DETAIL:  Process 880623 waits for AccessExclusiveLock on relation 16662 of datab
 Process 880651 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 880623.
 HINT:  See server log for query details.
 
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 70, in run_cycle
+    ensure_corp_tables(cur)
+  File "/root/zion_backend/corporations.py", line 41, in ensure_corp_tables
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 886691 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 886737.
+Process 886737 waits for RowShareLock on relation 16391 of database 16388; blocked by process 886691.
+HINT:  See server log for query details.
+

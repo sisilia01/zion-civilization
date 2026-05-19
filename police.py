@@ -124,20 +124,24 @@ def main():
             priority="breaking",
         )
         print(f"✅ Raid on {target['name']}: {deaths} killed, +{seized:.0f} ZION")
+
+        # Reinvest seized funds into recruitment
+        recruits = min(3, int(seized / 40))
+        if recruits > 0:
+            cur.execute(
+                """
+                UPDATE sheriff_state SET police_count = police_count + %s
+                WHERE is_active = true
+                """,
+                (recruits,),
+            )
+            print(f"  📋 +{recruits} officers recruited from raid proceeds")
     else:
-        loss = random.randint(5, 10)
-        new_count = max(5, police_count - loss)
+        loss = random.randint(1, 3)
+        new_count = max(8, police_count - loss)
         cur.execute(
             "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
             (new_count,),
-        )
-        cur.execute(
-            """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'gang_war'
-            WHERE is_alive = true AND class IN ('middle','elite')
-            AND id IN (SELECT id FROM agents WHERE is_alive = true ORDER BY RANDOM() LIMIT %s)
-            """,
-            (loss,),
         )
         log_event(
             cur,
@@ -147,7 +151,45 @@ def main():
             loss,
             priority="urgent",
         )
-        print(f"❌ Raid failed: -{loss} officers")
+        print(f"❌ Raid failed: -{loss} officers (no civilian casualties)")
+
+    # Passive recruitment when under-staffed and funded
+    cur.execute(
+        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    row = cur.fetchone()
+    if row and int(row["police_count"] or 0) < 22 and float(row["police_budget"] or 0) > 250:
+        hire = min(6, int(float(row["police_budget"]) / 60))
+        cost = hire * 15
+        cur.execute(
+            """
+            UPDATE sheriff_state SET
+                police_count = police_count + %s,
+                police_budget = police_budget - %s
+            WHERE is_active = true
+            """,
+            (hire, cost),
+        )
+        print(f"  👮 Recruitment drive: +{hire} officers (-{cost:.0f} ZION budget)")
+
+    # Emergency staffing when at minimum — keeps raids viable after 24h
+    cur.execute(
+        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    row2 = cur.fetchone()
+    if row2 and int(row2["police_count"] or 0) <= 10 and float(row2["police_budget"] or 0) > 80:
+        boost = min(4, 12 - int(row2["police_count"] or 0))
+        cost = boost * 12
+        cur.execute(
+            """
+            UPDATE sheriff_state SET
+                police_count = police_count + %s,
+                police_budget = police_budget - %s
+            WHERE is_active = true
+            """,
+            (boost, cost),
+        )
+        print(f"  🚨 Emergency staffing: +{boost} officers")
 
     conn.commit()
     print("✅ Police cycle complete!\n")

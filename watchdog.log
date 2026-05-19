@@ -154,3 +154,21 @@
 2026-05-19 18:30:00,416 [WATCHDOG] Started police (police.py)
 2026-05-19 18:30:00,416 [WATCHDOG] Coin manager started
 2026-05-19 18:40:00,643 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:24
+2026-05-19 18:50:00,831 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:24
+2026-05-19 19:00:01,000 [WATCHDOG] Running birth (interval 1800s)
+2026-05-19 19:00:02,009 [WATCHDOG] Started birth (birth.py)
+2026-05-19 19:00:02,013 [WATCHDOG] Running corporations (interval 1800s)
+2026-05-19 19:00:03,021 [WATCHDOG] Started corporations (corporations.py)
+2026-05-19 19:00:03,023 [WATCHDOG] Running market (interval 1800s)
+2026-05-19 19:00:04,028 [WATCHDOG] Started market (market.py)
+2026-05-19 19:00:04,033 [WATCHDOG] Running casino (interval 1800s)
+2026-05-19 19:00:05,039 [WATCHDOG] Started casino (casino.py)
+2026-05-19 19:00:05,045 [WATCHDOG] Running religion (interval 1800s)
+2026-05-19 19:00:06,050 [WATCHDOG] Started religion (religion.py)
+2026-05-19 19:00:06,052 [WATCHDOG] Running zionwork (interval 1800s)
+2026-05-19 19:00:07,056 [WATCHDOG] Started zionwork (zionwork.py)
+2026-05-19 19:00:07,058 [WATCHDOG] Running frs (interval 1800s)
+2026-05-19 19:00:08,062 [WATCHDOG] Started frs (frs.py)
+2026-05-19 19:00:08,065 [WATCHDOG] Running news (interval 1800s)
+2026-05-19 19:00:09,072 [WATCHDOG] Started news (news.py)
+2026-05-19 19:00:11,643 [WATCHDOG] Heartbeat — API:✅ | Daemons:2 Cron:24

@@ -156,15 +156,42 @@ def main():
             priority="breaking",
         )
     elif mode == "NORMAL":
-        log_event(
-            cur,
-            None,
-            "zrs",
-            f"ZRS: Economy NORMAL. Rate {rate}%. Avg {econ['avg_balance']:.1f} ZION, "
-            f"poverty {econ['poverty_pct']:.0f}%",
-            0,
-            priority="normal",
-        )
+        # Stability grant when poverty elevated — prevents slow deflation spiral
+        if econ["poverty_pct"] > 42:
+            cur.execute(
+                """
+                UPDATE agents SET balance = balance + 1
+                WHERE is_alive = true AND balance < 12
+                """
+            )
+            cur.execute(
+                """
+                SELECT COUNT(*) AS c FROM agents
+                WHERE is_alive = true AND balance < 12
+                """
+            )
+            n = int(cur.fetchone()["c"] or 0)
+            amount = float(n)
+            action = "STABILITY_GRANT"
+            log_event(
+                cur,
+                None,
+                "zrs",
+                f"ZRS NORMAL stability: +1 ZION to {n} agents below 12 balance "
+                f"(poverty {econ['poverty_pct']:.0f}%)",
+                amount,
+                priority="normal",
+            )
+        else:
+            log_event(
+                cur,
+                None,
+                "zrs",
+                f"ZRS: Economy NORMAL. Rate {rate}%. Avg {econ['avg_balance']:.1f} ZION, "
+                f"poverty {econ['poverty_pct']:.0f}%",
+                0,
+                priority="normal",
+            )
 
     if mode != prev_mode:
         log_event(
