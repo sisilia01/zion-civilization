@@ -8,6 +8,9 @@ import random
 import traceback
 from datetime import datetime
 
+from civ_common import ensure_schema
+from civ_governance import attempt_coup, process_sheriff_orders
+
 conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
@@ -496,6 +499,7 @@ def main():
 
     try:
         ensure_tables()
+        ensure_schema(cur)
         conn.commit()
 
         sheriff = get_sheriff()
@@ -523,6 +527,12 @@ def main():
             return
 
         sheriff_actions(sheriff)
+        sheriff = get_sheriff()
+        process_sheriff_orders(cur, sheriff)
+        sheriff = get_sheriff()
+        cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
+        president = cur.fetchone()
+        attempt_coup(cur, sheriff, president)
         check_interaction_with_president()
         check_term_end(sheriff)
 

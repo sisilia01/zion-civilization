@@ -16936,3 +16936,87 @@ Prayers: 100 | Miracles: 10
   🕯️ Shadow Cult: 724 believers
 
 ✅ Religion cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/religion.py", line 229, in main
+    prayers, miracles = run_religious_cycle(cur)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/religion.py", line 132, in run_religious_cycle
+    cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 857550 waits for ShareLock on transaction 22343; blocked by process 857513.
+Process 857513 waits for ShareLock on transaction 22348; blocked by process 857550.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (325,69) in relation "agents"
+
+
+⛪ ZION Religion v2 — 2026-05-19 16:05
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 0 new agents
+❌ Error: deadlock detected
+DETAIL:  Process 857550 waits for ShareLock on transaction 22343; blocked by process 857513.
+Process 857513 waits for ShareLock on transaction 22348; blocked by process 857550.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (325,69) in relation "agents"
+
+
+⛪ ZION Religion v2 — 2026-05-19 16:35
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 53 new agents
+Prayers: 100 | Miracles: 11
+🕯️ Chris Smith 185: 'The Shadow Lord is angry — disaster incoming!'
+  🔮 Church of the Prophet: 742 believers
+  🌑 Order of Void: 35 believers
+  ⚔️ Iron Faith: 1254 believers
+  ✨ Golden Temple: 568 believers
+  🕯️ Shadow Cult: 744 believers
+
+✅ Religion cycle complete!
+
+⛪ ZION Religion v2 — 2026-05-19 17:05
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 53 new agents
+Prayers: 100 | Miracles: 10
+⚔️ Religious conflict: Order of Void vs Iron Faith!
+⚔️ Luna Davis 8938: 'The Iron God is angry — disaster incoming!'
+  🔮 Church of the Prophet: 760 believers
+  🌑 Order of Void: 35 believers
+  ⚔️ Iron Faith: 1255 believers
+  ✨ Golden Temple: 551 believers
+  🕯️ Shadow Cult: 758 believers
+
+✅ Religion cycle complete!
+
+⛪ ZION Religion v2 — 2026-05-19 17:36
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 85 new agents
+Prayers: 100 | Miracles: 15
+⚔️ Religious conflict: Shadow Cult vs Golden Temple!
+⚔️ Luna Davis 8938: 'The Iron God warns: the great purge approaches!'
+  🔮 Church of the Prophet: 788 believers
+  🌑 Order of Void: 35 believers
+  ⚔️ Iron Faith: 1272 believers
+  ✨ Golden Temple: 545 believers
+  🕯️ Shadow Cult: 787 believers
+
+✅ Religion cycle complete!
+
+⛪ ZION Religion v2 — 2026-05-19 18:06
+==================================================
+Religions: 🔮 Church of the Prophet, 🌑 Order of Void, ⚔️ Iron Faith, ✨ Golden Temple, 🕯️ Shadow Cult
+Assigned religion to 75 new agents
+Prayers: 100 | Miracles: 14
+🔮 Kim Robinson 6582: 'A new age dawns for followers of Church of the Prophet!'
+  🔮 Church of the Prophet: 815 believers
+  🌑 Order of Void: 35 believers
+  ⚔️ Iron Faith: 1281 believers
+  ✨ Golden Temple: 540 believers
+  🕯️ Shadow Cult: 791 believers
+
+✅ Religion cycle complete!

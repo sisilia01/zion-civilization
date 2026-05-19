@@ -99,3 +99,15 @@
 2026-05-19 13:03:53,601 [WATCHDOG] Running police (interval 1800s)
 2026-05-19 13:03:54,608 [WATCHDOG] Started police (police.py)
 2026-05-19 13:03:54,609 [WATCHDOG] Coin manager started
+2026-05-19 18:29:34,097 [WATCHDOG] === ZION Watchdog started ===
+2026-05-19 18:29:34,097 [WATCHDOG] Monitoring 2 daemons + 24 cron scripts
+2026-05-19 18:29:34,105 [WATCHDOG] Daemon zion-api screen not running — starting
+2026-05-19 18:29:34,105 [WATCHDOG] Starting zion-api daemon...
+2026-05-19 18:29:36,139 [WATCHDOG] zion-api daemon started
+2026-05-19 18:29:36,143 [WATCHDOG] Running tax (interval 3600s)
+2026-05-19 18:29:37,149 [WATCHDOG] Started tax (tax_cron.py)
+2026-05-19 18:29:37,151 [WATCHDOG] Running birth (interval 1800s)
+2026-05-19 18:29:38,159 [WATCHDOG] Started birth (birth.py)
+2026-05-19 18:29:38,164 [WATCHDOG] Running corporations (interval 1800s)
+2026-05-19 18:29:39,171 [WATCHDOG] Started corporations (corporations.py)
+2026-05-19 18:29:39,177 [WATCHDOG] Running epidemics (interval 7200s)

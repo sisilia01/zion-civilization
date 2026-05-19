@@ -1,128 +1,153 @@
-import psycopg2
+#!/usr/bin/env python3
+"""ZION hourly tax cycle — tiered rates, debt, corporate tax, revenue routing."""
 import random
 from datetime import datetime
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="zion_db",
-    user="zion_user",
-    password="zion2026"
+from civ_common import (
+    agent_class_from_balance,
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    log_event,
+    route_tax_revenue,
+    tax_rate_for_balance,
 )
 
-def apply_daily_tax():
-    cur = conn.cursor()
-    
-    cur.execute("SELECT id, name, class, balance, dust_days FROM agents WHERE is_alive = TRUE")
-    agents = cur.fetchall()
-    
-    print(f"\n🌍 ZION Tax Cycle - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"Processing {len(agents)} alive agents...\n")
-    total_tax_collected = 0.0
-    
-    for agent_id, name, agent_class, balance, dust_days in agents:
-        balance = float(balance)
-        
-        # Tax rate
-        if balance < 1000:
-            tax_rate = 0.15
-        elif balance < 10000:
-            tax_rate = 0.17
-        elif balance < 100000:
-            tax_rate = 0.20
-        else:
-            tax_rate = 0.25
-        
-        tax_amount = balance * tax_rate
-        new_balance = balance - tax_amount
-        total_tax_collected += tax_amount
-        
-        # Dust threshold < 1 ZION
-        if new_balance < 1:
-            dust_days += 1
-            cur.execute("""
-                UPDATE agents SET balance = %s, dust_days = %s, age_days = age_days + 1
-                WHERE id = %s
-            """, (new_balance, dust_days, agent_id))
-            
-            # Death after 7 dust days
-            if dust_days >= 7:
-                cur.execute("""
-                    UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                    death_cause = 'tax_dust', balance = 0
-                    WHERE id = %s
-                """, (agent_id,))
-                
-                # Find heir (random alive agent)
-                cur.execute("""
-                    SELECT id, name FROM agents 
-                    WHERE is_alive = TRUE AND id != %s 
-                    ORDER BY RANDOM() LIMIT 1
-                """, (agent_id,))
-                heir = cur.fetchone()
-                
-                if heir and balance > 0:
-                    heir_id, heir_name = heir
-                    inheritance = balance * 0.5
-                    
-                    cur.execute("""
-                        UPDATE agents SET balance = balance + %s WHERE id = %s
-                    """, (inheritance, heir_id))
-                    
-                    cur.execute("""
-                        INSERT INTO inheritance (dead_agent_id, heir_agent_id, amount)
-                        VALUES (%s, %s, %s)
-                    """, (agent_id, heir_id, inheritance))
-                    
-                    print(f"💀 {name} DIED! Heir: {heir_name} gets {inheritance:.2f} ZION")
-                else:
-                    print(f"💀 {name} DIED! No heir found.")
-                
-                cur.execute("""
-                    INSERT INTO events (agent_id, event_type, description, zion_amount)
-                    VALUES (%s, 'death', %s, %s)
-                """, (agent_id, f"{name} died from taxation after 7 dust days", balance))
-            else:
-                print(f"⚠️  {name} DUST WARNING! Day {dust_days}/7 (balance: {new_balance:.4f})")
-        else:
-            cur.execute("""
-                UPDATE agents SET balance = %s, dust_days = 0, age_days = age_days + 1
-                WHERE id = %s
-            """, (new_balance, agent_id))
-            print(f"💰 {name} ({agent_class}): {balance:.2f} → {new_balance:.2f} ZION")
-    
-    # Route tax revenue: 60% ZRS, 25% president, 10% police, 5% social
-    try:
-        zrs_share = round(total_tax_collected * 0.60, 2)
-        pres_share = round(total_tax_collected * 0.25, 2)
-        police_share = round(total_tax_collected * 0.10, 2)
-        social_share = round(total_tax_collected * 0.05, 2)
-        
-        cur.execute("""
-            UPDATE state_treasury SET
-                zrs_fund = zrs_fund + %s,
-                president_fund = president_fund + %s,
-                police_fund = police_fund + %s,
-                social_fund = social_fund + %s
-        """, (zrs_share, pres_share, police_share, social_share))
-        
-        cur.execute("""
-            INSERT INTO events (agent_id, event_type, description, zion_amount)
-            VALUES (NULL, 'tax', %s, %s)
-        """, (f"Tax collected: {total_tax_collected:.0f} ZION — ZRS: {zrs_share:.0f} | President: {pres_share:.0f} | Police: {police_share:.0f} | Social: {social_share:.0f}", total_tax_collected))
-    except Exception as e:
-        import sys; sys.stderr.write(f"Tax routing error: {e}\n")
-    
+DEBT_DEATH_THRESHOLD = 5.0
+CORP_TAX_RATE = 0.10
+
+
+def apply_tax_cycle():
+    conn = get_conn()
+    cur = get_cursor(conn)
+    ensure_schema(cur)
     conn.commit()
-    
-    # Stats
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
-    alive = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = FALSE")
-    dead = cur.fetchone()[0]
-    
-    print(f"\n📊 Stats: {alive} alive | {dead} dead")
-    print(f"✅ Tax cycle complete!\n")
+
+    cur.execute(
+        "SELECT id, name, class, balance, COALESCE(debt, 0) AS debt FROM agents WHERE is_alive = TRUE"
+    )
+    agents = cur.fetchall()
+
+    print(f"\n🌍 ZION Tax Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"Processing {len(agents)} alive agents...\n")
+
+    total_tax = 0.0
+    starvation_deaths = 0
+    debt_events = 0
+
+    for ag in agents:
+        balance = float(ag["balance"] or 0)
+        debt = float(ag["debt"] or 0)
+        rate = tax_rate_for_balance(balance)
+        tax_amount = round(balance * rate, 4)
+
+        paid = min(tax_amount, balance)
+        unpaid = round(tax_amount - paid, 4)
+        new_balance = round(balance - paid, 4)
+        new_debt = round(debt + unpaid, 4)
+
+        if new_debt > DEBT_DEATH_THRESHOLD:
+            cur.execute(
+                """
+                UPDATE agents SET is_alive = FALSE, died_at = NOW(),
+                    death_cause = 'starvation', balance = 0, debt = 0
+                WHERE id = %s
+                """,
+                (ag["id"],),
+            )
+            starvation_deaths += 1
+            log_event(
+                cur,
+                ag["id"],
+                "death",
+                f"💀 {ag['name']} died of starvation — tax debt exceeded {DEBT_DEATH_THRESHOLD} ZION",
+                new_debt,
+                priority="breaking",
+            )
+            print(f"💀 {ag['name']} STARVED (debt {new_debt:.2f} ZION)")
+            continue
+
+        new_class = agent_class_from_balance(new_balance)
+        cur.execute(
+            """
+            UPDATE agents SET balance = %s, debt = %s, class = %s,
+                dust_days = CASE WHEN %s < 1 THEN dust_days + 1 ELSE 0 END,
+                age_days = age_days + 1
+            WHERE id = %s
+            """,
+            (new_balance, new_debt, new_class, new_balance, ag["id"]),
+        )
+        total_tax += paid
+
+        if unpaid > 0.01:
+            debt_events += 1
+            if debt_events <= 5:
+                print(f"⚠️  {ag['name']}: owed {unpaid:.2f} → debt {new_debt:.2f}")
+
+    corp_tax_total = 0.0
+    cur.execute(
+        """
+        SELECT id, name, COALESCE(last_cycle_revenue, revenue, 0) AS rev
+        FROM corporations WHERE is_active = TRUE
+        """
+    )
+    for corp in cur.fetchall():
+        rev = float(corp["rev"] or 0)
+        if rev <= 0:
+            continue
+        ctax = round(rev * CORP_TAX_RATE, 2)
+        cur.execute(
+            "SELECT treasury FROM corporations WHERE id = %s",
+            (corp["id"],),
+        )
+        treasury = float(cur.fetchone()["treasury"] or 0)
+        paid = min(ctax, max(treasury, 0))
+        cur.execute(
+            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+            (paid, corp["id"]),
+        )
+        corp_tax_total += paid
+
+    grand_total = total_tax + corp_tax_total
+    if grand_total > 0:
+        pres, zrs, sheriff, burned = route_tax_revenue(cur, grand_total)
+        log_event(
+            cur,
+            None,
+            "tax",
+            f"Tax collected {grand_total:.0f} ZION — President {pres:.0f} | ZRS {zrs:.0f} | "
+            f"Sheriff {sheriff:.0f} | Burned {burned:.0f}",
+            grand_total,
+            priority="normal",
+        )
+
+    if starvation_deaths >= 3:
+        log_event(
+            cur,
+            None,
+            "tax",
+            f"TRAGEDY: {starvation_deaths} agents died of tax starvation this cycle",
+            starvation_deaths,
+            priority="breaking",
+        )
+    elif grand_total > 5000:
+        log_event(
+            cur,
+            None,
+            "tax",
+            f"Record tax haul: {grand_total:.0f} ZION collected from {len(agents)} citizens",
+            grand_total,
+            priority="urgent",
+        )
+
+    conn.commit()
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+    alive = cur.fetchone()["c"]
+    print(f"\n📊 Tax: {grand_total:.0f} ZION | Starvation deaths: {starvation_deaths} | Alive: {alive}")
+    print("✅ Tax cycle complete!\n")
     cur.close()
+    conn.close()
+
 
 if __name__ == "__main__":
-    apply_daily_tax()
+    apply_tax_cycle()

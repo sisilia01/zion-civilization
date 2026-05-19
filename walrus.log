@@ -398,3 +398,51 @@ Walrus store error: HTTPSConnectionPool(host='publisher.walrus-testnet.walrus.sp
   civilization_snapshot: NP_e7X8oBeNjO3wuj4cL... (12:55)
 
 ✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 16:04
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: JwdezyihwS8T1lM4pgcfUr2FUCGiBtVUd-Ncu_qkLoA
+   Sui Object: 0x154f5c3bd5d29976ca4b55746216d3c1a7e735554954836e0447e041484fa775
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/JwdezyihwS8T1lM4pgcfUr2FUCGiBtVUd-Ncu_qkLoA
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: JwdezyihwS8T1lM4pgcf... (16:04)
+  civilization_snapshot: NElpNlF8vy26HzXSxzMG... (15:04)
+  civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
+  civilization_snapshot: us10_R2jJ1JGHI2FjXaO... (13:03)
+  civilization_snapshot: J5krtpoFqXUZMhAzMd0p... (13:00)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 17:04
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: DxU9kIlkxsJF0obM-J_piQmwz8oLB4KXON5P1Rh8H6o
+   Sui Object: 0x93dc2323fcfce5d540291a3bff712daa2d36f90d7b9eb354d139d360e4c5b28d
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/DxU9kIlkxsJF0obM-J_piQmwz8oLB4KXON5P1Rh8H6o
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: DxU9kIlkxsJF0obM-J_p... (17:04)
+  civilization_snapshot: JwdezyihwS8T1lM4pgcf... (16:04)
+  civilization_snapshot: NElpNlF8vy26HzXSxzMG... (15:04)
+  civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
+  civilization_snapshot: us10_R2jJ1JGHI2FjXaO... (13:03)
+
+✅ Walrus cycle complete!
+
+🐋 ZION Walrus Integration — 2026-05-19 18:04
+==================================================
+✅ Snapshot stored on Walrus!
+   Blob ID: NCDOOdekcr7AWmYDuQ7u2UWiFd8mlJWdUJYQ1KHnIvM
+   Sui Object: 0xfc4e25b545a14ea692e86d19af2cac1fc49e1e57abc100a697ec8f81a3359354
+   View: https://aggregator.walrus-testnet.walrus.space/v1/blobs/NCDOOdekcr7AWmYDuQ7u2UWiFd8mlJWdUJYQ1KHnIvM
+
+📊 Recent Walrus blobs (5):
+  civilization_snapshot: NCDOOdekcr7AWmYDuQ7u... (18:04)
+  civilization_snapshot: DxU9kIlkxsJF0obM-J_p... (17:04)
+  civilization_snapshot: JwdezyihwS8T1lM4pgcf... (16:04)
+  civilization_snapshot: NElpNlF8vy26HzXSxzMG... (15:04)
+  civilization_snapshot: 9oTb8xQIy8SjjlTiYx4E... (14:03)
+
+✅ Walrus cycle complete!
