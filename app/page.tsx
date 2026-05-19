@@ -661,6 +661,46 @@ const DEEPBOOK_BINARY_MARKETS: ZionbetApiMarket[] = [
   { id: "sui_24h", question: "Will SUI go UP today?", event_type: "sui_24h", timeframe: "24h", category: "crypto", yes_pct: 50, no_pct: 50, token: "SUI" },
 ];
 
+const isDeepbookCryptoMarket = (marketId: string) =>
+  marketId.startsWith("btc") || marketId.startsWith("eth") || marketId.startsWith("sui");
+
+const CryptoIcon = ({ marketId }: { marketId: string }) => {
+  const getBgColor = () => {
+    if (marketId.startsWith("btc")) return "#F7931A";
+    if (marketId.startsWith("eth")) return "#627EEA";
+    if (marketId.startsWith("sui")) return "#4DA2FF";
+    return "#666";
+  };
+  const getSymbol = () => {
+    if (marketId.startsWith("btc")) return "₿";
+    if (marketId.startsWith("eth")) return "Ξ";
+    if (marketId.startsWith("sui")) return "SUI";
+    return "?";
+  };
+  return (
+    <div
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: "50%",
+        background: getBgColor(),
+        border: "2px solid gold",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
+        fontWeight: "bold",
+        fontSize: marketId.startsWith("sui") ? 10 : 18,
+        flexShrink: 0,
+        boxShadow: "0 0 8px gold",
+      }}
+      aria-hidden
+    >
+      {getSymbol()}
+    </div>
+  );
+};
+
 const POLY_TABS: ZionbetBetTab[] = [
   "crypto", "sports", "politics", "economics", "geopolitics", "culture",
 ];
@@ -1031,6 +1071,7 @@ function ZionBetMarketCardItem({
 }) {
   const [hovered, setHovered] = useState(false);
   const resolvedImageUrl = (imageUrl ?? marketApi.image_url)?.trim() || null;
+  const showCryptoIcon = isDeepbookCryptoMarket(marketApi.id);
   const displayEmoji = zionbetCardFallbackEmoji(marketApi, betTab);
   const cardBase: CSSProperties = {
     position: "relative",
@@ -1085,7 +1126,9 @@ function ZionBetMarketCardItem({
         </span>
       ) : null}
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
-        {resolvedImageUrl ? (
+        {showCryptoIcon ? (
+          <CryptoIcon marketId={marketApi.id} />
+        ) : resolvedImageUrl ? (
           <div
             style={{
               width: 40,
