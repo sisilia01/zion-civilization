@@ -43,7 +43,7 @@ CRON_SCRIPTS = {
     "zionwork":     ("zionwork.py",       1800),
     "neo":          ("neo.py",            3600),
     "politics":     ("politics.py",       3600),
-    "frs":          ("frs.py",            1800),
+    # frs.py retired — zrs.py is canonical central bank (avoids duplicate QE)
     "zrs":          ("zrs.py",            7200),
     "president":    ("president.py",      3600),
     "sheriff":      ("sheriff.py",        3600),

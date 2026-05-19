@@ -89,28 +89,60 @@ def get_child_balance(parent_balance, parent_class):
         birth_cost = 0.8 * parent_balance
     return birth_cost * 0.70
 
-def run_birth_cycle(base_balance=50):
+def run_birth_cycle(base_balance=10):
     cur = conn.cursor()
-    
-    cur.execute("""
-        SELECT id, name, class, balance FROM agents 
-        WHERE is_alive = TRUE AND balance > 0
-        ORDER BY RANDOM() LIMIT 500
-    """)
-    agents = cur.fetchall()
-    
+
+    cur.execute(
+        "SELECT COALESCE(AVG(balance), 0) FROM agents WHERE is_alive = TRUE"
+    )
+    avg_balance = float(cur.fetchone()[0] or 0)
+    if avg_balance > 8:
+        birth_rate = 0.02
+    elif avg_balance < 4:
+        birth_rate = 0.005
+    else:
+        birth_rate = 0.01
+
+    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
+    alive_total = int(cur.fetchone()[0] or 0)
+    max_births = max(1, int(alive_total * birth_rate))
+
+    cur.execute(
+        """
+        SELECT id, name, class, balance, COALESCE(age_days, 0) AS age_days FROM agents
+        WHERE is_alive = TRUE
+        """
+    )
+    all_agents = cur.fetchall()
+
     print(f"\n👶 ZION Birth Cycle - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    
+    print(f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | Cap: {max_births}")
+
+    deaths_old = 0
+    for agent_id, name, agent_class, balance, age_days in all_agents:
+        if age_days > 90 and random.random() < 0.15:
+            cur.execute(
+                """
+                UPDATE agents SET is_alive = FALSE, died_at = NOW(),
+                    death_cause = 'old_age', balance = 0
+                WHERE id = %s
+                """,
+                (agent_id,),
+            )
+            deaths_old += 1
+
+    random.shuffle(all_agents)
+    agents = all_agents[: max(max_births * 5, 100)]
+
     births = 0
-    for agent_id, name, agent_class, balance in agents:
+    for agent_id, name, agent_class, balance, age_days in agents:
         balance = float(balance)
         
         if not can_reproduce(balance, agent_class, base_balance):
             continue
         
-        # 30% chance to reproduce each cycle
-        if random.random() > 0.30:
-            continue
+        if births >= max_births:
+            break
         
         # Get child balance
         child_balance = get_child_balance(balance, agent_class)
@@ -164,7 +196,7 @@ def run_birth_cycle(base_balance=50):
     cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
     alive = cur.fetchone()[0]
     
-    print(f"\n📊 Births this cycle: {births} | Total alive: {alive}")
+    print(f"\n📊 Births: {births} | Old-age deaths: {deaths_old} | Total alive: {alive}")
     print("✅ Birth cycle complete!\n")
     cur.close()
 

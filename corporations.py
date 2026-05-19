@@ -14,8 +14,27 @@ from civ_common import (
 
 MAX_LOAN = 5000.0
 MIN_LOAN = 100.0
-SALARY_PER_EMP = 3.0
+SALARY_PER_EMP = 1.2  # payroll circulates to agents (see pay_payroll)
+BASE_REVENUE_PER_EMP = 2.0  # floor so revenue can exceed payroll at typical headcount
 BANKRUPTCY_CYCLES = 3
+
+
+def pay_payroll(cur, emp: int, salary_pool: float) -> float:
+    """Pay employees from corp treasury — keeps ZION in agent circulation."""
+    if emp <= 0 or salary_pool <= 0:
+        return 0.0
+    per_emp = round(salary_pool / emp, 4)
+    cur.execute(
+        """
+        UPDATE agents SET balance = balance + %s
+        WHERE id IN (
+            SELECT id FROM agents WHERE is_alive = true
+            ORDER BY RANDOM() LIMIT %s
+        )
+        """,
+        (per_emp, emp),
+    )
+    return round(per_emp * emp, 2)
 
 
 def ensure_corp_tables(cur):
@@ -70,11 +89,14 @@ def run_cycle():
     for corp in corps:
         emp = int(corp["employees"] or 0)
         mult = sector_multiplier(corp["corp_type"])
-        revenue = round(emp * mult * random.uniform(0.8, 1.2), 2) if emp > 0 else 0.0
+        raw_rev = emp * mult * random.uniform(0.8, 1.2) if emp > 0 else 0.0
+        revenue = round(max(raw_rev, emp * BASE_REVENUE_PER_EMP * mult * 0.5), 2) if emp > 0 else 0.0
         loan_interest = round(float(corp["debt"] or 0) * (interest / 100), 2)
-        expenses = round(emp * SALARY_PER_EMP + loan_interest, 2)
+        salary_pool = round(emp * SALARY_PER_EMP, 2)
+        expenses = salary_pool + loan_interest
 
         treasury = float(corp["treasury"] or 0) + revenue - expenses
+        pay_payroll(cur, emp, salary_pool)
 
         neg = int(corp["negative_cycles"] or 0)
         if treasury < 0:
