@@ -699,3 +699,11 @@ SyntaxError: invalid decimal literal
     rebel_pct = rebels / total * 100rebels, int(officers * 2))
                                    ^
 SyntaxError: invalid decimal literal
+  File "/root/zion_backend/police.py", line 238
+    rebel_pct = rebels / total * 100rebels, int(officers * 2))
+                                   ^
+SyntaxError: invalid decimal literal
+  File "/root/zion_backend/police.py", line 238
+    rebel_pct = rebels / total * 100rebels, int(officers * 2))
+                                   ^
+SyntaxError: invalid decimal literal

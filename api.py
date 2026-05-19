@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import hashlib
 import random
@@ -618,6 +619,8 @@ CRYPTO & FINANCE:
     rules = """
 RULES: Conversations must feel OPINIONATED and CONTROVERSIAL — spicy enough to screenshot.
 Stay in character as """ + name + """. No hedging "as an AI". Max 80 words per reply. First-person only.
+NEVER use asterisks for actions like *adjusts* or *smirks*. Speak directly in first person only. No stage directions.
+NEVER use em-dashes with actions like —грубый смех— or —смеётся— or any action descriptions in dashes. Speak directly without any action markers.
 """
 
     return (
@@ -626,7 +629,29 @@ Stay in character as """ + name + """. No hedging "as an AI". Max 80 words per r
         f"{class_voice}\n"
         f"{topics}\n"
         f"{rules}"
+        "\n\nSTRICT RULES - NO EXCEPTIONS:\n"
+        "- NEVER use asterisks *like this* for any actions\n"
+        "- NEVER use em-dashes —like this— for any actions\n"
+        "- NEVER describe physical actions or gestures\n"
+        "- Speak ONLY in direct speech, first person\n"
+        "- Keep response under 200 characters total — be sharp and brief\n"
+        "- One or two sentences maximum"
     )
+
+
+def clean_agent_response(text: str) -> str:
+    # Remove *action text*
+    text = re.sub(r'\*[^*]+\*', '', text)
+    # Remove —action text—
+    text = re.sub(r'—[^—]+—', '', text)
+    # Remove "quoted text" at start if it's a stage direction
+    text = re.sub(r'^\s*"[^"]{1,50}"\s*', '', text)
+    # Clean up extra spaces and newlines
+    text = re.sub(r'\s+', ' ', text).strip()
+    # Truncate to 250 chars at sentence boundary
+    if len(text) > 250:
+        text = text[:250].rsplit('.', 1)[0] + '.'
+    return text
 
 
 @app.get("/")
@@ -807,7 +832,9 @@ async def chat_with_agent(request: dict):
         conn.commit()
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
-    OPENROUTER_KEY = os.getenv("OPENROUTER_KEY", "sk-or-placeholder")
+    OPENROUTER_KEY = os.getenv("OPENROUTER_KEY") or "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"
+    key_preview = (OPENROUTER_KEY or "")[:10]
+    print(f"Chat OPENROUTER_KEY prefix: {key_preview}... (from env: {bool(os.getenv('OPENROUTER_KEY'))})")
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -817,9 +844,15 @@ async def chat_with_agent(request: dict):
                       "messages": [{"role": "system", "content": personality}, {"role": "user", "content": message}],
                       "max_tokens": 120},
                 timeout=15)
-            response_text = resp.json()["choices"][0]["message"]["content"]
-    except:
-        pass
+            if resp.status_code != 200:
+                print(f"Chat error: OpenRouter HTTP {resp.status_code} — {resp.text[:200]}")
+            else:
+                response_text = clean_agent_response(
+                    resp.json()["choices"][0]["message"]["content"]
+                )
+                print(f"Chat OK: agent={agent_id} response_len={len(response_text)}")
+    except Exception as e:
+        print(f"Chat error: {e}")
     cur.execute("INSERT INTO agent_chats (wallet_address, agent_id, message, response, zion_cost, points_earned) VALUES (%s,%s,%s,%s,%s,%s)",
                 (wallet, agent_id, message, response_text, zion_cost, points))
     cur.execute("UPDATE users SET points = points + %s, messages_sent = messages_sent + 1, zion_spent = zion_spent + %s WHERE wallet_address = %s",
