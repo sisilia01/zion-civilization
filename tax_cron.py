@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from civ_common import (
+    DAILY_FOOD_COST,
     agent_class_from_balance,
     ensure_schema,
     get_conn,
@@ -43,10 +44,14 @@ def apply_tax_cycle():
     print(f"Processing {len(agents)} alive agents | ZRS modifier +{tax_modifier_pct*100:.1f}%\n")
 
     total_tax = 0.0
+    total_food = 0.0
     starvation_deaths = 0
 
     for ag in agents:
         balance = float(ag["balance"] or 0)
+        food_cost = min(DAILY_FOOD_COST, balance)
+        balance = round(balance - food_cost, 4)
+        total_food += food_cost
         debt = float(ag["debt"] or 0)
         base_rate = tax_rate_for_balance(balance)
         rate = max(0.0, base_rate + tax_modifier_pct)
@@ -148,7 +153,10 @@ def apply_tax_cycle():
     conn.commit()
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive = cur.fetchone()["c"]
-    print(f"\n📊 Tax: {grand_total:.0f} ZION | Starvation deaths: {starvation_deaths} | Alive: {alive}")
+    print(
+        f"\n📊 Tax: {grand_total:.0f} ZION | Food: {total_food:.0f} ZION | "
+        f"Starvation deaths: {starvation_deaths} | Alive: {alive}"
+    )
     print("✅ Tax cycle complete!\n")
     cur.close()
     conn.close()

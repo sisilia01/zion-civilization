@@ -73,6 +73,41 @@ def inject_to_agents(cur, amount: float, where_sql: str = "is_alive = true") -> 
     return n, total
 
 
+def record_zrs_policy(
+    cur,
+    state: str,
+    action: str,
+    amount: float,
+    headline: str,
+    econ: dict | None = None,
+    rate: float = 0.0,
+):
+    """Always log latest ZRS action for API / eco-pol (ORDER BY created_at DESC)."""
+    cur.execute(
+        """
+        INSERT INTO zrs_policy (
+            state, action_taken, amount, news_headline, created_at,
+            avg_balance, poverty_pct, corp_treasury_total, inflation_index,
+            interest_rate, policy_mode, poor_pct, total_money
+        ) VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            state,
+            action,
+            round(amount, 2),
+            headline,
+            round((econ or {}).get("avg_balance", 0), 2),
+            round((econ or {}).get("poverty_pct", 0), 2),
+            round((econ or {}).get("corp_treasury_total", 0), 2),
+            (econ or {}).get("inflation_index", 0),
+            rate,
+            state,
+            round((econ or {}).get("poverty_pct", 0), 2),
+            round((econ or {}).get("total_money", 0), 2),
+        ),
+    )
+
+
 def absorb_from_agents(cur, rate: float) -> float:
     cur.execute(
         "SELECT id, balance FROM agents WHERE is_alive = true AND balance > 0"
@@ -238,34 +273,13 @@ def main():
     )
 
     reserve_after = zrs_reserve(cur)
-    news_headline = (
-        f"ZRS {state}: {action} — reserve {reserve_after:,.0f} ZION, "
-        f"interest {rate}%, avg {econ['avg_balance']:.1f}, poverty {econ['poverty_pct']:.0f}%"
-    )
+    if not headline:
+        headline = (
+            f"ZRS {state}: {action} — reserve {reserve_after:,.0f} ZION, "
+            f"interest {rate}%, avg {econ['avg_balance']:.1f}, poverty {econ['poverty_pct']:.0f}%"
+        )
 
-    cur.execute(
-        """
-        INSERT INTO zrs_policy (
-            state, avg_balance, poverty_pct, corp_treasury_total,
-            inflation_index, interest_rate, action_taken, amount, news_headline,
-            policy_mode, poor_pct, total_money
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            state,
-            round(econ["avg_balance"], 2),
-            round(econ["poverty_pct"], 2),
-            round(econ["corp_treasury_total"], 2),
-            econ["inflation_index"],
-            rate,
-            action,
-            round(amount, 2),
-            news_headline,
-            state,
-            round(econ["poverty_pct"], 2),
-            round(econ["total_money"], 2),
-        ),
-    )
+    record_zrs_policy(cur, state, action, amount, headline, econ, rate)
 
     conn.commit()
     print(f"Mode: {state} | Reserve: {reserve_before:,.0f} → {reserve_after:,.0f}")

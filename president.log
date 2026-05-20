@@ -732,3 +732,25 @@ President: Blake Miller 1393 | Approval: 10% | Poverty: 6% | Treasury: 175,126,2
 LINE 3:                 owner = 'state', negative_cycles = 0
                         ^
 
+Traceback (most recent call last):
+  File "/root/zion_backend/president.py", line 348, in main
+    execute_decision(cur, data)
+  File "/root/zion_backend/president.py", line 231, in execute_decision
+    nationalize_bankrupt_corps(cur, pres)
+  File "/root/zion_backend/president.py", line 136, in nationalize_bankrupt_corps
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedColumn: column "owner" of relation "corporations" does not exist
+LINE 3:                 owner = 'state', negative_cycles = 0
+                        ^
+
+
+🏛️ ZION President — 2026-05-20 15:19
+==================================================
+President: Blake Miller 1393 | Approval: 10% | Poverty: 3% | Treasury: 13,764,339
+❌ Error: column "owner" of relation "corporations" does not exist
+LINE 3:                 owner = 'state', negative_cycles = 0
+                        ^
+

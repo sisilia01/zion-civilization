@@ -51,6 +51,11 @@ def log_event(cur, agent_id, event_type, description, amount=0, priority="normal
 
 ZRS_RESERVE_FLOOR = 4_000_000.0  # 10% of 40M ZRS reserve (100M total supply)
 
+# Education & living costs (100M supply economy)
+UNIVERSITY_COST = 2000
+ACADEMY_COST = 1000
+DAILY_FOOD_COST = 50
+
 
 def agent_class_from_balance(balance: float) -> str:
     """100M supply tiers (~13k avg per agent): poor / working / middle / elite."""

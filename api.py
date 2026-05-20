@@ -2288,11 +2288,13 @@ async def get_frs_stats():
         """)
         economy = cur.fetchone()
         
-        # Последние решения ФРС
+        # Last ZRS policy actions (zrs_policy table — not legacy frs_actions)
         cur.execute("""
-            SELECT action, amount, reason, performed_at 
-            FROM frs_actions 
-            ORDER BY performed_at DESC LIMIT 5
+            SELECT action_taken AS action, amount,
+                   news_headline AS reason, created_at AS performed_at, state
+            FROM zrs_policy
+            ORDER BY created_at DESC NULLS LAST, id DESC
+            LIMIT 5
         """)
         actions = cur.fetchall()
         
@@ -2311,10 +2313,10 @@ async def get_frs_stats():
         """)
         law = cur.fetchone()
 
-        # Корпорации
+        # Corporations with treasury > 0 (active in economy)
         cur.execute("""
-            SELECT COUNT(*) as count, SUM(treasury) as total_treasury
-            FROM corporations WHERE is_active = true
+            SELECT COUNT(*) AS count, COALESCE(SUM(treasury), 0) AS total_treasury
+            FROM corporations WHERE treasury > 0
         """)
         corps = cur.fetchone()
 
@@ -2360,22 +2362,62 @@ async def get_frs_stats():
 # ============ ECO / POLITICS (live president + sheriff) ============
 @app.get("/eco-pol")
 async def get_eco_pol():
-    """Fresh president + sheriff for treasury UI (no cache)."""
+    """President, sheriff, ZRS, corporations, economy — live DB for ECO-POL tab."""
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute("""
             SELECT agent_name, party, term_number, is_dictator,
-                   approval_rating, days_in_power, police_fund, personal_fund
+                   approval_rating, days_in_power, police_fund, personal_fund,
+                   COALESCE(corruption_index, 30) AS corruption_index
             FROM president_state WHERE is_active = true LIMIT 1
         """)
         pres = cur.fetchone()
+
         cur.execute("""
             SELECT agent_name, sheriff_type, approval_rating,
                    police_budget, police_count, term_number, days_in_office
             FROM sheriff_state WHERE is_active = true LIMIT 1
         """)
         sher = cur.fetchone()
+
+        cur.execute("""
+            SELECT state, action_taken, amount, news_headline, created_at
+            FROM zrs_policy
+            ORDER BY created_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """)
+        zrs_row = cur.fetchone()
+
+        cur.execute("""
+            SELECT COUNT(*) AS active, COALESCE(SUM(treasury), 0) AS total_treasury
+            FROM corporations WHERE treasury > 0
+        """)
+        corps = cur.fetchone()
+
+        cur.execute("""
+            SELECT
+                COALESCE(AVG(balance), 0) AS avg_balance,
+                COALESCE(SUM(balance), 0) AS total_zion,
+                COUNT(*) AS total_agents,
+                COUNT(*) FILTER (WHERE balance < 100 OR class IN ('poor', 'critical')) AS poor_count
+            FROM agents WHERE is_alive = true
+        """)
+        econ = cur.fetchone()
+        total_agents = max(int(econ["total_agents"] or 0), 1)
+        poverty_pct = round(float(econ["poor_count"] or 0) / total_agents * 100, 1)
+
+        zrs_last_action = None
+        if zrs_row:
+            created = zrs_row["created_at"]
+            zrs_last_action = {
+                "state": zrs_row["state"],
+                "action_taken": zrs_row["action_taken"],
+                "amount": round(float(zrs_row["amount"] or 0), 2),
+                "news_headline": zrs_row["news_headline"],
+                "created_at": created.isoformat() if hasattr(created, "isoformat") else str(created),
+            }
+
         return {
             "president": dict(pres) if pres else None,
             "sheriff": dict(sher) if sher else {
@@ -2386,6 +2428,16 @@ async def get_eco_pol():
                 "police_count": 0,
                 "term_number": 0,
                 "days_in_office": 0,
+            },
+            "zrs_last_action": zrs_last_action,
+            "corporations": {
+                "active": int(corps["active"] or 0) if corps else 0,
+                "total_treasury": round(float(corps["total_treasury"] or 0), 2) if corps else 0,
+            },
+            "economy": {
+                "avg_balance": round(float(econ["avg_balance"] or 0), 1),
+                "poverty_pct": poverty_pct,
+                "total_zion": round(float(econ["total_zion"] or 0), 2),
             },
         }
     finally:
