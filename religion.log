@@ -17656,3 +17656,22 @@ Prayers: 998 | Tithes: 386.54 ZION | Church treasury: 436,072
 Prayers: 989 | Tithes: 342.09 ZION | Church treasury: 436,414
 
 ✅ Religion cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/religion.py", line 209, in <module>
+    main()
+  File "/root/zion_backend/religion.py", line 181, in main
+    ensure_church(cur)
+  File "/root/zion_backend/religion.py", line 21, in ensure_church
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 171, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 102, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 1009454 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 1009455.
+Process 1009455 waits for AccessShareLock on relation 16424 of database 16388; blocked by process 1009454.
+HINT:  See server log for query details.
+
