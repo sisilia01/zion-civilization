@@ -8,7 +8,13 @@ import random
 import traceback
 from datetime import datetime
 
-from civ_common import ensure_schema
+from civ_common import (
+    ensure_schema,
+    is_martial_law_active,
+    is_uprising_active,
+    log_event as civ_log_event,
+    sync_police_divisions,
+)
 from civ_governance import (
     attempt_coup,
     process_sheriff_orders,
@@ -64,6 +70,23 @@ def get_sheriff():
     return cur.fetchone()
 
 
+def sheriff_budget_warning(sheriff):
+    """Low police budget: no hiring, demoralized force."""
+    budget = float(sheriff.get("police_budget") or 0)
+    if budget >= 100:
+        return
+    civ_log_event(
+        cur,
+        sheriff["agent_id"],
+        "sheriff_action",
+        f"URGENT: Sheriff {sheriff['agent_name']} — police budget {budget:.0f} ZION! "
+        f"Cannot hire; force efficiency -20%",
+        budget,
+        priority="urgent",
+    )
+    print(f"⚠️ Police budget critical: {budget:.0f} ZION")
+
+
 def run_sheriff_election(forced=False):
     """Run sheriff election with voting, corporate bribes, and sheriff type assignment."""
     reason = "forced early election" if forced else "regular election"
@@ -108,7 +131,7 @@ def run_sheriff_election(forced=False):
     if bribe_total > 0:
         log_event(
             None,
-            "police",
+            "sheriff_action",
             f"Corporations spent {bribe_total:.0f} ZION bribing sheriff election voters!",
             bribe_total,
         )
@@ -149,11 +172,12 @@ def run_sheriff_election(forced=False):
 
     log_event(
         winner["id"],
-        "police",
+        "sheriff_action",
         f"{winner['name']} elected Sheriff! Type: {type_desc[sheriff_type]}. "
         f"Votes: {winner_votes}/{len(voters)}",
         winner_votes,
     )
+    sync_police_divisions(cur)
     print(f"Sheriff elected: {winner['name']} ({sheriff_type}) — {winner_votes}/{len(voters)} votes")
     return winner
 
@@ -213,7 +237,7 @@ def sheriff_actions(sheriff):
             (fines,),
         )
 
-        if budget > 200:
+        if budget >= 200:
             new_cops = random.randint(2, 8)
             cost = new_cops * 10
             cur.execute(
@@ -239,7 +263,7 @@ def sheriff_actions(sheriff):
 
         log_event(
             sid,
-            "police",
+            "sheriff_action",
             f"Sheriff {name} cracked down on crime! Collected {fines:.0f} ZION in fines. "
             f"Police force: {police} officers.",
             fines,
@@ -271,7 +295,7 @@ def sheriff_actions(sheriff):
 
         log_event(
             sid,
-            "police",
+            "sheriff_action",
             f"CORRUPT Sheriff {name} took {bribes:.0f} ZION in clan bribes! "
             f"Crime flourishes. Police look the other way.",
             bribes,
@@ -299,7 +323,7 @@ def sheriff_actions(sheriff):
                 WHERE is_alive=true AND class='critical'
                 AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
             """, (new_cops,))
-            log_event(sid, 'police',
+            log_event(sid, 'sheriff_action',
                      f"⚔️ Junta Sheriff {name} expands military! Recruited {new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
                      cost)
             print(f"⚔️ Junta: +{new_cops} officers hired")
@@ -311,7 +335,7 @@ def sheriff_actions(sheriff):
             seized = round(float(clan_target['treasury']) * 0.15, 2)
             cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s", (seized, clan_target['id']))
             cur.execute("UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active=true", (seized,))
-            log_event(sid, 'police',
+            log_event(sid, 'sheriff_action',
                      f"⚔️ Junta forces seized {seized:.0f} ZION from {clan_target['name']}! Military growing stronger.",
                      seized)
             print(f"⚔️ Junta seized {seized:.0f} from {clan_target['name']}")
@@ -328,7 +352,7 @@ def sheriff_actions(sheriff):
                 )
                 log_event(
                     sid,
-                    "police",
+                    "sheriff_action",
                     f"COUP! Sheriff {name} arrested President {president['agent_name']}! "
                     f"Military junta takes control! Martial law declared!",
                     0,
@@ -352,7 +376,7 @@ def sheriff_actions(sheriff):
                 )
                 log_event(
                     None,
-                    "police",
+                    "sheriff_action",
                     f"Coup resistance crushed! {deaths} agents killed in street fighting.",
                     deaths * 10,
                 )
@@ -361,7 +385,7 @@ def sheriff_actions(sheriff):
             else:
                 log_event(
                     sid,
-                    "police",
+                    "sheriff_action",
                     f"Sheriff {name} (JUNTA) attempted coup but failed. Tensions rise.",
                     0,
                 )
@@ -370,7 +394,7 @@ def sheriff_actions(sheriff):
         else:
             log_event(
                 sid,
-                "police",
+                "sheriff_action",
                 f"Sheriff {name} (JUNTA) bides his time. Approval: {approval}%",
                 0,
             )
@@ -412,7 +436,7 @@ def check_interaction_with_president():
             )
             log_event(
                 sheriff["agent_id"],
-                "police",
+                "sheriff_action",
                 f"Sheriff {sheriff['agent_name']} REFUSES to support dictator "
                 f"{president['agent_name']}! Police stand with the people!",
                 0,
@@ -429,7 +453,7 @@ def check_interaction_with_president():
                 cur.execute("UPDATE president_state SET is_active = false WHERE is_active = true")
                 log_event(
                     sheriff["agent_id"],
-                    "police",
+                    "sheriff_action",
                     f"Sheriff {sheriff['agent_name']} ARRESTED dictator "
                     f"{president['agent_name']}! Democracy restored!",
                     0,
@@ -454,7 +478,7 @@ def check_interaction_with_president():
             )
             log_event(
                 None,
-                "police",
+                "sheriff_action",
                 f"CORRUPT REGIME: Dictator + Corrupt Sheriff oppress citizens! "
                 f"{victims} poor agents killed! City in chaos!",
                 victims * 10,
@@ -477,7 +501,7 @@ def check_term_end(sheriff):
         )
         log_event(
             sheriff["agent_id"],
-            "police",
+            "sheriff_action",
             f"Sheriff {sheriff['agent_name']} re-elected for term 2!",
             0,
         )
@@ -487,7 +511,7 @@ def check_term_end(sheriff):
         if sheriff["sheriff_type"] == "junta" and random.random() < 0.4:
             log_event(
                 sheriff["agent_id"],
-                "police",
+                "sheriff_action",
                 f"Sheriff {sheriff['agent_name']} REFUSES to step down! Military coup imminent!",
                 0,
             )
@@ -497,7 +521,7 @@ def check_term_end(sheriff):
             cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
             log_event(
                 sheriff["agent_id"],
-                "police",
+                "sheriff_action",
                 f"Sheriff {sheriff['agent_name']} completed 2 terms. New election called.",
                 0,
             )
@@ -531,7 +555,7 @@ def main():
         if sheriff and sheriff['approval_rating'] <= 0:
             record_last_sheriff_agent(cur)
             cur.execute("UPDATE sheriff_state SET is_active=false WHERE is_active=true")
-            log_event(sheriff['agent_id'], 'police',
+            log_event(sheriff['agent_id'], 'sheriff_action',
                      f"🗳️ Sheriff {sheriff['agent_name']} removed from office! Approval hit 0%. Emergency election called!",
                      0)
             conn.commit()
@@ -539,6 +563,7 @@ def main():
             conn.commit()
             return
 
+        sheriff_budget_warning(sheriff)
         sheriff_actions(sheriff)
         sheriff = get_sheriff()
         process_sheriff_orders(cur, sheriff)
@@ -548,6 +573,8 @@ def main():
         attempt_coup(cur, sheriff, president)
         check_interaction_with_president()
         check_term_end(sheriff)
+        if not is_uprising_active(cur) and not is_martial_law_active(cur):
+            sync_police_divisions(cur)
 
         conn.commit()
         print("\nSheriff cycle complete!")

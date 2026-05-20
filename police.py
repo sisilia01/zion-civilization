@@ -3,12 +3,102 @@
 import random
 from datetime import datetime
 
-from civ_common import ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    OFFICER_SALARY_PER_CYCLE,
+    cleanup_expired_effects,
+    effective_crime_multiplier,
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    get_division_officers,
+    is_martial_law_active,
+    is_uprising_active,
+    log_event,
+    restore_after_martial_law,
+    sync_police_divisions,
+)
 
 
 def get_sheriff(cur):
     cur.execute("SELECT * FROM sheriff_state WHERE is_active = true LIMIT 1")
     return cur.fetchone()
+
+
+def police_salary_check(cur) -> int:
+    """Pay 5 ZION/officer/cycle; underfunded divisions lose officers proportionally."""
+    cur.execute(
+        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    sh = cur.fetchone()
+    if not sh:
+        return 0
+
+    total_officers = int(sh["police_count"] or 0)
+    budget = float(sh["police_budget"] or 0)
+    salary_needed = total_officers * OFFICER_SALARY_PER_CYCLE
+    if salary_needed <= 0:
+        return 0
+
+    if budget >= salary_needed:
+        cur.execute(
+            """
+            UPDATE sheriff_state SET police_budget = police_budget - %s
+            WHERE is_active = true
+            """,
+            (salary_needed,),
+        )
+        return 0
+
+    paid = budget
+    cur.execute(
+        "UPDATE sheriff_state SET police_budget = 0 WHERE is_active = true"
+    )
+    pay_ratio = paid / salary_needed if salary_needed > 0 else 0
+    quit_total = max(1, int(total_officers * (1 - pay_ratio)))
+
+    cur.execute("SELECT division_name, officers FROM police_divisions WHERE officers > 0")
+    divs = cur.fetchall()
+    if not divs:
+        new_count = max(5, total_officers - quit_total)
+        cur.execute(
+            "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
+            (new_count,),
+        )
+    else:
+        div_officer_sum = sum(int(d["officers"] or 0) for d in divs)
+        for d in divs:
+            share = int(d["officers"] or 0) / max(div_officer_sum, 1)
+            loss = max(0, int(quit_total * share))
+            new_o = max(0, int(d["officers"] or 0) - loss)
+            cur.execute(
+                "UPDATE police_divisions SET officers = %s WHERE division_name = %s",
+                (new_o, d["division_name"]),
+            )
+        cur.execute("SELECT COALESCE(SUM(officers), 0) AS s FROM police_divisions")
+        new_total = int((cur.fetchone() or {}).get("s") or 0)
+        cur.execute(
+            "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
+            (max(5, new_total),),
+        )
+
+    log_event(
+        cur,
+        None,
+        "police_action",
+        f"NORMAL: Officer exodus: {quit_total} police quit unpaid wages!",
+        quit_total,
+        priority="urgent",
+    )
+    log_event(
+        cur,
+        None,
+        "police_action",
+        "URGENT: Police losing officers — budget depleted!",
+        paid,
+        priority="urgent",
+    )
+    print(f"💸 Salary crisis: {quit_total} officers quit (paid {paid:.0f}/{salary_needed:.0f})")
+    return quit_total
 
 
 def gang_strength(cur, clan_id):
@@ -27,6 +117,8 @@ def main():
     conn = get_conn()
     cur = get_cursor(conn)
     ensure_schema(cur)
+    cleanup_expired_effects(cur)
+    restore_after_martial_law(cur)
     conn.commit()
 
     print(f"\n🚔 ZION Police — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -37,8 +129,12 @@ def main():
         conn.close()
         return
 
-    police_count = int(sheriff.get("police_count") or 20)
-    police_strength = police_count * 10
+    police_salary_check(cur)
+
+    swat_officers = get_division_officers(cur, "SWAT") or int(sheriff.get("police_count") or 20)
+    police_strength = swat_officers * 10
+    crime_mult = effective_crime_multiplier(cur)
+    police_strength = int(police_strength / max(crime_mult, 0.5))
     stype = sheriff.get("sheriff_type") or "honest"
     sname = sheriff.get("agent_name") or "Sheriff"
 
@@ -46,7 +142,7 @@ def main():
         log_event(
             cur,
             None,
-            "police",
+            "police_action",
             f"CORRUPT: Sheriff {sname} tipped off gangs — raid cancelled!",
             0,
             priority="urgent",
@@ -76,6 +172,9 @@ def main():
 
     gstr = gang_strength(cur, target["id"])
     success_rate = police_strength / max(police_strength + gstr, 1)
+    if is_uprising_active(cur):
+        success_rate *= 0.10
+        print("⚡ UPRISING: SWAT depleted — raids fail 90% of the time")
     success = random.random() < success_rate
 
     if success:
@@ -118,8 +217,8 @@ def main():
         log_event(
             cur,
             None,
-            "police",
-            f"Sheriff {sname} crushes {target['name']} hideout! {deaths} dead, {seized:.0f} ZION recovered!",
+            "police_action",
+            f"SWAT RAID: Sheriff {sname} crushes {target['name']} hideout! {deaths} dead, {seized:.0f} ZION recovered!",
             seized,
             priority="breaking",
         )
@@ -138,6 +237,8 @@ def main():
             print(f"  📋 +{recruits} officers recruited from raid proceeds")
     else:
         loss = random.randint(1, 3)
+        cur.execute("SELECT police_count FROM sheriff_state WHERE is_active = true LIMIT 1")
+        police_count = int((cur.fetchone() or {}).get("police_count") or 20)
         new_count = max(8, police_count - loss)
         cur.execute(
             "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
@@ -146,8 +247,8 @@ def main():
         log_event(
             cur,
             None,
-            "police",
-            f"Police raid on {target['name']} FAILED! {loss} officers lost. Morale drops.",
+            "police_action",
+            f"SWAT raid on {target['name']} FAILED! {loss} officers lost. Morale drops.",
             loss,
             priority="urgent",
         )
@@ -191,6 +292,8 @@ def main():
         )
         print(f"  🚨 Emergency staffing: +{boost} officers")
 
+    if not is_uprising_active(cur):
+        sync_police_divisions(cur)
     conn.commit()
     print("✅ Police cycle complete!\n")
     cur.close()

@@ -7,10 +7,10 @@ import re
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from openrouter_key import get_openrouter_key
+
 WALRUS_PUBLISHER = "https://publisher.walrus-testnet.walrus.space"
 WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space"
-
-OPENROUTER_KEY = "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"
 
 
 def get_best_coin_id() -> str:
@@ -58,7 +58,7 @@ def ask_judge(judge: dict, prompt: str) -> dict:
             "https://openrouter.ai/api/v1/chat/completions",
             data=data,
             headers={
-                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Authorization": f"Bearer {get_openrouter_key()}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://zionciv.com",
                 "X-Title": "ZION Consensus Oracle"

@@ -935,3 +935,40 @@
   TOTAL active    354
 
   Images: 354 with image_url, 0 without
+🔄 Polymarket sync — 2026-05-20 15:57
+  Resolving Polymarket tag IDs...
+  tag geopolitics          -> id 100265 (geopolitics)
+  tag politics             -> id 2 (politics)
+  tag sports               -> id 1 (sports)
+  tag crypto               -> id 21 (crypto)
+  tag finance              -> id 120 (finance)
+  tag technology           -> id 22 (tech)
+  tag tech                 -> id 1401 (tech)
+  tag ai                   -> id 439 (tech)
+  tag iran                 -> id 78 (iran)
+  tag pop-culture          -> id 596 (culture)
+  geopolitics     tag_id=100265: 100 active, 15 closed
+  politics        tag_id=2: 100 active, 15 closed
+  sports          tag_id=1: 100 active, 15 closed
+  crypto          tag_id=21: 100 active, 15 closed
+  finance         tag_id=120: 100 active, 15 closed
+  tech            tag_id=22: 0 active, 15 closed
+  tech            tag_id=1401: 100 active, 15 closed
+  tech            tag_id=439: 100 active, 15 closed
+  tech            merged: 200 active rows fetched, +31 unique usable
+  iran            tag_id=78: 100 active, 15 closed
+  culture         tag_id=596: 100 active, 15 closed
+  Backfilled/updated image_url on 507 rows
+
+✅ Synced 337 active markets (337 unique), 150 closed/settled rows
+  crypto          91
+  geopolitics     56
+  culture         50
+  iran            44
+  tech            34
+  finance         30
+  sports          28
+  politics        21
+  TOTAL active    354
+
+  Images: 354 with image_url, 0 without

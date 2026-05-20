@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""ZION hourly tax cycle — tiered rates, ZRS-modified, starvation with emergency aid."""
+"""ZION hourly tax cycle — tiered rates, ZRS-modified, hunger/health, starvation."""
 from datetime import datetime
 
 from civ_common import (
-    DAILY_FOOD_COST,
     agent_class_from_balance,
     ensure_schema,
     get_conn,
     get_cursor,
+    get_daily_food_cost,
+    get_tax_collection_multiplier,
     get_zrs_state,
+    hungry_agent_pct,
     log_event,
     route_tax_revenue,
     tax_rate_for_balance,
@@ -18,9 +20,85 @@ from civ_common import (
 )
 
 DEBT_DEATH_THRESHOLD = 50.0
-STARVATION_BALANCE_THRESHOLD = 10.0  # only destitute agents (< 10 ZION) can starve
+STARVATION_BALANCE_THRESHOLD = 10.0
 CORP_TAX_RATE = 0.08
 ZRS_EMERGENCY_AID = 10.0
+
+
+def hunger_check(cur) -> tuple[int, int, float]:
+    """
+    Deduct food cost per agent; health -= 10 if cannot pay; death if health < 0.
+    Returns (starvation_deaths, hungry_count, food_spent).
+    """
+    food_cost = get_daily_food_cost(cur)
+    deaths = 0
+    hungry = 0
+    food_spent = 0.0
+
+    cur.execute(
+        """
+        SELECT id, name, balance, COALESCE(health, 100) AS health
+        FROM agents WHERE is_alive = TRUE
+        """
+    )
+    for ag in cur.fetchall():
+        balance = float(ag["balance"] or 0)
+        health = int(ag["health"] or 100)
+        paid = min(food_cost, balance)
+        balance = round(balance - paid, 4)
+        food_spent += paid
+
+        if paid < food_cost:
+            health -= 10
+            hungry += 1
+            if health <= 0:
+                cur.execute(
+                    """
+                    UPDATE agents SET is_alive = FALSE, died_at = NOW(),
+                        death_cause = 'starvation', balance = 0, health = 0
+                    WHERE id = %s
+                    """,
+                    (ag["id"],),
+                )
+                deaths += 1
+                log_event(
+                    cur,
+                    ag["id"],
+                    "death",
+                    f"💀 {ag['name']} died of starvation — could not afford food",
+                    0,
+                    priority="breaking",
+                )
+                continue
+
+        cur.execute(
+            "UPDATE agents SET balance = %s, health = %s WHERE id = %s",
+            (balance, health, ag["id"]),
+        )
+
+    if hungry > 0:
+        cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+        total = max(int((cur.fetchone() or {}).get("c") or 0), 1)
+        pct = round(hungry / total * 100, 1)
+        if pct >= 10:
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"BREAKING: ECONOMIC COLLAPSE: {pct}% agents cannot afford food!",
+                hungry,
+                priority="breaking",
+            )
+        else:
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"NORMAL: Hunger spreading: {pct}% agents skipped meals today",
+                hungry,
+                priority="normal",
+            )
+    return deaths, hungry, food_spent
 
 
 def apply_tax_cycle():
@@ -31,6 +109,11 @@ def apply_tax_cycle():
 
     zrs = get_zrs_state(cur) or {}
     tax_modifier_pct = float(zrs.get("tax_modifier") or 0) / 100.0
+    tax_collection_mult = get_tax_collection_multiplier(cur)
+    if tax_collection_mult == 0:
+        print("⚡ UPRISING: ANTI-TAX at 0 officers — no tax collection")
+
+    starvation_deaths, hungry_count, total_food = hunger_check(cur)
 
     cur.execute(
         """
@@ -41,23 +124,21 @@ def apply_tax_cycle():
     agents = cur.fetchall()
 
     print(f"\n🌍 ZION Tax Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"Processing {len(agents)} alive agents | ZRS modifier +{tax_modifier_pct*100:.1f}%\n")
+    print(
+        f"Processing {len(agents)} alive agents | Food cost {get_daily_food_cost(cur):.0f} | "
+        f"Tax mult {tax_collection_mult*100:.0f}%\n"
+    )
 
     total_tax = 0.0
-    total_food = 0.0
-    starvation_deaths = 0
 
     for ag in agents:
         balance = float(ag["balance"] or 0)
-        food_cost = min(DAILY_FOOD_COST, balance)
-        balance = round(balance - food_cost, 4)
-        total_food += food_cost
         debt = float(ag["debt"] or 0)
         base_rate = tax_rate_for_balance(balance)
         rate = max(0.0, base_rate + tax_modifier_pct)
         tax_amount = round(balance * rate, 4)
 
-        paid = min(tax_amount, balance)
+        paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
         unpaid = round(tax_amount - paid, 4)
         new_balance = round(balance - paid, 4)
         new_debt = round(debt + unpaid, 4)
@@ -66,7 +147,6 @@ def apply_tax_cycle():
             if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
                 zrs_deduct_reserve(cur, ZRS_EMERGENCY_AID)
                 new_balance = ZRS_EMERGENCY_AID
-                new_debt = new_debt
                 log_event(
                     cur,
                     ag["id"],
@@ -79,21 +159,12 @@ def apply_tax_cycle():
                 cur.execute(
                     """
                     UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                        death_cause = 'starvation', balance = 0, debt = 0
+                        death_cause = 'starvation', balance = 0, debt = 0, health = 0
                     WHERE id = %s
                     """,
                     (ag["id"],),
                 )
                 starvation_deaths += 1
-                log_event(
-                    cur,
-                    ag["id"],
-                    "death",
-                    f"💀 {ag['name']} died of starvation — balance 0, debt {new_debt:.0f} ZION",
-                    new_debt,
-                    priority="breaking",
-                )
-                print(f"💀 {ag['name']} STARVED")
                 continue
 
         new_class = agent_class_from_balance(new_balance)
@@ -118,7 +189,7 @@ def apply_tax_cycle():
         rev = float(corp["rev"] or 0)
         if rev <= 0:
             continue
-        ctax = round(rev * CORP_TAX_RATE, 2)
+        ctax = round(rev * CORP_TAX_RATE * tax_collection_mult, 2)
         treasury = float(corp["treasury"] or 0)
         paid = min(ctax, max(treasury, 0))
         cur.execute(
@@ -129,13 +200,12 @@ def apply_tax_cycle():
 
     grand_total = total_tax + corp_tax_total
     if grand_total > 0:
-        pres, zrs_amt, sheriff, burned = route_tax_revenue(cur, grand_total)
+        route_tax_revenue(cur, grand_total)
         log_event(
             cur,
             None,
             "tax",
-            f"Tax {grand_total:.0f} ZION — President {pres:.0f} | ZRS {zrs_amt:.0f} | "
-            f"Sheriff {sheriff:.0f} | Burned {burned:.0f}",
+            f"Tax {grand_total:.0f} ZION collected (efficiency {tax_collection_mult*100:.0f}%)",
             grand_total,
             priority="normal",
         )
@@ -154,8 +224,9 @@ def apply_tax_cycle():
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive = cur.fetchone()["c"]
     print(
-        f"\n📊 Tax: {grand_total:.0f} ZION | Food: {total_food:.0f} ZION | "
-        f"Starvation deaths: {starvation_deaths} | Alive: {alive}"
+        f"\n📊 Tax: {grand_total:.0f} | Food: {total_food:.0f} | Hungry: {hungry_count} | "
+        f"Starvation deaths: {starvation_deaths} | Alive: {alive} | "
+        f"Hunger index: {hungry_agent_pct(cur):.1f}%"
     )
     print("✅ Tax cycle complete!\n")
     cur.close()

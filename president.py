@@ -3,13 +3,28 @@
 import random
 from datetime import datetime
 
-from civ_common import ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    cleanup_expired_effects,
+    effective_crime_multiplier,
+    ensure_schema,
+    get_active_effects,
+    get_conn,
+    get_cursor,
+    get_revolution_meter,
+    insert_active_effect,
+    is_uprising_active,
+    log_event,
+    process_revolution_cycle,
+    apply_martial_law_divisions,
+    apply_stimulus_revolution_bonus,
+    restore_after_martial_law,
+    sync_police_divisions,
+)
 from civ_governance import (
     check_compliance,
     get_sheriff_compliance_metrics,
     issue_president_orders,
     sheriff_compliance_actionable,
-    update_revolution_meter,
 )
 
 POPULISM_TAX_HOURS = 48
@@ -92,9 +107,16 @@ def gather_metrics(cur) -> dict:
         else 100.0
     )
 
+    cleanup_expired_effects(cur)
+    active_effects = get_active_effects(cur)
+    crime_mult = effective_crime_multiplier(cur)
+    effective_poverty = max(0.0, poverty_pct * crime_mult)
+
     return {
-        "crime_rate": poverty_pct,
+        "crime_rate": effective_poverty,
         "poverty_pct": poverty_pct,
+        "effective_poverty_pct": effective_poverty,
+        "active_effects": active_effects,
         "corp_bankruptcies_week": corp_bankruptcies_week,
         "gang_strength_total": gang_strength,
         "police_count": police_count,
@@ -198,9 +220,13 @@ def execute_decision(cur, data: dict):
             """
             UPDATE president_state SET
                 approval_rating = GREATEST(0, approval_rating - 15),
-                martial_law_until = NOW() + INTERVAL '24 hours'
+                martial_law_until = NOW() + INTERVAL '48 hours'
             WHERE is_active = true
             """
+        )
+        insert_active_effect(
+            cur, "martial_law", 48, crime_modifier=-0.40,
+            metadata={"source": "president", "action": "MARTIAL_LAW", "food_x2": True},
         )
         cur.execute(
             """
@@ -208,11 +234,12 @@ def execute_decision(cur, data: dict):
             WHERE is_active = true
             """
         )
+        apply_martial_law_divisions(cur)
         log_event(
             cur,
             pid,
             "president",
-            f"MARTIAL LAW: President {pname} doubles police raids! Approval -15, crime -30%",
+            f"BREAKING: MARTIAL LAW DECLARED: All resources to police! Crime -40%, food ×2",
             0,
             priority="breaking",
         )
@@ -229,6 +256,11 @@ def execute_decision(cur, data: dict):
             "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
             (STIMULUS_AMOUNT * 100,),
         )
+        insert_active_effect(
+            cur, "stimulus", 24, poverty_modifier=-0.15,
+            metadata={"amount": STIMULUS_AMOUNT, "source": "president"},
+        )
+        apply_stimulus_revolution_bonus(cur)
         log_event(
             cur,
             pid,
@@ -252,7 +284,7 @@ def execute_decision(cur, data: dict):
         log_event(
             cur,
             pid,
-            "president",
+            "sheriff_action",
             f"President {pname} investigates Sheriff — compliance {rate:.0f}% (24h orders)",
             0,
             priority="urgent",
@@ -340,6 +372,8 @@ def main():
 
     try:
         ensure_president_exists(cur)
+        cleanup_expired_effects(cur)
+        restore_after_martial_law(cur)
         data = gather_metrics(cur)
         president = data["president"]
 
@@ -350,7 +384,9 @@ def main():
 
         print(
             f"President: {president['agent_name']} | Approval: {data['approval']}% | "
-            f"Poverty: {data['poverty_pct']:.0f}% | Treasury: {data['treasury']:,.0f}"
+            f"Poverty: {data['poverty_pct']:.0f}% | Treasury: {data['treasury']:,.0f} | "
+            f"Revolution: {get_revolution_meter(cur)}%"
+            + (" ⚡ UPRISING" if is_uprising_active(cur) else "")
         )
 
         cur.execute(
@@ -359,18 +395,23 @@ def main():
 
         execute_decision(cur, data)
         president = get_president(cur)
+        rev_status = {"meter": 0, "active": False}
         if president:
+            rev_status = process_revolution_cycle(cur, president)
+            print(f"   Revolution meter: {rev_status['meter']}% ({rev_status.get('change', '')})")
             issue_president_orders(cur, president)
-            if update_revolution_meter(cur, president):
+            if rev_status.get("rebels_won"):
                 log_event(
                     cur,
                     president["agent_id"],
                     "rebellion",
-                    f"REVOLUTION: Citizens storm {president['agent_name']}'s palace!",
+                    f"REVOLUTION: Citizens storm the palace — President removed!",
                     0,
                     priority="breaking",
                 )
             check_compliance(cur, president)
+            if not is_uprising_active(cur):
+                sync_police_divisions(cur)
 
         conn.commit()
         print("\n✅ President cycle complete!")
