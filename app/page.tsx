@@ -2785,6 +2785,7 @@ type TabId =
   | "chat"
   | "zionbet"
   | "leaderboard"
+  | "zbank"
   | "faucet"
   | "press"
   | "treasury"; // ECO-POL (display label; id kept for routing)
@@ -4983,6 +4984,158 @@ function renderArticle(
   );
 }
 
+const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
+  SWAT: "⚔️ COMBAT",
+  "ANTI-TAX": "💰 ENFORCEMENT",
+  "PRES.GUARD": "🛡️ SECURITY",
+  "ANTI-CORR": "⚖️ INVESTIGATION",
+  "RIOT CTRL": "🚨 CROWD CONTROL",
+};
+
+type WireNewsItem = { text: string; type?: string; timestamp?: string };
+
+const WIRE_THEMES = {
+  green: {
+    border: "#1a3a1a",
+    headerBg: "rgba(0,255,65,0.1)",
+    headerBorder: "#1a3a1a",
+    dot: "#00ff41",
+    label: "#00ff41",
+    text: "#8fdf8f",
+    sep: "#1a3a1a",
+  },
+  blue: {
+    border: "#1a3a5c",
+    headerBg: "rgba(77,162,255,0.1)",
+    headerBorder: "#1a3a5c",
+    dot: "#4DA2FF",
+    label: "#4DA2FF",
+    text: "#7ab8f5",
+    sep: "#1a3a5c",
+  },
+  orange: {
+    border: "#3a2a0a",
+    headerBg: "rgba(255,120,0,0.12)",
+    headerBorder: "#3a2a0a",
+    dot: "#ff8800",
+    label: "#ffaa00",
+    text: "#ffcc88",
+    sep: "#3a2a0a",
+  },
+} as const;
+
+function wireItemColor(type: string | undefined, theme: keyof typeof WIRE_THEMES): string {
+  if (type === "breaking") return "#ff6464";
+  if (type === "warning") return theme === "orange" ? "#ff8800" : "#ffaa00";
+  return WIRE_THEMES[theme].text;
+}
+
+function NewsWireTicker({
+  label,
+  items,
+  theme,
+  animationSec = 50,
+}: {
+  label: string;
+  items: WireNewsItem[];
+  theme: keyof typeof WIRE_THEMES;
+  animationSec?: number;
+}) {
+  if (!items.length) return null;
+  const c = WIRE_THEMES[theme];
+  const loop = [...items, ...items, ...items];
+  return (
+    <div
+      style={{
+        marginTop: "12px",
+        background: "#050a10",
+        border: `1px solid ${c.border}`,
+        borderRadius: "8px",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          background: c.headerBg,
+          padding: "4px 12px",
+          borderBottom: `1px solid ${c.headerBorder}`,
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
+        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: c.dot }} />
+        <span style={{ color: c.label, fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ overflow: "hidden", padding: "8px 0" }}>
+        <div
+          style={{
+            display: "flex",
+            width: "max-content",
+            animation: `marquee ${animationSec}s linear infinite`,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {loop.map((item, i) => (
+            <span
+              key={`${item.text}-${i}`}
+              style={{
+                color: wireItemColor(item.type, theme),
+                fontFamily: "monospace",
+                fontSize: "0.75rem",
+                flexShrink: 0,
+                paddingRight: "60px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item.text}
+              <span style={{ color: c.sep, marginLeft: "20px" }}>◆</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const POLICE_DIVISION_DESCRIPTIONS: Record<string, string> = {
+  SWAT: "Gang raids & tactical response",
+  "ANTI-TAX": "Tax collection & evasion enforcement",
+  "PRES.GUARD": "Presidential protection detail",
+  "ANTI-CORR": "Corruption & fraud investigation",
+  "RIOT CTRL": "Civil unrest & riot suppression",
+};
+
+type PoliceDivisionCard = {
+  division: string;
+  division_name: string;
+  officers: number;
+  budget: number;
+  effectiveness: number;
+  role?: string;
+  depleted?: boolean;
+  mobilized?: boolean;
+};
+
+function normalizePoliceDivision(raw: Record<string, unknown>): PoliceDivisionCard {
+  const name = String(raw.division_name ?? raw.division ?? raw.name ?? "").trim();
+  const officers = Number(raw.officers ?? 0);
+  return {
+    division: name,
+    division_name: name,
+    officers,
+    budget: Number(raw.budget ?? 0),
+    effectiveness: Number(
+      raw.effectiveness ?? Math.min(100, Math.max(0, officers * 4))
+    ),
+    role: String(raw.role ?? "patrol"),
+    depleted: Boolean(raw.depleted),
+    mobilized: Boolean(raw.mobilized),
+  };
+}
+
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -5024,12 +5177,8 @@ export default function Home() {
     }>
   >([]);
   const [policeDivisions, setPoliceDivisions] = useState<{
-    divisions: Array<{
-      division: string;
-      officers: number;
-      budget: number;
-      effectiveness: number;
-    }>;
+    uprising_active?: boolean;
+    divisions: PoliceDivisionCard[];
     treasury: {
       zrs_fund: number;
       president_fund: number;
@@ -5070,7 +5219,18 @@ export default function Home() {
         if (Array.isArray(d)) setCorporations(d);
       })
       .catch(() => {});
-    fetch("/api/police/divisions").then(r => r.json()).then(d => setPoliceDivisions(d)).catch(() => {});
+    fetch("/api/police/divisions")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d?.divisions || !Array.isArray(d.divisions)) return;
+        setPoliceDivisions({
+          ...d,
+          divisions: d.divisions.map((div: Record<string, unknown>) =>
+            normalizePoliceDivision(div)
+          ),
+        });
+      })
+      .catch(() => {});
     fetch("/api/walrus/blobs")
       .then((r) => r.json())
       .then((d) => {
@@ -5224,7 +5384,24 @@ export default function Home() {
       created_at: string;
     } | null;
     corporations: { active: number; total_treasury: number };
-    economy: { avg_balance: number; poverty_pct: number; total_zion: number };
+    economy: {
+      avg_balance: number;
+      poverty_pct: number;
+      total_zion: number;
+      trend_arrows?: { avg_balance?: string; poverty_pct?: string; total_zion?: string };
+    };
+    active_effects?: Array<{
+      effect_type: string;
+      type?: string;
+      expires_at: string;
+      expires_in?: string;
+      effects?: string;
+      crime_modifier?: number;
+      poverty_modifier?: number;
+    }>;
+    uprising?: { active: boolean; meter: number; meter_change: string; trend?: string };
+    economy_trend?: { avg_balance_change: string; direction: string };
+    epidemic?: { active: boolean; infected_count: number };
   } | null>(null);
   const [sheriffState, setSheriffState] = useState<{
     agent_name: string;
@@ -5244,7 +5421,9 @@ export default function Home() {
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
   const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
-  const [policeNews, setPoliceNews] = useState<string[]>([]);
+  const [policeNews, setPoliceNews] = useState<WireNewsItem[]>([]);
+  const [corporateNews, setCorporateNews] = useState<WireNewsItem[]>([]);
+  const [clanNews, setClanNews] = useState<WireNewsItem[]>([]);
 
   const fetchEcoPol = useCallback(async () => {
     try {
@@ -5293,37 +5472,61 @@ export default function Home() {
           avg_balance: Number(economy.avg_balance) || 0,
           poverty_pct: Number(economy.poverty_pct) || 0,
           total_zion: Number(economy.total_zion) || 0,
+          trend_arrows: economy.trend_arrows ?? {},
         },
+        active_effects: Array.isArray(data.active_effects) ? data.active_effects : [],
+        uprising: data.uprising
+          ? {
+              active: Boolean(data.uprising.active),
+              meter: Number(data.uprising.meter) || 0,
+              meter_change: String(data.uprising.meter_change ?? data.uprising.trend ?? ""),
+            }
+          : { active: false, meter: 0, meter_change: "" },
+        economy_trend: data.economy_trend ?? { avg_balance_change: "0", direction: "flat" },
+        epidemic: data.epidemic ?? { active: false, infected_count: 0 },
       });
     } catch {
       /* ignore */
     }
   }, []);
 
+  const parseWireResponse = (data: unknown): WireNewsItem[] => {
+    if (!Array.isArray(data)) return [];
+    return data
+      .slice(0, 15)
+      .map((e: { text?: string; description?: string; type?: string; timestamp?: string }) => ({
+        text: String(e.text ?? e.description ?? "").trim(),
+        type: e.type,
+        timestamp: e.timestamp,
+      }))
+      .filter((e) => e.text.length > 0);
+  };
+
   const fetchPoliceNews = useCallback(async () => {
     try {
-      const [sheriffRes, eventsRes] = await Promise.all([
-        fetch(`/api/eco-pol?t=${Date.now()}`, { cache: "no-store" }),
-        fetch("/api/sheriff/actions"),
-      ]);
-      const ecoData = await sheriffRes.json();
-      const sheriffData = ecoData?.sheriff ?? ecoData;
-      if (ecoData?.sheriff?.agent_name && ecoData.sheriff.agent_name !== "No Sheriff") {
-        setSheriffState(ecoData.sheriff);
-      }
-      const events = await eventsRes.json();
+      const res = await fetch("/api/police-wire", { cache: "no-store" });
+      setPoliceNews(parseWireResponse(await res.json()));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-      const pNews: string[] = [];
-      if (Array.isArray(events)) {
-        events.slice(0, 8).forEach((e: { description: string }) => pNews.push(e.description));
-      }
-      if (sheriffData?.agent_name && sheriffData.agent_name !== "No Sheriff") {
-        pNews.push(
-          `👮 ACTIVE FORCE: ${sheriffData.police_count} officers | Budget: ${Math.floor(sheriffData.police_budget || 0)} ZION | Approval: ${sheriffData.approval_rating}%`
-        );
-      }
-      setPoliceNews(pNews);
-    } catch {}
+  const fetchCorporateNews = useCallback(async () => {
+    try {
+      const res = await fetch("/api/corporate-wire", { cache: "no-store" });
+      setCorporateNews(parseWireResponse(await res.json()));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const fetchClanNews = useCallback(async () => {
+    try {
+      const res = await fetch("/api/clan-wire", { cache: "no-store" });
+      setClanNews(parseWireResponse(await res.json()));
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
@@ -5349,7 +5552,7 @@ export default function Home() {
           if (Array.isArray(d)) setPresidentActions(d);
         })
         .catch(() => {});
-      fetch("/api/sheriff/actions")
+      fetch("/api/sheriff-log")
         .then((r) => r.json())
         .then((d) => {
           if (Array.isArray(d)) setSheriffActions(d);
@@ -5396,12 +5599,17 @@ export default function Home() {
   }, [activeTab, fetchEcoPol]);
 
   useEffect(() => {
-    if (activeTab === "treasury") {
+    if (activeTab !== "civilization") return;
+    void fetchPoliceNews();
+    void fetchCorporateNews();
+    void fetchClanNews();
+    const interval = setInterval(() => {
       void fetchPoliceNews();
-      const interval = setInterval(() => void fetchPoliceNews(), 3600000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTab, fetchPoliceNews]);
+      void fetchCorporateNews();
+      void fetchClanNews();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [activeTab, fetchPoliceNews, fetchCorporateNews, fetchClanNews]);
 
   const fetchZcoDecisions = useCallback(async () => {
     const cacheKey = "zco_decisions_cache";
@@ -7419,6 +7627,7 @@ export default function Home() {
                   ["zionbet", "🎰 ZIONBET"],
                   ["treasury", "💹 ECO-POL"],
                   ["leaderboard", "🏆 LEADERBOARD"],
+                  ["zbank", "💳 Z-BANK"],
                   ["faucet", "🚰 FAUCET"],
                   ["press", "📰 PRESS"],
                 ] as const
@@ -7467,6 +7676,7 @@ export default function Home() {
                   ["zionbet", "🎰 ZIONBET"],
                   ["treasury", "💹 ECO-POL"],
                   ["leaderboard", "🏆 LEADERBOARD"],
+                  ["zbank", "💳 Z-BANK"],
                   ["faucet", "🚰 FAUCET"],
                   ["press", "📰 PRESS"],
                 ] as const
@@ -7724,6 +7934,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
+                  <NewsWireTicker label="📊 CORPORATE WIRE" items={corporateNews} theme="green" animationSec={55} />
                 </>
               )}
 
@@ -7738,33 +7949,93 @@ export default function Home() {
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                     {policeDivisions.divisions.map((div) => {
-                      const emojis: Record<string, string> = {
-                        swat: "🔫",
-                        anti_tax: "💼",
-                        presidential_guard: "🛡️",
-                        anti_corruption: "🕵️",
-                        riot_control: "🪖",
-                      };
-                      const labels: Record<string, string> = {
-                        swat: "SWAT",
-                        anti_tax: "ANTI-TAX",
-                        presidential_guard: "PRES. GUARD",
-                        anti_corruption: "ANTI-CORR",
-                        riot_control: "RIOT CTRL",
-                      };
+                      const divName = div.division_name || div.division || "UNKNOWN";
+                      const roleBadge = POLICE_DIVISION_ROLE_BADGES[divName] || "🚔 PATROL";
+                      const roleDesc =
+                        POLICE_DIVISION_DESCRIPTIONS[divName] || "Division operations";
+                      const dimmed = Boolean(div.depleted);
+                      const mobilized =
+                        Boolean(div.mobilized) ||
+                        (policeDivisions.uprising_active && divName === "RIOT CTRL");
+                      const statusLabel = mobilized
+                        ? "MOBILIZED"
+                        : dimmed
+                          ? "DEPLETED"
+                          : div.officers > 15
+                            ? "STRONG"
+                            : div.officers > 8
+                              ? "MID"
+                              : "LOW";
+                      const statusColor = mobilized
+                        ? "#ff8800"
+                        : dimmed
+                          ? "#666"
+                          : div.officers > 15
+                            ? "#00ff41"
+                            : div.officers > 8
+                              ? "#ffaa00"
+                              : "#ff3232";
                       return (
                         <div
-                          key={div.division}
+                          key={divName}
                           style={{
-                            border: "1px solid #1a4a4a",
+                            border: mobilized ? "1px solid #ff8800" : "1px solid #1a4a4a",
                             borderRadius: "10px",
                             padding: "14px",
-                            background: "rgba(0,200,200,0.03)",
+                            background: mobilized
+                              ? "rgba(255,120,0,0.06)"
+                              : "rgba(0,200,200,0.03)",
+                            opacity: dimmed && !mobilized ? 0.45 : 1,
                           }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                            <span style={{ color: "#00cccc", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
-                              {emojis[div.division]} {labels[div.division]}
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "10px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#00cccc",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                                fontSize: "0.85rem",
+                              }}
+                            >
+                              {divName}
+                            </span>
+                            <span
+                              style={{
+                                background: "rgba(0,200,200,0.1)",
+                                color: "#00cccc",
+                                fontSize: "0.6rem",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontFamily: "monospace",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {roleBadge}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "10px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#666",
+                                fontFamily: "monospace",
+                                fontSize: "0.6rem",
+                              }}
+                            >
+                              {roleDesc}
                             </span>
                             <span
                               style={{
@@ -7776,31 +8047,59 @@ export default function Home() {
                                 fontFamily: "monospace",
                               }}
                             >
-                              {div.effectiveness?.toFixed(0)}% EFF
+                              {div.effectiveness.toFixed(0)}% EFF
                             </span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+                              gap: "8px",
+                            }}
+                          >
                             <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>OFFICERS</div>
-                              <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{div.officers}</div>
-                            </div>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>BUDGET</div>
-                              <div style={{ color: "#00cccc", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                                {div.budget?.toFixed(0)}
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                                OFFICERS
+                              </div>
+                              <div
+                                style={{
+                                  color: "#fff",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.9rem",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {div.officers}
                               </div>
                             </div>
                             <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                                BUDGET
+                              </div>
                               <div
                                 style={{
-                                  color: div.officers > 15 ? "#00ff41" : div.officers > 8 ? "#ffaa00" : "#ff3232",
+                                  color: "#00cccc",
+                                  fontFamily: "monospace",
+                                  fontSize: "0.9rem",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {div.budget.toFixed(0)}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                                STATUS
+                              </div>
+                              <div
+                                style={{
+                                  color: statusColor,
                                   fontFamily: "monospace",
                                   fontSize: "0.8rem",
                                   fontWeight: "bold",
                                 }}
                               >
-                                {div.officers > 15 ? "💪 STRONG" : div.officers > 8 ? "⚖️ MID" : "⚠️ LOW"}
+                                {statusLabel}
                               </div>
                             </div>
                           </div>
@@ -7808,6 +8107,7 @@ export default function Home() {
                       );
                     })}
                   </div>
+                  <NewsWireTicker label="🚔 POLICE WIRE" items={policeNews} theme="blue" animationSec={50} />
                 </>
               )}
 
@@ -7872,9 +8172,9 @@ export default function Home() {
                       ))}
                     </div>
                   </section>
+                  <NewsWireTicker label="⚔️ CLAN WIRE" items={clanNews} theme="orange" animationSec={45} />
                 </>
               )}
-
 
               <div
                 style={{
@@ -8337,6 +8637,7 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
             </>
           )}
 
@@ -9075,6 +9376,481 @@ export default function Home() {
             </section>
           )}
 
+          {activeTab === "zbank" && (
+            <div style={{ padding: "24px" }}>
+              <div style={{ marginBottom: "24px" }}>
+                <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
+                  💳 ZION BANK — Private Transfers
+                </h2>
+                <p style={{ color: "#888", fontSize: "0.8rem", margin: 0 }}>
+                  Anonymous cross-chain transfers powered by Seal Protocol &amp; Sui
+                </p>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #333",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div style={{ color: "#fff", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "16px" }}>
+                  💸 Send Private Transaction
+                </div>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                    RECIPIENT ADDRESS
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="0x..."
+                    value={bankRecipient}
+                    onChange={(e) => setBankRecipient(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      background: "rgba(0,0,0,0.4)",
+                      border: "1px solid #333",
+                      borderRadius: "8px",
+                      color: "#fff",
+                      fontSize: "0.85rem",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div>
+                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                      AMOUNT
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={bankAmount}
+                      onChange={(e) => setBankAmount(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        background: "rgba(0,0,0,0.4)",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontSize: "0.85rem",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                      TOKEN
+                    </label>
+                    <select
+                      value={bankToken}
+                      onChange={(e) => setBankToken(e.target.value as "SUI" | "ZION")}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        background: "rgba(0,0,0,0.8)",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontSize: "0.85rem",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <option value="SUI">SUI</option>
+                      <option value="ZION">ZION</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    padding: "10px 12px",
+                    background: "rgba(255,215,0,0.05)",
+                    border: "1px solid rgba(255,215,0,0.2)",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div style={{ color: "#ffd700", fontSize: "0.72rem" }}>
+                    💰 Fee: 10 ZION + $0.01 gas · Transaction will be encrypted on Sui blockchain
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBankSend}
+                  disabled={bankLoading}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    background: "linear-gradient(90deg, rgba(255,215,0,0.2), rgba(0,255,65,0.2))",
+                    border: "1px solid #ffd700",
+                    borderRadius: "8px",
+                    color: "#ffd700",
+                    fontSize: "1rem",
+                    fontWeight: "bold",
+                    cursor: bankLoading ? "not-allowed" : "pointer",
+                    opacity: bankLoading ? 0.7 : 1,
+                  }}
+                >
+                  {bankLoading ? "⏳ Sending..." : "🔐 Send Transaction"}
+                </button>
+                {bankTxHash && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px",
+                      background: "rgba(0,255,65,0.05)",
+                      border: "1px solid #00ff4144",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "4px" }}>
+                      ✅ Transaction sent!
+                    </div>
+                    <a
+                      href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
+                    >
+                      View on Suiscan →
+                    </a>
+                  </div>
+                )}
+                {bankError && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      padding: "10px",
+                      background: "rgba(255,50,50,0.05)",
+                      border: "1px solid #ff323244",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
+                  </div>
+                )}
+                <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
+                  Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
+                </div>
+              </div>
+
+              {/* Cross-chain — ZION Bridge */}
+              <div
+                style={{
+                  border: "1px solid rgba(100,160,255,0.3)",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  marginBottom: "20px",
+                  background: "rgba(100,160,255,0.02)",
+                }}
+              >
+                <div style={{ color: "#64a0ff", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "4px" }}>
+                  🌉 COMING SOON — ZION BRIDGE
+                </div>
+                <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: "bold", marginBottom: "4px" }}>
+                  Private Cross-Chain Transfers
+                </div>
+                <div style={{ color: "#555", fontSize: "0.8rem", marginBottom: "20px" }}>
+                  Send privately across chains · Powered by Wormhole + Sui ETH Bridge
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    marginBottom: "24px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {[
+                    { chain: "Sui", color: "#64a0ff", icon: "🔵" },
+                    { chain: "Ethereum", color: "#9945ff", icon: "💎" },
+                    { chain: "Solana", color: "#00ff94", icon: "◎" },
+                    { chain: "Arbitrum", color: "#28a0f0", icon: "🔷" },
+                    { chain: "Base", color: "#0052ff", icon: "🔵" },
+                  ].map((c) => (
+                    <div
+                      key={c.chain}
+                      onClick={() => {
+                        if (c.chain !== "Sui") setBridgeToChain(c.chain);
+                      }}
+                      style={{
+                        padding: "10px 16px",
+                        border:
+                          bridgeToChain === c.chain || c.chain === "Sui"
+                            ? `2px solid ${c.color}`
+                            : `1px solid ${c.color}44`,
+                        borderRadius: "10px",
+                        background: bridgeToChain === c.chain ? `${c.color}22` : `${c.color}08`,
+                        textAlign: "center",
+                        minWidth: "80px",
+                        cursor: c.chain === "Sui" ? "default" : "pointer",
+                        transition: "all 0.2s ease",
+                        opacity: c.chain === "Sui" ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{ fontSize: "1.2rem" }}>{c.icon}</div>
+                      <div style={{ color: c.color, fontSize: "0.72rem", fontWeight: "bold" }}>{c.chain}</div>
+                      {c.chain === "Sui" && (
+                        <div style={{ color: c.color, fontSize: "0.6rem", opacity: 0.7 }}>FROM</div>
+                      )}
+                      {bridgeToChain === c.chain && c.chain !== "Sui" && (
+                        <div style={{ color: c.color, fontSize: "0.6rem" }}>TO ✓</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+                  {[
+                    { step: "1", title: "Send on Sui", desc: "Send USDC privately on Sui blockchain", color: "#64a0ff" },
+                    {
+                      step: "2",
+                      title: "Wormhole Bridge",
+                      desc: "Automatic cross-chain transfer via Wormhole protocol",
+                      color: "#9945ff",
+                    },
+                    { step: "3", title: "Receive anywhere", desc: "Get USDC on ETH, SOL, Arbitrum or Base", color: "#00ff94" },
+                  ].map((s) => (
+                    <div
+                      key={s.step}
+                      style={{
+                        padding: "14px",
+                        border: `1px solid ${s.color}33`,
+                        borderRadius: "10px",
+                        background: `${s.color}08`,
+                        textAlign: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "50%",
+                          background: `${s.color}22`,
+                          border: `1px solid ${s.color}`,
+                          color: s.color,
+                          fontSize: "0.85rem",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          margin: "0 auto 8px",
+                        }}
+                      >
+                        {s.step}
+                      </div>
+                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
+                        {s.title}
+                      </div>
+                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ opacity: 0.4, pointerEvents: "none" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <div>
+                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                        FROM NETWORK
+                      </label>
+                      <select
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          background: "rgba(0,0,0,0.4)",
+                          border: "1px solid #333",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        <option>🔵 Sui (Private)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
+                        TO NETWORK
+                      </label>
+                      <div
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          background: "rgba(0,0,0,0.4)",
+                          border: "1px solid #64a0ff",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          fontSize: "0.85rem",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        {bridgeToChain === "Ethereum" && "💎 Ethereum"}
+                        {bridgeToChain === "Solana" && "◎ Solana"}
+                        {bridgeToChain === "Arbitrum" && "🔷 Arbitrum"}
+                        {bridgeToChain === "Base" && "🔵 Base"}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      width: "100%",
+                      padding: "14px",
+                      background: "rgba(100,160,255,0.1)",
+                      border: "1px solid #64a0ff",
+                      borderRadius: "8px",
+                      color: "#64a0ff",
+                      fontSize: "1rem",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    🌉 Bridge Privately
+                  </button>
+                </div>
+
+                <div style={{ textAlign: "center", marginTop: "12px" }}>
+                  <span
+                    style={{
+                      background: "rgba(100,160,255,0.1)",
+                      border: "1px solid rgba(100,160,255,0.3)",
+                      color: "#64a0ff",
+                      fontSize: "0.7rem",
+                      padding: "4px 16px",
+                      borderRadius: "20px",
+                    }}
+                  >
+                    🚀 Launching with Sui ETH Bridge · Powered by Wormhole
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid rgba(255,215,0,0.2)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginBottom: "20px",
+                  background: "rgba(255,215,0,0.03)",
+                }}
+              >
+                <div style={{ color: "#ffd700", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  🔐 HOW IT WORKS
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "1fr 1fr 1fr 1fr",
+                    gap: "12px",
+                  }}
+                >
+                  {[
+                    { icon: "💸", title: "Send", desc: "Send SUI or USDC to any address" },
+                    { icon: "🔐", title: "Encrypt", desc: "Amount & recipient encrypted on-chain" },
+                    { icon: "🔑", title: "Key", desc: "Only you hold the viewing key" },
+                    { icon: "📋", title: "Audit", desc: "Reveal details to tax authority if needed" },
+                  ].map((step) => (
+                    <div
+                      key={step.title}
+                      style={{ textAlign: "center", padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "8px" }}
+                    >
+                      <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{step.icon}</div>
+                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
+                        {step.title}
+                      </div>
+                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{step.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid rgba(0,255,65,0.2)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginBottom: "20px",
+                  background: "rgba(0,255,65,0.02)",
+                }}
+              >
+                <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  ⚙️ POWERED BY
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
+                  {[
+                    { icon: "🔐", title: "Sui zkLogin", desc: "Sign in with Google — no seed phrase needed" },
+                    { icon: "🛡️", title: "Seal Protocol", desc: "On-chain encryption for private transfers" },
+                    { icon: "🌊", title: "Walrus Storage", desc: "Decentralized storage for transaction history" },
+                    { icon: "⚡", title: "Sui Move", desc: "Smart contracts with object-based security" },
+                    { icon: "🔑", title: "Viewing Key", desc: "Full audit trail — reveal only when needed" },
+                    { icon: "📊", title: "DeepBook", desc: "On-chain liquidity for ZION token transfers" },
+                  ].map((tech) => (
+                    <div
+                      key={tech.title}
+                      style={{
+                        padding: "12px",
+                        background: "rgba(0,0,0,0.3)",
+                        borderRadius: "8px",
+                        border: "1px solid #1a1a1a",
+                      }}
+                    >
+                      <div style={{ fontSize: "1.2rem", marginBottom: "6px" }}>{tech.icon}</div>
+                      <div
+                        style={{
+                          color: "#00ff41",
+                          fontSize: "0.78rem",
+                          fontWeight: "bold",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {tech.title}
+                      </div>
+                      <div style={{ color: "#555", fontSize: "0.68rem", lineHeight: "1.4" }}>{tech.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ border: "1px solid #222", borderRadius: "12px", padding: "16px" }}>
+                <div style={{ color: "#555", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
+                  ⚙️ TECHNICAL STACK
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {[
+                    "sui::ristretto255",
+                    "Pedersen commitments",
+                    "zk-SNARK on-chain",
+                    "Stealth addresses",
+                    "Viewing key",
+                    "XChaCha20-Poly1305",
+                  ].map((tech) => (
+                    <span
+                      key={tech}
+                      style={{
+                        background: "rgba(0,255,65,0.05)",
+                        border: "1px solid rgba(0,255,65,0.2)",
+                        color: "#00ff41",
+                        fontSize: "0.7rem",
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                      }}
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === "faucet" && (
             <section className="faucetTab">
               {!walletAddress ? (
@@ -9534,6 +10310,94 @@ export default function Home() {
 
               {(ecoPolData || frsStats) && (
                 <div style={{ marginBottom: "24px" }}>
+                  {ecoPolData?.uprising?.active && (
+                    <div style={{
+                      marginBottom: "12px", padding: "10px 14px",
+                      background: "rgba(255,100,0,0.12)", border: "1px solid rgba(255,150,0,0.5)",
+                      borderRadius: "8px", animation: "pulse 1.5s infinite",
+                    }}>
+                      <div style={{ color: "#ff8800", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
+                        ⚡ UPRISING ACTIVE — RIOT CTRL mobilized!
+                      </div>
+                      <div style={{ color: "#aa8866", fontFamily: "monospace", fontSize: "0.65rem", marginTop: "4px" }}>
+                        SWAT &amp; ANTI-TAX depleted · Meter {ecoPolData.uprising.meter}% ({ecoPolData.uprising.meter_change})
+                      </div>
+                    </div>
+                  )}
+
+                  {(() => {
+                    const meter = ecoPolData?.uprising?.meter ?? 0;
+                    const revLabel =
+                      meter >= 100 ? "REVOLUTION!" :
+                      meter >= 80 ? "CRITICAL" :
+                      meter >= 60 ? "VOLATILE" :
+                      meter >= 30 ? "TENSE" : "STABLE";
+                    const revColor =
+                      meter >= 100 ? "#ff0000" :
+                      meter >= 80 ? "#ff3232" :
+                      meter >= 60 ? "#ff8800" :
+                      meter >= 30 ? "#ffaa00" : "#00ff41";
+                    return (
+                      <div style={{
+                        marginBottom: "16px", padding: "12px 14px",
+                        background: "#050a10", border: `1px solid ${revColor}44`, borderRadius: "8px",
+                        boxShadow: meter >= 100 ? `0 0 12px ${revColor}66` : undefined,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                          <span style={{ color: revColor, fontFamily: "monospace", fontSize: "0.7rem", letterSpacing: "1px" }}>
+                            🔥 REVOLUTION METER
+                          </span>
+                          <span style={{
+                            color: revColor, fontFamily: "monospace", fontSize: "0.75rem", fontWeight: "bold",
+                            animation: meter >= 100 ? "pulse 0.8s infinite" : undefined,
+                          }}>
+                            {revLabel} · {meter}%
+                          </span>
+                        </div>
+                        <div style={{ width: "100%", height: "10px", background: "#111", borderRadius: "5px", overflow: "hidden" }}>
+                          <div style={{
+                            width: `${Math.min(meter, 100)}%`, height: "100%",
+                            background: revColor, borderRadius: "5px", transition: "width 0.5s",
+                          }} />
+                        </div>
+                        {ecoPolData?.uprising?.meter_change && (
+                          <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.6rem", marginTop: "6px" }}>
+                            {ecoPolData.uprising.meter_change}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {ecoPolData?.active_effects && ecoPolData.active_effects.length > 0 && (
+                    <div style={{
+                      marginBottom: "12px", padding: "10px 14px",
+                      background: "rgba(255,50,50,0.08)", border: "1px solid rgba(255,50,50,0.3)",
+                      borderRadius: "8px",
+                    }}>
+                      {ecoPolData.epidemic?.active && (
+                        <div style={{ color: "#ff66aa", fontFamily: "monospace", fontSize: "0.72rem", marginBottom: "4px" }}>
+                          💉 EPIDEMIC — {ecoPolData.epidemic.infected_count} agents infected!
+                        </div>
+                      )}
+                      {ecoPolData.active_effects?.map((ef, i) => {
+                        const hrs = (ef as { expires_in?: string }).expires_in
+                          ?? `${Math.round(Math.max(0, (new Date(ef.expires_at).getTime() - Date.now()) / 3600000))}h`;
+                        const fx = (ef as { effects?: string }).effects ?? "";
+                        const et = (ef as { type?: string }).type ?? ef.effect_type;
+                        const label = et === "martial_law"
+                          ? `⚔️ MARTIAL LAW — ${hrs} remaining${fx ? ` | ${fx}` : ""}`
+                          : et === "stimulus"
+                            ? `💰 STIMULUS — ${hrs} remaining`
+                            : `📜 ${String(et).toUpperCase()} — ${hrs} remaining`;
+                        return (
+                          <div key={i} style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.72rem" }}>
+                            {label}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div style={{display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:"12px", marginBottom:"16px"}}>
 
                     {/* TOP LEFT — ZRS */}
@@ -9744,17 +10608,17 @@ export default function Home() {
                     {[
                       {
                         label: "AVG BALANCE",
-                        value: `${(ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })} ZION`,
+                        value: `${(ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })} ZION ${ecoPolData?.economy.trend_arrows?.avg_balance ?? ""} ${ecoPolData?.economy_trend?.avg_balance_change ? `(${ecoPolData.economy_trend.avg_balance_change})` : ""}`,
                         color: "#4DA2FF",
                       },
                       {
                         label: "TOTAL ZION",
-                        value: `${Math.round(ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0).toLocaleString("en-US")} ZION`,
+                        value: `${Math.round(ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0).toLocaleString("en-US")} ZION ${ecoPolData?.economy.trend_arrows?.total_zion ?? ""}`,
                         color: "#00ff41",
                       },
                       {
                         label: "POVERTY %",
-                        value: `${(ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0).toFixed(1)}%`,
+                        value: `${(ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0).toFixed(1)}% ${ecoPolData?.economy.trend_arrows?.poverty_pct ?? ""}`,
                         color: (ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0) > 40 ? "#ff6464" : "#ffaa00",
                       },
                       {
@@ -9994,531 +10858,6 @@ export default function Home() {
                   </div>
                 </div>
               )}
-
-              {policeNews.length > 0 && (
-                <div
-                  style={{
-                    marginTop: "8px",
-                    background: "#050a10",
-                    border: "1px solid #1a3a5c",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "rgba(77,162,255,0.1)",
-                      padding: "4px 12px",
-                      borderBottom: "1px solid #1a3a5c",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#4DA2FF" }} />
-                    <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
-                      🚔 POLICE WIRE
-                    </span>
-                  </div>
-                  <div style={{ overflow: "hidden", padding: "8px 0" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        width: "max-content",
-                        animation: "marquee 50s linear infinite",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {[...policeNews, ...policeNews, ...policeNews].map((item, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            color: "#7ab8f5",
-                            fontFamily: "monospace",
-                            fontSize: "0.75rem",
-                            flexShrink: 0,
-                            paddingRight: "60px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {item}
-                          <span style={{ color: "#1a3a5c", marginLeft: "20px" }}>◆</span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* How it works */}
-              <div
-                style={{
-                  border: "1px solid rgba(255,215,0,0.2)",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  marginBottom: "20px",
-                  background: "rgba(255,215,0,0.03)",
-                }}
-              >
-                <div style={{ color: "#ffd700", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  🔐 HOW IT WORKS
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "1fr 1fr 1fr 1fr",
-                    gap: "12px",
-                  }}
-                >
-                  {[
-                    { icon: "💸", title: "Send", desc: "Send SUI or USDC to any address" },
-                    { icon: "🔐", title: "Encrypt", desc: "Amount & recipient encrypted on-chain" },
-                    { icon: "🔑", title: "Key", desc: "Only you hold the viewing key" },
-                    { icon: "📋", title: "Audit", desc: "Reveal details to tax authority if needed" },
-                  ].map((step) => (
-                    <div
-                      key={step.title}
-                      style={{ textAlign: "center", padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "8px" }}
-                    >
-                      <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{step.icon}</div>
-                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {step.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{step.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Our technology */}
-              <div
-                style={{
-                  border: "1px solid rgba(0,255,65,0.2)",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  marginBottom: "20px",
-                  background: "rgba(0,255,65,0.02)",
-                }}
-              >
-                <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  ⚙️ POWERED BY
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-                  {[
-                    { icon: "🔐", title: "Sui zkLogin", desc: "Sign in with Google — no seed phrase needed" },
-                    { icon: "🛡️", title: "Seal Protocol", desc: "On-chain encryption for private transfers" },
-                    { icon: "🌊", title: "Walrus Storage", desc: "Decentralized storage for transaction history" },
-                    { icon: "⚡", title: "Sui Move", desc: "Smart contracts with object-based security" },
-                    { icon: "🔑", title: "Viewing Key", desc: "Full audit trail — reveal only when needed" },
-                    { icon: "📊", title: "DeepBook", desc: "On-chain liquidity for ZION token transfers" },
-                  ].map((tech) => (
-                    <div
-                      key={tech.title}
-                      style={{
-                        padding: "12px",
-                        background: "rgba(0,0,0,0.3)",
-                        borderRadius: "8px",
-                        border: "1px solid #1a1a1a",
-                      }}
-                    >
-                      <div style={{ fontSize: "1.2rem", marginBottom: "6px" }}>{tech.icon}</div>
-                      <div
-                        style={{
-                          color: "#00ff41",
-                          fontSize: "0.78rem",
-                          fontWeight: "bold",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        {tech.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.68rem", lineHeight: "1.4" }}>{tech.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Send form */}
-              <div
-                style={{
-                  border: "1px solid #333",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  marginBottom: "20px",
-                }}
-              >
-                <div style={{ color: "#fff", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "16px" }}>
-                  💸 Send Private Transaction
-                </div>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                    RECIPIENT ADDRESS
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={bankRecipient}
-                    onChange={(e) => setBankRecipient(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      background: "rgba(0,0,0,0.4)",
-                      border: "1px solid #333",
-                      borderRadius: "8px",
-                      color: "#fff",
-                      fontSize: "0.85rem",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div>
-                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                      AMOUNT
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      value={bankAmount}
-                      onChange={(e) => setBankAmount(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        background: "rgba(0,0,0,0.4)",
-                        border: "1px solid #333",
-                        borderRadius: "8px",
-                        color: "#fff",
-                        fontSize: "0.85rem",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                      TOKEN
-                    </label>
-                    <select
-                      value={bankToken}
-                      onChange={(e) => setBankToken(e.target.value as "SUI" | "ZION")}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        background: "rgba(0,0,0,0.8)",
-                        border: "1px solid #333",
-                        borderRadius: "8px",
-                        color: "#fff",
-                        fontSize: "0.85rem",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <option value="SUI">SUI</option>
-                      <option value="ZION">ZION</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginBottom: "16px",
-                    padding: "10px 12px",
-                    background: "rgba(255,215,0,0.05)",
-                    border: "1px solid rgba(255,215,0,0.2)",
-                    borderRadius: "8px",
-                  }}
-                >
-                  <div style={{ color: "#ffd700", fontSize: "0.72rem" }}>
-                    💰 Fee: 10 ZION + $0.01 gas · Transaction will be encrypted on Sui blockchain
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleBankSend}
-                  disabled={bankLoading}
-                  style={{
-                    width: "100%",
-                    padding: "14px",
-                    background: "linear-gradient(90deg, rgba(255,215,0,0.2), rgba(0,255,65,0.2))",
-                    border: "1px solid #ffd700",
-                    borderRadius: "8px",
-                    color: "#ffd700",
-                    fontSize: "1rem",
-                    fontWeight: "bold",
-                    cursor: bankLoading ? "not-allowed" : "pointer",
-                    opacity: bankLoading ? 0.7 : 1,
-                  }}
-                >
-                  {bankLoading ? "⏳ Sending..." : "🔐 Send Transaction"}
-                </button>
-                {bankTxHash && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "10px",
-                      background: "rgba(0,255,65,0.05)",
-                      border: "1px solid #00ff4144",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "4px" }}>
-                      ✅ Transaction sent!
-                    </div>
-                    <a
-                      href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
-                    >
-                      View on Suiscan →
-                    </a>
-                  </div>
-                )}
-                {bankError && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "10px",
-                      background: "rgba(255,50,50,0.05)",
-                      border: "1px solid #ff323244",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
-                  </div>
-                )}
-                <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
-                  Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
-                </div>
-              </div>
-
-              {/* Cross-chain — ZION Bridge */}
-              <div
-                style={{
-                  border: "1px solid rgba(100,160,255,0.3)",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  marginTop: "20px",
-                  marginBottom: "20px",
-                  background: "rgba(100,160,255,0.02)",
-                }}
-              >
-                <div style={{ color: "#64a0ff", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "4px" }}>
-                  🌉 COMING SOON — ZION BRIDGE
-                </div>
-                <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: "bold", marginBottom: "4px" }}>
-                  Private Cross-Chain Transfers
-                </div>
-                <div style={{ color: "#555", fontSize: "0.8rem", marginBottom: "20px" }}>
-                  Send privately across chains · Powered by Wormhole + Sui ETH Bridge
-                </div>
-
-                {/* Chain flow diagram */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    marginBottom: "24px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {[
-                    { chain: "Sui", color: "#64a0ff", icon: "🔵" },
-                    { chain: "Ethereum", color: "#9945ff", icon: "💎" },
-                    { chain: "Solana", color: "#00ff94", icon: "◎" },
-                    { chain: "Arbitrum", color: "#28a0f0", icon: "🔷" },
-                    { chain: "Base", color: "#0052ff", icon: "🔵" },
-                  ].map((c) => (
-                    <div
-                      key={c.chain}
-                      onClick={() => {
-                        if (c.chain !== "Sui") setBridgeToChain(c.chain);
-                      }}
-                      style={{
-                        padding: "10px 16px",
-                        border:
-                          bridgeToChain === c.chain || c.chain === "Sui"
-                            ? `2px solid ${c.color}`
-                            : `1px solid ${c.color}44`,
-                        borderRadius: "10px",
-                        background: bridgeToChain === c.chain ? `${c.color}22` : `${c.color}08`,
-                        textAlign: "center",
-                        minWidth: "80px",
-                        cursor: c.chain === "Sui" ? "default" : "pointer",
-                        transition: "all 0.2s ease",
-                        opacity: c.chain === "Sui" ? 0.6 : 1,
-                      }}
-                    >
-                      <div style={{ fontSize: "1.2rem" }}>{c.icon}</div>
-                      <div style={{ color: c.color, fontSize: "0.72rem", fontWeight: "bold" }}>{c.chain}</div>
-                      {c.chain === "Sui" && (
-                        <div style={{ color: c.color, fontSize: "0.6rem", opacity: 0.7 }}>FROM</div>
-                      )}
-                      {bridgeToChain === c.chain && c.chain !== "Sui" && (
-                        <div style={{ color: c.color, fontSize: "0.6rem" }}>TO ✓</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* How it works steps */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "20px" }}>
-                  {[
-                    { step: "1", title: "Send on Sui", desc: "Send USDC privately on Sui blockchain", color: "#64a0ff" },
-                    {
-                      step: "2",
-                      title: "Wormhole Bridge",
-                      desc: "Automatic cross-chain transfer via Wormhole protocol",
-                      color: "#9945ff",
-                    },
-                    { step: "3", title: "Receive anywhere", desc: "Get USDC on ETH, SOL, Arbitrum or Base", color: "#00ff94" },
-                  ].map((s) => (
-                    <div
-                      key={s.step}
-                      style={{
-                        padding: "14px",
-                        border: `1px solid ${s.color}33`,
-                        borderRadius: "10px",
-                        background: `${s.color}08`,
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          background: `${s.color}22`,
-                          border: `1px solid ${s.color}`,
-                          color: s.color,
-                          fontSize: "0.85rem",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          margin: "0 auto 8px",
-                        }}
-                      >
-                        {s.step}
-                      </div>
-                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {s.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{s.desc}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Coming soon form preview */}
-                <div style={{ opacity: 0.4, pointerEvents: "none" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                    <div>
-                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                        FROM NETWORK
-                      </label>
-                      <select
-                        style={{
-                          width: "100%",
-                          padding: "10px",
-                          background: "rgba(0,0,0,0.4)",
-                          border: "1px solid #333",
-                          borderRadius: "8px",
-                          color: "#fff",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        <option>🔵 Sui (Private)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                        TO NETWORK
-                      </label>
-                      <div
-                        style={{
-                          width: "100%",
-                          padding: "10px",
-                          background: "rgba(0,0,0,0.4)",
-                          border: "1px solid #64a0ff",
-                          borderRadius: "8px",
-                          color: "#fff",
-                          fontSize: "0.85rem",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        {bridgeToChain === "Ethereum" && "💎 Ethereum"}
-                        {bridgeToChain === "Solana" && "◎ Solana"}
-                        {bridgeToChain === "Arbitrum" && "🔷 Arbitrum"}
-                        {bridgeToChain === "Base" && "🔵 Base"}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    style={{
-                      width: "100%",
-                      padding: "14px",
-                      background: "rgba(100,160,255,0.1)",
-                      border: "1px solid #64a0ff",
-                      borderRadius: "8px",
-                      color: "#64a0ff",
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    🌉 Bridge Privately
-                  </button>
-                </div>
-
-                <div style={{ textAlign: "center", marginTop: "12px" }}>
-                  <span
-                    style={{
-                      background: "rgba(100,160,255,0.1)",
-                      border: "1px solid rgba(100,160,255,0.3)",
-                      color: "#64a0ff",
-                      fontSize: "0.7rem",
-                      padding: "4px 16px",
-                      borderRadius: "20px",
-                    }}
-                  >
-                    🚀 Launching with Sui ETH Bridge · Powered by Wormhole
-                  </span>
-                </div>
-              </div>
-
-              {/* Tech stack */}
-              <div style={{ border: "1px solid #222", borderRadius: "12px", padding: "16px" }}>
-                <div style={{ color: "#555", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  ⚙️ TECHNICAL STACK
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {[
-                    "sui::ristretto255",
-                    "Pedersen commitments",
-                    "zk-SNARK on-chain",
-                    "Stealth addresses",
-                    "Viewing key",
-                    "XChaCha20-Poly1305",
-                  ].map((tech) => (
-                    <span
-                      key={tech}
-                      style={{
-                        background: "rgba(0,255,65,0.05)",
-                        border: "1px solid rgba(0,255,65,0.2)",
-                        color: "#00ff41",
-                        fontSize: "0.7rem",
-                        padding: "4px 10px",
-                        borderRadius: "20px",
-                      }}
-                    >
-                      {tech}
-                    </span>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
         </div>
