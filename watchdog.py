@@ -8,6 +8,8 @@ import time
 import os
 import logging
 
+from civ_common import get_conn
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [WATCHDOG] %(message)s',
@@ -55,7 +57,14 @@ CRON_SCRIPTS = {
     "settlements":  ("settlement_check.py",  3600),
 }
 
+# Vacancy checks: run election scripts if no active office holder (every 30 min)
+ELECTION_CHECKS = {
+    "sheriff_check": ("sheriff.py", 1800),
+    "president_check": ("president.py", 1800),
+}
+
 last_run = {name: 0 for name in CRON_SCRIPTS}
+last_election_check = {name: 0 for name in ELECTION_CHECKS}
 last_coin_manager = 0
 COIN_MANAGER_INTERVAL = 14400  # каждые 4 часа
 
@@ -134,6 +143,46 @@ def ensure_daemons():
             log.exception(f"Daemon check failed for {name}: {e}")
 
 
+def has_active_office(office: str) -> bool:
+    """True if an active president or sheriff row exists."""
+    table = "sheriff_state" if office == "sheriff" else "president_state"
+    conn = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(f"SELECT 1 FROM {table} WHERE is_active = true LIMIT 1")
+        exists = cur.fetchone() is not None
+        cur.close()
+        return exists
+    except Exception as e:
+        log.warning(f"Office check failed for {office}: {e}")
+        return True  # assume filled on DB error to avoid election spam
+    finally:
+        if conn:
+            conn.close()
+
+
+def check_election_offices(now):
+    """Every 30 min: run sheriff.py / president.py if office is vacant."""
+    for name, (script, interval) in ELECTION_CHECKS.items():
+        try:
+            if now - last_election_check[name] < interval:
+                continue
+            last_election_check[name] = now
+
+            office = "sheriff" if name == "sheriff_check" else "president"
+            if has_active_office(office):
+                continue
+
+            if is_screen_running(name):
+                continue
+
+            log.warning(f"No active {office} — running {script} for election")
+            run_script(name, script)
+        except Exception as e:
+            log.exception(f"Election check failed for {name}: {e}")
+
+
 def check_cron_scripts(now):
     """Interval + log_stuck logic for scripts that run and exit."""
     for name, (script, interval) in CRON_SCRIPTS.items():
@@ -161,7 +210,8 @@ def main():
 
     log.info("=== ZION Watchdog started ===")
     log.info(
-        f"Monitoring {len(DAEMONS)} daemons + {len(CRON_SCRIPTS)} cron scripts"
+        f"Monitoring {len(DAEMONS)} daemons + {len(CRON_SCRIPTS)} cron scripts + "
+        f"{len(ELECTION_CHECKS)} election checks"
     )
 
     while True:
@@ -169,6 +219,7 @@ def main():
             now = time.time()
 
             ensure_daemons()
+            check_election_offices(now)
             check_cron_scripts(now)
 
             if int(now) % 600 < 30:

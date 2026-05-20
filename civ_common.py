@@ -236,6 +236,11 @@ def ensure_schema(cur):
     cur.execute(
         "INSERT INTO civilization_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
     )
+    _add_columns(
+        cur,
+        "civilization_state",
+        [("last_sheriff_agent_id", "INTEGER")],
+    )
 
     cur.execute(
         """

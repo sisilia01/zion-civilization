@@ -9,7 +9,11 @@ import traceback
 from datetime import datetime
 
 from civ_common import ensure_schema
-from civ_governance import attempt_coup, process_sheriff_orders
+from civ_governance import (
+    attempt_coup,
+    process_sheriff_orders,
+    record_last_sheriff_agent,
+)
 
 conn = psycopg2.connect(
     host="localhost",
@@ -65,17 +69,19 @@ def run_sheriff_election(forced=False):
     reason = "forced early election" if forced else "regular election"
     print(f"\nSHERIFF ELECTION ({reason})!")
 
+    cur.execute("SELECT last_sheriff_agent_id FROM civilization_state WHERE id = 1")
+    civ = cur.fetchone() or {}
+    last_sheriff_id = civ.get("last_sheriff_agent_id")
+
     cur.execute(
         """
         SELECT id, name, class, charisma, balance FROM agents
         WHERE is_alive = true AND charisma > 50
         AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
-        AND id NOT IN (
-            SELECT agent_id FROM sheriff_state
-            WHERE agent_id IS NOT NULL AND is_active = false
-        )
+        AND (%s IS NULL OR id != %s)
         ORDER BY charisma DESC, RANDOM() LIMIT 6
-        """
+        """,
+        (last_sheriff_id, last_sheriff_id),
     )
     candidates = cur.fetchall()
     if not candidates:
@@ -125,6 +131,7 @@ def run_sheriff_election(forced=False):
 
     sheriff_type = random.choices(SHERIFF_TYPES, weights=TYPE_WEIGHTS)[0]
 
+    record_last_sheriff_agent(cur)
     cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
     cur.execute(
         """
@@ -486,6 +493,7 @@ def check_term_end(sheriff):
             )
             print(f"Junta sheriff {sheriff['agent_name']} refuses to leave office!")
         else:
+            record_last_sheriff_agent(cur)
             cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
             log_event(
                 sheriff["agent_id"],
@@ -521,6 +529,7 @@ def main():
         )
 
         if sheriff and sheriff['approval_rating'] <= 0:
+            record_last_sheriff_agent(cur)
             cur.execute("UPDATE sheriff_state SET is_active=false WHERE is_active=true")
             log_event(sheriff['agent_id'], 'police',
                      f"🗳️ Sheriff {sheriff['agent_name']} removed from office! Approval hit 0%. Emergency election called!",
