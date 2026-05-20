@@ -6,7 +6,9 @@ from datetime import datetime
 from civ_common import ensure_schema, get_conn, get_cursor, log_event
 from civ_governance import (
     check_compliance,
+    get_sheriff_compliance_metrics,
     issue_president_orders,
+    sheriff_compliance_actionable,
     update_revolution_meter,
 )
 
@@ -83,9 +85,12 @@ def gather_metrics(cur) -> dict:
     cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
     pres = cur.fetchone() or {}
 
-    orders_given = int(pres.get("orders_given_cycle") or 0)
-    orders_executed = int(sheriff.get("orders_executed_cycle") or 0)
-    compliance = (orders_executed / orders_given * 100) if orders_given > 0 else 100.0
+    compliance_metrics = get_sheriff_compliance_metrics(cur)
+    compliance = (
+        compliance_metrics["compliance_rate"]
+        if compliance_metrics["measurable"]
+        else 100.0
+    )
 
     return {
         "crime_rate": poverty_pct,
@@ -97,6 +102,7 @@ def gather_metrics(cur) -> dict:
         "approval": int(pres.get("approval_rating") or 50),
         "corruption_index": float(pres.get("corruption_index") or 30),
         "sheriff_compliance_rate": compliance,
+        "sheriff_compliance_metrics": compliance_metrics,
         "sheriff_type": sheriff_type,
         "president": pres,
         "sheriff": sheriff,
@@ -234,8 +240,9 @@ def execute_decision(cur, data: dict):
     elif data["corp_bankruptcies_week"] > 3:
         action = "NATIONALIZE_CORPS"
         nationalize_bankrupt_corps(cur, pres)
-    elif data["sheriff_compliance_rate"] < 50:
+    elif sheriff_compliance_actionable(data["sheriff_compliance_metrics"]):
         action = "INVESTIGATE_SHERIFF"
+        rate = data["sheriff_compliance_metrics"]["compliance_rate"]
         cur.execute(
             """
             UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 50
@@ -246,7 +253,7 @@ def execute_decision(cur, data: dict):
             cur,
             pid,
             "president",
-            f"President {pname} investigates Sheriff — compliance {data['sheriff_compliance_rate']:.0f}%",
+            f"President {pname} investigates Sheriff — compliance {rate:.0f}% (24h orders)",
             0,
             priority="urgent",
         )

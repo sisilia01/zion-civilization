@@ -13,6 +13,82 @@ ORDER_TYPES = [
     "PROTECT_CORP",
 ]
 
+MIN_SHERIFF_TENURE_DAYS = 3
+COMPLIANCE_FIRE_THRESHOLD = 0.30
+
+
+def get_sheriff_compliance_metrics(cur) -> dict:
+    """Compliance from sheriff_orders in the last 24h (not cycle counters)."""
+    cur.execute(
+        "SELECT COALESCE(days_in_office, 0) AS d FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    row = cur.fetchone()
+    days = int((row or {}).get("d") or 0)
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM sheriff_orders
+        WHERE issued_at > NOW() - INTERVAL '24 hours'
+        """
+    )
+    given = int(cur.fetchone()["c"] or 0)
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM sheriff_orders
+        WHERE issued_at > NOW() - INTERVAL '24 hours'
+          AND status IN ('executed', 'faked')
+        """
+    )
+    executed = int(cur.fetchone()["c"] or 0)
+
+    if given == 0:
+        rate = None
+        rate_pct = None
+    else:
+        rate = executed / given
+        rate_pct = rate * 100
+
+    return {
+        "orders_24h": given,
+        "orders_executed_24h": executed,
+        "compliance_rate": rate_pct,
+        "compliance_rate_raw": rate,
+        "days_in_office": days,
+        "measurable": given > 0,
+        "tenure_ok": days > MIN_SHERIFF_TENURE_DAYS,
+    }
+
+
+def sheriff_compliance_actionable(metrics: dict, threshold_pct: float = 30.0) -> bool:
+    """True when compliance can be measured, tenure > 3 days, and rate below threshold."""
+    if not metrics.get("measurable"):
+        return False
+    if not metrics.get("tenure_ok"):
+        return False
+    rate = metrics.get("compliance_rate")
+    if rate is None:
+        return False
+    return rate < threshold_pct
+
+
+def record_last_sheriff_agent(cur):
+    cur.execute("SELECT agent_id FROM sheriff_state WHERE is_active = true LIMIT 1")
+    row = cur.fetchone()
+    if row and row.get("agent_id"):
+        cur.execute(
+            """
+            UPDATE civilization_state
+            SET last_sheriff_agent_id = %s, updated_at = NOW()
+            WHERE id = 1
+            """,
+            (row["agent_id"],),
+        )
+
+
+def deactivate_sheriff(cur):
+    record_last_sheriff_agent(cur)
+    cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
+
 
 def issue_president_orders(cur, president):
     """President issues 1-3 direct orders per cycle based on situation."""
@@ -242,31 +318,15 @@ def check_compliance(cur, president):
     if not president:
         return
 
-    # Use order table timestamps (president and sheriff run in separate crons)
-    cur.execute(
-        """
-        SELECT COUNT(*) AS c FROM sheriff_orders
-        WHERE issued_at > NOW() - INTERVAL '2 hours'
-        """
-    )
-    given = int(cur.fetchone()["c"] or 0)
-    cur.execute(
-        """
-        SELECT COUNT(*) AS c FROM sheriff_orders
-        WHERE issued_at > NOW() - INTERVAL '2 hours'
-          AND status IN ('executed', 'faked')
-        """
-    )
-    executed = int(cur.fetchone()["c"] or 0)
+    metrics = get_sheriff_compliance_metrics(cur)
+    if not metrics["measurable"]:
+        return  # no orders in 24h — compliance cannot be measured
 
-    if given == 0:
-        return
-
-    rate = executed / given
+    rate = metrics["compliance_rate_raw"]
     pname = president["agent_name"]
 
-    if rate < 0.30:
-        cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
+    if rate < COMPLIANCE_FIRE_THRESHOLD and metrics["tenure_ok"]:
+        deactivate_sheriff(cur)
         log_event(
             cur,
             president["agent_id"],
@@ -280,7 +340,7 @@ def check_compliance(cur, president):
         )
         return
 
-    if rate < 0.50:
+    if metrics["tenure_ok"] and rate < 0.50:
         cur.execute(
             """
             UPDATE president_state SET compliance_low_cycles = COALESCE(compliance_low_cycles, 0) + 1
@@ -468,7 +528,7 @@ def attempt_coup(cur, sheriff, president):
             priority="breaking",
         )
     else:
-        cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
+        deactivate_sheriff(cur)
         cur.execute(
             """
             UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'coup'
