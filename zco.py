@@ -192,6 +192,8 @@ Respond ONLY as JSON:
     }, sort_keys=True)
     consensus_hash = "ZCO-" + hashlib.sha256(hash_data.encode()).hexdigest()[:16]
 
+    sui_url = record_sui_proof("", consensus_hash)
+
     proof_payload = {
         "type": "zco_decision",
         "agent": agent_name,
@@ -201,9 +203,14 @@ Respond ONLY as JSON:
         "votes": votes,
         "timestamp": timestamp,
         "consensus_hash": consensus_hash,
+        "sui_url": sui_url or "",
     }
     blob_id, explorer_url = store_decision_walrus(proof_payload)
-    sui_url = record_sui_proof(blob_id, consensus_hash) if blob_id else None
+    if blob_id:
+        proof_payload["blob_id"] = blob_id
+        final_id, final_url = store_decision_walrus(proof_payload)
+        if final_id:
+            blob_id, explorer_url = final_id, final_url
 
     return {
         "agent": agent_name,
