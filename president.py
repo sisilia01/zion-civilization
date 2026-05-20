@@ -42,7 +42,7 @@ def gather_metrics(cur) -> dict:
     cur.execute(
         """
         SELECT COUNT(*) AS c FROM agents
-        WHERE is_alive = true AND (balance < 100 OR class IN ('poor', 'critical'))
+        WHERE is_alive = true AND (balance < 10 OR class IN ('poor', 'critical'))
         """
     )
     poor = int(cur.fetchone()["c"] or 0)
@@ -215,7 +215,7 @@ def execute_decision(cur, data: dict):
         cur.execute(
             """
             UPDATE agents SET balance = balance + %s
-            WHERE is_alive = true AND balance < 100
+            WHERE is_alive = true AND balance < 10
             """,
             (STIMULUS_AMOUNT,),
         )

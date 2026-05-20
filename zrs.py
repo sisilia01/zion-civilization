@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ZION Reserve System (ZRS) — central bank with 40M reserve (100M supply), inject/absorb."""
+"""ZION Reserve System (ZRS) — central bank with 400k reserve (1M supply), inject/absorb."""
 from datetime import datetime
 
 from civ_common import (
@@ -20,29 +20,29 @@ HYPER_ABSORB_RATE = 0.20
 
 
 def determine_state(econ: dict, consecutive_crisis: int) -> str:
-    """Thresholds for 100M supply (~13k avg per agent)."""
+    """Thresholds for 1M supply (~130 avg per agent)."""
     avg = econ["avg_balance"]
     poor = econ["poverty_pct"]
 
-    if avg > 20_000:
+    if avg > 1_000:
         return "HYPERINFLATION"
     if consecutive_crisis >= 2:
         return "DEPRESSION"
-    if avg > 5_000 and poor < 20:
+    if avg > 200 and poor < 20:
         return "BOOM"
-    if 1_000 <= avg <= 5_000:
+    if 50 <= avg <= 200:
         return "NORMAL"
-    if 100 <= avg < 1_000 and poor > 40:
+    if 10 <= avg < 50 and poor > 40:
         return "RECESSION"
-    if avg < 100 and poor > 60:
+    if avg < 10 and poor > 60:
         return "CRISIS"
     if poor > 60:
         return "CRISIS"
-    if avg < 1_000 and poor > 40:
+    if avg < 50 and poor > 40:
         return "RECESSION"
-    if 1_000 <= avg <= 5_000:
+    if 50 <= avg <= 200:
         return "NORMAL"
-    if avg > 5_000:
+    if avg > 200:
         return "BOOM"
     return "RECESSION"
 
@@ -181,7 +181,7 @@ def main():
         n, total = inject_to_agents(
             cur,
             20.0,
-            "is_alive = true AND balance < 100",
+            "is_alive = true AND balance < 10",
         )
         amount = total
         action = "INJECT_SMALL"
