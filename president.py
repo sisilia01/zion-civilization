@@ -103,25 +103,30 @@ def gather_metrics(cur) -> dict:
     }
 
 
-def update_corruption(cur, data: dict, action: str):
-    idx = data["corruption_index"]
-    if data["sheriff_type"] == "corrupt":
-        idx += 3
-    if action == "ANTI_CORRUPTION_DRIVE":
-        idx -= 5
-    elif action == "BRIBE" or action == "corrupt":
+def update_corruption(cur, data: dict, action: str) -> float:
+    """Dynamic corruption_index on president_state (0–100)."""
+    idx = float(data.get("corruption_index") or 30)
+    sheriff_type = data.get("sheriff_type") or "honest"
+
+    if sheriff_type == "corrupt":
         idx += 5
-    elif data["sheriff_type"] == "honest":
+    elif sheriff_type == "honest":
         idx -= 3
-    if random.random() < 0.20 and action not in ("ANTI_CORRUPTION_DRIVE",):
-        idx += 5
-        action = "BRIBE"
-    idx = max(0, min(100, idx))
+
+    if action == "POPULISM":
+        idx += 3
+    elif action != "ANTI_CORRUPTION_DRIVE" and random.random() < 0.20:
+        idx += 3  # president took a bribe
+
+    if action == "ANTI_CORRUPTION_DRIVE":
+        idx -= 10
+
+    idx = max(0.0, min(100.0, round(idx, 2)))
     cur.execute(
         "UPDATE president_state SET corruption_index = %s WHERE is_active = true",
         (idx,),
     )
-    return idx, action
+    return idx
 
 
 def nationalize_bankrupt_corps(cur, president: dict):
@@ -288,8 +293,8 @@ def execute_decision(cur, data: dict):
             priority="normal",
         )
 
-    update_corruption(cur, data, action)
-    print(f"📋 Decision: {action} | approval {approval}% | corruption {data['corruption_index']:.0f}")
+    corruption = update_corruption(cur, data, action)
+    print(f"📋 Decision: {action} | approval {approval}% | corruption {corruption:.0f}")
     return action
 
 

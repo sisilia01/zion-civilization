@@ -3,11 +3,16 @@
 import random
 from datetime import datetime
 
-from civ_common import ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    ACADEMY_COST,
+    UNIVERSITY_COST,
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    log_event,
+)
 
-UNIVERSITY_COST = 150
 UNIVERSITY_DAYS = 3
-ACADEMY_COST = 80
 ACADEMY_DAYS = 2
 CHILD_MAINTENANCE = 2.0
 CHILD_MAX_DAY = 7
