@@ -216,6 +216,17 @@ function zcoAgreementPercent(d: ZcoDecision): number {
   return Math.round(Math.min(1, Math.max(0, x)) * 100);
 }
 
+/** Internal proof page — never link ZCO cards directly to Walrus JSON. */
+function zcoProofHref(decision: ZcoDecision): string | null {
+  const blobId = decision.blob_id || decision.tx_hash;
+  if (blobId && !String(blobId).startsWith("http")) {
+    return `/zco/${blobId}`;
+  }
+  const url = decision.explorer_url || "";
+  const match = url.match(/\/blobs\/([^/?#]+)/);
+  return match ? `/zco/${match[1]}` : null;
+}
+
 function zcoAgreementDisplayColor(pct: number): string {
   if (pct >= 85) return "#22c55e";
   if (pct >= 50) return ZCO_ACCENT;
@@ -4994,104 +5005,105 @@ const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
 
 type WireNewsItem = { text: string; type?: string; timestamp?: string };
 
-const WIRE_THEMES = {
-  green: {
-    border: "#1a3a1a",
-    headerBg: "rgba(0,255,65,0.1)",
-    headerBorder: "#1a3a1a",
-    dot: "#00ff41",
-    label: "#00ff41",
-    text: "#8fdf8f",
-    sep: "#1a3a1a",
-  },
-  blue: {
-    border: "#1a3a5c",
-    headerBg: "rgba(77,162,255,0.1)",
-    headerBorder: "#1a3a5c",
-    dot: "#4DA2FF",
-    label: "#4DA2FF",
-    text: "#7ab8f5",
-    sep: "#1a3a5c",
-  },
-  orange: {
-    border: "#3a2a0a",
-    headerBg: "rgba(255,120,0,0.12)",
-    headerBorder: "#3a2a0a",
-    dot: "#ff8800",
-    label: "#ffaa00",
-    text: "#ffcc88",
-    sep: "#3a2a0a",
-  },
-} as const;
+const WIRE_TICKER_SCROLL_SEC = 150;
 
-function wireItemColor(type: string | undefined, theme: keyof typeof WIRE_THEMES): string {
-  if (type === "breaking") return "#ff6464";
-  if (type === "warning") return theme === "orange" ? "#ff8800" : "#ffaa00";
-  return WIRE_THEMES[theme].text;
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function colorWithAlpha(hex: string, alphaSuffix: string): string {
+  return hex.length === 7 ? `${hex}${alphaSuffix}` : hex;
+}
+
+function wireItemStyle(accentColor: string, type?: string): CSSProperties {
+  if (type === "breaking") return { color: "#ff4444", fontWeight: "bold" };
+  return { color: accentColor };
+}
+
+/** Matches LIVE EVENTS — WALRUS ticker bar (header + scroll); only accent color varies. */
 function NewsWireTicker({
   label,
   items,
-  theme,
-  animationSec = 50,
+  color,
 }: {
   label: string;
   items: WireNewsItem[];
-  theme: keyof typeof WIRE_THEMES;
-  animationSec?: number;
+  color: string;
 }) {
   if (!items.length) return null;
-  const c = WIRE_THEMES[theme];
-  const loop = [...items, ...items, ...items];
+  const loop = [...items, ...items];
+  const borderColor = colorWithAlpha(color, "22");
   return (
     <div
       style={{
-        marginTop: "12px",
-        background: "#050a10",
-        border: `1px solid ${c.border}`,
-        borderRadius: "8px",
+        margin: "16px 0",
         overflow: "hidden",
+        borderRadius: "6px",
+        border: `1px solid ${borderColor}`,
+        background: hexToRgba(color, 0.02),
       }}
     >
       <div
         style={{
-          background: c.headerBg,
-          padding: "4px 12px",
-          borderBottom: `1px solid ${c.headerBorder}`,
           display: "flex",
           alignItems: "center",
           gap: "8px",
+          padding: "5px 12px",
+          background: hexToRgba(color, 0.06),
+          borderBottom: `1px solid ${borderColor}`,
         }}
       >
-        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: c.dot }} />
-        <span style={{ color: c.label, fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
+        <span
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: color,
+            boxShadow: `0 0 6px ${color}`,
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: "0.65rem",
+            color,
+            letterSpacing: "2px",
+          }}
+        >
           {label}
         </span>
       </div>
-      <div style={{ overflow: "hidden", padding: "8px 0" }}>
+      <div style={{ overflow: "hidden", padding: "10px 0" }}>
         <div
           style={{
             display: "flex",
-            width: "max-content",
-            animation: `marquee ${animationSec}s linear infinite`,
+            gap: "0",
+            animation: `tickerScroll ${WIRE_TICKER_SCROLL_SEC}s linear infinite`,
             whiteSpace: "nowrap",
+            width: "max-content",
           }}
         >
           {loop.map((item, i) => (
-            <span
-              key={`${item.text}-${i}`}
-              style={{
-                color: wireItemColor(item.type, theme),
-                fontFamily: "monospace",
-                fontSize: "0.75rem",
-                flexShrink: 0,
-                paddingRight: "60px",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {item.text}
-              <span style={{ color: c.sep, marginLeft: "20px" }}>◆</span>
+            <span key={`${item.text}-${i}`} style={{ display: "inline-flex", alignItems: "center" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "0 40px",
+                  borderRight: "1px solid #ffffff11",
+                  fontFamily: "monospace",
+                  fontSize: "0.75rem",
+                  whiteSpace: "nowrap",
+                  ...wireItemStyle(color, item.type),
+                }}
+              >
+                {item.text}
+              </span>
+              <span style={{ color: colorWithAlpha(color, "55"), padding: "0 20px" }}>◆</span>
             </span>
           ))}
         </div>
@@ -7934,7 +7946,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <NewsWireTicker label="📊 CORPORATE WIRE" items={corporateNews} theme="green" animationSec={55} />
+                  <NewsWireTicker label="📊 CORPORATE WIRE" items={corporateNews} color="#4DA2FF" />
                 </>
               )}
 
@@ -8107,7 +8119,7 @@ export default function Home() {
                       );
                     })}
                   </div>
-                  <NewsWireTicker label="🚔 POLICE WIRE" items={policeNews} theme="blue" animationSec={50} />
+                  <NewsWireTicker label="🚔 POLICE WIRE" items={policeNews} color="#00cccc" />
                 </>
               )}
 
@@ -8172,7 +8184,7 @@ export default function Home() {
                       ))}
                     </div>
                   </section>
-                  <NewsWireTicker label="⚔️ CLAN WIRE" items={clanNews} theme="orange" animationSec={45} />
+                  <NewsWireTicker label="⚔️ CLAN WIRE" items={clanNews} color="#ffaa00" />
                 </>
               )}
 
@@ -8308,13 +8320,13 @@ export default function Home() {
                     style={{
                       display: "flex",
                       gap: "0",
-                      animation: "tickerScroll 150s linear infinite",
+                      animation: `tickerScroll ${WIRE_TICKER_SCROLL_SEC}s linear infinite`,
                       whiteSpace: "nowrap",
                       width: "max-content",
                     }}
                   >
                     {[...filteredEvents, ...filteredEvents].map((item, i) => {
-                      const color = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
+                      const badgeColor = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
                       const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
                       return (
                         <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
@@ -8323,34 +8335,34 @@ export default function Home() {
                               display: "inline-flex",
                               alignItems: "center",
                               gap: "8px",
-                              padding: "0 60px",
+                              padding: "0 40px",
                               borderRight: "1px solid #ffffff11",
                               fontFamily: "monospace",
-                              fontSize: "0.88rem",
-                              color: "#ccc",
+                              fontSize: "0.75rem",
+                              color: "#00ff41",
                             }}
                           >
                             <span style={{ fontSize: "1rem" }}>{icon}</span>
                             <span
                               style={{
-                                color: color === "#666" ? "#c4c4c4" : color === "#888" ? "#d0d0d0" : color,
+                                color: badgeColor === "#666" ? "#c4c4c4" : badgeColor === "#888" ? "#d0d0d0" : badgeColor,
                                 fontWeight: "bold",
                                 fontSize: "0.7rem",
                                 background:
-                                  color === "#666"
+                                  badgeColor === "#666"
                                     ? "rgba(180,180,180,0.2)"
-                                    : color === "#888"
+                                    : badgeColor === "#888"
                                       ? "rgba(200,200,200,0.2)"
-                                      : `${color}33`,
+                                      : `${badgeColor}33`,
                                 padding: "2px 6px",
                                 borderRadius: "3px",
-                                border: `1px solid ${color === "#666" ? "#c4c4c466" : color === "#888" ? "#d0d0d066" : `${color}55`}`,
+                                border: `1px solid ${badgeColor === "#666" ? "#c4c4c466" : badgeColor === "#888" ? "#d0d0d066" : `${badgeColor}55`}`,
                               }}
                             >
                               {item.type?.replace("_", " ").toUpperCase()}
                             </span>
                             <span>{item.text}</span>
-                            <span style={{ color: "#00ff41", fontSize: "0.7rem" }}>— {item.agent}</span>
+                            <span style={{ color: "#00ff41", fontSize: "0.75rem" }}>— {item.agent}</span>
                           </span>
                           <span style={{ color: "#00ff4155", padding: "0 20px" }}>◆</span>
                         </span>
@@ -8575,11 +8587,11 @@ export default function Home() {
                                 marginTop: "8px",
                               }}
                             >
-                              {decision.explorer_url ? (
+                              {(() => {
+                                const proofHref = zcoProofHref(decision);
+                                return proofHref ? (
                                 <a
-                                  href={decision.explorer_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  href={proofHref}
                                   style={{
                                     display: "inline-flex",
                                     alignItems: "center",
@@ -8596,7 +8608,7 @@ export default function Home() {
                                 >
                                   View in Explorer ↗
                                 </a>
-                              ) : (
+                                ) : (
                                 <span
                                   style={{
                                     fontFamily: "monospace",
@@ -8606,7 +8618,8 @@ export default function Home() {
                                 >
                                   ⏳ Storing proof…
                                 </span>
-                              )}
+                                );
+                              })()}
                               {decision.sui_url ? (
                                 <a
                                   href={decision.sui_url}
