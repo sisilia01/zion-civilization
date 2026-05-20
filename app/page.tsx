@@ -5213,6 +5213,18 @@ export default function Home() {
     days_in_power: number;
     police_fund: number;
     personal_fund: number;
+    corruption_index?: number;
+  } | null>(null);
+  const [ecoPolData, setEcoPolData] = useState<{
+    zrs_last_action: {
+      state: string;
+      action_taken: string;
+      amount: number;
+      news_headline: string;
+      created_at: string;
+    } | null;
+    corporations: { active: number; total_treasury: number };
+    economy: { avg_balance: number; poverty_pct: number; total_zion: number };
   } | null>(null);
   const [sheriffState, setSheriffState] = useState<{
     agent_name: string;
@@ -5239,14 +5251,50 @@ export default function Home() {
       const res = await fetch(`/api/eco-pol?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
+
       if (data.president?.agent_name) {
-        setPresidentState(data.president);
+        setPresidentState({
+          agent_name: data.president.agent_name,
+          party: data.president.party ?? "blue",
+          term_number: Number(data.president.term_number) || 1,
+          is_dictator: Boolean(data.president.is_dictator),
+          approval_rating: Number(data.president.approval_rating) || 0,
+          days_in_power: Number(data.president.days_in_power) || 0,
+          police_fund: Number(data.president.police_fund) || 0,
+          personal_fund: Number(data.president.personal_fund) || 0,
+          corruption_index: Number(data.president.corruption_index) || 30,
+        });
       }
+
       if (data.sheriff?.agent_name && data.sheriff.agent_name !== "No Sheriff") {
         setSheriffState(data.sheriff);
       } else {
         setSheriffState(null);
       }
+
+      const zrs = data.zrs_last_action;
+      const corps = data.corporations ?? {};
+      const economy = data.economy ?? {};
+      setEcoPolData({
+        zrs_last_action: zrs
+          ? {
+              state: String(zrs.state ?? "NORMAL"),
+              action_taken: String(zrs.action_taken ?? "HOLD"),
+              amount: Number(zrs.amount) || 0,
+              news_headline: String(zrs.news_headline ?? ""),
+              created_at: String(zrs.created_at ?? ""),
+            }
+          : null,
+        corporations: {
+          active: Number(corps.active) || 0,
+          total_treasury: Number(corps.total_treasury) || 0,
+        },
+        economy: {
+          avg_balance: Number(economy.avg_balance) || 0,
+          poverty_pct: Number(economy.poverty_pct) || 0,
+          total_zion: Number(economy.total_zion) || 0,
+        },
+      });
     } catch {
       /* ignore */
     }
@@ -9484,7 +9532,7 @@ export default function Home() {
                 </p>
               </div>
 
-              {frsStats && (
+              {(ecoPolData || frsStats) && (
                 <div style={{ marginBottom: "24px" }}>
                   <div style={{display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:"12px", marginBottom:"16px"}}>
 
@@ -9496,7 +9544,7 @@ export default function Home() {
                       <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
                         <span style={{fontSize:"1.2rem"}}>🏦</span>
                         <span style={{color:"#00ff41", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.85rem"}}>
-                          ZRS STATUS: {frsStats?.status || "LOADING"}
+                          ZRS STATUS: {ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "LOADING"}
                         </span>
                       </div>
                       <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"0.7rem", marginBottom:"4px"}}>
@@ -9553,71 +9601,85 @@ export default function Home() {
                       padding:"14px 16px", background:"#050a10",
                       border:"1px solid #1a1a1a", borderRadius:"10px",
                     }}>
-                      {/* Corruption rate */}
+                      {/* Corruption rate — from /eco-pol president.corruption_index */}
                       <div style={{marginBottom:"12px"}}>
+                        {(() => {
+                          const corruptionIdx = presidentState?.corruption_index ?? 30;
+                          const corruptColor =
+                            corruptionIdx < 30 ? "#00ff41" : corruptionIdx <= 60 ? "#ffaa00" : "#ff3232";
+                          return (
+                            <>
                         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px"}}>
                           <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.65rem", letterSpacing:"1px"}}>🕵️ CORRUPTION INDEX</span>
                           <span style={{
-                            color: (stateTreasury?.corruption_index ?? 20) < 30 ? "#00ff41" :
-                                   (stateTreasury?.corruption_index ?? 20) < 60 ? "#ffaa00" : "#ff3232",
+                            color: corruptColor,
                             fontFamily:"monospace", fontSize:"0.7rem", fontWeight:"bold"
                           }}>
-                            {(stateTreasury?.corruption_index ?? 20) < 30 ? "🟢 LOW" :
-                             (stateTreasury?.corruption_index ?? 20) < 60 ? "🟡 MODERATE" : "🔴 HIGH"}
+                            {corruptionIdx < 30 ? "🟢 LOW" :
+                             corruptionIdx <= 60 ? "🟡 MODERATE" : "🔴 HIGH"}
                           </span>
                         </div>
                         <div style={{width:"100%", height:"8px", background:"#111", borderRadius:"4px", overflow:"hidden", marginBottom:"4px"}}>
                           <div style={{
-                            width:`${Math.min(stateTreasury?.corruption_index ?? 20, 100)}%`,
+                            width:`${Math.min(corruptionIdx, 100)}%`,
                             height:"100%",
-                            background: (stateTreasury?.corruption_index ?? 20) < 30 ? "#00ff41" :
-                                        (stateTreasury?.corruption_index ?? 20) < 60 ? "#ffaa00" : "#ff3232",
+                            background: corruptColor,
                             borderRadius:"4px", transition:"width 1s",
                           }}/>
                         </div>
                         <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem"}}>
-                          {(stateTreasury?.corruption_index ?? 20).toFixed(1)}% — {
-                            (stateTreasury?.corruption_index ?? 20) < 30 ? "Officials are clean" :
-                            (stateTreasury?.corruption_index ?? 20) < 60 ? "Bribes common" : "System is corrupt!"
+                          {corruptionIdx.toFixed(1)}% — {
+                            corruptionIdx < 30 ? "Officials are clean" :
+                            corruptionIdx <= 60 ? "Bribes common" : "System is corrupt!"
                           }
                         </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Divider */}
                       <div style={{borderTop:"1px solid #1a1a1a", marginBottom:"12px"}}/>
 
-                      {/* Crime rate */}
+                      {/* Poverty / crime proxy — from /eco-pol economy.poverty_pct */}
                       <div>
+                        {(() => {
+                          const povertyPct = ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0;
+                          return (
+                            <>
                         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px"}}>
-                          <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.65rem", letterSpacing:"1px"}}>🔍 CRIME RATE INDEX</span>
+                          <span style={{color:"#666", fontFamily:"monospace", fontSize:"0.65rem", letterSpacing:"1px"}}>🔍 POVERTY INDEX</span>
                           <span style={{
-                            color: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
-                                   (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
-                                   (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
+                            color: povertyPct < 20 ? "#00ff41" :
+                                   povertyPct < 40 ? "#ffaa00" :
+                                   povertyPct < 60 ? "#ff8800" : "#ff3232",
                             fontFamily:"monospace", fontSize:"0.7rem", fontWeight:"bold"
                           }}>
-                            {(frsStats?.economy.poor_pct ?? 0) < 20 ? "🟢 LOW" :
-                             (frsStats?.economy.poor_pct ?? 0) < 40 ? "🟡 MODERATE" :
-                             (frsStats?.economy.poor_pct ?? 0) < 60 ? "🟠 HIGH" : "🔴 CRITICAL"}
+                            {povertyPct < 20 ? "🟢 LOW" :
+                             povertyPct < 40 ? "🟡 MODERATE" :
+                             povertyPct < 60 ? "🟠 HIGH" : "🔴 CRITICAL"}
                           </span>
                         </div>
                         <div style={{width:"100%", height:"8px", background:"#111", borderRadius:"4px", overflow:"hidden", marginBottom:"4px"}}>
                           <div style={{
-                            width:`${Math.min(frsStats?.economy.poor_pct ?? 0, 100)}%`,
+                            width:`${Math.min(povertyPct, 100)}%`,
                             height:"100%",
-                            background: (frsStats?.economy.poor_pct ?? 0) < 20 ? "#00ff41" :
-                                        (frsStats?.economy.poor_pct ?? 0) < 40 ? "#ffaa00" :
-                                        (frsStats?.economy.poor_pct ?? 0) < 60 ? "#ff8800" : "#ff3232",
+                            background: povertyPct < 20 ? "#00ff41" :
+                                        povertyPct < 40 ? "#ffaa00" :
+                                        povertyPct < 60 ? "#ff8800" : "#ff3232",
                             borderRadius:"4px", transition:"width 1s",
                           }}/>
                         </div>
                         <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.6rem"}}>
-                          {(frsStats?.economy.poor_pct ?? 0).toFixed(1)}% poverty index — {
-                            (frsStats?.economy.poor_pct ?? 0) < 20 ? "City is safe" :
-                            (frsStats?.economy.poor_pct ?? 0) < 40 ? "Police active" :
-                            (frsStats?.economy.poor_pct ?? 0) < 60 ? "Crime rising" : "City in chaos!"
+                          {povertyPct.toFixed(1)}% poverty — {
+                            povertyPct < 20 ? "City is safe" :
+                            povertyPct < 40 ? "Police active" :
+                            povertyPct < 60 ? "Crime rising" : "City in chaos!"
                           }
                         </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     {/* BOTTOM RIGHT — Sheriff */}
@@ -9680,20 +9742,24 @@ export default function Home() {
 
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
                     {[
-                      { label: "AVG BALANCE", value: `${frsStats.economy.avg_balance.toFixed(1)} ZION`, color: "#4DA2FF" },
                       {
-                        label: "TOTAL MONEY",
-                        value: `${(frsStats.economy.total_money / 1000).toFixed(1)}K ZION`,
+                        label: "AVG BALANCE",
+                        value: `${(ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })} ZION`,
+                        color: "#4DA2FF",
+                      },
+                      {
+                        label: "TOTAL ZION",
+                        value: `${Math.round(ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0).toLocaleString("en-US")} ZION`,
                         color: "#00ff41",
                       },
                       {
-                        label: "POOR %",
-                        value: `${frsStats.economy.poor_pct}%`,
-                        color: frsStats.economy.poor_pct > 40 ? "#ff6464" : "#ffaa00",
+                        label: "POVERTY %",
+                        value: `${(ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0).toFixed(1)}%`,
+                        color: (ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0) > 40 ? "#ff6464" : "#ffaa00",
                       },
                       {
-                        label: "MAX WEALTH",
-                        value: `${frsStats.economy.max_balance.toFixed(0)} ZION`,
+                        label: "ZRS STATE",
+                        value: ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—",
                         color: "#ffd700",
                       },
                     ].map((m) => (
@@ -9717,6 +9783,7 @@ export default function Home() {
                     ))}
                   </div>
 
+                  {frsStats && (
                   <div
                     style={{
                       background: "#050a10",
@@ -9735,7 +9802,7 @@ export default function Home() {
                         { cls: "Middle", cnt: frsStats.economy.middle_count, color: "#4DA2FF" },
                         { cls: "Poor", cnt: frsStats.economy.poor_count, color: "#ff6464" },
                       ].map((c) => {
-                        const pct = ((c.cnt / frsStats.economy.total_agents) * 100).toFixed(1);
+                        const pct = ((c.cnt / Math.max(frsStats.economy.total_agents, 1)) * 100).toFixed(1);
                         return (
                           <div
                             key={c.cls}
@@ -9756,6 +9823,7 @@ export default function Home() {
                       })}
                     </div>
                   </div>
+                  )}
 
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
                     <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
@@ -9763,17 +9831,37 @@ export default function Home() {
                         🏢 CORPORATIONS
                       </div>
                       <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "1.2rem", fontWeight: "bold" }}>
-                        {frsStats.corporations.count} active
+                        {(ecoPolData?.corporations.active ?? frsStats?.corporations.count ?? 0).toLocaleString("en-US")} active
                       </div>
                       <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.7rem" }}>
-                        Treasury: {frsStats.corporations.total_treasury.toFixed(0)} ZION
+                        Treasury: {Math.round(ecoPolData?.corporations.total_treasury ?? frsStats?.corporations.total_treasury ?? 0).toLocaleString("en-US")} ZION
                       </div>
                     </div>
                     <div style={{ background: "#050a10", border: "1px solid #1a1a2e", borderRadius: "8px", padding: "14px" }}>
                       <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "8px" }}>
                         📋 LAST ZRS ACTION
                       </div>
-                      {frsStats.recent_actions[0] ? (
+                      {ecoPolData?.zrs_last_action ? (
+                        <>
+                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "4px" }}>
+                            {ecoPolData.zrs_last_action.state} · {ecoPolData.zrs_last_action.action_taken}
+                          </div>
+                          <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.75rem", marginBottom: "4px" }}>
+                            {Math.round(ecoPolData.zrs_last_action.amount).toLocaleString("en-US")} ZION
+                          </div>
+                          <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.65rem", lineHeight: 1.4, marginBottom: "4px" }}>
+                            {ecoPolData.zrs_last_action.news_headline}
+                          </div>
+                          <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.6rem" }}>
+                            {ecoPolData.zrs_last_action.created_at
+                              ? new Date(ecoPolData.zrs_last_action.created_at).toLocaleTimeString("en", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "—"}
+                          </div>
+                        </>
+                      ) : frsStats?.recent_actions?.[0] ? (
                         <>
                           <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
                             {frsStats.recent_actions[0].action}
