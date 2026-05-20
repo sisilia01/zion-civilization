@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 
 export const revalidate = 7200;
 
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY || process.env.OPENROUTER_API_KEY || "";
 
 type NewspaperIn = { id: string; name: string; theme: string };
 
 export async function POST(req: Request) {
   if (!OPENROUTER_KEY) {
-    return NextResponse.json({ article: null, error: "OPENROUTER_API_KEY not configured" }, { status: 503 });
+    return NextResponse.json({ article: null, error: "OPENROUTER_KEY not configured" }, { status: 503 });
   }
 
   let body: {

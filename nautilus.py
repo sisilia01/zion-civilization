@@ -1,11 +1,10 @@
 import subprocess
 import json
-import os
 import urllib.request
 import re
 from datetime import datetime, timezone
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_KEY", ""))
+from openrouter_key import get_openrouter_key
 SUI_ADDRESS = "0xb193ba40239f9caebbc9b6bf1d7aba2d9ff6f8a26eca4ae74ad610079607265b"
 SUI_COIN_ID = "0xd7e289b8f734ea56f234386cde0dfab5371eee6de1f4a479e47fed17a5485ef2"
 
@@ -29,7 +28,7 @@ Respond ONLY as JSON: {{"decision": "work", "reason": "need more ZION", "confide
             "https://openrouter.ai/api/v1/chat/completions",
             data=data,
             headers={
-                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Authorization": f"Bearer {get_openrouter_key()}",
                 "Content-Type": "application/json"
             }
         )

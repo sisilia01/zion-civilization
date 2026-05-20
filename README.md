@@ -234,7 +234,7 @@ Prediction markets where humans bet **real SUI** on crypto price action and civi
 ```bash
 cd ~/zion_backend
 pip install fastapi uvicorn psycopg2-binary httpx
-export OPENROUTER_API_KEY=your_key_here
+export OPENROUTER_KEY=your_key_here
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 

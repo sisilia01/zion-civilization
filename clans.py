@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
-"""ZION Gangs/Clans — extortion, territory, recruitment, wars, alliances."""
+"""ZION Gangs/Clans — extortion, territory, recruitment, wars, street crime."""
 import random
 from datetime import datetime
 
-from civ_common import ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    CRISIS_ZRS_MODES,
+    cap_gang_treasuries,
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    get_division_officers,
+    get_zrs_policy_mode,
+    log_event,
+)
 
 RECRUIT_BONUS = 5.0
 SIGNING_BALANCE_MAX = 3.0
 MAX_DOMINANT_GANGS = 3
-EXTORT_RATE = 0.08  # was 0.15 — hourly 15% bankrupted corps in <12h sim
+EXTORT_RATE = 0.08
 
 
 def sync_member_counts(cur):
@@ -56,6 +65,96 @@ def recruit_poor(cur):
         )
         joined += 1
     return joined
+
+
+def street_crime(cur) -> int:
+    """Poor rob rich during ZRS crisis; desperation robberies in boom/normal."""
+    zrs_mode = get_zrs_policy_mode(cur)
+    crisis = zrs_mode in CRISIS_ZRS_MODES
+    rob_rate = 0.05 if crisis else 0.01
+
+    cur.execute(
+        """
+        SELECT id, name, balance FROM agents
+        WHERE is_alive = true AND balance < 50
+        """
+    )
+    poor_agents = cur.fetchall()
+    if not poor_agents:
+        return 0
+
+    cur.execute(
+        """
+        SELECT id, name, balance FROM agents
+        WHERE is_alive = true AND balance > 500
+        """
+    )
+    rich_agents = cur.fetchall()
+    if not rich_agents:
+        return 0
+
+    anti_tax = get_division_officers(cur, "ANTI-TAX")
+    catch_chance = 0.30 if anti_tax > 0 else 0.05
+    robberies = 0
+
+    for robber in poor_agents:
+        if random.random() > rob_rate:
+            continue
+        victim = random.choice(rich_agents)
+        vbal = float(victim["balance"] or 0)
+        if vbal <= 0:
+            continue
+        steal_pct = random.uniform(0.10, 0.30)
+        stolen = round(vbal * steal_pct, 2)
+        if stolen <= 0:
+            continue
+
+        if random.random() < catch_chance:
+            cur.execute(
+                """
+                UPDATE agents SET balance = GREATEST(0, balance - 50)
+                WHERE id = %s
+                """,
+                (robber["id"],),
+            )
+            log_event(
+                cur,
+                robber["id"],
+                "street_crime",
+                f"Police caught {robber['name']} robbing {victim['name']}! Jail fine -50 ZION",
+                50,
+                priority="urgent",
+            )
+            continue
+
+        cur.execute(
+            "UPDATE agents SET balance = balance - %s WHERE id = %s",
+            (stolen, victim["id"]),
+        )
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (stolen, robber["id"]),
+        )
+        log_event(
+            cur,
+            robber["id"],
+            "street_crime",
+            f"{robber['name']} robbed {victim['name']} for {stolen:.0f} ZION!",
+            stolen,
+            priority="urgent",
+        )
+        robberies += 1
+
+    if robberies > 0 and crisis:
+        log_event(
+            cur,
+            None,
+            "street_crime",
+            f"URGENT: Street crime surges as ZRS enters {zrs_mode} mode — {robberies} robberies!",
+            robberies,
+            priority="urgent",
+        )
+    return robberies
 
 
 def extort_territory(cur):
@@ -128,7 +227,6 @@ def expand_territory(cur):
                 float(target["treasury"]) * 0.1,
                 priority="urgent",
             )
-            print(f"🏴 {clan['name']} took {target['name']}")
 
 
 def gang_war(cur):
@@ -194,14 +292,6 @@ def dissolve_empty_clans(cur):
             "UPDATE clans SET treasury = 0, members_count = 0 WHERE id = %s",
             (clan["id"],),
         )
-        log_event(
-            cur,
-            None,
-            "clan_war",
-            f"Clan {clan['name']} dissolved — all members dead",
-            0,
-            priority="normal",
-        )
 
 
 def cap_dominant_gangs(cur):
@@ -237,6 +327,7 @@ def main():
 
     print(f"\n⚔️  ZION Clans — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     sync_member_counts(cur)
+    robbed = street_crime(cur)
     recruited = recruit_poor(cur)
     extort_territory(cur)
     expand_territory(cur)
@@ -245,9 +336,10 @@ def main():
     dissolve_empty_clans(cur)
     cap_dominant_gangs(cur)
     sync_member_counts(cur)
+    cap_gang_treasuries(cur)
 
     conn.commit()
-    print(f"✅ Clans cycle complete — recruited {recruited}\n")
+    print(f"✅ Clans cycle — recruited {recruited}, street robberies {robbed}\n")
     cur.close()
     conn.close()
 

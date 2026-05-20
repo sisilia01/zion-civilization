@@ -5,7 +5,17 @@ import random
 import re
 from datetime import datetime, timedelta
 
-from civ_common import ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    CRISIS_ZRS_MODES,
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    get_revolution_meter,
+    get_zrs_policy_mode,
+    hungry_agent_pct,
+    is_uprising_active,
+    log_event,
+)
 
 TIER_ORDER = {"breaking": 0, "urgent": 1, "normal": 2, "gossip": 3}
 TARGET_MIN = 5
@@ -96,8 +106,54 @@ def fetch_recent_events(cur):
     return cur.fetchall()
 
 
+def fetch_uprising(cur):
+    if not is_uprising_active(cur):
+        return None
+    cur.execute(
+        "SELECT COUNT(*) AS c FROM agents WHERE is_alive = true AND balance < 50"
+    )
+    rebels = int((cur.fetchone() or {}).get("c") or 0)
+    return {"meter": get_revolution_meter(cur), "rebel_count": rebels}
+
+
 def build_dynamic_headlines(cur) -> list[dict]:
     headlines = []
+
+    up = fetch_uprising(cur)
+    if up:
+        headlines.append({
+            "tier": "breaking",
+            "text": (
+                f"BREAKING: UPRISING BEGINS! {up['rebel_count']} citizens take to streets! "
+                f"Revolution meter: {up['meter']}%"
+            ),
+            "agent_id": None,
+            "amount": up["meter"],
+        })
+        headlines.append({
+            "tier": "urgent",
+            "text": "URGENT: Police divisions stretched thin — uprising drains SWAT and ANTI-TAX!",
+            "agent_id": None,
+            "amount": 0,
+        })
+        headlines.append({
+            "tier": "urgent",
+            "text": "URGENT: Corruption surges as ANTI-CORR officers reassigned to riot duty!",
+            "agent_id": None,
+            "amount": 0,
+        })
+
+    cur.execute(
+        """
+        SELECT description FROM events
+        WHERE event_type = 'revolution' AND created_at > NOW() - INTERVAL '2 hours'
+        ORDER BY created_at DESC LIMIT 3
+        """
+    )
+    for ev in cur.fetchall():
+        desc = ev["description"] or ""
+        tier = "breaking" if "BREAKING" in desc else "urgent"
+        headlines.append({"tier": tier, "text": desc, "agent_id": None, "amount": 0})
 
     rev = fetch_revolution(cur)
     if rev:
@@ -111,8 +167,72 @@ def build_dynamic_headlines(cur) -> list[dict]:
             "amount": 0,
         })
 
+    hunger_pct = hungry_agent_pct(cur)
+    if hunger_pct >= 10:
+        headlines.append({
+            "tier": "breaking",
+            "text": f"BREAKING: ECONOMIC COLLAPSE: {hunger_pct:.0f}% agents cannot afford food!",
+            "agent_id": None,
+            "amount": hunger_pct,
+        })
+    elif hunger_pct >= 3:
+        headlines.append({
+            "tier": "normal",
+            "text": f"NORMAL: Hunger spreading: {hunger_pct:.1f}% agents skipped meals today",
+            "agent_id": None,
+            "amount": 0,
+        })
+
+    zrs_mode = get_zrs_policy_mode(cur)
+    if zrs_mode in CRISIS_ZRS_MODES:
+        headlines.append({
+            "tier": "urgent",
+            "text": f"URGENT: Street crime surges as ZRS enters {zrs_mode} mode",
+            "agent_id": None,
+            "amount": 0,
+        })
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM agents WHERE is_alive = true AND infected = true
+        """
+    )
+    infected = int((cur.fetchone() or {}).get("c") or 0)
+    if infected >= 5:
+        headlines.append({
+            "tier": "breaking",
+            "text": f"BREAKING: EPIDEMIC spreading! {infected} agents infected!",
+            "agent_id": None,
+            "amount": infected,
+        })
+
+    cur.execute(
+        """
+        SELECT description FROM events
+        WHERE event_type IN ('street_crime', 'catastrophe', 'zrs', 'corporation')
+          AND created_at > NOW() - INTERVAL '2 hours'
+        ORDER BY created_at DESC LIMIT 8
+        """
+    )
+    for ev in cur.fetchall():
+        desc = ev["description"] or ""
+        if not desc:
+            continue
+        tier = "breaking" if "BREAKING" in desc else "urgent" if "URGENT" in desc else "normal"
+        headlines.append({"tier": tier, "text": desc, "agent_id": None, "amount": 0})
+
     zrs = fetch_zrs_alert(cur)
     if zrs and zrs.get("state"):
+        if zrs.get("action_taken") == "MEGA_INJECT":
+            headlines.append({
+                "tier": "breaking",
+                "text": (
+                    f"BREAKING: ZRS MEGA QE: {float(zrs.get('amount') or 0):,.0f} ZION injected — "
+                    f"civilization saved!"
+                ),
+                "agent_id": None,
+                "amount": float(zrs.get("amount") or 0),
+            })
         headlines.append({
             "tier": "urgent",
             "text": (

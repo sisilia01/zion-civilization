@@ -10,6 +10,10 @@ from civ_common import (
     get_cursor,
     get_zrs_state,
     log_event,
+    set_corporate_crisis,
+    zrs_deduct_reserve,
+    zrs_reserve,
+    ZRS_RESERVE_FLOOR,
 )
 
 MANAGER_SALARY = 50.0
@@ -203,7 +207,12 @@ def gang_extortion(cur, corp: dict):
     )
 
 
-def fire_all_employees(cur, corp_id: int):
+def fire_all_employees(cur, corp_id: int) -> int:
+    cur.execute(
+        "SELECT COUNT(*) AS c FROM agents WHERE employer_corp_id = %s",
+        (corp_id,),
+    )
+    count = int((cur.fetchone() or {}).get("c") or 0)
     cur.execute(
         """
         UPDATE agents SET
@@ -215,6 +224,76 @@ def fire_all_employees(cur, corp_id: int):
         (corp_id,),
     )
     cur.execute("UPDATE corporations SET employees = 0 WHERE id = %s", (corp_id,))
+    return count
+
+
+def layoff_to_gangs(cur, corp_id: int, corp_name: str, count: int):
+    """Unemployed agents with balance < 20 join a random gang."""
+    cur.execute(
+        """
+        SELECT id FROM agents
+        WHERE is_alive = true AND balance < 20
+          AND COALESCE(job_status, 'unemployed') = 'unemployed'
+          AND clan_id IS NULL
+        ORDER BY RANDOM() LIMIT %s
+        """,
+        (max(count * 2, 5),),
+    )
+    agents = cur.fetchall()
+    if not agents:
+        return
+    cur.execute(
+        "SELECT id, name FROM clans WHERE members_count >= 0 ORDER BY RANDOM() LIMIT 1"
+    )
+    clan = cur.fetchone()
+    if not clan:
+        return
+    joined = 0
+    for ag in agents[:count]:
+        cur.execute(
+            """
+            UPDATE agents SET clan_id = %s, clan_name = %s
+            WHERE id = %s
+            """,
+            (clan["id"], clan["name"], ag["id"]),
+        )
+        joined += 1
+    if joined:
+        log_event(
+            cur,
+            None,
+            "corporation",
+            f"Gang {clan['name']} recruits {joined} laid-off workers from {corp_name}",
+            joined,
+            priority="urgent",
+        )
+
+
+def handle_corp_insolvency(cur, corp: dict, treasury: float) -> bool:
+    """Treasury < 0: mass layoffs, bankruptcy."""
+    if treasury >= 0:
+        return False
+
+    count = fire_all_employees(cur, corp["id"])
+    layoff_to_gangs(cur, corp["id"], corp["name"], count)
+    cur.execute(
+        """
+        UPDATE corporations SET is_active = false, employees = 0, treasury = %s
+        WHERE id = %s
+        """,
+        (treasury, corp["id"]),
+    )
+    cur.execute("DELETE FROM clan_territory WHERE corp_id = %s", (corp["id"],))
+    log_event(
+        cur,
+        None,
+        "corporation",
+        f"MASS LAYOFFS: {corp['name']} cannot pay {count} workers — treasury {treasury:.0f}",
+        abs(treasury),
+        priority="breaking",
+    )
+    print(f"💥 INSOLVENT: {corp['name']} ({count} laid off)")
+    return True
 
 
 def run_cycle():
@@ -237,6 +316,8 @@ def run_cycle():
     )
     corps = cur.fetchall()
 
+    bankrupt_this_cycle = 0
+
     for corp in corps:
         hired = hire_for_corp(cur, corp)
         if hired:
@@ -248,6 +329,10 @@ def run_cycle():
 
         cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))
         treasury = float(cur.fetchone()["treasury"] or 0) + revenue - payroll
+
+        if handle_corp_insolvency(cur, corp, treasury):
+            bankrupt_this_cycle += 1
+            continue
 
         neg = int(corp["negative_cycles"] or 0)
         if treasury < 0:
@@ -272,7 +357,8 @@ def run_cycle():
         gang_extortion(cur, {**corp, "treasury": treasury})
 
         if neg >= BANKRUPTCY_CYCLES:
-            fire_all_employees(cur, corp["id"])
+            count = fire_all_employees(cur, corp["id"])
+            layoff_to_gangs(cur, corp["id"], corp["name"], count)
             cur.execute(
                 "UPDATE corporations SET is_active = false, employees = 0 WHERE id = %s",
                 (corp["id"],),
@@ -286,7 +372,42 @@ def run_cycle():
                 0,
                 priority="breaking",
             )
+            bankrupt_this_cycle += 1
             print(f"💥 BANKRUPT: {corp['name']}")
+
+    if bankrupt_this_cycle >= 3:
+        set_corporate_crisis(cur, True)
+        log_event(
+            cur,
+            None,
+            "corporation",
+            f"BREAKING: CORPORATE CASCADE: {bankrupt_this_cycle} corporations bankrupt in 24h!",
+            bankrupt_this_cycle,
+            priority="breaking",
+        )
+        bailout_each = 5000.0
+        cur.execute(
+            "SELECT id, name FROM corporations WHERE is_active = true ORDER BY treasury ASC"
+        )
+        bailed = 0
+        for c in cur.fetchall():
+            if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + bailout_each:
+                if zrs_deduct_reserve(cur, bailout_each):
+                    cur.execute(
+                        "UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
+                        (bailout_each, c["id"]),
+                    )
+                    bailed += 1
+        if bailed > 0:
+            log_event(
+                cur,
+                None,
+                "zrs",
+                f"CORPORATE CRISIS: ZRS emergency bailout activated — {bailed} corps +{bailout_each:.0f}",
+                bailout_each * bailed,
+                priority="breaking",
+            )
+            print(f"🏦 ZRS corporate bailout: {bailed} corps")
 
     conn.commit()
     print("✅ Corporations cycle complete!\n")

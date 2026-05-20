@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from openrouter_key import get_openrouter_key
+
 app = FastAPI(title="ZION Civilization API")
 
 app.add_middleware(
@@ -832,14 +834,21 @@ async def chat_with_agent(request: dict):
         conn.commit()
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
-    OPENROUTER_KEY = os.getenv("OPENROUTER_KEY") or "REDACTED_KEY"
-    key_preview = (OPENROUTER_KEY or "")[:10]
-    print(f"Chat OPENROUTER_KEY prefix: {key_preview}... (from env: {bool(os.getenv('OPENROUTER_KEY'))})")
     try:
+        openrouter_key = get_openrouter_key()
+    except RuntimeError as e:
+        print(f"Chat skipped: {e}")
+        openrouter_key = None
+    if openrouter_key:
+        key_preview = openrouter_key[:10]
+        print(f"Chat OPENROUTER_KEY prefix: {key_preview}... (from env)")
+    try:
+        if not openrouter_key:
+            raise RuntimeError("OPENROUTER_KEY not configured")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
+                headers={"Authorization": f"Bearer {openrouter_key}"},
                 json={"model": "deepseek/deepseek-chat-v3-0324",
                       "messages": [{"role": "system", "content": personality}, {"role": "user", "content": message}],
                       "max_tokens": 120},
@@ -1988,7 +1997,7 @@ Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_KEY', 'sk-or-placeholder')}",
+                "Authorization": f"Bearer {get_openrouter_key()}",
                 "HTTP-Referer": "https://zionciv.com",
                 "X-Title": "ZION Civilization"
             }
@@ -2152,7 +2161,10 @@ async def generate_conversations():
         events = cur.fetchall()
         event_context = "; ".join([f"{e['event_type']}: {e['description']}" for e in events])
 
-        OPENROUTER_KEY = os.getenv("OPENROUTER_KEY", "sk-or-placeholder")
+        try:
+            openrouter_key = get_openrouter_key()
+        except RuntimeError as e:
+            return {"ok": False, "error": str(e)}
         import urllib.request as req
         conversations = []
 
@@ -2182,7 +2194,7 @@ English only."""
                     data=payload,
                     headers={
                         "Content-Type": "application/json",
-                        "Authorization": f"Bearer {OPENROUTER_KEY}",
+                        "Authorization": f"Bearer {openrouter_key}",
                         "HTTP-Referer": "https://zionciv.com",
                         "X-Title": "ZION Civilization"
                     }
@@ -2316,7 +2328,7 @@ async def get_frs_stats():
         # Corporations with treasury > 0 (active in economy)
         cur.execute("""
             SELECT COUNT(*) AS count, COALESCE(SUM(treasury), 0) AS total_treasury
-            FROM corporations WHERE treasury > 0
+            FROM corporations WHERE is_active = true
         """)
         corps = cur.fetchone()
 
@@ -2391,9 +2403,111 @@ async def get_eco_pol():
 
         cur.execute("""
             SELECT COUNT(*) AS active, COALESCE(SUM(treasury), 0) AS total_treasury
-            FROM corporations WHERE treasury > 0
+            FROM corporations WHERE is_active = true
         """)
         corps = cur.fetchone()
+
+        cur.execute("""
+            SELECT effect_type, expires_at, crime_modifier, poverty_modifier, metadata
+            FROM active_effects WHERE expires_at > NOW()
+            ORDER BY expires_at ASC
+        """)
+        effects_raw = cur.fetchall()
+        active_effects = []
+        now_utc = _utc_now()
+        for ef in effects_raw:
+            exp = ef["expires_at"]
+            if hasattr(exp, "tzinfo") and exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            hrs_left = max(0, (exp - now_utc).total_seconds() / 3600) if exp else 0
+            etype = ef["effect_type"]
+            if etype == "martial_law":
+                effects_txt = "Crime -40%, Food ×2"
+            elif etype == "stimulus":
+                effects_txt = "Poverty relief"
+            else:
+                effects_txt = ""
+            active_effects.append({
+                "type": etype,
+                "effect_type": etype,
+                "expires_at": exp.isoformat() if hasattr(exp, "isoformat") else str(exp),
+                "expires_in": f"{int(hrs_left)}h",
+                "effects": effects_txt,
+                "crime_modifier": float(ef["crime_modifier"] or 0),
+                "poverty_modifier": float(ef["poverty_modifier"] or 0),
+                "metadata": ef.get("metadata"),
+            })
+
+        cur.execute("""
+            SELECT avg_balance, total_zion, poverty_pct, zrs_state, snapshot_at
+            FROM economy_snapshots
+            ORDER BY snapshot_at DESC NULLS LAST, id DESC
+            LIMIT 6
+        """)
+        snaps = list(reversed(cur.fetchall()))
+        economy_trends = {
+            "avg_balance": [],
+            "poverty_pct": [],
+            "total_zion": [],
+        }
+        for s in snaps:
+            economy_trends["avg_balance"].append(round(float(s["avg_balance"] or 0), 2))
+            economy_trends["poverty_pct"].append(round(float(s["poverty_pct"] or 0), 2))
+            economy_trends["total_zion"].append(round(float(s["total_zion"] or 0), 2))
+
+        def _trend_arrow(series):
+            if len(series) < 2:
+                return "→"
+            if series[-1] > series[-2] * 1.005:
+                return "↑"
+            if series[-1] < series[-2] * 0.995:
+                return "↓"
+            return "→"
+
+        trend_arrows = {
+            "avg_balance": _trend_arrow(economy_trends["avg_balance"]),
+            "poverty_pct": _trend_arrow(economy_trends["poverty_pct"]),
+            "total_zion": _trend_arrow(economy_trends["total_zion"]),
+        }
+        avg_change = 0.0
+        direction = "flat"
+        if len(economy_trends["avg_balance"]) >= 2:
+            avg_change = round(
+                economy_trends["avg_balance"][-1] - economy_trends["avg_balance"][-2], 2
+            )
+            if avg_change > 0.5:
+                direction = "up"
+            elif avg_change < -0.5:
+                direction = "down"
+        economy_trend = {
+            "avg_balance_change": f"{avg_change:+.1f}",
+            "direction": direction,
+        }
+
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM agents WHERE is_alive = true AND infected = true"
+        )
+        epidemic_count = int((cur.fetchone() or {}).get("c") or 0)
+
+        cur.execute("""
+            SELECT COALESCE(SUM(officers), 0) AS total_officers
+            FROM police_divisions
+        """)
+        div_officers = int((cur.fetchone() or {}).get("total_officers") or 0)
+
+        cur.execute("""
+            SELECT COALESCE(revolution_meter, 0) AS meter,
+                   COALESCE(uprising_active, false) AS active,
+                   COALESCE(last_meter_delta, 0) AS delta,
+                   last_meter_reason
+            FROM civilization_state WHERE id = 1
+        """)
+        rev_row = cur.fetchone() or {}
+        meter = int(float(rev_row.get("meter") or 0))
+        delta = int(rev_row.get("delta") or 0)
+        reason = rev_row.get("last_meter_reason") or ""
+        sign = "+" if delta >= 0 else ""
+        meter_change = f"{sign}{delta} ({reason})" if reason else f"{sign}{delta}"
 
         cur.execute("""
             SELECT
@@ -2438,8 +2552,252 @@ async def get_eco_pol():
                 "avg_balance": round(float(econ["avg_balance"] or 0), 1),
                 "poverty_pct": poverty_pct,
                 "total_zion": round(float(econ["total_zion"] or 0), 2),
+                "trend_arrows": trend_arrows,
+                "snapshots": economy_trends,
             },
+            "active_effects": active_effects,
+            "police_divisions_total": div_officers,
+            "uprising": {
+                "active": bool(rev_row.get("active")),
+                "meter": meter,
+                "trend": meter_change,
+                "meter_change": meter_change,
+            },
+            "economy_trend": economy_trend,
+            "epidemic": {"active": epidemic_count > 0, "infected_count": epidemic_count},
         }
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/sheriff-log")
+async def get_sheriff_log():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT description, created_at FROM events
+            WHERE event_type IN ('sheriff_action', 'sheriff_election', 'sheriff_order',
+                                 'sheriff_arrest', 'insubordination', 'election')
+              AND (event_type != 'election' OR description ILIKE '%%Sheriff%%')
+            ORDER BY created_at DESC LIMIT 10
+        """)
+        rows = cur.fetchall()
+        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+    finally:
+        cur.close()
+        db.close()
+
+
+def _wire_item(text: str, item_type: str = "info", ts=None) -> dict:
+    return {
+        "text": text,
+        "type": item_type,
+        "timestamp": str(ts) if ts else datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _wire_type_from_event(description: str, event_type: str, priority=None) -> str:
+    desc = description or ""
+    pr = (priority or "").lower()
+    if pr == "breaking" or "BREAKING" in desc:
+        return "breaking"
+    if pr == "urgent" or event_type in ("corp_bankruptcy", "corp_layoff", "gang_battle", "coup_attempt"):
+        return "warning"
+    if "critically" in desc.lower() or "⚠️" in desc:
+        return "warning"
+    return "info"
+
+
+def _trim_wire(items: list, limit: int = 15) -> list:
+    items.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
+    return items[:limit]
+
+
+@app.get("/police-wire")
+async def get_police_wire():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT description, event_type, priority, created_at FROM events
+            WHERE event_type IN (
+                'police_action', 'police_raid', 'crime_report', 'patrol', 'police',
+                'street_crime', 'arrest', 'swat_raid'
+            )
+            AND event_type NOT IN (
+                'sheriff_action', 'sheriff_election', 'sheriff_order', 'sheriff'
+            )
+            ORDER BY created_at DESC LIMIT 20
+        """)
+        rows = cur.fetchall()
+        out = [
+            _wire_item(
+                r["description"],
+                _wire_type_from_event(r["description"], r["event_type"], r.get("priority")),
+                r["created_at"],
+            )
+            for r in rows
+            if r.get("description")
+        ]
+        return _trim_wire(out, 15)
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/corporate-wire")
+async def get_corporate_wire():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        items: list = []
+        corp_types = (
+            "corp_hired", "corp_revenue", "corp_bankruptcy", "corp_loan",
+            "corp_nationalized", "corp_layoff", "corp_hiring", "corporation",
+        )
+        cur.execute(
+            """
+            SELECT description, event_type, priority, created_at FROM events
+            WHERE event_type = ANY(%s)
+            ORDER BY created_at DESC LIMIT 20
+            """,
+            (list(corp_types),),
+        )
+        for r in cur.fetchall():
+            if r.get("description"):
+                items.append(
+                    _wire_item(
+                        r["description"],
+                        _wire_type_from_event(
+                            r["description"], r["event_type"], r.get("priority")
+                        ),
+                        r["created_at"],
+                    )
+                )
+
+        cur.execute(
+            """
+            SELECT name, employees, revenue FROM corporations
+            WHERE is_active = true
+            ORDER BY revenue DESC NULLS LAST LIMIT 3
+            """
+        )
+        for r in cur.fetchall():
+            rev = float(r.get("revenue") or 0)
+            items.append(
+                _wire_item(
+                    f"📈 {r['name']} revenue: {rev:.0f} ZION this cycle",
+                    "info",
+                )
+            )
+
+        cur.execute(
+            """
+            SELECT name, treasury FROM corporations
+            WHERE is_active = true AND COALESCE(treasury, 0) < 1000
+            ORDER BY treasury ASC LIMIT 5
+            """
+        )
+        for r in cur.fetchall():
+            items.append(
+                _wire_item(
+                    f"⚠️ {r['name']} treasury critically low!",
+                    "warning",
+                )
+            )
+
+        cur.execute(
+            """
+            SELECT c.name, COUNT(a.id) AS grads
+            FROM agents a
+            JOIN corporations c ON a.employer_corp_id = c.id
+            WHERE a.education_status = 'graduated' AND a.is_alive = true
+            GROUP BY c.id, c.name
+            HAVING COUNT(a.id) > 0
+            ORDER BY grads DESC LIMIT 3
+            """
+        )
+        for r in cur.fetchall():
+            items.append(
+                _wire_item(
+                    f"🎓 {r['name']} hiring {int(r['grads'])} university graduates",
+                    "info",
+                )
+            )
+
+        return _trim_wire(items, 15)
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/clan-wire")
+async def get_clan_wire():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        items: list = []
+        clan_types = (
+            "gang_war", "clan_extortion", "clan_recruited", "territory_capture",
+            "clan_raid", "gang_battle", "coup_attempt", "clan_war",
+        )
+        cur.execute(
+            """
+            SELECT description, event_type, priority, created_at FROM events
+            WHERE event_type = ANY(%s)
+            ORDER BY created_at DESC LIMIT 20
+            """,
+            (list(clan_types),),
+        )
+        for r in cur.fetchall():
+            if r.get("description"):
+                items.append(
+                    _wire_item(
+                        r["description"],
+                        _wire_type_from_event(
+                            r["description"], r["event_type"], r.get("priority")
+                        ),
+                        r["created_at"],
+                    )
+                )
+
+        cur.execute(
+            """
+            SELECT name, COALESCE(members_count, 0) AS members, treasury
+            FROM clans
+            WHERE COALESCE(members_count, 0) > 0
+            ORDER BY treasury DESC NULLS LAST LIMIT 3
+            """
+        )
+        for r in cur.fetchall():
+            tre = float(r.get("treasury") or 0)
+            mem = int(r.get("members") or 0)
+            items.append(
+                _wire_item(
+                    f"💰 {r['name']} treasury: {tre:.0f} ZION | {mem} members",
+                    "info",
+                )
+            )
+
+        cur.execute(
+            """
+            SELECT name, treasury, wins, losses FROM clans
+            WHERE COALESCE(members_count, 0) > 0
+              AND COALESCE(wins, 0) > COALESCE(losses, 0)
+            ORDER BY treasury DESC NULLS LAST LIMIT 3
+            """
+        )
+        for r in cur.fetchall():
+            items.append(
+                _wire_item(
+                    f"👑 {r['name']} DOMINATES the district!",
+                    "breaking",
+                )
+            )
+
+        return _trim_wire(items, 15)
     finally:
         cur.close()
         db.close()
@@ -2517,34 +2875,44 @@ async def get_sheriff_state():
 
 @app.get("/sheriff/actions")
 async def get_sheriff_actions():
-    db = get_db()
-    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        cur.execute("""
-            SELECT description, created_at FROM events
-            WHERE event_type = 'police'
-            ORDER BY created_at DESC LIMIT 10
-        """)
-        rows = cur.fetchall()
-        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
-    finally:
-        cur.close()
-        db.close()
+    """Legacy alias — prefer /sheriff-log."""
+    return await get_sheriff_log()
 
 @app.get("/police/divisions")
+@app.get("/police-divisions")
 async def get_police_divisions():
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute("SELECT * FROM police_divisions ORDER BY id")
         divs = cur.fetchall()
+        cur.execute(
+            "SELECT COALESCE(uprising_active, false) AS a FROM civilization_state WHERE id = 1"
+        )
+        up_row = cur.fetchone()
+        uprising = bool((up_row or {}).get("a"))
+        depleted = {"SWAT", "ANTI-TAX", "ANTI-CORR", "PRES.GUARD"} if uprising else set()
+        out = []
+        for d in divs:
+            name = d.get("division_name") or ""
+            officers = int(d.get("officers") or 0)
+            budget = float(d.get("budget") or 0)
+            out.append({
+                "division": name,
+                "division_name": name,
+                "officers": officers,
+                "budget": budget,
+                "role": d.get("role"),
+                "effectiveness": min(100, officers * 4),
+                "depleted": uprising and name in depleted,
+                "mobilized": uprising and name == "RIOT CTRL",
+            })
         cur.execute("SELECT * FROM state_treasury LIMIT 1")
         treasury = cur.fetchone()
-        cur.execute("SELECT corruption_index FROM state_treasury LIMIT 1")
-        corruption = cur.fetchone()
         return {
-            "divisions": [dict(d) for d in divs],
+            "divisions": out,
             "treasury": dict(treasury) if treasury else {},
+            "uprising_active": uprising,
         }
     finally:
         cur.close()

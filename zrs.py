@@ -9,6 +9,7 @@ from civ_common import (
     get_conn,
     get_cursor,
     log_event,
+    record_economy_snapshot,
     zrs_add_reserve,
     zrs_deduct_reserve,
     zrs_reserve,
@@ -222,24 +223,43 @@ def main():
         corp_n = int(cur.fetchone()["c"] or 0)
         cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
         agent_n = int(cur.fetchone()["c"] or 0)
-        corp_cost = corp_n * 20000.0
-        agent_cost = agent_n * 500.0
+        agent_inject = 500.0
+        corp_bailout = 5000.0
+        agent_cost = agent_n * agent_inject
+        corp_cost = corp_n * corp_bailout
+        amount = 0.0
+        n = 0
         if zrs_reserve(cur) >= RESERVE_FLOOR + agent_cost + corp_cost:
-            zrs_deduct_reserve(cur, agent_cost)
-            cur.execute(
-                "UPDATE agents SET balance = balance + 500, debt = 0 WHERE is_alive = true"
-            )
-            zrs_deduct_reserve(cur, corp_cost)
-            cur.execute(
-                "UPDATE corporations SET treasury = treasury + 20000 WHERE is_active = true"
-            )
-            amount = agent_cost + corp_cost
-            n = agent_n
+            if zrs_deduct_reserve(cur, agent_cost):
+                cur.execute(
+                    """
+                    UPDATE agents SET balance = balance + %s, debt = 0, health = LEAST(100, COALESCE(health, 80) + 20)
+                    WHERE is_alive = true
+                    """,
+                    (agent_inject,),
+                )
+                amount += agent_cost
+                n = agent_n
+            if zrs_deduct_reserve(cur, corp_cost):
+                cur.execute(
+                    "UPDATE corporations SET treasury = treasury + %s WHERE is_active = true",
+                    (corp_bailout,),
+                )
+                amount += corp_cost
         else:
-            n, amount = inject_to_agents(cur, 500.0)
+            n, partial = inject_to_agents(cur, agent_inject)
+            amount = partial
             cur.execute("UPDATE agents SET debt = 0 WHERE is_alive = true")
         action = "MEGA_INJECT"
-        headline = "ZRS DEPRESSION PROTOCOL: Maximum stimulus activated!"
+        headline = "ZRS DEPRESSION PROTOCOL: Saving the civilization!"
+        log_event(
+            cur,
+            None,
+            "zrs",
+            f"BREAKING: ZRS MEGA QE: {amount:,.0f} ZION injected — civilization saved!",
+            amount,
+            priority="breaking",
+        )
         log_event(cur, None, "zrs", headline, amount, priority="breaking")
         rate = 0.0
     elif state == "HYPERINFLATION":
@@ -280,6 +300,7 @@ def main():
         )
 
     record_zrs_policy(cur, state, action, amount, headline, econ, rate)
+    record_economy_snapshot(cur, state)
 
     conn.commit()
     print(f"Mode: {state} | Reserve: {reserve_before:,.0f} → {reserve_after:,.0f}")

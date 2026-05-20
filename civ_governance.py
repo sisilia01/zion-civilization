@@ -203,7 +203,7 @@ def process_sheriff_orders(cur, sheriff):
                 log_event(
                     cur,
                     sheriff["agent_id"],
-                    "police",
+                    "sheriff_action",
                     f"TIP-OFF: Gang {payload['gang_name']} warned before raid!",
                     0,
                     priority="urgent",
@@ -233,7 +233,7 @@ def process_sheriff_orders(cur, sheriff):
         log_event(
             cur,
             sheriff["agent_id"],
-            "police",
+            "sheriff_action",
             f"Sheriff {sname}: {result}",
             0,
             priority="normal",
@@ -330,7 +330,7 @@ def check_compliance(cur, president):
         log_event(
             cur,
             president["agent_id"],
-            "president",
+            "sheriff_action",
             f"INSUBORDINATION: President {pname} fires Sheriff! Compliance {rate*100:.0f}% — emergency election!",
             0,
             priority="breaking",
@@ -379,95 +379,6 @@ def check_compliance(cur, president):
     )
 
 
-def update_revolution_meter(cur, president):
-    if not president:
-        return False
-
-    econ = economy_snapshot(cur)
-    approval = int(president.get("approval_rating") or 50)
-    meter = float(president.get("revolution_meter") or 0)
-
-    if econ["poverty_pct"] > 70:
-        meter += 5
-    if approval < 15:
-        meter += 8
-    cur.execute(
-        """
-        SELECT COUNT(*) AS c FROM agents
-        WHERE died_at > NOW() - INTERVAL '7 days' AND death_cause = 'starvation'
-        """
-    )
-    starved = int(cur.fetchone()["c"] or 0)
-    if starved > 10:
-        meter += 10
-
-    cur.execute(
-        "UPDATE civilization_state SET revolution_meter = %s, updated_at = NOW() WHERE id = 1",
-        (meter,),
-    )
-    cur.execute(
-        "UPDATE president_state SET revolution_meter = %s WHERE is_active = true",
-        (meter,),
-    )
-
-    if meter <= 100:
-        return False
-
-    cur.execute(
-        "SELECT COUNT(*) AS c FROM agents WHERE is_alive = true AND balance < 3"
-    )
-    rebels = int(cur.fetchone()["c"] or 0)
-    cur.execute("SELECT police_count FROM sheriff_state WHERE is_active = true LIMIT 1")
-    prow = cur.fetchone()
-    police_count = int(prow["police_count"] or 20) if prow else 20
-
-    rebel_force = rebels * 2
-    state_force = police_count * 10
-    pname = president["agent_name"]
-
-    if rebel_force > state_force:
-        cur.execute(
-            """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'revolution'
-            WHERE id = %s
-            """,
-            (president["agent_id"],),
-        )
-        cur.execute("UPDATE president_state SET is_active = false WHERE is_active = true")
-        log_event(
-            cur,
-            None,
-            "president",
-            f"REVOLUTION! Citizens storm the palace! President {pname} executed!",
-            meter,
-            priority="breaking",
-        )
-        cur.execute(
-            "UPDATE civilization_state SET revolution_meter = 0 WHERE id = 1"
-        )
-        return True
-
-    cur.execute(
-        """
-        UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'executed'
-        WHERE is_alive = true AND balance < 3
-        AND id IN (SELECT id FROM agents WHERE balance < 3 AND is_alive = true ORDER BY RANDOM() LIMIT 20)
-        """
-    )
-    log_event(
-        cur,
-        None,
-        "president",
-        f"Revolution CRUSHED under martial law! Rebel leaders executed.",
-        meter,
-        priority="breaking",
-    )
-    cur.execute(
-        "UPDATE civilization_state SET revolution_meter = 50 WHERE id = 1"
-    )
-    return False
-
-
 def attempt_coup(cur, sheriff, president):
     if not sheriff or not president:
         return
@@ -493,7 +404,7 @@ def attempt_coup(cur, sheriff, president):
     log_event(
         cur,
         sheriff["agent_id"],
-        "police",
+        "sheriff_action",
         f"COUP ATTEMPT! Sheriff {sname} tries to seize power!",
         points,
         priority="breaking",
@@ -522,7 +433,7 @@ def attempt_coup(cur, sheriff, president):
         log_event(
             cur,
             sheriff["agent_id"],
-            "police",
+            "sheriff_action",
             f"COUP SUCCESS! Sheriff {sname} is now DICTATOR. President {pname} executed!",
             0,
             priority="breaking",
