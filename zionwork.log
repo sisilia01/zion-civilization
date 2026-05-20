@@ -724,3 +724,549 @@ psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expression
 LINE 8:         ORDER BY RANDOM()
                          ^
 
+
+⚒️  ZionWork - 2026-05-19 20:02
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 20:32
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 21:02
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 21:33
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 22:03
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 22:33
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 23:03
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-19 23:34
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 00:04
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 00:34
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 01:04
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 01:35
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 02:05
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 02:35
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 03:05
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 03:35
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 04:06
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 04:36
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 05:06
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 05:36
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 06:07
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 06:37
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 07:07
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 07:37
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 08:08
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 08:38
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 09:08
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 09:38
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 10:09
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 10:39
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 11:09
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 11:39
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 12:10
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 12:40
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 13:10
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 13:40
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 14:11
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 14:41
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+
+
+⚒️  ZionWork - 2026-05-20 15:11
+Traceback (most recent call last):
+  File "/root/zion_backend/zionwork.py", line 233, in <module>
+    run_zionwork()
+  File "/root/zion_backend/zionwork.py", line 134, in run_zionwork
+    fired_count = process_firings(cur)
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/zionwork.py", line 69, in process_firings
+    cur.execute(
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 8:         ORDER BY RANDOM()
+                         ^
+

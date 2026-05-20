@@ -359,3 +359,316 @@ LINE 14:         ORDER BY RANDOM()
 LINE 14:         ORDER BY RANDOM()
                           ^
 
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-19 21:01
+==================================================
+🎓 Alex Robinson 1658 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Taylor Anderson 6643 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Gay More 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Nova Miller 6656 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Lars Kato 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Zoe Jackson 2990 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jay Ash 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ray Harris 4797 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kim Moore 402 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Dana Clark 5398 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Gio Wynn studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ted Sunn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Mox Crowe 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Bex Ash 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Eve More 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Bex Quinn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pat Lund 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sam More 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Una Tate 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-19 23:02
+==================================================
+🎓 Dax Abel 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sam Cole 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Cob Yates 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pita Ingrid 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Tara Flores 5 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Casey Harris 6749 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Una Owen 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Xena Laurent 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sidney Anderson 4039 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Quinn Jackson 1506 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Luna Harris 4767 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ash Drew 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Gaia Andersen 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 01:02
+==================================================
+🎓 Jin Martinez 6962 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Bex Nash 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Dana Taylor 8648 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Walt Sharp 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Chris Jones 3372 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kai Lewis 3059 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Finn Moss 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Bea Abel 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Marc Ozaki 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 03:03
+==================================================
+🎓 Flo Innes 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sue Ross 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sidney Robinson 6669 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hana Johansson 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ned Sunn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Rae Wood 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ray Dale 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sera Espinoza 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Dean Eriksson 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jordan Brown 8603 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hugo Jimenez 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 05:03
+==================================================
+🎓 Bex Stone 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Zed Nunn studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kurt Mbeki 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kim Anderson 4602 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Chris Lewis 6807 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Iris Zabala 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jamie Lewis 1040 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hana Okafor 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Nan Howe 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Vess Torres 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Una Lane 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Zara Kapoor 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Yul Mills 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Casey Moore 4161 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Taylor Brown 5532 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jamie Thomas 5167 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 07:03
+==================================================
+🎓 Fox Gray 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pat Davis 9621 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Taylor Martin 7953 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Nan Sunn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Mae Carr 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pat Robinson 4964 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Luna Wilson 9387 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Una Kent 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 09:04
+==================================================
+🎓 Robin Moore 5447 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Dax Abel 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Lee Yates 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jana Garcia 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Cob Sage 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Marc Perez 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ray Anderson 8749 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Morgan Lewis 3887 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Max Garcia 7955 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Aria Vieira 5 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Zara Kapoor 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jamie Miller 2055 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kim Martinez 3556 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Lars Espinoza 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 11:04
+==================================================
+🎓 Bex Nash 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Pat Jackson 4554 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Kim Anderson 5916 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Tess Ueda 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Ned Jude 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Uma Pham 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Jamie Garcia 4668 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Iris Davis 5974 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Owen Kuznetsov 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Riley Harris 6876 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hal Frey 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Gaia Cortez 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Cal Vance 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Vera Obasi 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Val Abbot 3 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+Traceback (most recent call last):
+  File "/root/zion_backend/education.py", line 122, in main
+    taught = clan_elder_learning(cur)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/zion_backend/education.py", line 66, in clan_elder_learning
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 13:05
+==================================================
+🎓 Pat Robinson 8354 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Cal Jude studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sam Abbot 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Mire Guerrero 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hal Fenn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Morgan Lewis 8573 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Max Nunn 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Nan Abel studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Uri Earl studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Hal Gunn 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Sam Abbot 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Zara Laurent 4 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Cob Sage 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Eli Cole 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Maya Hashimoto 3 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Mox Blake 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Faye Mueller 2 studied (-2.0 ZION, charisma +2, ambition +1)
+🎓 Luna Pham 2 studied (-2.0 ZION, charisma +2, ambition +1)
+❌ Error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
+LINE 14:         ORDER BY RANDOM()
+                          ^
+
+
+🎓 ZION Education — 2026-05-20 15:05
+==================================================
+
+✅ Education cycle complete!
+
+🎓 ZION Education — 2026-05-20 15:11
+==================================================
+
+✅ Education cycle complete!

@@ -213,3 +213,73 @@ LINE 4:                 ORDER BY treasury DESC LIMIT 1
 ==================================================
 No epidemic this cycle
 ✅ Epidemics cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/epidemics.py", line 116, in main
+    spread_epidemic(cur)
+  File "/root/zion_backend/epidemics.py", line 90, in spread_epidemic
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.SyntaxError: syntax error at or near "ORDER"
+LINE 4:                 ORDER BY treasury DESC LIMIT 1
+                        ^
+
+
+🦠 ZION Epidemics — 2026-05-19 21:01
+==================================================
+💊 Pharma corps profit from epidemic: +200 ZION
+❌ Error: syntax error at or near "ORDER"
+LINE 4:                 ORDER BY treasury DESC LIMIT 1
+                        ^
+
+
+🦠 ZION Epidemics — 2026-05-19 23:02
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 01:02
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 03:03
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 05:03
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 07:03
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 09:04
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 11:04
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 13:05
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 15:05
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!
+
+🦠 ZION Epidemics — 2026-05-20 15:11
+==================================================
+No epidemic this cycle
+✅ Epidemics cycle complete!

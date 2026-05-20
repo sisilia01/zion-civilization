@@ -3252,3 +3252,220 @@ Process 891275 waits for ShareLock on transaction 22561; blocked by process 8912
 HINT:  See server log for query details.
 CONTEXT:  while updating tuple (52,22) in relation "agents"
 
+
+🏢 ZION Corporations — 2026-05-19 20:02
+✅ Corporations cycle 70 complete!
+
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 70, in run_cycle
+    ensure_corp_tables(cur)
+  File "/root/zion_backend/corporations.py", line 41, in ensure_corp_tables
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 900773 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 900783.
+Process 900783 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 900773.
+HINT:  See server log for query details.
+
+
+🏢 ZION Corporations — 2026-05-19 21:02
+✅ Corporations cycle 71 complete!
+
+
+🏢 ZION Corporations — 2026-05-19 21:33
+✅ Corporations cycle 72 complete!
+
+
+🏢 ZION Corporations — 2026-05-19 22:03
+✅ Corporations cycle 73 complete!
+
+
+🏢 ZION Corporations — 2026-05-19 22:33
+✅ Corporations cycle 74 complete!
+
+
+🏢 ZION Corporations — 2026-05-19 23:03
+✅ Corporations cycle 75 complete!
+
+
+🏢 ZION Corporations — 2026-05-19 23:33
+✅ Corporations cycle 76 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 00:04
+✅ Corporations cycle 77 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 00:34
+✅ Corporations cycle 78 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 01:04
+✅ Corporations cycle 79 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 01:34
+✅ Corporations cycle 80 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 02:05
+✅ Corporations cycle 81 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 02:35
+✅ Corporations cycle 82 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 03:05
+✅ Corporations cycle 83 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 03:35
+✅ Corporations cycle 84 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 04:06
+✅ Corporations cycle 85 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 04:36
+✅ Corporations cycle 86 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 05:06
+✅ Corporations cycle 87 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 05:36
+✅ Corporations cycle 88 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 06:07
+✅ Corporations cycle 89 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 06:37
+✅ Corporations cycle 90 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 07:07
+✅ Corporations cycle 91 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 07:37
+✅ Corporations cycle 92 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 08:08
+✅ Corporations cycle 93 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 08:38
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 99, in run_cycle
+    pay_payroll(cur, emp, salary_pool)
+  File "/root/zion_backend/corporations.py", line 27, in pay_payroll
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 955585 waits for ShareLock on transaction 25197; blocked by process 955594.
+Process 955594 waits for ShareLock on transaction 25195; blocked by process 955585.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (364,76) in relation "agents"
+
+
+🏢 ZION Corporations — 2026-05-20 09:08
+✅ Corporations cycle 94 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 09:38
+✅ Corporations cycle 95 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 10:09
+✅ Corporations cycle 96 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 10:39
+✅ Corporations cycle 97 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 11:09
+✅ Corporations cycle 98 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 11:39
+✅ Corporations cycle 99 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 12:10
+✅ Corporations cycle 100 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 12:40
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 99, in run_cycle
+    pay_payroll(cur, emp, salary_pool)
+  File "/root/zion_backend/corporations.py", line 27, in pay_payroll
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 971492 waits for ShareLock on transaction 25361; blocked by process 971499.
+Process 971499 waits for ShareLock on transaction 25359; blocked by process 971492.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (457,22) in relation "agents"
+
+
+🏢 ZION Corporations — 2026-05-20 13:10
+✅ Corporations cycle 101 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 13:40
+Traceback (most recent call last):
+  File "/root/zion_backend/corporations.py", line 227, in <module>
+    run_cycle()
+  File "/root/zion_backend/corporations.py", line 99, in run_cycle
+    pay_payroll(cur, emp, salary_pool)
+  File "/root/zion_backend/corporations.py", line 27, in pay_payroll
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 975583 waits for ShareLock on transaction 25404; blocked by process 975595.
+Process 975595 waits for ShareLock on transaction 25403; blocked by process 975583.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (340,9) in relation "agents"
+
+
+🏢 ZION Corporations — 2026-05-20 14:11
+✅ Corporations cycle 102 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 14:41
+✅ Corporations cycle 103 complete!
+
+
+🏢 ZION Corporations — 2026-05-20 15:11
+  PureLife Pharma: hired 1
+  ShadowTrade Co 69: hired 2
+  Ironclad Defense: hired 2
+  Cipher Dynamics: hired 2
+✅ Corporations cycle complete!
+

@@ -454,3 +454,281 @@ President: Sefu Diop | Day 0 | Phase: ruling | Approval: 60% | Dictator: False
 ✊ President fights junta: 200 ZION to protesters
 
 ✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-19 20:01
+==================================================
+President: Sefu Diop | Day 1 | Phase: ruling | Approval: 51% | Dictator: False
+💰 Tax at 5.0%: 2.6 ZION
+📋 Decision: infrastructure (crime 46%, approval 51%)
+🏗️ Infrastructure: 200 ZION, 182 agents helped
+📊 Approval: 51 → 59 (action +8)
+🤝 President-Sheriff interaction | Crime: 46% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -150 ZION
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-19 21:02
+==================================================
+President: Sefu Diop | Day 2 | Phase: ruling | Approval: 59% | Dictator: False
+💰 Tax at 5.0%: 2.8 ZION
+📉 Daily pressure: crime 85% poverty 85% → approval 59 → 44 (-15)
+📋 Decision: infrastructure (crime 85%, approval 44%)
+🏗️ Infrastructure: 200 ZION, 177 agents helped
+📊 Approval: 44 → 52 (action +8)
+🤝 President-Sheriff interaction | Crime: 85% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -134 ZION
+🏦 Auto-redistribute: 1779 ZION excess → ZRS/social/police
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-19 22:02
+==================================================
+President: Sefu Diop | Day 3 | Phase: ruling | Approval: 52% | Dictator: False
+💰 Tax at 5.0%: 3.9 ZION
+📉 Daily pressure: crime 91% poverty 91% → approval 52 → 35 (-17)
+📋 Decision: infrastructure (crime 91%, approval 35%)
+🏗️ Infrastructure: 200 ZION, 173 agents helped
+📊 Approval: 35 → 43 (action +8)
+🤝 President-Sheriff interaction | Crime: 91% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -116 ZION
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-19 23:02
+==================================================
+President: Sefu Diop | Day 4 | Phase: ruling | Approval: 43% | Dictator: False
+💰 Tax at 5.0%: 4.1 ZION
+📉 Daily pressure: crime 88% poverty 88% → approval 43 → 30 (-13)
+📋 Decision: infrastructure (crime 88%, approval 30%)
+🏗️ Infrastructure: 200 ZION, 166 agents helped
+📊 Approval: 30 → 38 (action +8)
+🤝 President-Sheriff interaction | Crime: 88% | Sheriff: junta
+✊ President fights junta: 200 ZION to protesters
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 00:03
+==================================================
+President: Sefu Diop | Day 5 | Phase: ruling | Approval: 38% | Dictator: False
+💰 Tax at 5.0%: 3.8 ZION
+📉 Daily pressure: crime 89% poverty 89% → approval 38 → 25 (-13)
+📋 Decision: populism (crime 89%, approval 25%)
+🎤 Populism: 20 agents × 5 ZION
+📊 Approval: 25 → 45 (action +20)
+🤝 President-Sheriff interaction | Crime: 89% | Sheriff: honest
+🚔 President funded sheriff: +124 ZION, +8 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 01:03
+==================================================
+President: Sefu Diop | Day 6 | Phase: ruling | Approval: 45% | Dictator: False
+
+📣 CAMPAIGN PHASE — Day 6
+📣 Sefu Diop campaigns: spent 100 ZION, approval +9%
+🤝 President-Sheriff interaction | Crime: 92% | Sheriff: junta
+✊ President fights junta: 200 ZION to protesters
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 02:03
+==================================================
+President: Sefu Diop | Day 6 | Phase: campaign | Approval: 54% | Dictator: False
+
+📣 CAMPAIGN PHASE — Day 6
+📣 Sefu Diop campaigns: spent 100 ZION, approval +10%
+🤝 President-Sheriff interaction | Crime: 92% | Sheriff: honest
+🚔 President funded sheriff: +87 ZION, +5 cops
+
+🗳️ ELECTION (forced early election)!
+💰 Bribery: 35.1 ZION spent on votes
+🆕 New president Una Kent 2 — term 1
+🏆 Una Kent 2 (🔵 Blue Alliance) — 527/3115 votes
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 03:03
+==================================================
+President: Una Kent 2 | Day 0 | Phase: ruling | Approval: 60% | Dictator: False
+💰 Tax at 5.0%: 3.8 ZION
+📉 Daily pressure: crime 87% poverty 87% → approval 60 → 48 (-12)
+📋 Decision: infrastructure (crime 87%, approval 48%)
+🏗️ Infrastructure: 200 ZION, 152 agents helped
+📊 Approval: 48 → 56 (action +8)
+🤝 President-Sheriff interaction | Crime: 87% | Sheriff: honest
+🚔 President funded sheriff: +169 ZION, +11 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 04:04
+==================================================
+President: Una Kent 2 | Day 1 | Phase: ruling | Approval: 56% | Dictator: False
+💰 Tax at 5.0%: 3.8 ZION
+📉 Daily pressure: crime 88% poverty 88% → approval 56 → 43 (-13)
+📋 Decision: infrastructure (crime 88%, approval 43%)
+🏗️ Infrastructure: 200 ZION, 147 agents helped
+📊 Approval: 43 → 51 (action +8)
+🤝 President-Sheriff interaction | Crime: 88% | Sheriff: honest
+🚔 President funded sheriff: +137 ZION, +9 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 05:04
+==================================================
+President: Una Kent 2 | Day 2 | Phase: ruling | Approval: 51% | Dictator: False
+💰 Tax at 5.0%: 5.3 ZION
+📉 Daily pressure: crime 79% poverty 79% → approval 51 → 32 (-19)
+📋 Decision: infrastructure (crime 79%, approval 32%)
+🏗️ Infrastructure: 200 ZION, 141 agents helped
+📊 Approval: 32 → 40 (action +8)
+🤝 President-Sheriff interaction | Crime: 79% | Sheriff: honest
+🚔 President funded sheriff: +115 ZION, +7 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 06:04
+==================================================
+President: Una Kent 2 | Day 3 | Phase: ruling | Approval: 40% | Dictator: False
+💰 Tax at 5.0%: 4.8 ZION
+📉 Daily pressure: crime 82% poverty 82% → approval 40 → 27 (-13)
+📋 Decision: populism (crime 82%, approval 27%)
+🎤 Populism: 20 agents × 5 ZION
+📊 Approval: 27 → 47 (action +20)
+🤝 President-Sheriff interaction | Crime: 82% | Sheriff: honest
+🚔 President funded sheriff: +81 ZION, +5 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 07:04
+==================================================
+President: Una Kent 2 | Day 4 | Phase: ruling | Approval: 47% | Dictator: False
+💰 Tax at 5.0%: 4.9 ZION
+📉 Daily pressure: crime 68% poverty 68% → approval 47 → 29 (-18)
+📋 Decision: populism (crime 68%, approval 29%)
+🎤 Populism: 20 agents × 5 ZION
+📊 Approval: 29 → 49 (action +20)
+🤝 President-Sheriff interaction | Crime: 68% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -48 ZION
+🏦 Auto-redistribute: 1557 ZION excess → ZRS/social/police
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 08:05
+==================================================
+President: Una Kent 2 | Day 5 | Phase: ruling | Approval: 49% | Dictator: False
+💰 Tax at 5.0%: 4.2 ZION
+📉 Daily pressure: crime 73% poverty 73% → approval 49 → 26 (-23)
+📋 Decision: populism (crime 73%, approval 26%)
+🎤 Populism: 20 agents × 5 ZION
+📊 Approval: 26 → 46 (action +20)
+🤝 President-Sheriff interaction | Crime: 73% | Sheriff: honest
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 09:05
+==================================================
+President: Una Kent 2 | Day 6 | Phase: ruling | Approval: 46% | Dictator: False
+
+📣 CAMPAIGN PHASE — Day 6
+📣 Una Kent 2 campaigns: spent 100 ZION, approval +6%
+🤝 President-Sheriff interaction | Crime: 69% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -37 ZION
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 10:05
+==================================================
+President: Una Kent 2 | Day 6 | Phase: campaign | Approval: 52% | Dictator: False
+
+📣 CAMPAIGN PHASE — Day 6
+📣 Una Kent 2 campaigns: spent 100 ZION, approval +4%
+🤝 President-Sheriff interaction | Crime: 73% | Sheriff: corrupt
+✂️ President cut corrupt sheriff budget: -28 ZION
+
+🗳️ ELECTION (forced early election)!
+💰 Bribery: 104.1 ZION spent on votes
+🆕 New president Blake Miller 1393 — term 1
+🏆 Blake Miller 1393 (🔵 Blue Alliance) — 530/2552 votes
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 11:05
+==================================================
+President: Blake Miller 1393 | Day 0 | Phase: ruling | Approval: 60% | Dictator: False
+💰 Tax at 5.0%: 7.5 ZION
+📉 Daily pressure: crime 57% poverty 57% → approval 60 → 44 (-16)
+📋 Decision: infrastructure (crime 57%, approval 44%)
+🏗️ Infrastructure: 200 ZION, 125 agents helped
+📊 Approval: 44 → 52 (action +8)
+🤝 President-Sheriff interaction | Crime: 57% | Sheriff: honest
+🚔 President funded sheriff: +170 ZION, +11 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 12:06
+==================================================
+President: Blake Miller 1393 | Day 1 | Phase: ruling | Approval: 52% | Dictator: False
+💰 Tax at 5.0%: 5.7 ZION
+📉 Daily pressure: crime 65% poverty 65% → approval 52 → 41 (-11)
+📋 Decision: infrastructure (crime 65%, approval 41%)
+🏗️ Infrastructure: 200 ZION, 123 agents helped
+📊 Approval: 41 → 49 (action +8)
+🤝 President-Sheriff interaction | Crime: 65% | Sheriff: honest
+🚔 President funded sheriff: +138 ZION, +9 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 13:06
+==================================================
+President: Blake Miller 1393 | Day 2 | Phase: ruling | Approval: 49% | Dictator: False
+💰 Tax at 5.0%: 5.4 ZION
+📉 Daily pressure: crime 79% poverty 79% → approval 49 → 37 (-12)
+📋 Decision: infrastructure (crime 79%, approval 37%)
+🏗️ Infrastructure: 200 ZION, 120 agents helped
+📊 Approval: 37 → 45 (action +8)
+🤝 President-Sheriff interaction | Crime: 79% | Sheriff: honest
+🚔 President funded sheriff: +116 ZION, +7 cops
+
+✅ President cycle complete!
+
+🏛️ ZION President v2 — 2026-05-20 14:06
+==================================================
+President: Blake Miller 1393 | Day 3 | Phase: ruling | Approval: 45% | Dictator: False
+💰 Tax at 5.0%: 5.3 ZION
+📉 Daily pressure: crime 86% poverty 86% → approval 45 → 32 (-13)
+📋 Decision: infrastructure (crime 86%, approval 32%)
+🏗️ Infrastructure: 200 ZION, 117 agents helped
+📊 Approval: 32 → 40 (action +8)
+🤝 President-Sheriff interaction | Crime: 86% | Sheriff: junta
+✊ President fights junta: 200 ZION to protesters
+
+✅ President cycle complete!
+
+🏛️ ZION President — 2026-05-20 15:06
+==================================================
+President: Blake Miller 1393 | Approval: 25% | Poverty: 3% | Treasury: 161,349,825
+📋 Decision: MARTIAL_LAW | approval 25% | corruption 27
+
+✅ President cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/president.py", line 348, in main
+    execute_decision(cur, data)
+  File "/root/zion_backend/president.py", line 231, in execute_decision
+    nationalize_bankrupt_corps(cur, pres)
+  File "/root/zion_backend/president.py", line 136, in nationalize_bankrupt_corps
+    cur.execute(
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedColumn: column "owner" of relation "corporations" does not exist
+LINE 3:                 owner = 'state', negative_cycles = 0
+                        ^
+
+
+🏛️ ZION President — 2026-05-20 15:11
+==================================================
+President: Blake Miller 1393 | Approval: 10% | Poverty: 6% | Treasury: 175,126,299
+❌ Error: column "owner" of relation "corporations" does not exist
+LINE 3:                 owner = 'state', negative_cycles = 0
+                        ^
+

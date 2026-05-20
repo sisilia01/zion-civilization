@@ -765,3 +765,178 @@ SyntaxError: invalid decimal literal
 
 🚔 ZION Police — 2026-05-19 19:02
 🤫 Greta Kristensen tipped off gangs (corrupt)
+Traceback (most recent call last):
+  File "/root/zion_backend/police.py", line 201, in <module>
+    main()
+  File "/root/zion_backend/police.py", line 29, in main
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 897173 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 897196.
+Process 897196 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 897173.
+HINT:  See server log for query details.
+
+Traceback (most recent call last):
+  File "/root/zion_backend/police.py", line 201, in <module>
+    main()
+  File "/root/zion_backend/police.py", line 29, in main
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 903737 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 903744.
+Process 903744 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 903737.
+HINT:  See server log for query details.
+
+
+🚔 ZION Police — 2026-05-19 22:02
+❌ Raid failed: -2 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-19 23:02
+❌ Raid failed: -3 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+Traceback (most recent call last):
+  File "/root/zion_backend/police.py", line 201, in <module>
+    main()
+  File "/root/zion_backend/police.py", line 29, in main
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 920452 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 920454.
+Process 920454 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 920452.
+HINT:  See server log for query details.
+
+Traceback (most recent call last):
+  File "/root/zion_backend/police.py", line 201, in <module>
+    main()
+  File "/root/zion_backend/police.py", line 29, in main
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 118, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 71, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 924315 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 924324.
+Process 924324 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 924315.
+HINT:  See server log for query details.
+
+
+🚔 ZION Police — 2026-05-20 02:03
+✅ Raid on Shadow Order: 17 killed, +611 ZION
+  📋 +3 officers recruited from raid proceeds
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 03:03
+❌ Raid failed: -3 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 04:04
+❌ Raid failed: -2 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 05:04
+❌ Raid failed: -1 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 06:04
+🤫 Ash Oaks 2 tipped off gangs (corrupt)
+
+🚔 ZION Police — 2026-05-20 07:04
+✅ Raid on Shadow Order: 20 killed, +140 ZION
+  📋 +3 officers recruited from raid proceeds
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 08:05
+🤫 Max Burns 2 tipped off gangs (corrupt)
+
+🚔 ZION Police — 2026-05-20 09:05
+❌ Raid failed: -2 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 10:05
+❌ Raid failed: -2 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 11:05
+✅ Raid on Shadow Order: 13 killed, +82 ZION
+  📋 +2 officers recruited from raid proceeds
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 12:06
+❌ Raid failed: -1 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 13:06
+❌ Raid failed: -2 officers (no civilian casualties)
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+
+🚔 ZION Police — 2026-05-20 14:06
+✅ Raid on Shadow Order: 15 killed, +33 ZION
+  👮 Recruitment drive: +5 officers (-75 ZION budget)
+✅ Police cycle complete!
+
+Traceback (most recent call last):
+  File "/root/zion_backend/police.py", line 201, in <module>
+    main()
+  File "/root/zion_backend/police.py", line 29, in main
+    ensure_schema(cur)
+  File "/root/zion_backend/civ_common.py", line 141, in ensure_schema
+    _add_columns(
+  File "/root/zion_backend/civ_common.py", line 77, in _add_columns
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 985480 waits for AccessExclusiveLock on relation 16408 of database 16388; blocked by process 985488.
+Process 985488 waits for AccessShareLock on relation 16391 of database 16388; blocked by process 985480.
+HINT:  See server log for query details.
+
+
+🚔 ZION Police — 2026-05-20 15:11
+❌ Raid failed: -1 officers (no civilian casualties)
+  👮 Recruitment drive: +6 officers (-90 ZION budget)
+✅ Police cycle complete!
+

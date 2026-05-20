@@ -671,3 +671,519 @@ Process 891275 waits for ShareLock on transaction 22562; blocked by process 8912
 HINT:  See server log for query details.
 CONTEXT:  while updating tuple (144,61) in relation "agents"
 
+
+📦 ZION Market — 2026-05-19 20:02
+==================================================
+🌾 Food: 2.2 | 💊 Medicine: 23.2 | Inflation: x1.0
+Prices: food=2.2 water=4.4 energy=10.2
+🌾 Food: 8 starved, 23 hungry (price: 2.2)
+📦 Lars Parker 2 traded — profit 24.1 ZION
+📦 Reid Yoon 2 traded — profit 6.2 ZION
+📦 Orion Mercer traded — profit 25.9 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 20:32
+==================================================
+🌾 Food: 2.2 | 💊 Medicine: 16.2 | Inflation: x0.7
+Prices: food=2.2 water=4.8 energy=6.2
+🌾 Food: 16 starved, 61 hungry (price: 2.2)
+📦 Orion Mercer traded — profit 25.5 ZION
+📦 Lars Parker 2 traded — profit 14.9 ZION
+📦 Reid Yoon 2 traded — profit 26.4 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 21:02
+==================================================
+🌾 Food: 3.1 | 💊 Medicine: 10.7 | Inflation: x0.7
+Prices: food=3.1 water=4.0 energy=10.7
+🌾 Food: 20 starved, 55 hungry (price: 3.1)
+📦 Orion Mercer traded — profit 20.2 ZION
+📦 Neil Watanabe 4 traded — profit 21.1 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 21:33
+==================================================
+🌾 Food: 3.3 | 💊 Medicine: 15.7 | Inflation: x0.7
+Prices: food=3.3 water=4.1 energy=13.8
+🌾 Food: 61 starved, 176 hungry (price: 3.3)
+📦 Orion Mercer traded — profit 5.0 ZION
+📦 Neil Watanabe 4 traded — profit 24.7 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 22:03
+==================================================
+🌾 Food: 4.9 | 💊 Medicine: 13.3 | Inflation: x0.7
+Prices: food=4.9 water=0.9 energy=12.2
+🌾 Food: 69 starved, 200 hungry (price: 4.9)
+📦 Luna Delacroix 3 traded — profit 22.9 ZION
+📦 Neil Watanabe 4 traded — profit 28.8 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 22:33
+==================================================
+🌾 Food: 5.3 | 💊 Medicine: 6.9 | Inflation: x0.7
+Prices: food=5.3 water=4.0 energy=11.1
+🌾 Food: 68 starved, 200 hungry (price: 5.3)
+📦 Luna Delacroix 3 traded — profit 23.2 ZION
+📦 Neil Watanabe 4 traded — profit 14.2 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 23:03
+==================================================
+🌾 Food: 2.9 | 💊 Medicine: 9.1 | Inflation: x0.7
+Prices: food=3.0 water=4.4 energy=9.6
+🌾 Food: 8 starved, 25 hungry (price: 3.0)
+📦 Luna Delacroix 3 traded — profit 5.9 ZION
+📦 Neil Watanabe 4 traded — profit 10.2 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-19 23:33
+==================================================
+🌾 Food: 3.0 | 💊 Medicine: 8.3 | Inflation: x0.7
+Prices: food=3.0 water=5.2 energy=5.3
+🌾 Food: 52 starved, 167 hungry (price: 3.0)
+📦 Luna Delacroix 3 traded — profit 20.1 ZION
+📦 Neil Watanabe 4 traded — profit 16.6 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 00:04
+==================================================
+🌾 Food: 5.4 | 💊 Medicine: 17.8 | Inflation: x0.7
+Prices: food=5.4 water=2.4 energy=6.5
+🌾 Food: 53 starved, 150 hungry (price: 5.4)
+📦 Neil Watanabe 4 traded — profit 29.4 ZION
+📦 Luna Delacroix 3 traded — profit 6.9 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 00:34
+==================================================
+🌾 Food: 5.3 | 💊 Medicine: 14.3 | Inflation: x0.7
+Prices: food=5.3 water=4.9 energy=8.0
+🌾 Food: 57 starved, 153 hungry (price: 5.3)
+📦 Neil Watanabe 4 traded — profit 10.7 ZION
+📦 Luna Delacroix 3 traded — profit 26.1 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 01:04
+==================================================
+🌾 Food: 2.3 | 💊 Medicine: 17.6 | Inflation: x0.7
+Prices: food=2.3 water=0.9 energy=11.6
+🌾 Food: 15 starved, 34 hungry (price: 2.3)
+📦 Luna Delacroix 3 traded — profit 21.6 ZION
+📦 Neil Watanabe 4 traded — profit 26.9 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 01:34
+==================================================
+🌾 Food: 2.6 | 💊 Medicine: 9.6 | Inflation: x0.7
+Prices: food=2.6 water=1.7 energy=13.8
+🌾 Food: 47 starved, 154 hungry (price: 2.6)
+📦 Neil Watanabe 4 traded — profit 20.6 ZION
+📦 Luna Delacroix 3 traded — profit 14.7 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 02:05
+==================================================
+🌾 Food: 2.8 | 💊 Medicine: 15.0 | Inflation: x0.7
+Prices: food=2.8 water=3.6 energy=8.8
+🌾 Food: 38 starved, 119 hungry (price: 2.8)
+📦 Neil Watanabe 4 traded — profit 7.7 ZION
+📦 Riley Harris 6876 traded — profit 23.5 ZION
+📦 Luna Delacroix 3 traded — profit 19.2 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 02:35
+==================================================
+🌾 Food: 0.9 | 💊 Medicine: 8.1 | Inflation: x0.7
+Prices: food=0.8 water=3.3 energy=5.8
+🌾 Food: 10 starved, 24 hungry (price: 0.8)
+📦 Luna Delacroix 3 traded — profit 17.9 ZION
+📦 Riley Harris 6876 traded — profit 21.1 ZION
+📦 Neil Watanabe 4 traded — profit 7.7 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 03:05
+==================================================
+🌾 Food: 2.4 | 💊 Medicine: 10.6 | Inflation: x0.7
+Prices: food=2.4 water=2.6 energy=10.4
+🌾 Food: 44 starved, 99 hungry (price: 2.4)
+📦 Luna Delacroix 3 traded — profit 19.1 ZION
+📦 Riley Harris 6876 traded — profit 15.9 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 03:35
+==================================================
+🌾 Food: 4.6 | 💊 Medicine: 9.4 | Inflation: x0.7
+Prices: food=4.6 water=2.3 energy=7.8
+🌾 Food: 61 starved, 164 hungry (price: 4.6)
+📦 Luna Delacroix 3 traded — profit 25.8 ZION
+📦 Riley Harris 6876 traded — profit 27.0 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 04:06
+==================================================
+🌾 Food: 5.5 | 💊 Medicine: 5.3 | Inflation: x0.7
+Prices: food=5.5 water=1.3 energy=10.3
+🌾 Food: 44 starved, 145 hungry (price: 5.5)
+📦 Riley Harris 6876 traded — profit 10.2 ZION
+📦 Luna Delacroix 3 traded — profit 21.1 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 04:36
+==================================================
+🌾 Food: 2.6 | 💊 Medicine: 7.3 | Inflation: x0.7
+Prices: food=2.6 water=4.6 energy=3.7
+🌾 Food: 30 starved, 113 hungry (price: 2.6)
+📦 Riley Harris 6876 traded — profit 11.0 ZION
+📦 Luna Delacroix 3 traded — profit 28.2 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 05:06
+==================================================
+🌾 Food: 2.8 | 💊 Medicine: 7.6 | Inflation: x0.7
+Prices: food=2.8 water=1.5 energy=8.8
+🌾 Food: 24 starved, 86 hungry (price: 2.8)
+📦 Luna Delacroix 3 traded — profit 27.8 ZION
+📦 Rex Smith 6573 traded — profit 24.7 ZION
+📦 Riley Harris 6876 traded — profit 23.5 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 05:36
+==================================================
+🌾 Food: 5.3 | 💊 Medicine: 16.9 | Inflation: x0.7
+Prices: food=5.3 water=4.0 energy=10.4
+🌾 Food: 73 starved, 185 hungry (price: 5.3)
+📦 Rex Smith 6573 traded — profit 26.4 ZION
+📦 Riley Harris 6876 traded — profit 17.1 ZION
+📦 Luna Delacroix 3 traded — profit 6.1 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 06:07
+==================================================
+🌾 Food: 4.1 | 💊 Medicine: 20.8 | Inflation: x0.7
+Prices: food=4.1 water=5.5 energy=4.0
+🌾 Food: 40 starved, 107 hungry (price: 4.1)
+📦 Riley Harris 6876 traded — profit 22.3 ZION
+📦 Luna Delacroix 3 traded — profit 18.4 ZION
+📦 Rex Smith 6573 traded — profit 22.5 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 06:37
+==================================================
+🌾 Food: 1.5 | 💊 Medicine: 12.9 | Inflation: x0.7
+Prices: food=1.5 water=5.5 energy=13.0
+🌾 Food: 10 starved, 29 hungry (price: 1.5)
+📦 Rex Smith 6573 traded — profit 15.6 ZION
+📦 Luna Delacroix 3 traded — profit 13.8 ZION
+📦 Riley Harris 6876 traded — profit 7.5 ZION
+
+✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 137, in food_crisis
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 949033 waits for ShareLock on transaction 25148; blocked by process 949023.
+Process 949023 waits for ShareLock on transaction 25149; blocked by process 949033.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (316,30) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 07:07
+==================================================
+🌾 Food: 2.8 | 💊 Medicine: 10.0 | Inflation: x0.7
+Prices: food=2.8 water=4.3 energy=10.8
+❌ Error: deadlock detected
+DETAIL:  Process 949033 waits for ShareLock on transaction 25148; blocked by process 949023.
+Process 949023 waits for ShareLock on transaction 25149; blocked by process 949033.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (316,30) in relation "agents"
+
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 137, in food_crisis
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 951176 waits for ShareLock on transaction 25156; blocked by process 951169.
+Process 951169 waits for ShareLock on transaction 25157; blocked by process 951176.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (405,70) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 07:37
+==================================================
+🌾 Food: 5.2 | 💊 Medicine: 15.7 | Inflation: x0.7
+Prices: food=5.2 water=5.4 energy=7.9
+❌ Error: deadlock detected
+DETAIL:  Process 951176 waits for ShareLock on transaction 25156; blocked by process 951169.
+Process 951169 waits for ShareLock on transaction 25157; blocked by process 951176.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (405,70) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 08:08
+==================================================
+🌾 Food: 5.3 | 💊 Medicine: 6.5 | Inflation: x0.7
+Prices: food=5.3 water=4.7 energy=2.9
+🌾 Food: 46 starved, 154 hungry (price: 5.3)
+📦 Riley Harris 6876 traded — profit 28.9 ZION
+📦 Luna Delacroix 3 traded — profit 11.5 ZION
+📦 Rex Smith 6573 traded — profit 12.1 ZION
+📦 Sana Lopez 3 traded — profit 26.2 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 08:38
+==================================================
+🌾 Food: 2.6 | 💊 Medicine: 12.5 | Inflation: x0.7
+Prices: food=2.6 water=1.4 energy=8.9
+🌾 Food: 42 starved, 107 hungry (price: 2.6)
+📦 Sana Lopez 3 traded — profit 14.7 ZION
+📦 Rex Smith 6573 traded — profit 26.6 ZION
+📦 Riley Harris 6876 traded — profit 8.3 ZION
+📦 Luna Delacroix 3 traded — profit 5.8 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 09:08
+==================================================
+🌾 Food: 5.1 | 💊 Medicine: 9.6 | Inflation: x1.0
+Prices: food=5.1 water=0.8 energy=6.7
+🌾 Food: 46 starved, 148 hungry (price: 5.1)
+📦 Luna Delacroix 3 traded — profit 15.6 ZION
+📦 Rex Smith 6573 traded — profit 6.3 ZION
+📦 Sana Lopez 3 traded — profit 15.2 ZION
+📦 Riley Harris 6876 traded — profit 15.9 ZION
+
+✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 137, in food_crisis
+    cur.execute("""
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 959395 waits for ShareLock on transaction 25235; blocked by process 959384.
+Process 959384 waits for ShareLock on transaction 25236; blocked by process 959395.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (345,61) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 09:38
+==================================================
+🌾 Food: 5.8 | 💊 Medicine: 27.2 | Inflation: x1.0
+Prices: food=5.8 water=7.4 energy=17.1
+❌ Error: deadlock detected
+DETAIL:  Process 959395 waits for ShareLock on transaction 25235; blocked by process 959384.
+Process 959384 waits for ShareLock on transaction 25236; blocked by process 959395.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (345,61) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 10:09
+==================================================
+🌾 Food: 7.4 | 💊 Medicine: 34.7 | Inflation: x1.0
+Prices: food=7.4 water=1.8 energy=10.5
+🌾 Food: 50 starved, 186 hungry (price: 7.4)
+📦 Sana Lopez 3 traded — profit 14.3 ZION
+📦 Luna Delacroix 3 traded — profit 25.6 ZION
+📦 Pip Burns 4 traded — profit 25.0 ZION
+📦 Rex Smith 6573 traded — profit 5.3 ZION
+📦 Riley Harris 6876 traded — profit 13.7 ZION
+
+✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 129, in food_crisis
+    cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 963716 waits for ShareLock on transaction 25276; blocked by process 963705.
+Process 963705 waits for ShareLock on transaction 25277; blocked by process 963716.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (109,90) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 10:39
+==================================================
+🌾 Food: 2.3 | 💊 Medicine: 9.3 | Inflation: x1.0
+Prices: food=2.3 water=5.8 energy=6.6
+❌ Error: deadlock detected
+DETAIL:  Process 963716 waits for ShareLock on transaction 25276; blocked by process 963705.
+Process 963705 waits for ShareLock on transaction 25277; blocked by process 963716.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (109,90) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 11:09
+==================================================
+🌾 Food: 4.6 | 💊 Medicine: 31.3 | Inflation: x1.0
+Prices: food=4.6 water=0.6 energy=15.3
+🌾 Food: 28 starved, 99 hungry (price: 4.6)
+📦 Riley Harris 6876 traded — profit 21.8 ZION
+📦 Luna Delacroix 3 traded — profit 11.5 ZION
+📦 Rex Smith 6573 traded — profit 7.4 ZION
+📦 Nan Sunn 2 traded — profit 7.8 ZION
+📦 Sana Lopez 3 traded — profit 18.7 ZION
+
+✅ Market cycle complete!
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 129, in food_crisis
+    cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 967671 waits for ShareLock on transaction 25320; blocked by process 967664.
+Process 967664 waits for ShareLock on transaction 25321; blocked by process 967671.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (72,65) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 11:39
+==================================================
+🌾 Food: 1.8 | 💊 Medicine: 33.5 | Inflation: x1.0
+Prices: food=1.8 water=1.6 energy=3.5
+❌ Error: deadlock detected
+DETAIL:  Process 967671 waits for ShareLock on transaction 25320; blocked by process 967664.
+Process 967664 waits for ShareLock on transaction 25321; blocked by process 967671.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (72,65) in relation "agents"
+
+Traceback (most recent call last):
+  File "/root/zion_backend/market.py", line 187, in main
+    food_crisis(cur, prices)
+  File "/root/zion_backend/market.py", line 129, in food_crisis
+    cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
+  File "/usr/local/lib/python3.12/dist-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DeadlockDetected: deadlock detected
+DETAIL:  Process 969596 waits for ShareLock on transaction 25347; blocked by process 969585.
+Process 969585 waits for ShareLock on transaction 25348; blocked by process 969596.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (472,23) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 12:10
+==================================================
+🌾 Food: 1.3 | 💊 Medicine: 9.2 | Inflation: x0.7
+Prices: food=1.3 water=1.2 energy=10.6
+❌ Error: deadlock detected
+DETAIL:  Process 969596 waits for ShareLock on transaction 25347; blocked by process 969585.
+Process 969585 waits for ShareLock on transaction 25348; blocked by process 969596.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (472,23) in relation "agents"
+
+
+📦 ZION Market — 2026-05-20 12:40
+==================================================
+🌾 Food: 2.3 | 💊 Medicine: 17.1 | Inflation: x1.0
+Prices: food=2.3 water=7.5 energy=12.4
+🌾 Food: 14 starved, 37 hungry (price: 2.3)
+📦 Sana Lopez 3 traded — profit 25.3 ZION
+📦 Pip Burns 4 traded — profit 20.2 ZION
+📦 Rex Smith 6573 traded — profit 21.4 ZION
+📦 Riley Harris 6876 traded — profit 21.1 ZION
+📦 Nan Sunn 2 traded — profit 8.8 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 13:10
+==================================================
+🌾 Food: 1.2 | 💊 Medicine: 23.2 | Inflation: x0.7
+Prices: food=1.2 water=3.0 energy=9.4
+🌾 Food: 13 starved, 28 hungry (price: 1.2)
+📦 Rex Smith 6573 traded — profit 23.1 ZION
+📦 Riley Harris 6876 traded — profit 14.8 ZION
+📦 Nan Sunn 2 traded — profit 5.3 ZION
+📦 Ivor Diallo 3 traded — profit 29.7 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 13:40
+==================================================
+🌾 Food: 4.5 | 💊 Medicine: 26.1 | Inflation: x0.7
+Prices: food=4.5 water=3.3 energy=13.7
+🌾 Food: 47 starved, 165 hungry (price: 4.5)
+📦 Rex Smith 6573 traded — profit 15.5 ZION
+📦 Nan Sunn 2 traded — profit 13.6 ZION
+📦 Ivor Diallo 3 traded — profit 21.7 ZION
+📦 Riley Harris 6876 traded — profit 26.4 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 14:11
+==================================================
+🌾 Food: 5.3 | 💊 Medicine: 17.7 | Inflation: x0.7
+Prices: food=5.3 water=2.9 energy=6.2
+🌾 Food: 48 starved, 141 hungry (price: 5.3)
+📦 Xena Jimenez 2 traded — profit 20.9 ZION
+📦 Riley Harris 6876 traded — profit 16.2 ZION
+📦 Ivor Diallo 3 traded — profit 18.3 ZION
+📦 Rex Smith 6573 traded — profit 7.0 ZION
+📦 Nan Sunn 2 traded — profit 19.0 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 14:41
+==================================================
+🌾 Food: 3.9 | 💊 Medicine: 19.4 | Inflation: x0.7
+Prices: food=3.9 water=3.7 energy=10.4
+🌾 Food: 46 starved, 140 hungry (price: 3.9)
+📦 Riley Harris 6876 traded — profit 10.3 ZION
+📦 Ivor Diallo 3 traded — profit 15.9 ZION
+📦 Xena Jimenez 2 traded — profit 21.2 ZION
+📦 Rex Smith 6573 traded — profit 10.3 ZION
+📦 Nan Sunn 2 traded — profit 19.7 ZION
+
+✅ Market cycle complete!
+
+📦 ZION Market — 2026-05-20 15:11
+==================================================
+🌾 Food: 11.0 | 💊 Medicine: 30.8 | Inflation: x4.0
+Prices: food=11.0 water=21.4 energy=40.1
+🌾 Food market normal: 11.0 ZION, 0 struggling
+📦 Pat York 2 traded — profit 13.6 ZION
+📦 Una Wynn 2 traded — profit 10.4 ZION
+📦 Zara Morales 3 traded — profit 17.1 ZION
+📦 Peg Finn traded — profit 8.0 ZION
+📦 Lee Frost 2 traded — profit 21.0 ZION
+
+✅ Market cycle complete!
