@@ -28,30 +28,31 @@ DAEMONS = {
 
 # Scripts that run once and exit: interval + log_stuck restarts
 CRON_SCRIPTS = {
-    "tax":          ("tax_cron.py",       3600),
-    "birth":        ("birth.py",          1800),
-    "corporations": ("corporations.py",   1800),
+    # CIVILIZATION_LOGIC.md schedule (new architecture)
+    "birth":        ("birth.py",          1800),   # 30 min
+    "news":         ("news.py",           1800),   # 30 min
+    "tax":          ("tax_cron.py",       3600),   # 1 hour
+    "corporations": ("corporations.py",   3600),   # 1 hour
+    "clans":        ("clans.py",          3600),   # 1 hour
+    "police":       ("police.py",         3600),   # 1 hour
+    "sheriff":      ("sheriff.py",        3600),   # 1 hour
+    "president":    ("president.py",      3600),   # 1 hour
+    "neo":          ("neo.py",            3600),   # 1 hour
+    "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
+    "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
+    "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
+    # Other civilization modules (unchanged intervals)
     "epidemics":    ("epidemics.py",      7200),
     "marriages":    ("marriages.py",      3600),
-    "education":    ("education.py",      7200),
     "market":       ("market.py",         1800),
     "espionage":    ("espionage.py",      3600),
     "casino":       ("casino.py",         1800),
-    "religion":     ("religion.py",       1800),
     "catastrophes": ("catastrophes.py",   7200),
-    "clans":        ("clans.py",          3600),
     "zionwork":     ("zionwork.py",       1800),
-    "neo":          ("neo.py",            3600),
     "politics":     ("politics.py",       3600),
-    # frs.py retired — zrs.py is canonical central bank (avoids duplicate QE)
-    "zrs":          ("zrs.py",            7200),
-    "president":    ("president.py",      3600),
-    "sheriff":      ("sheriff.py",        3600),
-    "news":         ("news.py",           1800),
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),
-    "police":       ("police.py",            3600),
 }
 
 last_run = {name: 0 for name in CRON_SCRIPTS}

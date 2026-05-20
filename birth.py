@@ -1,204 +1,172 @@
-import psycopg2
+#!/usr/bin/env python3
+"""ZION Birth/Death — unique names, inheritance, natural death at day 100."""
 import random
 from datetime import datetime
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="zion_db",
-    user="zion_user",
-    password="zion2026"
-)
+from civ_common import agent_class_from_balance, ensure_schema, get_conn, get_cursor, log_event
+from names_pool import generate_unique_name
 
-NAMES_ELITE = ["Kael", "Raze", "Dorn", "Vex", "Zorn", "Axel", "Drake", "Cain", "Nero", "Atlas", "Cyrus", "Magnus", "Orion", "Dante", "Victor", "Leon", "Marcus", "Adrian", "Dorian", "Evander", "Felix", "Gideon", "Hector", "Ivan", "Julius", "Kaspar", "Leander", "Maximus", "Nikolai", "Octavian", "Perseus", "Quintus", "Remus", "Silvius", "Titus", "Ulysses", "Valerian", "Wolfgang", "Xavier", "Zacharias", "Ares", "Brutus", "Cato", "Darius", "Emilio", "Fabian", "Gavril", "Harald", "Ignatius", "Jarvis", "Konrad", "Lucian", "Matteo", "Naveen", "Orlando", "Phineas", "Roland", "Stefan", "Theron", "Ulric", "Vincent", "Werner", "Yannick", "Zoltan"]
-NAMES_MIDDLE = ["Vess", "Olan", "Mire", "Sera", "Lena", "Orin", "Tara", "Bram", "Aria", "Cleo", "Dana", "Elsa", "Faye", "Gaia", "Hana", "Iris", "Jana", "Kira", "Luna", "Maya", "Nora", "Opal", "Pita", "Rena", "Sana", "Tess", "Uma", "Vera", "Wren", "Xena", "Yuki", "Zara", "Abel", "Beck", "Cole", "Dean", "Evan", "Flynn", "Glen", "Hugo", "Ivor", "Joel", "Kurt", "Lars", "Marc", "Neil", "Owen", "Paul", "Reid", "Sean", "Troy"]
-NAMES_POOR = ["Ash", "Grim", "Mox", "Finn", "Pip", "Wick", "Bex", "Cob", "Ace", "Bo", "Cal", "Dax", "Eli", "Fox", "Gio", "Hal", "Ike", "Jay", "Kai", "Lee", "Max", "Ned", "Oz", "Pat", "Ray", "Sam", "Ted", "Uri", "Val", "Walt", "Yul", "Zed", "Ada", "Bea", "Cay", "Dot", "Eve", "Flo", "Gay", "Ida", "Joy", "Kay", "Lou", "Mae", "Nan", "Ora", "Peg", "Rae", "Sue", "Una", "Viv"]
-
-# Match genesis.py so births are "First Surname", not single-token names (avoids "Samira B" style tags).
-SURNAMES_ELITE = [
-    "Voltaire", "Blackwood", "Sterling", "Ashford", "Ravenswood", "Coldwell", "Stormborn", "Ironside",
-    "Goldstein", "Castellan", "Drakon", "Vexlar", "Thornton", "Whitmore", "Blackstone",
-    "Beaumont", "Harrington", "Windsor", "Pemberton", "Fairfax", "Lockwood", "Wyndham",
-    "Sinclair", "Montague", "Everton", "Kingsley", "Mercer", "Aldrich", "Cromwell",
-    "Voss", "Hartley", "Ashton", "Braxton", "Clayborne", "Devereux", "Ellsworth",
-    "Falkner", "Grenville", "Hawkwood", "Ingram", "Jervais", "Kendrick", "Langford",
-    "Maddox", "Nightingale", "Ormond", "Prescott", "Queensbury", "Redgrave", "Stanwick",
-    "Tremont", "Ulrich", "Vanderburg", "Warwick", "Xerxes", "Yarborough", "Zephyr", "Acheron", "Borgia", "Czar", "Defoe", "Elric", "Faust", "Grimm", "Hexum", "Icarus", "Janus", "Kronos", "Lucius", "Moros", "Noctis", "Oberon", "Pluto", "Regulus", "Solus",
-]
-
-SURNAMES_MIDDLE = [
-    "Parker", "Loginov", "Kapoor", "Tanaka", "Santos", "Mueller", "Okafor", "Nguyen",
-    "Petrov", "Garcia", "Yamamoto", "Kowalski", "Mbeki", "Rossi", "Diallo",
-    "Holloway", "Araujo", "Ekwueme", "Lindqvist", "Castellano", "Ferreira", "Nakamura",
-    "Johansson", "Barbosa", "Kimura", "Cortez", "Roux", "Eriksson", "Bernardo",
-    "Castillo", "Dubois", "Evangelista", "Fujimoto", "Guerrero", "Hashimoto", "Ibarra",
-    "Jensen", "Kuznetsov", "Laurent", "Morales", "Nielsen", "Oliveira", "Patel",
-    "Quiroga", "Ramirez", "Silva", "Torres", "Ueda", "Vargas", "Weber",
-    "Xiong", "Yilmaz", "Zabala", "Andersen", "Bakker", "Chavez", "Demir",
-    "Espinoza", "Flores", "Gomez", "Herrera", "Ishida", "Jimenez", "Kato",
-    "Lopez", "Mendez", "Navarro", "Ozaki", "Perez", "Reyes", "Sato", "Adeyemi", "Bergmann", "Chandra", "Delacroix", "Emeka", "Fonseca", "Gupta", "Hadley", "Ingrid", "Johal", "Kitamura", "Lavoie", "Mensah", "Nakata", "Obasi", "Pham", "Rashid", "Suzuki", "Tran", "Usman", "Vieira", "Watanabe", "Yoon", "Zuberi",
-]
-
-SURNAMES_POOR = [
-    "Gray", "Stone", "Marsh", "Field", "Brook", "Wood", "Hill", "Cross",
-    "Banks", "Reed", "Mills", "Ford", "Lane", "West", "Nash",
-    "Burns", "Price", "Sharp", "Swift", "Thorn", "Vale", "Wilde",
-    "Frost", "Hale", "Quinn", "Ross", "Scott", "Todd", "Vance",
-    "Abel", "Blake", "Cole", "Dale", "Earl", "Finn", "Glen",
-    "Hart", "Ives", "Kane", "Knox", "Lake", "Moss", "Neal",
-    "Oaks", "Pace", "Rand", "Sage", "Tate", "Upton", "Vane",
-    "Wade", "Yates", "Zane", "Ash", "Bay", "Carr", "Drew",
-    "Fenn", "Gore", "Holt", "Isle", "Jude", "Kirk", "Lowe",
-    "More", "Noel", "Orr", "Penn", "Rowe", "Shaw", "Troy", "Abbot", "Bauer", "Crowe", "Dunn", "Ennis", "Frey", "Gunn", "Howe", "Innes", "Judd", "Kent", "Lund", "Munn", "Nunn", "Owen", "Penn", "Rudd", "Sunn", "Tunn", "Unn", "Vann", "Wynn", "York", "Zinn",
-]
+OLD_AGE_DAYS = 100
 
 
-def unique_child_name(cur, first: str, surnames: list) -> str:
-    """First + random surname; if taken, retry then append a numeric suffix (same idea as genesis)."""
-    for _ in range(120):
-        name = f"{first} {random.choice(surnames)}"
-        cur.execute("SELECT 1 FROM agents WHERE name = %s LIMIT 1", (name,))
-        if not cur.fetchone():
+def birth_name(cur, gender: str) -> str:
+    """Unique first+surname only — never numeric suffixes."""
+    for _ in range(100):
+        name, _ = generate_unique_name(cur, gender)
+        if name and not any(ch.isdigit() for ch in name):
             return name
-    base = f"{first} {random.choice(surnames)}"
-    n = 2
-    while n < 999999:
-        candidate = f"{base} {n}"
-        cur.execute("SELECT 1 FROM agents WHERE name = %s LIMIT 1", (candidate,))
-        if not cur.fetchone():
-            return candidate
-        n += 1
-    return f"{base} {random.randint(1000000, 9999999)}"
+    raise RuntimeError("Could not generate a valid birth name without numbers")
+STARVATION_DEBT = 50.0
 
 
-def can_reproduce(balance, agent_class, base_balance):
-    """Check if agent can reproduce based on balance"""
-    if agent_class == "poor":
-        # Social mobility - poor can reproduce if rich enough
-        return balance > 1.2 * base_balance
-    elif agent_class == "middle":
-        return balance > 1.2 * base_balance
-    elif agent_class == "elite":
-        return balance > 12.0 * base_balance
-    return False
+def birth_rate_for_avg(avg_balance: float) -> float:
+    if avg_balance > 500:
+        return 0.03
+    if avg_balance >= 100:
+        return 0.02
+    if avg_balance >= 50:
+        return 0.01
+    return 0.005
 
-def get_child_balance(parent_balance, parent_class):
-    """Child gets 70% of birth cost"""
-    if parent_class == "elite":
-        birth_cost = 2.0 * (parent_balance / 10)
-    else:
-        birth_cost = 0.8 * parent_balance
-    return birth_cost * 0.70
 
-def run_birth_cycle(base_balance=10):
-    cur = conn.cursor()
+def run_birth_cycle():
+    conn = get_conn()
+    cur = get_cursor(conn)
+    ensure_schema(cur)
+    conn.commit()
 
-    cur.execute(
-        "SELECT COALESCE(AVG(balance), 0) FROM agents WHERE is_alive = TRUE"
-    )
-    avg_balance = float(cur.fetchone()[0] or 0)
-    if avg_balance > 8:
-        birth_rate = 0.02
-    elif avg_balance < 4:
-        birth_rate = 0.005
-    else:
-        birth_rate = 0.01
+    cur.execute("SELECT COALESCE(AVG(balance), 0) AS a FROM agents WHERE is_alive = TRUE")
+    avg_balance = float(cur.fetchone()["a"] or 0)
+    birth_rate = birth_rate_for_avg(avg_balance)
 
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
-    alive_total = int(cur.fetchone()[0] or 0)
-    max_births = max(1, int(alive_total * birth_rate))
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+    alive_total = int(cur.fetchone()["c"] or 0)
+    max_births = max(0, int(alive_total * birth_rate))
+
+    print(f"\n👶 ZION Birth Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | Cap: {max_births}")
+
+    deaths_old = 0
+    deaths_starvation = 0
 
     cur.execute(
         """
-        SELECT id, name, class, balance, COALESCE(age_days, 0) AS age_days FROM agents
-        WHERE is_alive = TRUE
+        SELECT id, name, balance, COALESCE(age_days, 0) AS age_days, COALESCE(debt, 0) AS debt
+        FROM agents WHERE is_alive = TRUE
         """
     )
     all_agents = cur.fetchall()
 
-    print(f"\n👶 ZION Birth Cycle - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | Cap: {max_births}")
-
-    deaths_old = 0
-    for agent_id, name, agent_class, balance, age_days in all_agents:
-        if age_days > 90 and random.random() < 0.15:
+    for ag in all_agents:
+        age = int(ag["age_days"] or 0)
+        if age > OLD_AGE_DAYS:
             cur.execute(
                 """
                 UPDATE agents SET is_alive = FALSE, died_at = NOW(),
                     death_cause = 'old_age', balance = 0
                 WHERE id = %s
                 """,
-                (agent_id,),
+                (ag["id"],),
             )
             deaths_old += 1
+            log_event(
+                cur,
+                ag["id"],
+                "death",
+                f"💀 {ag['name']} died of old age at day {age}",
+                0,
+                priority="normal",
+            )
 
-    random.shuffle(all_agents)
-    agents = all_agents[: max(max_births * 5, 100)]
+        bal = float(ag["balance"] or 0)
+        debt = float(ag["debt"] or 0)
+        if bal <= 0 and debt > STARVATION_DEBT:
+            cur.execute(
+                """
+                UPDATE agents SET is_alive = FALSE, died_at = NOW(),
+                    death_cause = 'starvation', balance = 0, debt = 0
+                WHERE id = %s
+                """,
+                (ag["id"],),
+            )
+            deaths_starvation += 1
+
+    cur.execute(
+        """
+        SELECT id, name, balance FROM agents
+        WHERE is_alive = TRUE AND balance >= 5
+        ORDER BY RANDOM()
+        """
+    )
+    parents = cur.fetchall()
+    random.shuffle(parents)
 
     births = 0
-    for agent_id, name, agent_class, balance, age_days in agents:
-        balance = float(balance)
-        
-        if not can_reproduce(balance, agent_class, base_balance):
-            continue
-        
+    for parent in parents:
         if births >= max_births:
             break
-        
-        # Get child balance
-        child_balance = get_child_balance(balance, agent_class)
-        
-        # Deduct birth cost from parent
-        birth_cost = child_balance / 0.70
-        new_parent_balance = balance - birth_cost
-        
-        # Pick child name and class (full name with surname, aligned with genesis.py)
-        if agent_class == "elite":
-            child_class = random.choice(["elite", "middle"])
-            child_first = random.choice(NAMES_ELITE)
-            surnames = SURNAMES_ELITE if child_class == "elite" else SURNAMES_MIDDLE
-        else:
-            child_class = agent_class
-            child_first = random.choice(NAMES_MIDDLE if agent_class == "middle" else NAMES_POOR)
-            surnames = SURNAMES_MIDDLE if agent_class == "middle" else SURNAMES_POOR
-        child_name = unique_child_name(cur, child_first, surnames)
-        
-        # Create child
-        child_charisma = random.randint(10, 30)
-        cur.execute("""
-            INSERT INTO agents (name, class, balance, parent_id, charisma, aggression, faith, ambition, loyalty)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 50)
-        """, (
-            child_name, child_class, child_balance, agent_id,
-            child_charisma,
-            random.randint(20, 80),
-            random.randint(20, 80),
-            random.randint(30, 90)
-        ))
-        
-        # Update parent balance
-        cur.execute("UPDATE agents SET balance = %s WHERE id = %s", 
-                   (new_parent_balance, agent_id))
-        
-        # Log event
-        cur.execute("""
-            INSERT INTO events (agent_id, event_type, description, zion_amount)
-            VALUES (%s, 'birth', %s, %s)
-        """, (agent_id, f"{name} gave birth to {child_name}", child_balance))
-        
-        print(
-            f"👶 {name} ({agent_class}) → {child_name} ({child_class}) born with "
-            f"{child_balance:.2f} ZION (charisma {child_charisma})"
+
+        parent_balance = float(parent["balance"] or 0)
+        child_balance = max(5.0, min(100.0, round(parent_balance * 0.20, 2)))
+        if parent_balance < child_balance + 1:
+            continue
+
+        gender = random.choice(["male", "female"])
+        child_name = birth_name(cur, gender)
+        child_class = agent_class_from_balance(child_balance)
+
+        cur.execute(
+            """
+            INSERT INTO agents (
+                name, class, balance, parent_id, gender,
+                charisma, aggression, faith, intelligence, strength, loyalty,
+                education_status, job_status, age_days
+            ) VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                'child', 'unemployed', 0
+            ) RETURNING id
+            """,
+            (
+                child_name,
+                child_class,
+                child_balance,
+                parent["id"],
+                gender,
+                random.randint(1, 15),
+                random.randint(1, 15),
+                random.randint(1, 20),
+                random.randint(1, 15),
+                random.randint(1, 15),
+                random.randint(1, 15),
+            ),
         )
+        child_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "UPDATE agents SET balance = balance - %s WHERE id = %s",
+            (child_balance, parent["id"]),
+        )
+
+        log_event(
+            cur,
+            child_id,
+            "birth",
+            f"New citizen {child_name} born to {parent['name']} with {child_balance:.0f} ZION",
+            child_balance,
+            priority="normal",
+        )
+        print(f"👶 {parent['name']} → {child_name} ({child_balance:.0f} ZION)")
         births += 1
-    
+
     conn.commit()
-    
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
-    alive = cur.fetchone()[0]
-    
-    print(f"\n📊 Births: {births} | Old-age deaths: {deaths_old} | Total alive: {alive}")
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+    alive = cur.fetchone()["c"]
+    print(f"\n📊 Births: {births} | Old age: {deaths_old} | Starvation: {deaths_starvation} | Alive: {alive}")
     print("✅ Birth cycle complete!\n")
     cur.close()
+    conn.close()
+
 
 if __name__ == "__main__":
-    run_birth_cycle(base_balance=10)
+    run_birth_cycle()

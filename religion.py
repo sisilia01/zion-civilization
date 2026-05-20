@@ -1,259 +1,209 @@
 #!/usr/bin/env python3
-"""
-ZION Religion v2 — многоконфессиональность
-Несколько религий конкурируют за души агентов
-"""
-import psycopg2
-import psycopg2.extras
+"""ZION Religion — faith, prayer, church treasury milestones, prophet speeches."""
 import random
 from datetime import datetime
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="zion_db",
-    user="zion_user",
-    password="zion2026"
-)
-cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+from civ_common import ensure_schema, get_conn, get_cursor, log_event
 
-RELIGIONS = [
-    {
-        "name": "Church of the Prophet",
-        "icon": "🔮",
-        "deity": "Prophet Drake",
-        "class_affinity": ["poor", "critical"],
-        "blessing_amount": 3.0,
-        "tithe_rate": 0.05,
-        "miracle_chance": 0.15,
-    },
-    {
-        "name": "Order of Void",
-        "icon": "🌑",
-        "deity": "The Void",
-        "class_affinity": ["elite"],
-        "blessing_amount": 15.0,
-        "tithe_rate": 0.03,
-        "miracle_chance": 0.08,
-    },
-    {
-        "name": "Iron Faith",
-        "icon": "⚔️",
-        "deity": "Iron God",
-        "class_affinity": ["middle", "poor"],
-        "blessing_amount": 5.0,
-        "tithe_rate": 0.07,
-        "miracle_chance": 0.12,
-    },
-    {
-        "name": "Golden Temple",
-        "icon": "✨",
-        "deity": "Golden One",
-        "class_affinity": ["elite", "middle"],
-        "blessing_amount": 10.0,
-        "tithe_rate": 0.04,
-        "miracle_chance": 0.10,
-    },
-    {
-        "name": "Shadow Cult",
-        "icon": "🕯️",
-        "deity": "Shadow Lord",
-        "class_affinity": ["critical", "poor"],
-        "blessing_amount": 2.0,
-        "tithe_rate": 0.08,
-        "miracle_chance": 0.20,
-    },
+FAITH_CAP = 100
+PRAYER_BASE_RATE = 0.30
+TITHE_RATE = 0.005
+
+MILESTONES = [
+    (10_000, "clinic_built", 10, "Church built clinic — disease deaths -10%"),
+    (50_000, "hospital_built", 25, "Church built hospital — disease deaths -25%"),
+    (100_000, "school_built", 0, "Church built school — children +3 intelligence"),
+    (200_000, "university_built", 50, "Church built university — tuition -50%"),
 ]
 
-def log_event(cur, agent_id, event_type, description, amount=0):
-    cur.execute("""
-        INSERT INTO events (agent_id, event_type, description, zion_amount)
-        VALUES (%s, %s, %s, %s)
-    """, (agent_id, event_type, description, amount))
 
-def ensure_religion_tables(cur):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS agent_religion (
-            agent_id INTEGER PRIMARY KEY REFERENCES agents(id),
-            religion_name VARCHAR(100),
-            faith_level INTEGER DEFAULT 50,
-            joined_at TIMESTAMP DEFAULT NOW()
-        )
-    """)
+def ensure_church(cur):
+    ensure_schema(cur)
+    cur.execute("SELECT * FROM church_state WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("INSERT INTO church_state (id) VALUES (1)")
 
-def assign_religions(cur):
-    """Назначаем религию агентам у которых её нет"""
-    cur.execute("""
-        SELECT a.id, a.class FROM agents a
-        LEFT JOIN agent_religion ar ON a.id = ar.agent_id
-        WHERE a.is_alive = true AND ar.agent_id IS NULL
-        ORDER BY RANDOM() LIMIT 100
-    """)
-    unassigned = cur.fetchall()
-    
-    assigned = 0
-    for agent in unassigned:
-        # Выбираем религию по классу
-        matching = [r for r in RELIGIONS if agent['class'] in r['class_affinity']]
-        religion = random.choice(matching if matching else RELIGIONS)
-        
-        cur.execute("""
-            INSERT INTO agent_religion (agent_id, religion_name, faith_level)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (agent_id) DO NOTHING
-        """, (agent['id'], religion['name'], random.randint(30, 90)))
-        assigned += 1
-    
-    return assigned
 
-def run_religious_cycle(cur):
-    """Религиозные обряды — молитвы, десятина, чудеса"""
-    total_prayers = 0
-    total_miracles = 0
-    
-    for religion in RELIGIONS:
-        # Находим верующих
-        cur.execute("""
-            SELECT a.id, a.name, a.class, a.balance, ar.faith_level
-            FROM agents a
-            JOIN agent_religion ar ON a.id = ar.agent_id
-            WHERE a.is_alive = true AND ar.religion_name = %s
-            ORDER BY RANDOM() LIMIT 20
-        """, (religion['name'],))
-        believers = cur.fetchall()
-        
-        if not believers:
+def prayer_probability(faith: int) -> float:
+    return min(0.95, PRAYER_BASE_RATE + faith / 200.0)
+
+
+def process_prayer_cycle(cur):
+    cur.execute(
+        """
+        SELECT id, name, balance, COALESCE(faith, 0) AS faith, clan_id
+        FROM agents
+        WHERE is_alive = true AND clan_id IS NULL
+        """
+    )
+    agents = cur.fetchall()
+    prayers = 0
+    tithe_total = 0.0
+
+    for ag in agents:
+        faith = int(ag["faith"] or 0)
+        if random.random() > prayer_probability(faith):
             continue
-        
-        # Collect tithes into church pool
-        church_pool = 0.0
-        for believer in believers:
-            tithe = round(float(believer['balance']) * religion['tithe_rate'], 2)
-            if tithe > 0.1:
-                cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                           (tithe, believer['id']))
-                church_pool += tithe
-            total_prayers += 1
-        
-        # Miracles paid FROM church pool (no money creation)
-        for believer in believers:
-            if random.random() < religion['miracle_chance'] and church_pool > 0:
-                blessing = min(religion['blessing_amount'] * random.uniform(0.5, 2.0), church_pool)
-                blessing = round(blessing, 2)
-                cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                           (blessing, believer['id']))
-                church_pool -= blessing
-                log_event(cur, believer['id'], 'prayer',
-                         f"{religion['icon']} {religion['deity']} blessed {believer['name']}! +{blessing:.1f} ZION from church tithe pool!",
-                         blessing)
-                total_miracles += 1
 
-        if church_pool > 0.01:
+        tithe = round(float(ag["balance"] or 0) * TITHE_RATE, 4)
+        if tithe > 0:
             cur.execute(
-                "UPDATE state_treasury SET social_fund = social_fund + %s",
-                (round(church_pool, 2),),
+                "UPDATE agents SET balance = balance - %s WHERE id = %s",
+                (tithe, ag["id"]),
             )
-            church_pool = 0.0
-    
-    return total_prayers, total_miracles
+            tithe_total += tithe
 
-def religious_conflict(cur):
-    """Конфликт между религиями"""
-    if random.random() > 0.15:
-        return
-    
-    r1, r2 = random.sample(RELIGIONS, 2)
-    
-    # Верующие r1 атакуют верующих r2
-    cur.execute("""
-        SELECT a.id, a.name, a.balance FROM agents a
-        JOIN agent_religion ar ON a.id = ar.agent_id
-        WHERE a.is_alive = true AND ar.religion_name = %s
-        ORDER BY RANDOM() LIMIT 5
-    """, (r2['name'],))
-    victims = cur.fetchall()
-    
-    total_damage = 0
-    for victim in victims:
-        damage = round(float(victim['balance']) * 0.1, 2)
-        cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                   (damage, victim['id']))
-        total_damage += damage
-    
-    log_event(cur, None, 'religion',
-             f"⚔️ Religious war! {r1['icon']} {r1['name']} vs {r2['icon']} {r2['name']}! {len(victims)} victims, {total_damage:.1f} ZION lost!",
-             total_damage)
-    print(f"⚔️ Religious conflict: {r1['name']} vs {r2['name']}!")
+        cur.execute(
+            """
+            UPDATE agents SET faith = LEAST(%s, COALESCE(faith, 0) + 1), prays = true
+            WHERE id = %s
+            """,
+            (FAITH_CAP, ag["id"]),
+        )
+        prayers += 1
 
-def prophet_event(cur):
-    """Пророк выступает"""
-    religion = random.choice(RELIGIONS)
-    
-    prophecies = [
-        f"The {religion['deity']} warns: the great purge approaches!",
-        f"Blessed are those who tithe to {religion['name']}!",
-        f"The {religion['deity']} demands sacrifice — give your ZION!",
-        f"A new age dawns for followers of {religion['name']}!",
-        f"The {religion['deity']} is angry — disaster incoming!",
-    ]
-    
-    prophecy = random.choice(prophecies)
-    
-    # Находим пророка
-    cur.execute("""
-        SELECT a.id, a.name FROM agents a
-        JOIN agent_religion ar ON a.id = ar.agent_id
-        WHERE a.is_alive = true AND ar.religion_name = %s
-        AND ar.faith_level > 70
-        ORDER BY ar.faith_level DESC LIMIT 1
-    """, (religion['name'],))
+    if tithe_total > 0:
+        cur.execute(
+            "UPDATE church_state SET treasury = treasury + %s WHERE id = 1",
+            (round(tithe_total, 2),),
+        )
+
+    return prayers, tithe_total
+
+
+def check_milestones(cur):
+    cur.execute("SELECT * FROM church_state WHERE id = 1")
+    church = cur.fetchone() or {}
+    treasury = float(church.get("treasury") or 0)
+
+    for threshold, col, reduction, msg in MILESTONES:
+        if treasury >= threshold and not church.get(col):
+            updates = {col: True}
+            if reduction > 0 and col in ("clinic_built", "hospital_built"):
+                cur.execute(
+                    "SELECT COALESCE(disease_reduction_pct, 0) AS d FROM church_state WHERE id = 1"
+                )
+                current = float(cur.fetchone()["d"] or 0)
+                updates["disease_reduction_pct"] = min(50, current + reduction)
+            if col == "university_built":
+                updates["tuition_discount_pct"] = 50
+
+            set_clause = ", ".join(f"{k} = %s" for k in updates)
+            cur.execute(
+                f"UPDATE church_state SET {set_clause}, updated_at = NOW() WHERE id = 1",
+                tuple(updates.values()),
+            )
+            log_event(cur, None, "religion", msg, threshold, priority="normal")
+            print(f"⛪ {msg}")
+            cur.execute("SELECT * FROM church_state WHERE id = 1")
+            church = cur.fetchone() or {}
+
+
+def prophet_speech(cur):
+    cur.execute(
+        """
+        SELECT id, name, COALESCE(faith, 0) AS faith, charisma, balance, class
+        FROM agents
+        WHERE is_alive = true AND COALESCE(charisma, 0) > 5
+        ORDER BY faith DESC, charisma DESC
+        LIMIT 1
+        """
+    )
     prophet = cur.fetchone()
-    
-    if prophet:
-        log_event(cur, prophet['id'], 'prayer',
-                 f"{religion['icon']} Prophet {prophet['name']} of {religion['name']}: '{prophecy}'",
-                 0)
-        print(f"{religion['icon']} {prophet['name']}: '{prophecy}'")
+    if not prophet:
+        return
+
+    cur.execute(
+        "SELECT COALESCE(MAX(age_days), 0) AS d FROM agents WHERE is_alive = true"
+    )
+    max_day = int(cur.fetchone()["d"] or 0)
+    if max_day % 7 != 0:
+        return
+
+    bal = float(prophet["balance"] or 0)
+    is_elite = bal > 2000 or prophet["class"] == "elite"
+
+    prophecies_poor = [
+        "The rich must share — the poor shall inherit the city!",
+        "No child should hunger while treasuries overflow!",
+        "Redistribute ZION to those who bleed for this civilization!",
+    ]
+    prophecies_elite = [
+        "Order above chaos — obey the law of ZION!",
+        "Strength and discipline will save us from the gangs!",
+        "Prosperity comes to those who work and pay their dues!",
+    ]
+
+    if is_elite:
+        prophecy = random.choice(prophecies_elite)
+        cur.execute(
+            """
+            UPDATE agents SET faith = GREATEST(0, COALESCE(faith, 0) - 2)
+            WHERE is_alive = true AND balance < 100
+            """
+        )
+        log_event(
+            cur,
+            prophet["id"],
+            "religion",
+            f"Prophet {prophet['name']} speaks: '{prophecy}' — crime pressure eases",
+            0,
+            priority="normal",
+        )
+    else:
+        prophecy = random.choice(prophecies_poor)
+        cur.execute(
+            """
+            UPDATE agents SET faith = LEAST(%s, COALESCE(faith, 0) + 2)
+            WHERE is_alive = true AND balance < 100
+            """,
+            (FAITH_CAP,),
+        )
+        log_event(
+            cur,
+            prophet["id"],
+            "religion",
+            f"Prophet {prophet['name']} speaks: '{prophecy}' — poor morale rises",
+            0,
+            priority="normal",
+        )
+    print(f"🔮 Prophet {prophet['name']}: '{prophecy}'")
+
+
+def apply_faith_events(cur):
+    """Faith -5 gang, -3 kill; +3 catastrophe survival handled in catastrophes module."""
+    pass
+
 
 def main():
-    print(f"\n⛪ ZION Religion v2 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    conn = get_conn()
+    cur = get_cursor(conn)
+    ensure_church(cur)
+    conn.commit()
+
+    print(f"\n⛪ ZION Religion — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
-    print(f"Religions: {', '.join([r['icon']+' '+r['name'] for r in RELIGIONS])}")
-    
+
     try:
-        ensure_religion_tables(cur)
+        prayers, tithes = process_prayer_cycle(cur)
+        check_milestones(cur)
+        prophet_speech(cur)
         conn.commit()
-        
-        assigned = assign_religions(cur)
-        print(f"Assigned religion to {assigned} new agents")
-        
-        prayers, miracles = run_religious_cycle(cur)
-        print(f"Prayers: {prayers} | Miracles: {miracles}")
-        
-        religious_conflict(cur)
-        prophet_event(cur)
-        
-        conn.commit()
-        
-        # Статистика
-        for religion in RELIGIONS:
-            cur.execute("""
-                SELECT COUNT(*) as cnt FROM agent_religion ar
-                JOIN agents a ON ar.agent_id = a.id
-                WHERE ar.religion_name = %s AND a.is_alive = true
-            """, (religion['name'],))
-            cnt = cur.fetchone()['cnt']
-            print(f"  {religion['icon']} {religion['name']}: {cnt} believers")
-        
+
+        cur.execute("SELECT treasury FROM church_state WHERE id = 1")
+        treasury = float(cur.fetchone()["treasury"] or 0)
+        print(f"Prayers: {prayers} | Tithes: {tithes:.2f} ZION | Church treasury: {treasury:,.0f}")
         print("\n✅ Religion cycle complete!")
-        
     except Exception as e:
-        print(f"❌ Error: {e}")
         conn.rollback()
+        print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
     finally:
         cur.close()
         conn.close()
+
 
 if __name__ == "__main__":
     main()

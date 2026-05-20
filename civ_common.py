@@ -49,20 +49,44 @@ def log_event(cur, agent_id, event_type, description, amount=0, priority="normal
         )
 
 
+ZRS_RESERVE_FLOOR = 4_000_000.0  # 10% of 40M ZRS reserve (100M total supply)
+
+
 def agent_class_from_balance(balance: float) -> str:
-    if balance > 50:
+    """100M supply tiers (~13k avg per agent): poor / working / middle / elite."""
+    if balance > 10_000:
         return "elite"
-    if balance >= 10:
+    if balance >= 1_000:
         return "middle"
+    if balance >= 100:
+        return "working"
     return "poor"
 
 
 def tax_rate_for_balance(balance: float) -> float:
-    if balance > 50:
-        return 0.15
-    if balance >= 10:
-        return 0.08
-    return 0.02
+    """Base rates before ZRS modifier (aligned with class tiers)."""
+    if balance > 10_000:
+        return 0.20
+    if balance >= 1_000:
+        return 0.10
+    if balance >= 100:
+        return 0.05
+    return 0.0  # poor exempt
+
+
+def reclassify_all_agents(cur):
+    """Apply class tiers from balance for all alive agents."""
+    cur.execute(
+        """
+        UPDATE agents SET class = CASE
+            WHEN balance < 100 THEN 'poor'
+            WHEN balance < 1000 THEN 'working'
+            WHEN balance < 10000 THEN 'middle'
+            ELSE 'elite'
+        END
+        WHERE is_alive = true
+        """
+    )
 
 
 def _add_columns(cur, table: str, columns: list[tuple[str, str]]):
@@ -75,6 +99,23 @@ def ensure_schema(cur):
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS debt NUMERIC(20,2) DEFAULT 0")
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS home_zone INTEGER DEFAULT 1")
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS clan_name VARCHAR(100)")
+    _add_columns(
+        cur,
+        "agents",
+        [
+            ("intelligence", "INTEGER DEFAULT 10"),
+            ("strength", "INTEGER DEFAULT 10"),
+            ("education_status", "VARCHAR(30) DEFAULT 'child'"),
+            ("education_start_day", "INTEGER"),
+            ("education_path", "VARCHAR(20)"),
+            ("job_status", "VARCHAR(30) DEFAULT 'unemployed'"),
+            ("employer_corp_id", "INTEGER"),
+            ("job_role", "VARCHAR(20)"),
+            ("gender", "VARCHAR(10)"),
+            ("age_days", "INTEGER DEFAULT 0"),
+            ("prays", "BOOLEAN DEFAULT false"),
+        ],
+    )
     cur.execute("ALTER TABLE corporations ADD COLUMN IF NOT EXISTS debt NUMERIC(20,2) DEFAULT 0")
     cur.execute(
         "ALTER TABLE corporations ADD COLUMN IF NOT EXISTS negative_cycles INTEGER DEFAULT 0"
@@ -155,7 +196,25 @@ def ensure_schema(cur):
         )
         """
     )
+    cur.execute("ALTER TABLE zrs_state ADD COLUMN IF NOT EXISTS reserve NUMERIC(20,2) DEFAULT 0")
     cur.execute("INSERT INTO zrs_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS church_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            treasury NUMERIC(20,2) DEFAULT 0,
+            clinic_built BOOLEAN DEFAULT false,
+            hospital_built BOOLEAN DEFAULT false,
+            school_built BOOLEAN DEFAULT false,
+            university_built BOOLEAN DEFAULT false,
+            disease_reduction_pct NUMERIC(5,2) DEFAULT 0,
+            tuition_discount_pct NUMERIC(5,2) DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute("INSERT INTO church_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
 
     cur.execute(
         """
@@ -300,11 +359,13 @@ def get_zrs_state(cur):
 
 
 def route_tax_revenue(cur, total_tax: float):
+    """40% president | 30% ZRS reserve | 20% sheriff | 10% burned."""
     pres = round(total_tax * 0.40, 2)
     zrs = round(total_tax * 0.30, 2)
     sheriff = round(total_tax * 0.20, 2)
+    burned = round(total_tax - pres - zrs - sheriff, 2)
     cur.execute(
-        "UPDATE state_treasury SET zrs_fund = zrs_fund + %s WHERE id = 1",
+        "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s WHERE id = 1",
         (zrs,),
     )
     cur.execute(
@@ -321,7 +382,33 @@ def route_tax_revenue(cur, total_tax: float):
         """,
         (sheriff,),
     )
-    return pres, zrs, sheriff, round(total_tax * 0.10, 2)
+    return pres, zrs, sheriff, burned
+
+
+def zrs_reserve(cur) -> float:
+    cur.execute("SELECT COALESCE(reserve, 0) AS r FROM zrs_state WHERE id = 1")
+    row = cur.fetchone()
+    return float(row["r"] if row else 0)
+
+
+def zrs_deduct_reserve(cur, amount: float) -> bool:
+    """Deduct from ZRS reserve; returns False if below safety floor (50M)."""
+    reserve = zrs_reserve(cur)
+    floor = ZRS_RESERVE_FLOOR
+    if reserve - amount < floor:
+        return False
+    cur.execute(
+        "UPDATE zrs_state SET reserve = reserve - %s, updated_at = NOW() WHERE id = 1",
+        (amount,),
+    )
+    return True
+
+
+def zrs_add_reserve(cur, amount: float):
+    cur.execute(
+        "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s, updated_at = NOW() WHERE id = 1",
+        (amount,),
+    )
 
 
 def economy_snapshot(cur):
@@ -330,7 +417,7 @@ def economy_snapshot(cur):
         SELECT COUNT(*) AS total,
                COALESCE(AVG(balance), 0) AS avg_balance,
                COALESCE(SUM(balance), 0) AS total_money,
-               COUNT(*) FILTER (WHERE balance < 10 OR class IN ('poor','critical')) AS poor_count
+               COUNT(*) FILTER (WHERE balance < 100 OR class IN ('poor','critical')) AS poor_count
         FROM agents WHERE is_alive = true
         """
     )
