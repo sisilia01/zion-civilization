@@ -53,7 +53,7 @@ def fetch_revolution(cur):
     cur.execute(
         """
         SELECT COUNT(*) AS c FROM agents
-        WHERE is_alive = true AND balance < 100
+        WHERE is_alive = true AND balance < 10
         """
     )
     rebels = int(cur.fetchone()["c"] or 0)

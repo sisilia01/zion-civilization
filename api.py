@@ -2400,7 +2400,7 @@ async def get_eco_pol():
                 COALESCE(AVG(balance), 0) AS avg_balance,
                 COALESCE(SUM(balance), 0) AS total_zion,
                 COUNT(*) AS total_agents,
-                COUNT(*) FILTER (WHERE balance < 100 OR class IN ('poor', 'critical')) AS poor_count
+                COUNT(*) FILTER (WHERE balance < 10 OR class IN ('poor', 'critical')) AS poor_count
             FROM agents WHERE is_alive = true
         """)
         econ = cur.fetchone()

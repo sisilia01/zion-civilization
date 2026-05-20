@@ -49,32 +49,32 @@ def log_event(cur, agent_id, event_type, description, amount=0, priority="normal
         )
 
 
-ZRS_RESERVE_FLOOR = 4_000_000.0  # 10% of 40M ZRS reserve (100M total supply)
+ZRS_RESERVE_FLOOR = 50_000.0  # 5% of 400k ZRS reserve (1M total supply)
 
-# Education & living costs (100M supply economy)
-UNIVERSITY_COST = 2000
-ACADEMY_COST = 1000
-DAILY_FOOD_COST = 50
+# Education & living costs (1M supply economy)
+UNIVERSITY_COST = 50
+ACADEMY_COST = 25
+DAILY_FOOD_COST = 1
 
 
 def agent_class_from_balance(balance: float) -> str:
-    """100M supply tiers (~13k avg per agent): poor / working / middle / elite."""
-    if balance > 10_000:
+    """1M supply tiers (~130 avg per agent): poor / working / middle / elite."""
+    if balance > 500:
         return "elite"
-    if balance >= 1_000:
-        return "middle"
     if balance >= 100:
+        return "middle"
+    if balance >= 10:
         return "working"
     return "poor"
 
 
 def tax_rate_for_balance(balance: float) -> float:
-    """Base rates before ZRS modifier (aligned with class tiers)."""
-    if balance > 10_000:
+    """Base rates before ZRS modifier (0/5/10/20% by class tier)."""
+    if balance > 500:
         return 0.20
-    if balance >= 1_000:
-        return 0.10
     if balance >= 100:
+        return 0.10
+    if balance >= 10:
         return 0.05
     return 0.0  # poor exempt
 
@@ -84,9 +84,9 @@ def reclassify_all_agents(cur):
     cur.execute(
         """
         UPDATE agents SET class = CASE
-            WHEN balance < 100 THEN 'poor'
-            WHEN balance < 1000 THEN 'working'
-            WHEN balance < 10000 THEN 'middle'
+            WHEN balance < 10 THEN 'poor'
+            WHEN balance < 100 THEN 'working'
+            WHEN balance < 500 THEN 'middle'
             ELSE 'elite'
         END
         WHERE is_alive = true
@@ -136,6 +136,9 @@ def ensure_schema(cur):
     )
     cur.execute(
         "ALTER TABLE corporations ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true"
+    )
+    cur.execute(
+        "ALTER TABLE corporations ADD COLUMN IF NOT EXISTS owner VARCHAR(50) DEFAULT 'private'"
     )
     _add_columns(
         cur,
@@ -422,7 +425,7 @@ def economy_snapshot(cur):
         SELECT COUNT(*) AS total,
                COALESCE(AVG(balance), 0) AS avg_balance,
                COALESCE(SUM(balance), 0) AS total_money,
-               COUNT(*) FILTER (WHERE balance < 100 OR class IN ('poor','critical')) AS poor_count
+               COUNT(*) FILTER (WHERE balance < 10 OR class IN ('poor','critical')) AS poor_count
         FROM agents WHERE is_alive = true
         """
     )

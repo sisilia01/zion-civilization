@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""One-time genesis distribution of 100 million ZION across the economy."""
+"""One-time genesis distribution of 1 million ZION across the economy."""
 from datetime import datetime
 
 from civ_common import ensure_schema, get_conn, get_cursor, reclassify_all_agents
 
-TOTAL_SUPPLY = 100_000_000  # 100 million ZION
+TOTAL_SUPPLY = 1_000_000  # 1 million ZION
 
 
 def run_genesis():
-    """Distribute 100M ZION: 30% agents, 40% ZRS, 20% corps, 10% government."""
+    """Distribute 1M ZION: 30% agents, 40% ZRS, 20% corps, 10% government."""
     conn = get_conn()
     cur = get_cursor(conn)
     ensure_schema(cur)
