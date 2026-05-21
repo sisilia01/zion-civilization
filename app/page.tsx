@@ -5261,14 +5261,22 @@ function BankTokenModal({
   token,
   onToken,
   onClose,
+  bankSendMode = "regular",
 }: {
   token: string;
   onToken: (t: string) => void;
   onClose: () => void;
+  bankSendMode?: "regular" | "stealth";
 }) {
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
-  const filteredTokens = ZBANK_TOKENS.filter((t) => t.toLowerCase().includes(q));
+  const availableTokens =
+    bankSendMode === "stealth"
+      ? (["SUI", "USDC"] as const)
+      : (["SUI", "USDC", "USDT", "ETH"] as const);
+  const filteredTokens = availableTokens.filter((t) =>
+    t.toLowerCase().includes(q)
+  );
 
   return (
     <div
@@ -10774,7 +10782,15 @@ export default function Home() {
                         <button
                           key={mode}
                           type="button"
-                          onClick={() => setBankSendMode(mode)}
+                          onClick={() => {
+                            setBankSendMode(mode);
+                            if (
+                              mode === "stealth" &&
+                              (fromToken === "USDT" || fromToken === "ETH")
+                            ) {
+                              setFromToken("SUI");
+                            }
+                          }}
                           style={{
                             flex: 1,
                             padding: "8px",
@@ -10944,6 +10960,7 @@ export default function Home() {
               {showTokenModal && (
                 <BankTokenModal
                   token={showTokenModal === "from" ? fromToken : toToken}
+                  bankSendMode={bankSendMode}
                   onToken={(t) => {
                     if (showTokenModal === "from") setFromToken(t);
                     else setToToken(t);
