@@ -5723,6 +5723,19 @@ export default function Home() {
   const [showTokenModal, setShowTokenModal] = useState<"from" | "to" | null>(null);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankTxHash, setBankTxHash] = useState<string | null>(null);
+  const [notarizeResult, setNotarizeResult] = useState<{
+    ok?: boolean;
+    notarized?: boolean;
+    tx_hash?: string;
+    agent?: string;
+    agent_class?: string;
+    decision?: string;
+    consensus?: {
+      votes_for?: number;
+      total_votes?: number;
+      avg_confidence?: number;
+    };
+  } | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
   const [zbankTab, setZbankTab] = useState<"send" | "receive" | "scan">("send");
   const [stealthKeys, setStealthKeys] = useState<{
@@ -6944,6 +6957,7 @@ export default function Home() {
     setBankLoading(true);
     setBankError(null);
     setBankTxHash(null);
+    setNotarizeResult(null);
 
     const recordTransfer = (digest: string, token: string) => {
       setBankTxHash(digest);
@@ -7237,6 +7251,7 @@ export default function Home() {
     setBankLoading(true);
     setBankError(null);
     setBankTxHash(null);
+    setNotarizeResult(null);
 
     const announcePayment = (
       ephemeralPubKey: string,
@@ -7280,8 +7295,31 @@ export default function Home() {
         signAndExecute(
           { transaction: tx, chain: "sui:testnet" },
           {
-            onSuccess: (result) =>
-              announcePayment(ephemeralPubKey, stealthAddress, suiTxDigest(result)),
+            onSuccess: async (result) => {
+              const digest = suiTxDigest(result);
+              setBankTxHash(digest);
+              try {
+                const data = await fetch("/zco/notarize", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    tx_hash: digest,
+                    token: fromToken,
+                    amount: bankAmount,
+                    stealth_address: stealthAddress,
+                  }),
+                }).then((r) => r.json());
+                if (data?.ok) {
+                  setNotarizeResult({
+                    ...data,
+                    tx_hash: data.tx_hash || digest,
+                  });
+                }
+              } catch {
+                /* notarize optional */
+              }
+              announcePayment(ephemeralPubKey, stealthAddress, digest);
+            },
             onError: (err) => {
               setBankError(err.message);
               setBankLoading(false);
@@ -7319,8 +7357,31 @@ export default function Home() {
         signAndExecute(
           { transaction: tx, chain: "sui:testnet" },
           {
-            onSuccess: (result) =>
-              announcePayment(ephemeralPubKey, stealthAddress, suiTxDigest(result)),
+            onSuccess: async (result) => {
+              const digest = suiTxDigest(result);
+              setBankTxHash(digest);
+              try {
+                const data = await fetch("/zco/notarize", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    tx_hash: digest,
+                    token: fromToken,
+                    amount: bankAmount,
+                    stealth_address: stealthAddress,
+                  }),
+                }).then((r) => r.json());
+                if (data?.ok) {
+                  setNotarizeResult({
+                    ...data,
+                    tx_hash: data.tx_hash || digest,
+                  });
+                }
+              } catch {
+                /* notarize optional */
+              }
+              announcePayment(ephemeralPubKey, stealthAddress, digest);
+            },
             onError: (err) => {
               setBankError(err.message);
               setBankLoading(false);
@@ -10586,7 +10647,7 @@ export default function Home() {
                       <div
                         style={{
                           padding: "12px",
-                          background: "rgba(0,255,100,0.1)",
+                          background: "rgba(0,255,100,0.08)",
                           border: "1px solid rgba(0,255,100,0.3)",
                           borderRadius: "8px",
                           marginTop: "8px",
@@ -10603,6 +10664,17 @@ export default function Home() {
                         >
                           View on Suiscan →
                         </a>
+                        <br />
+                        <br />
+                        <span style={{ color: "#444", fontSize: "0.68rem" }}>
+                          🔒 ZION Stealth Protocol · Private transfer verified
+                          <br />
+                          Sender address: hidden · One-time address destroyed after
+                          claim
+                          <br />
+                          Proof: stealth address derived from recipient public key
+                          only
+                        </span>
                       </div>
                     )}
                     {claimStatus?.error && (
@@ -11028,6 +11100,43 @@ export default function Home() {
                     >
                       View on Suiscan →
                     </a>
+                  </div>
+                )}
+                {notarizeResult?.ok && (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      marginTop: "8px",
+                      background: "rgba(0,255,100,0.05)",
+                      border: "1px solid rgba(0,255,100,0.2)",
+                      borderRadius: "8px",
+                      fontSize: "0.75rem",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    ⚖️ Notarized by{" "}
+                    <span style={{ color: "#00ff88" }}>{notarizeResult.agent}</span> (
+                    {notarizeResult.agent_class})
+                    <br />
+                    <span style={{ color: "#555", fontSize: "0.7rem" }}>
+                      ZCO: {notarizeResult.consensus?.votes_for}/
+                      {notarizeResult.consensus?.total_votes} judges ·{" "}
+                      {Math.round(
+                        (notarizeResult.consensus?.avg_confidence || 0) * 100
+                      )}
+                      % confidence
+                    </span>
+                    <br />
+                    {notarizeResult.tx_hash && (
+                      <a
+                        href={`https://suiscan.xyz/testnet/tx/${notarizeResult.tx_hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#00ff8866", fontSize: "0.68rem" }}
+                      >
+                        View stealth TX on Suiscan →
+                      </a>
+                    )}
                   </div>
                 )}
                 {zbankTab === "send" && bankError && (
