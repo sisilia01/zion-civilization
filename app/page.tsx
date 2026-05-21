@@ -17,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type MouseEvent,
   type ReactNode,
@@ -5192,6 +5193,16 @@ const TOKEN_ICONS: Record<string, string> = {
   ZION: "https://zionciv.com/favicon.ico",
 };
 
+function getStealthGridColor(index: number, keyData: string) {
+  const sliceLen = Math.max(keyData.length - 4, 1);
+  const h = keyData.slice(index % sliceLen, (index % sliceLen) + 4);
+  const val = parseInt(h, 16) || index * 137;
+  const hue = val % 360;
+  const sat = 50 + (val % 40);
+  const light = 35 + (val % 30);
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
 function BankIconImg({ src, alt }: { src?: string; alt: string }) {
   if (!src) return <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />;
   return (
@@ -5601,6 +5612,14 @@ export default function Home() {
   const [stealthClaimLoading, setStealthClaimLoading] = useState<string | null>(
     null
   );
+  const [claimStatus, setClaimStatus] = useState<{
+    digest: string;
+    error: string;
+  } | null>(null);
+  const [keysFileStatus, setKeysFileStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [frsStats, setFrsStats] = useState<{
     economy: {
       total_agents: number;
@@ -6848,7 +6867,57 @@ export default function Home() {
     setStealthKeys(keys);
     localStorage.setItem("zion_stealth_keys", JSON.stringify(keys));
     setBankError(null);
+    setKeysFileStatus(null);
   }, []);
+
+  const handleExportKeys = useCallback(() => {
+    if (!stealthKeys) return;
+    const data = JSON.stringify(stealthKeys, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "zion-stealth-keys.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    setKeysFileStatus(null);
+    setBankError(null);
+  }, [stealthKeys]);
+
+  const handleImportKeys = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      e.target.value = "";
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const keys = JSON.parse(ev.target?.result as string);
+          if (keys.metaAddress && keys.spendingPrivKey && keys.viewingPrivKey) {
+            setStealthKeys(keys);
+            localStorage.setItem("zion_stealth_keys", JSON.stringify(keys));
+            setKeysFileStatus({
+              type: "success",
+              message: "Keys imported successfully!",
+            });
+            setBankError(null);
+          } else {
+            setKeysFileStatus({
+              type: "error",
+              message: "Invalid keys file",
+            });
+          }
+        } catch {
+          setKeysFileStatus({
+            type: "error",
+            message: "Failed to parse keys file",
+          });
+        }
+      };
+      reader.readAsText(file);
+    },
+    []
+  );
 
   const handleRegisterStealth = useCallback(() => {
     if (!account?.address) {
@@ -10023,30 +10092,122 @@ export default function Home() {
                           </div>
                           <div
                             style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(8, 1fr)",
-                              gap: "3px",
-                              padding: "10px",
-                              background: "#0a0a0a",
-                              borderRadius: "8px",
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "2px",
+                              maxWidth: "260px",
+                              margin: "0 auto 12px",
+                              justifyContent: "center",
                             }}
                             aria-hidden
                           >
-                            {stealthKeys.metaAddress.split("").map((ch, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  aspectRatio: "1",
-                                  background:
-                                    parseInt(ch, 16) >= 0 || ch === ":"
-                                      ? `hsl(${(i * 37) % 360}, 60%, ${30 + (i % 5) * 8}%)`
-                                      : "#222",
-                                  borderRadius: "2px",
-                                }}
-                              />
-                            ))}
+                            {Array.from({ length: 64 }, (_, i) => {
+                              const keyData =
+                                stealthKeys.spendingPubKey +
+                                stealthKeys.viewingPubKey;
+                              return (
+                                <div
+                                  key={i}
+                                  style={{
+                                    width: "28px",
+                                    height: "28px",
+                                    borderRadius: "4px",
+                                    background: getStealthGridColor(i, keyData),
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
                         </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "10px",
+                            flexWrap: "wrap",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={handleExportKeys}
+                            style={{
+                              padding: "8px 16px",
+                              background: "rgba(0,255,100,0.1)",
+                              border: "1px solid rgba(0,255,100,0.3)",
+                              borderRadius: "8px",
+                              color: "#00ff88",
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            ⬇ Export keys
+                          </button>
+                          <label
+                            style={{
+                              padding: "8px 16px",
+                              background: "rgba(100,100,255,0.1)",
+                              border: "1px solid rgba(100,100,255,0.3)",
+                              borderRadius: "8px",
+                              color: "#8888ff",
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            ⬆ Import keys
+                            <input
+                              type="file"
+                              accept=".json"
+                              onChange={handleImportKeys}
+                              style={{ display: "none" }}
+                            />
+                          </label>
+                        </div>
+                        <p
+                          style={{
+                            color: "#ffaa44",
+                            fontSize: "0.72rem",
+                            margin: "0 0 10px",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          ⚠️ Save your keys file! Without it you cannot claim
+                          payments.
+                        </p>
+                        {keysFileStatus?.type === "success" && (
+                          <div
+                            style={{
+                              padding: "12px",
+                              background: "rgba(0,255,100,0.1)",
+                              border: "1px solid rgba(0,255,100,0.3)",
+                              borderRadius: "8px",
+                              marginBottom: "10px",
+                              fontFamily: "monospace",
+                              fontSize: "0.75rem",
+                              color: "#00ff88",
+                            }}
+                          >
+                            ✅ {keysFileStatus.message}
+                          </div>
+                        )}
+                        {keysFileStatus?.type === "error" && (
+                          <div
+                            style={{
+                              padding: "12px",
+                              background: "rgba(255,50,50,0.1)",
+                              border: "1px solid rgba(255,50,50,0.3)",
+                              borderRadius: "8px",
+                              marginBottom: "10px",
+                              fontFamily: "monospace",
+                              fontSize: "0.75rem",
+                              color: "#ff6666",
+                            }}
+                          >
+                            ❌ {keysFileStatus.message}
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={handleRegisterStealth}
@@ -10153,6 +10314,7 @@ export default function Home() {
                                 if (!stealthKeys || !account?.address) return;
                                 const claimKey = `${item.stealthAddress}-${idx}`;
                                 setStealthClaimLoading(claimKey);
+                                setClaimStatus(null);
                                 try {
                                   const digest = await claimStealthPayment(
                                     item.ephemeralPubKey,
@@ -10162,15 +10324,16 @@ export default function Home() {
                                     account.address,
                                     suiClientHook
                                   );
-                                  alert("Claimed! TX: " + digest);
+                                  setClaimStatus({ digest, error: "" });
                                   setBankError(null);
                                 } catch (err: unknown) {
-                                  alert(
-                                    "Claim failed: " +
-                                      (err instanceof Error
+                                  setClaimStatus({
+                                    digest: "",
+                                    error:
+                                      err instanceof Error
                                         ? err.message
-                                        : String(err))
-                                  );
+                                        : String(err),
+                                  });
                                 } finally {
                                   setStealthClaimLoading(null);
                                 }
@@ -10203,6 +10366,45 @@ export default function Home() {
                             </button>
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {claimStatus?.digest && (
+                      <div
+                        style={{
+                          padding: "12px",
+                          background: "rgba(0,255,100,0.1)",
+                          border: "1px solid rgba(0,255,100,0.3)",
+                          borderRadius: "8px",
+                          marginTop: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        ✅ Claimed!
+                        <a
+                          href={`https://suiscan.xyz/testnet/tx/${claimStatus.digest}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#00ff88", marginLeft: "8px" }}
+                        >
+                          View on Suiscan →
+                        </a>
+                      </div>
+                    )}
+                    {claimStatus?.error && (
+                      <div
+                        style={{
+                          padding: "12px",
+                          background: "rgba(255,50,50,0.1)",
+                          border: "1px solid rgba(255,50,50,0.3)",
+                          borderRadius: "8px",
+                          marginTop: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "0.75rem",
+                          color: "#ff6666",
+                        }}
+                      >
+                        ❌ {claimStatus.error}
                       </div>
                     )}
                     {!stealthKeys && (
