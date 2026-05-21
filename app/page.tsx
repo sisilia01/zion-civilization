@@ -22,6 +22,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { suiClient } from "@/lib/deepbook";
+import {
+  STEALTH_PACKAGE,
+  buildAnnounceTransaction,
+  buildRegisterTransaction,
+  checkStealthAddress,
+  computeStealthAddress,
+  generateStealthMetaAddress,
+} from "@/lib/stealth";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
   CartesianGrid,
@@ -59,6 +67,7 @@ interface EventItem {
 interface WalrusLiveEvent {
   id: string;
   type: string;
+  event_type?: string;
   title: string;
   description: string;
   timestamp: string;
@@ -70,6 +79,21 @@ type WalrusFeedTickerItem = {
   type: string;
   text: string;
   agent: string;
+};
+
+const TAB_TYPES: Record<string, string[]> = {
+  ALL: [],
+  CRIME: ["street_crime", "police", "police_action", "sheriff_action", "gang_battle", "rebellion", "revolution", "espionage", "law"],
+  CORP: ["corporation", "market", "trade", "tax", "frs", "zrs", "work", "lottery"],
+  LOVE: ["marriage", "divorce"],
+  FAITH: ["prayer", "religion", "neo", "neo_prophecy", "blessing"],
+  CASINO: ["casino"],
+  SPY: ["espionage"],
+  FRS: ["frs", "zrs", "tax", "law"],
+  HEALTH: ["death", "epidemic", "famine", "catastrophe", "clan_war"],
+  EDU: ["education"],
+  POLITICS: ["election", "president", "rebellion", "revolution", "clan_join", "clan_war"],
+  MARKET: ["trade", "market", "corporation", "work", "frs"],
 };
 
 const WALRUS_TICKER_TYPE_COLORS: Record<string, string> = {
@@ -5148,6 +5172,203 @@ function normalizePoliceDivision(raw: Record<string, unknown>): PoliceDivisionCa
   };
 }
 
+const NETWORK_ICONS: Record<string, string> = {
+  Sui: "https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg",
+  Ethereum: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+  Solana: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+  Arbitrum: "https://assets.coingecko.com/coins/images/16547/small/photo_2023-03-29_21.47.00.jpeg",
+  Base: "https://assets.coingecko.com/coins/images/27008/small/base.png",
+  BNB: "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+  Optimism: "https://assets.coingecko.com/coins/images/25244/small/Optimism.png",
+  Polygon: "https://assets.coingecko.com/coins/images/4713/small/polygon.png",
+};
+
+const TOKEN_ICONS: Record<string, string> = {
+  SUI: "https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg",
+  USDC: "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
+  USDT: "https://assets.coingecko.com/coins/images/325/small/Tether.png",
+  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+  ZION: "https://zionciv.com/favicon.ico",
+};
+
+function BankIconImg({ src, alt }: { src?: string; alt: string }) {
+  if (!src) return <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+    />
+  );
+}
+const ZBANK_TO_NETWORKS = ["Sui", "Ethereum"] as const;
+const ZBANK_COMING_SOON_NETWORKS = ["Arbitrum", "Polygon", "BNB", "Base", "Solana", "Optimism"] as const;
+const ZBANK_TOKENS = ["SUI", "USDC", "USDT", "ETH"] as const;
+
+function truncateBankAddress(addr: string, start = 6, end = 4) {
+  if (addr.length <= start + end + 3) return addr;
+  return `${addr.slice(0, start)}...${addr.slice(-end)}`;
+}
+
+function BankAssetTrigger({
+  token,
+  network,
+  onClick,
+}: {
+  token: string;
+  network: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 10px",
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.08)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        cursor: "pointer",
+        flexShrink: 0,
+        color: "#fff",
+      }}
+    >
+      <BankIconImg src={TOKEN_ICONS[token]} alt={token} />
+      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{token}</span>
+      <span style={{ color: "#888", fontSize: "0.72rem" }}>{network}</span>
+      <span style={{ color: "#888", fontSize: "0.65rem" }}>▾</span>
+    </button>
+  );
+}
+
+function BankTokenModal({
+  token,
+  onToken,
+  onClose,
+}: {
+  token: string;
+  onToken: (t: string) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filteredTokens = ZBANK_TOKENS.filter((t) => t.toLowerCase().includes(q));
+
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 10000,
+        background: "rgba(0,0,0,0.75)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "13px",
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Select token"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: "320px",
+          background: "rgba(10, 10, 10, 0.85)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+          border: "1px solid rgba(0, 255, 100, 0.2)",
+          borderRadius: "16px",
+          overflow: "hidden",
+          boxShadow: "0 24px 48px rgba(0,0,0,0.6)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "11px 13px",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <span style={{ color: "#00ff41", fontSize: "0.85rem", fontWeight: 700 }}>Select token</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "8px",
+              color: "#aaa",
+              width: "28px",
+              height: "28px",
+              cursor: "pointer",
+              fontSize: "1rem",
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ padding: "10px 13px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <input
+            type="text"
+            placeholder="Search token…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "10px",
+              color: "#fff",
+              fontSize: "0.85rem",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+        <div style={{ maxHeight: "280px", overflowY: "auto", padding: "6px 0" }}>
+          {filteredTokens.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onToken(t)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                width: "100%",
+                padding: "10px 13px",
+                border: "none",
+                background: token === t ? "rgba(0,255,100,0.12)" : "transparent",
+                color: token === t ? "#00ff41" : "#ccc",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <BankIconImg src={TOKEN_ICONS[t]} alt={t} />
+              <span>{t}{t === "ETH" ? " (wETH on Sui)" : ""}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -5261,10 +5482,9 @@ export default function Home() {
   const [chatAgentsFiltered, setChatAgentsFiltered] = useState<Agent[]>([]);
   const [faucetBusy, setFaucetBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("civilization");
-  const [bridgeToChain, setBridgeToChain] = useState<string>("Ethereum");
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [walrusEvents, setWalrusEvents] = useState<WalrusLiveEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<WalrusLiveEvent[]>([]);
   const [walrusBlobs, setWalrusBlobs] = useState<Array<{
     blob_id: string;
     blob_type: string;
@@ -5272,7 +5492,7 @@ export default function Home() {
     sui_object_id: string;
     created_at: string;
   }>>([]);
-  const [eventFilter, setEventFilter] = useState<string>("all");
+  const [eventFilter, setEventFilter] = useState<string>("ALL");
   const [conversations, setConversations] = useState<ConversationPair[]>([]);
   const [markets, setMarkets] = useState<ZionBetMarket[]>([]);
   const [myBets, setMyBets] = useState<ZionBetMyBetRow[]>([]);
@@ -5353,11 +5573,34 @@ export default function Home() {
   const [zcoLoading, setZcoLoading] = useState(false);
   const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
   const [bankRecipient, setBankRecipient] = useState("");
+  const [ethRecipient, setEthRecipient] = useState("");
   const [bankAmount, setBankAmount] = useState("0.1");
-  const [bankToken, setBankToken] = useState<"SUI" | "ZION">("SUI");
+  const [toNetwork, setToNetwork] = useState<"Sui" | "Ethereum">("Sui");
+  const [showToNetworkDropdown, setShowToNetworkDropdown] = useState(false);
+  const [fromToken, setFromToken] = useState("SUI");
+  const [toToken, setToToken] = useState("SUI");
+  const [showTokenModal, setShowTokenModal] = useState<"from" | "to" | null>(null);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankTxHash, setBankTxHash] = useState<string | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
+  const [wormholeLoading, setWormholeLoading] = useState(false);
+  const [wormholeTxHash, setWormholeTxHash] = useState<string | null>(null);
+  const [wormholeBridgeComplete, setWormholeBridgeComplete] = useState(false);
+  const [zbankTab, setZbankTab] = useState<"send" | "receive" | "scan">("send");
+  const [stealthKeys, setStealthKeys] = useState<{
+    spendingPrivKey: string;
+    viewingPrivKey: string;
+    spendingPubKey: string;
+    viewingPubKey: string;
+    metaAddress: string;
+  } | null>(null);
+  const [stealthScanResults, setStealthScanResults] = useState<
+    { stealthAddress: string; ephemeralPubKey: string; txDigest?: string }[]
+  >([]);
+  const [bankSendMode, setBankSendMode] = useState<"regular" | "stealth">("regular");
+  const [stealthMetaInput, setStealthMetaInput] = useState("");
+  const [stealthScanLoading, setStealthScanLoading] = useState(false);
+  const [stealthRegisterLoading, setStealthRegisterLoading] = useState(false);
   const [frsStats, setFrsStats] = useState<{
     economy: {
       total_agents: number;
@@ -6302,31 +6545,35 @@ export default function Home() {
   }, [zionBetSelectedMarket?.id, loadZionBetMarkets]);
 
   const fetchWalrusEventsFromAPI = useCallback(async (): Promise<WalrusLiveEvent[]> => {
-    const res = await fetch("/api/events-mixed");
+    const res = await fetch("/api/events/by_type");
     const json = await res.json();
     const data = Array.isArray(json) ? json : Array.isArray(json?.events) ? json.events : [];
     if (!Array.isArray(data)) return [];
 
-    return data.map((e: Record<string, unknown>) => ({
-      id: String(e.id ?? ""),
-      type: String(e.type ?? ""),
-      title:
-        typeof e.description === "string"
-          ? e.description.split(".")[0] || String(e.type ?? "")
-          : String(e.type ?? ""),
-      description: typeof e.description === "string" ? e.description : "",
-      timestamp: (typeof e.time === "string" ? e.time : "") || "",
-      agents:
-        typeof e.agent === "string" && e.agent && e.agent !== "Unknown"
-          ? [e.agent]
-          : typeof e.description === "string"
-            ? (() => {
-                const m = e.description.match(/^(\w+ \w+)/);
-                return m?.[1] ? [m[1]] : ["ZION System"];
-              })()
-            : ["ZION System"],
-      amount: typeof e.amount === "number" ? e.amount : 0,
-    })).slice(0, 12);
+    return data.map((e: Record<string, unknown>) => {
+      const eventType = String(e.type ?? e.event_type ?? "");
+      return {
+        id: String(e.id ?? ""),
+        type: eventType,
+        event_type: eventType,
+        title:
+          typeof e.description === "string"
+            ? e.description.split(".")[0] || eventType
+            : eventType,
+        description: typeof e.description === "string" ? e.description : "",
+        timestamp: (typeof e.time === "string" ? e.time : "") || "",
+        agents:
+          typeof e.agent === "string" && e.agent && e.agent !== "Unknown"
+            ? [e.agent]
+            : typeof e.description === "string"
+              ? (() => {
+                  const m = e.description.match(/^(\w+ \w+)/);
+                  return m?.[1] ? [m[1]] : ["ZION System"];
+                })()
+              : ["ZION System"],
+        amount: typeof e.amount === "number" ? e.amount : 0,
+      };
+    });
   }, []);
 
   const fetchWalrusEvents = useCallback(async () => {
@@ -6337,9 +6584,9 @@ export default function Home() {
       if (cached) {
         const { data, ts } = JSON.parse(cached) as { data: WalrusLiveEvent[]; ts: number };
         if (Date.now() - ts < ttlMs && Array.isArray(data)) {
-          setWalrusEvents(data);
+          setAllEvents(data);
           void fetchWalrusEventsFromAPI().then((fresh) => {
-            setWalrusEvents(fresh);
+            setAllEvents(fresh);
             localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
           });
           return;
@@ -6350,7 +6597,7 @@ export default function Home() {
     }
     try {
       const fresh = await fetchWalrusEventsFromAPI();
-      setWalrusEvents(fresh);
+      setAllEvents(fresh);
       localStorage.setItem(cacheKey, JSON.stringify({ data: fresh, ts: Date.now() }));
     } catch (err) {
       console.error(err);
@@ -6378,13 +6625,13 @@ export default function Home() {
     void fetchWalrusEvents();
     const interval = setInterval(() => {
       void fetchWalrusEvents();
-    }, 60000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchWalrusEvents]);
 
   const allFeedItems = useMemo((): WalrusFeedTickerItem[] => {
-    const fromEvents: WalrusFeedTickerItem[] = walrusEvents.map((e) => ({
-      type: e.type,
+    const fromEvents: WalrusFeedTickerItem[] = allEvents.map((e) => ({
+      type: e.type || e.event_type || "",
       text: e.type === "chat" ? e.description || e.title : e.title || e.description,
       agent: e.agents[0] || "ZION System",
     }));
@@ -6394,26 +6641,20 @@ export default function Home() {
       agent: c.agent1?.name ? cleanName(c.agent1.name) : "Agent",
     }));
     return [...fromEvents, ...fromConvs].filter((i) => i.text);
-  }, [walrusEvents, conversations]);
+  }, [allEvents, conversations]);
 
   const filteredEvents = useMemo(() => {
-    if (eventFilter === "all") return allFeedItems;
-    return allFeedItems.filter((e) => {
-      const t = (e.type || "").toLowerCase();
-      if (eventFilter === "police") return t.includes("police") || t.includes("arrest") || t.includes("crime");
-      if (eventFilter === "corporation") return t.includes("corp");
-      if (eventFilter === "marriage") return t.includes("marr") || t.includes("divorce") || t.includes("wedding");
-      if (eventFilter === "religion") return t.includes("relig") || t.includes("prayer") || t.includes("faith");
-      if (eventFilter === "casino") return t.includes("casino") || t.includes("gambl");
-      if (eventFilter === "espionage") return t.includes("spy") || t.includes("espion");
-      if (eventFilter === "frs") return t.includes("frs");
-      if (eventFilter === "epidemic") return t.includes("epidem") || t.includes("disease") || t.includes("virus");
-      if (eventFilter === "education") return t.includes("educ") || t.includes("school") || t.includes("graduat");
-      if (eventFilter === "election") return t.includes("elect") || t.includes("rebel") || t.includes("law");
-      if (eventFilter === "trade") return t.includes("trade") || t.includes("market") || t.includes("famine");
-      return t.includes(eventFilter);
-    });
+    if (eventFilter === "ALL") return allFeedItems;
+    const tabTypes = TAB_TYPES[eventFilter];
+    if (!tabTypes?.length) return allFeedItems;
+    return allFeedItems.filter((e) => tabTypes.includes(e.type));
   }, [allFeedItems, eventFilter]);
+
+  const tickerDuration = 2080;
+
+  useEffect(() => {
+    console.log("filtered events:", filteredEvents.length, eventFilter);
+  }, [filteredEvents, eventFilter]);
 
   const loadMyBets = useCallback(async () => {
     const w = account?.address?.trim();
@@ -6533,16 +6774,22 @@ export default function Home() {
   );
 
   const handleBankSend = useCallback(async () => {
+    if (toNetwork !== "Sui") return;
+
     if (!account?.address) {
       setBankError("Connect wallet first");
       return;
     }
     if (!bankRecipient.startsWith("0x")) {
-      setBankError("Invalid address");
+      setBankError("Invalid Sui address");
       return;
     }
     if (!bankAmount || parseFloat(bankAmount) <= 0) {
       setBankError("Invalid amount");
+      return;
+    }
+    if (fromToken !== "SUI") {
+      setBankError(`${fromToken} on-chain send coming soon — use SUI for now`);
       return;
     }
 
@@ -6552,19 +6799,9 @@ export default function Home() {
 
     try {
       const tx = new Transaction();
-
-      if (bankToken === "SUI") {
-        const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
-        const [coin] = tx.splitCoins(tx.gas, [amountMist]);
-        tx.transferObjects([coin], tx.pure.address(bankRecipient));
-      } else {
-        const amountZion = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000_000));
-        tx.moveCall({
-          target: "0x2::coin::transfer",
-          typeArguments: [`${ZIONBET_PACKAGE}::civilization::CIVILIZATION`],
-          arguments: [tx.pure.u64(amountZion), tx.pure.address(bankRecipient)],
-        });
-      }
+      const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
+      const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+      tx.transferObjects([coin], tx.pure.address(bankRecipient));
 
       signAndExecute(
         { transaction: tx, chain: "sui:testnet" },
@@ -6580,7 +6817,7 @@ export default function Home() {
                 from: account.address,
                 to: bankRecipient,
                 amount: parseFloat(bankAmount),
-                token: bankToken,
+                token: "SUI",
                 tx_hash: digest,
               }),
             }).catch(() => {});
@@ -6595,7 +6832,305 @@ export default function Home() {
       setBankError(err instanceof Error ? err.message : "Unknown error");
       setBankLoading(false);
     }
-  }, [account?.address, bankRecipient, bankAmount, bankToken, signAndExecute]);
+  }, [toNetwork, account?.address, bankRecipient, bankAmount, fromToken, signAndExecute]);
+
+  const handleWormholeBridge = useCallback(async () => {
+    if (!account?.address) {
+      setBankError("Connect Sui wallet first");
+      return;
+    }
+    if (!ethRecipient.startsWith("0x")) {
+      setBankError("Enter valid ETH address");
+      return;
+    }
+    if (!["USDC", "ETH", "USDT"].includes(fromToken)) {
+      setBankError("Select USDC, ETH or USDT");
+      return;
+    }
+
+    setWormholeLoading(true);
+    setBankError(null);
+    setWormholeTxHash(null);
+    setWormholeBridgeComplete(false);
+
+    try {
+      const { Transaction: WormholeTx } = await import("@mysten/sui/transactions");
+      const tx = new WormholeTx();
+
+      const WORMHOLE_PACKAGE =
+        "0x26efee2b51c911237888e5dc6702868abca3c7ac12c53f76ef8eba0697695e3d";
+      const TOKEN_BRIDGE = "0xa6a3da85bbe05da5bfd953708d56f1a3a023e7fb58e5a9be5d0cd117d12d5b4";
+
+      const amountUnits = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
+      const recipientBytes = Array.from(Buffer.from(ethRecipient.slice(2), "hex"));
+
+      tx.moveCall({
+        target: `${WORMHOLE_PACKAGE}::transfer_tokens_with_relay::transfer_tokens_with_relay`,
+        typeArguments: [
+          "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+        ],
+        arguments: [
+          tx.object(TOKEN_BRIDGE),
+          tx.pure.u64(amountUnits),
+          tx.pure.u64(0),
+          tx.pure.u16(2),
+          tx.pure.vector("u8", recipientBytes),
+          tx.pure.u32(0),
+        ],
+      });
+
+      signAndExecute(
+        { transaction: tx as unknown as Transaction, chain: "sui:testnet" },
+        {
+          onSuccess: (result) => {
+            const digest =
+              suiTxDigest(result) ||
+              (result &&
+              typeof result === "object" &&
+              "transactionDigest" in result &&
+              typeof (result as { transactionDigest: unknown }).transactionDigest === "string"
+                ? (result as { transactionDigest: string }).transactionDigest
+                : "");
+            if (digest) setWormholeTxHash(digest);
+            setWormholeBridgeComplete(true);
+            setWormholeLoading(false);
+          },
+          onError: (err) => {
+            setBankError("Bridge failed: " + err.message);
+            setWormholeLoading(false);
+          },
+        }
+      );
+    } catch (err: unknown) {
+      setBankError(
+        "Bridge error: " + (err instanceof Error ? err.message : String(err))
+      );
+      setWormholeLoading(false);
+    }
+  }, [account?.address, ethRecipient, fromToken, bankAmount, signAndExecute]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("zion_stealth_keys");
+    if (!saved) return;
+    try {
+      setStealthKeys(JSON.parse(saved));
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }, []);
+
+  const handleGenerateStealth = useCallback(() => {
+    const keys = generateStealthMetaAddress();
+    setStealthKeys(keys);
+    localStorage.setItem("zion_stealth_keys", JSON.stringify(keys));
+    setBankError(null);
+  }, []);
+
+  const handleRegisterStealth = useCallback(() => {
+    if (!account?.address) {
+      setBankError("Connect Sui wallet first");
+      return;
+    }
+    if (!stealthKeys) {
+      setBankError("Generate stealth keys first");
+      return;
+    }
+    setStealthRegisterLoading(true);
+    setBankError(null);
+    try {
+      const tx = buildRegisterTransaction(
+        stealthKeys.spendingPubKey,
+        stealthKeys.viewingPubKey
+      );
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: () => {
+            setStealthRegisterLoading(false);
+            setBankError(null);
+          },
+          onError: (err) => {
+            setBankError("Register failed: " + err.message);
+            setStealthRegisterLoading(false);
+          },
+        }
+      );
+    } catch (err: unknown) {
+      setBankError(err instanceof Error ? err.message : "Register failed");
+      setStealthRegisterLoading(false);
+    }
+  }, [account?.address, stealthKeys, signAndExecute]);
+
+  const parseStealthAnnouncement = useCallback((parsed: unknown) => {
+    if (!parsed || typeof parsed !== "object") return null;
+    const j = parsed as Record<string, unknown>;
+    const stealthAddress =
+      typeof j.stealth_address === "string"
+        ? j.stealth_address
+        : typeof j.stealthAddress === "string"
+          ? j.stealthAddress
+          : null;
+    const rawEphemeral = j.ephemeral_pubkey ?? j.ephemeralPubKey ?? j.ephemeral_pubkey_hex;
+    let ephemeralPubKey = "";
+    if (typeof rawEphemeral === "string") {
+      ephemeralPubKey = rawEphemeral.startsWith("0x")
+        ? rawEphemeral.slice(2)
+        : rawEphemeral;
+    } else if (Array.isArray(rawEphemeral)) {
+      ephemeralPubKey = rawEphemeral
+        .map((b) => Number(b).toString(16).padStart(2, "0"))
+        .join("");
+    }
+    if (!stealthAddress || !ephemeralPubKey) return null;
+    return { stealthAddress, ephemeralPubKey };
+  }, []);
+
+  const handleStealthScan = useCallback(async () => {
+    if (!stealthKeys) {
+      setBankError("Generate keys in RECEIVE tab first");
+      return;
+    }
+    setStealthScanLoading(true);
+    setBankError(null);
+    try {
+      const { data } = await suiClient.queryEvents({
+        query: {
+          MoveEventType: `${STEALTH_PACKAGE}::stealth::StealthAnnouncement`,
+        },
+        limit: 50,
+        order: "descending",
+      });
+      const found: { stealthAddress: string; ephemeralPubKey: string; txDigest?: string }[] =
+        [];
+      for (const ev of data) {
+        const parsed = parseStealthAnnouncement(ev.parsedJson);
+        if (!parsed) continue;
+        const mine = checkStealthAddress(
+          parsed.ephemeralPubKey,
+          parsed.stealthAddress,
+          stealthKeys.viewingPrivKey,
+          stealthKeys.spendingPubKey
+        );
+        if (mine) {
+          found.push({
+            ...parsed,
+            txDigest: ev.id.txDigest,
+          });
+        }
+      }
+      setStealthScanResults(found);
+      if (found.length === 0) {
+        setBankError("No incoming stealth payments found");
+      } else {
+        setBankError(null);
+      }
+    } catch (err: unknown) {
+      setBankError(err instanceof Error ? err.message : "Scan failed");
+      setStealthScanResults([]);
+    } finally {
+      setStealthScanLoading(false);
+    }
+  }, [stealthKeys, parseStealthAnnouncement]);
+
+  const handleStealthSend = useCallback(async () => {
+    if (!account?.address) {
+      setBankError("Connect wallet first");
+      return;
+    }
+    if (!stealthMetaInput.startsWith("st:sui:")) {
+      setBankError("Enter a valid stealth meta-address (st:sui:...)");
+      return;
+    }
+    if (!bankAmount || parseFloat(bankAmount) <= 0) {
+      setBankError("Invalid amount");
+      return;
+    }
+    if (fromToken !== "SUI") {
+      setBankError(`${fromToken} stealth send coming soon — use SUI for now`);
+      return;
+    }
+
+    setBankLoading(true);
+    setBankError(null);
+    setBankTxHash(null);
+
+    try {
+      const { stealthAddress, ephemeralPubKey } =
+        computeStealthAddress(stealthMetaInput);
+      const tx = new Transaction();
+      const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
+      const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+      tx.transferObjects([coin], tx.pure.address(stealthAddress));
+
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: (result) => {
+            const digest = suiTxDigest(result);
+            setBankTxHash(digest);
+            const announceTx = buildAnnounceTransaction(
+              ephemeralPubKey,
+              stealthAddress
+            );
+            signAndExecute(
+              { transaction: announceTx, chain: "sui:testnet" },
+              {
+                onSuccess: () => setBankLoading(false),
+                onError: (err) => {
+                  setBankError(
+                    "Payment sent but announce failed: " + err.message
+                  );
+                  setBankLoading(false);
+                },
+              }
+            );
+          },
+          onError: (err) => {
+            setBankError(err.message);
+            setBankLoading(false);
+          },
+        }
+      );
+    } catch (err: unknown) {
+      setBankError(err instanceof Error ? err.message : "Stealth send failed");
+      setBankLoading(false);
+    }
+  }, [
+    account?.address,
+    stealthMetaInput,
+    bankAmount,
+    fromToken,
+    signAndExecute,
+  ]);
+
+  useEffect(() => {
+    if (toNetwork !== "Ethereum") {
+      setWormholeTxHash(null);
+      setWormholeBridgeComplete(false);
+      setWormholeLoading(false);
+    }
+  }, [toNetwork]);
+
+  useEffect(() => {
+    console.log("toNetwork changed:", toNetwork);
+    if (activeTab === "zbank") {
+      console.log("rendering TO section, toNetwork=", toNetwork);
+    }
+  }, [toNetwork, activeTab]);
+
+  useEffect(() => {
+    if (toNetwork === "Sui" && account?.address) {
+      setBankRecipient(account.address);
+    }
+  }, [toNetwork, account?.address]);
+
+  useEffect(() => {
+    if (!showToNetworkDropdown) return;
+    const handler = () => setShowToNetworkDropdown(false);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showToNetworkDropdown]);
 
   useEffect(() => {
     if (!account?.address) {
@@ -7421,11 +7956,23 @@ export default function Home() {
       ) : null}
       <canvas
         ref={bgCanvasRef}
-        style={{ position: "fixed", inset: 0, zIndex: 0, opacity: 0.22, pointerEvents: "none" }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          opacity: activeTab === "zbank" ? 0 : 0.22,
+          pointerEvents: "none",
+        }}
         aria-hidden
       />
-      <div className="bg-nebula" />
-      <div className="bg-grid" />
+      <div
+        className="bg-nebula"
+        style={activeTab === "zbank" ? { opacity: 0, background: "#0a0a0a" } : undefined}
+      />
+      <div
+        className="bg-grid"
+        style={activeTab === "zbank" ? { display: "none" } : undefined}
+      />
 
       {showIntro && (
         <div
@@ -8230,18 +8777,18 @@ export default function Home() {
                 </div>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", padding: "8px 12px", borderBottom: "1px solid #111" }}>
                   {[
-                    { id: "all", label: "ALL" },
-                    { id: "police", label: "🚔 CRIME" },
-                    { id: "corporation", label: "🏢 CORP" },
-                    { id: "marriage", label: "💍 LOVE" },
-                    { id: "religion", label: "⛪ FAITH" },
-                    { id: "casino", label: "🎰 CASINO" },
-                    { id: "espionage", label: "🕵️ SPY" },
-                    { id: "frs", label: "🏦 FRS" },
-                    { id: "epidemic", label: "🦠 HEALTH" },
-                    { id: "education", label: "🎓 EDU" },
-                    { id: "election", label: "🏛️ POLITICS" },
-                    { id: "trade", label: "📦 MARKET" },
+                    { id: "ALL", label: "ALL" },
+                    { id: "CRIME", label: "🚔 CRIME" },
+                    { id: "CORP", label: "🏢 CORP" },
+                    { id: "LOVE", label: "💍 LOVE" },
+                    { id: "FAITH", label: "⛪ FAITH" },
+                    { id: "CASINO", label: "🎰 CASINO" },
+                    { id: "SPY", label: "🕵️ SPY" },
+                    { id: "FRS", label: "🏦 FRS" },
+                    { id: "HEALTH", label: "🦠 HEALTH" },
+                    { id: "EDU", label: "🎓 EDU" },
+                    { id: "POLITICS", label: "🏛️ POLITICS" },
+                    { id: "MARKET", label: "📦 MARKET" },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -8316,59 +8863,72 @@ export default function Home() {
                   </div>
                 )}
                 <div style={{ overflow: "hidden", padding: "10px 0" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "0",
-                      animation: `tickerScroll ${WIRE_TICKER_SCROLL_SEC}s linear infinite`,
-                      whiteSpace: "nowrap",
-                      width: "max-content",
-                    }}
-                  >
-                    {[...filteredEvents, ...filteredEvents].map((item, i) => {
-                      const badgeColor = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
-                      const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
-                      return (
-                        <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              padding: "0 40px",
-                              borderRight: "1px solid #ffffff11",
-                              fontFamily: "monospace",
-                              fontSize: "0.75rem",
-                              color: "#00ff41",
-                            }}
-                          >
-                            <span style={{ fontSize: "1rem" }}>{icon}</span>
+                  {filteredEvents.length === 0 ? (
+                    <span
+                      style={{
+                        color: "#555",
+                        fontFamily: "monospace",
+                        fontSize: "0.8rem",
+                        padding: "0 12px",
+                      }}
+                    >
+                      No events yet...
+                    </span>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        animation: `tickerScroll ${tickerDuration}s linear infinite`,
+                        whiteSpace: "nowrap",
+                        willChange: "transform",
+                        width: "max-content",
+                      }}
+                    >
+                      {[...filteredEvents, ...filteredEvents].map((item, i) => {
+                        const badgeColor = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
+                        const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
+                        return (
+                          <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
                             <span
                               style={{
-                                color: badgeColor === "#666" ? "#c4c4c4" : badgeColor === "#888" ? "#d0d0d0" : badgeColor,
-                                fontWeight: "bold",
-                                fontSize: "0.7rem",
-                                background:
-                                  badgeColor === "#666"
-                                    ? "rgba(180,180,180,0.2)"
-                                    : badgeColor === "#888"
-                                      ? "rgba(200,200,200,0.2)"
-                                      : `${badgeColor}33`,
-                                padding: "2px 6px",
-                                borderRadius: "3px",
-                                border: `1px solid ${badgeColor === "#666" ? "#c4c4c466" : badgeColor === "#888" ? "#d0d0d066" : `${badgeColor}55`}`,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                padding: "0 40px",
+                                borderRight: "1px solid #ffffff11",
+                                fontFamily: "monospace",
+                                fontSize: "0.75rem",
+                                color: "#00ff41",
                               }}
                             >
-                              {item.type?.replace("_", " ").toUpperCase()}
+                              <span style={{ fontSize: "1rem" }}>{icon}</span>
+                              <span
+                                style={{
+                                  color: badgeColor === "#666" ? "#c4c4c4" : badgeColor === "#888" ? "#d0d0d0" : badgeColor,
+                                  fontWeight: "bold",
+                                  fontSize: "0.7rem",
+                                  background:
+                                    badgeColor === "#666"
+                                      ? "rgba(180,180,180,0.2)"
+                                      : badgeColor === "#888"
+                                        ? "rgba(200,200,200,0.2)"
+                                        : `${badgeColor}33`,
+                                  padding: "2px 6px",
+                                  borderRadius: "3px",
+                                  border: `1px solid ${badgeColor === "#666" ? "#c4c4c466" : badgeColor === "#888" ? "#d0d0d066" : `${badgeColor}55`}`,
+                                }}
+                              >
+                                {item.type?.replace("_", " ").toUpperCase()}
+                              </span>
+                              <span>{item.text}</span>
+                              <span style={{ color: "#00ff41", fontSize: "0.75rem" }}>— {item.agent}</span>
                             </span>
-                            <span>{item.text}</span>
-                            <span style={{ color: "#00ff41", fontSize: "0.75rem" }}>— {item.agent}</span>
+                            <span style={{ color: "#00ff4155", padding: "0 20px" }}>◆</span>
                           </span>
-                          <span style={{ color: "#00ff4155", padding: "0 20px" }}>◆</span>
-                        </span>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -9390,142 +9950,860 @@ export default function Home() {
           )}
 
           {activeTab === "zbank" && (
-            <div style={{ padding: "24px" }}>
-              <div style={{ marginBottom: "24px" }}>
-                <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
-                  💳 ZION BANK — Private Transfers
-                </h2>
-                <p style={{ color: "#888", fontSize: "0.8rem", margin: 0 }}>
-                  Anonymous cross-chain transfers powered by Seal Protocol &amp; Sui
-                </p>
-              </div>
-
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "flex-start",
+                paddingTop: "12px",
+                minHeight: "auto",
+                width: "100%",
+                position: "relative",
+                zIndex: 10,
+                boxSizing: "border-box",
+              }}
+            >
               <div
                 style={{
-                  border: "1px solid #333",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  marginBottom: "20px",
+                  maxWidth: "480px",
+                  width: "100%",
+                  margin: "0 auto",
+                  background: "rgba(0, 0, 0, 0.6)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
+                  border: "1px solid rgba(0, 255, 100, 0.15)",
+                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+                  borderRadius: "16px",
+                  padding: "16px",
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ color: "#fff", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "16px" }}>
-                  💸 Send Private Transaction
-                </div>
-
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                    RECIPIENT ADDRESS
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={bankRecipient}
-                    onChange={(e) => setBankRecipient(e.target.value)}
+                <div
+                  style={{
+                    borderBottom: "1px solid rgba(0,255,100,0.15)",
+                    paddingBottom: "8px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <h2
                     style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      background: "rgba(0,0,0,0.4)",
-                      border: "1px solid #333",
-                      borderRadius: "8px",
-                      color: "#fff",
-                      fontSize: "0.85rem",
-                      boxSizing: "border-box",
+                      color: "#00ff41",
+                      fontSize: "1.1rem",
+                      fontWeight: "bold",
+                      margin: 0,
+                      whiteSpace: "nowrap",
                     }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div>
-                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                      AMOUNT
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      value={bankAmount}
-                      onChange={(e) => setBankAmount(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        background: "rgba(0,0,0,0.4)",
-                        border: "1px solid #333",
-                        borderRadius: "8px",
-                        color: "#fff",
-                        fontSize: "0.85rem",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                      TOKEN
-                    </label>
-                    <select
-                      value={bankToken}
-                      onChange={(e) => setBankToken(e.target.value as "SUI" | "ZION")}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        background: "rgba(0,0,0,0.8)",
-                        border: "1px solid #333",
-                        borderRadius: "8px",
-                        color: "#fff",
-                        fontSize: "0.85rem",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <option value="SUI">SUI</option>
-                      <option value="ZION">ZION</option>
-                    </select>
-                  </div>
+                  >
+                    🏦 ZION BANK
+                  </h2>
                 </div>
 
                 <div
                   style={{
-                    marginBottom: "16px",
-                    padding: "10px 12px",
-                    background: "rgba(255,215,0,0.05)",
-                    border: "1px solid rgba(255,215,0,0.2)",
-                    borderRadius: "8px",
+                    display: "flex",
+                    gap: "6px",
+                    marginBottom: "14px",
                   }}
                 >
-                  <div style={{ color: "#ffd700", fontSize: "0.72rem" }}>
-                    💰 Fee: 10 ZION + $0.01 gas · Transaction will be encrypted on Sui blockchain
+                  {(
+                    [
+                      ["send", "SEND"],
+                      ["receive", "RECEIVE"],
+                      ["scan", "SCAN"],
+                    ] as const
+                  ).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => {
+                        setZbankTab(tab);
+                        setBankError(null);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: "8px 10px",
+                        background:
+                          zbankTab === tab
+                            ? "rgba(0,255,100,0.15)"
+                            : "rgba(255,255,255,0.04)",
+                        border:
+                          zbankTab === tab
+                            ? "1px solid rgba(0,255,100,0.45)"
+                            : "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "8px",
+                        color: zbankTab === tab ? "#00ff88" : "#888",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {zbankTab === "receive" && (
+                  <div style={{ marginBottom: "12px" }}>
+                    <p
+                      style={{
+                        color: "#ffaa44",
+                        fontSize: "0.72rem",
+                        margin: "0 0 12px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      ⚠️ Save your keys! If lost, funds cannot be recovered.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGenerateStealth}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        marginBottom: "10px",
+                        background: "rgba(0,255,100,0.1)",
+                        border: "1px solid rgba(0,255,100,0.35)",
+                        borderRadius: "10px",
+                        color: "#00ff88",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Generate my stealth address
+                    </button>
+                    {stealthKeys && (
+                      <>
+                        <div
+                          style={{
+                            padding: "14px",
+                            marginBottom: "10px",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(0,255,100,0.2)",
+                            borderRadius: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: "#666",
+                              fontSize: "0.65rem",
+                              marginBottom: "8px",
+                              letterSpacing: "0.08em",
+                            }}
+                          >
+                            META-ADDRESS
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: "monospace",
+                              fontSize: "0.62rem",
+                              color: "#00ff88",
+                              wordBreak: "break-all",
+                              lineHeight: 1.5,
+                              marginBottom: "12px",
+                            }}
+                          >
+                            {stealthKeys.metaAddress}
+                          </div>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(8, 1fr)",
+                              gap: "3px",
+                              padding: "10px",
+                              background: "#0a0a0a",
+                              borderRadius: "8px",
+                            }}
+                            aria-hidden
+                          >
+                            {stealthKeys.metaAddress.split("").map((ch, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  aspectRatio: "1",
+                                  background:
+                                    parseInt(ch, 16) >= 0 || ch === ":"
+                                      ? `hsl(${(i * 37) % 360}, 60%, ${30 + (i % 5) * 8}%)`
+                                      : "#222",
+                                  borderRadius: "2px",
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRegisterStealth}
+                          disabled={stealthRegisterLoading}
+                          style={{
+                            width: "100%",
+                            padding: "10px",
+                            marginBottom: "8px",
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid #333",
+                            borderRadius: "10px",
+                            color: "#fff",
+                            fontWeight: 600,
+                            cursor: stealthRegisterLoading ? "not-allowed" : "pointer",
+                            opacity: stealthRegisterLoading ? 0.7 : 1,
+                          }}
+                        >
+                          {stealthRegisterLoading
+                            ? "Registering..."
+                            : "Register on-chain"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {zbankTab === "scan" && (
+                  <div style={{ marginBottom: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleStealthScan()}
+                      disabled={stealthScanLoading}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        marginBottom: "12px",
+                        background: "rgba(0,255,100,0.1)",
+                        border: "1px solid rgba(0,255,100,0.35)",
+                        borderRadius: "10px",
+                        color: "#00ff88",
+                        fontWeight: 700,
+                        cursor: stealthScanLoading ? "not-allowed" : "pointer",
+                        opacity: stealthScanLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {stealthScanLoading
+                        ? "Scanning..."
+                        : "Scan for incoming payments"}
+                    </button>
+                    {stealthScanResults.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {stealthScanResults.map((item, idx) => (
+                          <div
+                            key={`${item.stealthAddress}-${idx}`}
+                            style={{
+                              padding: "12px",
+                              background: "rgba(0,255,100,0.06)",
+                              border: "1px solid rgba(0,255,100,0.25)",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: "#00ff88",
+                                fontSize: "0.72rem",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              🕵️ Incoming stealth payment
+                            </div>
+                            <div
+                              style={{
+                                fontFamily: "monospace",
+                                fontSize: "0.65rem",
+                                color: "#aaa",
+                                wordBreak: "break-all",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              {item.stealthAddress.slice(0, 20)}…
+                            </div>
+                            {item.txDigest && (
+                              <a
+                                href={`https://suiscan.xyz/testnet/tx/${item.txDigest}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: "#4DA2FF",
+                                  fontSize: "0.68rem",
+                                  display: "block",
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                View announcement →
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBankRecipient(item.stealthAddress);
+                                setZbankTab("send");
+                                setBankError(
+                                  "Sweep from stealth address: use wallet with spending key (coming soon)"
+                                );
+                              }}
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                background: "rgba(0,255,100,0.12)",
+                                border: "1px solid rgba(0,255,100,0.4)",
+                                borderRadius: "8px",
+                                color: "#00ff88",
+                                fontSize: "0.8rem",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Claim
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!stealthKeys && (
+                      <p style={{ color: "#666", fontSize: "0.75rem" }}>
+                        Generate keys in RECEIVE tab to scan for your payments.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {zbankTab === "send" && (
+                  <>
+                {/* FROM — Sui only */}
+                <div
+                  style={{
+                    width: "100%",
+                    padding: "16px",
+                    borderRadius: "12px",
+                    background: "rgba(255,255,255,0.05)",
+                    boxSizing: "border-box",
+                    marginBottom: "0",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>FROM</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.7rem", fontFamily: "monospace" }}>
+                      <BankIconImg src={NETWORK_ICONS.Sui} alt="Sui" />
+                      {account?.address
+                        ? `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
+                        : "Connect wallet"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        background: "rgba(0,255,65,0.1)",
+                        border: "1px solid rgba(0,255,100,0.25)",
+                        borderRadius: "6px",
+                        color: "#00ff41",
+                        fontSize: "0.65rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      🔒 Sui
+                    </span>
+                    <span style={{ color: "#444", fontSize: "0.65rem" }}>locked</span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.0"
+                      value={bankAmount}
+                      onChange={(e) => setBankAmount(e.target.value)}
+                      style={{
+                        fontSize: "1.6rem",
+                        fontWeight: "bold",
+                        background: "transparent",
+                        border: "none",
+                        color: "#fff",
+                        flex: 1,
+                        minWidth: 0,
+                        padding: 0,
+                        outline: "none",
+                      }}
+                    />
+                    <BankAssetTrigger
+                      token={fromToken}
+                      network="Sui"
+                      onClick={() => setShowTokenModal("from")}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                    <span style={{ color: "#666", fontSize: "0.75rem" }}>
+                      ${fromToken === "SUI" ? (parseFloat(bankAmount || "0") * 2).toFixed(2) : "0.00"}
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                      <span style={{ color: "#888", fontSize: "0.78rem" }}>
+                        Balance: {fromToken === "SUI" ? suiBalance.toFixed(2) : "—"}
+                      </span>
+                      {(["20", "50", "MAX"] as const).map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => {
+                            if (fromToken !== "SUI" || suiBalance <= 0) return;
+                            const frac = pct === "MAX" ? 1 : parseInt(pct, 10) / 100;
+                            setBankAmount((suiBalance * frac).toFixed(4));
+                          }}
+                          style={{
+                            padding: "3px 8px",
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "8px",
+                            color: "#aaa",
+                            fontSize: "0.72rem",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {pct === "20" ? "20%" : pct === "50" ? "50%" : "MAX"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleBankSend}
-                  disabled={bankLoading}
+                <div style={{ display: "flex", justifyContent: "center", margin: "8px 0", position: "relative", zIndex: 2 }}>
+                  <span style={{ color: "#00ff41", fontSize: "1.2rem" }}>⬇</span>
+                </div>
+
+                {/* TO */}
+                <div
                   style={{
                     width: "100%",
-                    padding: "14px",
-                    background: "linear-gradient(90deg, rgba(255,215,0,0.2), rgba(0,255,65,0.2))",
-                    border: "1px solid #ffd700",
-                    borderRadius: "8px",
-                    color: "#ffd700",
-                    fontSize: "1rem",
-                    fontWeight: "bold",
-                    cursor: bankLoading ? "not-allowed" : "pointer",
-                    opacity: bankLoading ? 0.7 : 1,
+                    padding: "16px",
+                    borderRadius: "12px",
+                    background: "rgba(255,255,255,0.05)",
+                    boxSizing: "border-box",
+                    marginBottom: "12px",
                   }}
                 >
-                  {bankLoading ? "⏳ Sending..." : "🔐 Send Transaction"}
-                </button>
-                {bankTxHash && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>TO</span>
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          setShowToNetworkDropdown(!showToNetworkDropdown);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "6px 10px",
+                          background: "rgba(255,255,255,0.05)",
+                          border: "1px solid #333",
+                          borderRadius: "8px",
+                          color: "#fff",
+                          cursor: "pointer",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        <img
+                          src={NETWORK_ICONS[toNetwork]}
+                          alt={toNetwork}
+                          style={{ width: 16, height: 16, borderRadius: "50%" }}
+                        />
+                        {toNetwork} ▾
+                      </button>
+                      {showToNetworkDropdown && (
+                        <div
+                          onMouseDown={(e) => e.stopPropagation()}
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 4px)",
+                            right: 0,
+                            zIndex: 400,
+                            background: "#1a1a1a",
+                            border: "1px solid #333",
+                            borderRadius: "10px",
+                            minWidth: "180px",
+                            overflow: "hidden",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          {(["Sui", "Ethereum"] as const).map((net) => (
+                            <button
+                              key={net}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setToNetwork(net);
+                                setShowToNetworkDropdown(false);
+                                setBankError(null);
+                              }}
+                              style={{
+                                display: "flex",
+                                width: "100%",
+                                padding: "10px 14px",
+                                background: toNetwork === net ? "rgba(0,255,100,0.1)" : "transparent",
+                                border: "none",
+                                color: toNetwork === net ? "#00ff88" : "#fff",
+                                cursor: "pointer",
+                                alignItems: "center",
+                                gap: "8px",
+                                fontSize: "0.85rem",
+                              }}
+                            >
+                              <img
+                                src={NETWORK_ICONS[net]}
+                                alt={net}
+                                style={{ width: 18, height: 18, borderRadius: "50%" }}
+                              />
+                              {net} {toNetwork === net ? "✓" : ""}
+                            </button>
+                          ))}
+                          <div
+                            style={{
+                              borderTop: "1px solid #222",
+                              padding: "8px 14px",
+                              color: "#444",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            Coming Soon: Arbitrum · Polygon · BNB · Base · Solana
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div
                     style={{
-                      marginTop: "12px",
-                      padding: "10px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.0"
+                      readOnly
+                      value={bankAmount}
+                      style={{
+                        fontSize: "1.6rem",
+                        fontWeight: "bold",
+                        background: "transparent",
+                        border: "none",
+                        color: "#888",
+                        flex: 1,
+                        minWidth: 0,
+                        padding: 0,
+                        outline: "none",
+                      }}
+                    />
+                    <BankAssetTrigger
+                      token={toToken}
+                      network={toNetwork}
+                      onClick={() => setShowTokenModal("to")}
+                    />
+                  </div>
+                </div>
+
+                {toNetwork === "Sui" && (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "6px",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      {(
+                        [
+                          ["regular", "Regular send"],
+                          ["stealth", "Stealth send"],
+                        ] as const
+                      ).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setBankSendMode(mode)}
+                          style={{
+                            flex: 1,
+                            padding: "8px",
+                            background:
+                              bankSendMode === mode
+                                ? "rgba(147,51,234,0.15)"
+                                : "rgba(255,255,255,0.04)",
+                            border:
+                              bankSendMode === mode
+                                ? "1px solid rgba(147,51,234,0.4)"
+                                : "1px solid #333",
+                            borderRadius: "8px",
+                            color: bankSendMode === mode ? "#c084fc" : "#888",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {bankSendMode === "regular" ? (
+                      <input
+                        type="text"
+                        placeholder="0x... Sui recipient"
+                        value={bankRecipient}
+                        onChange={(e) => setBankRecipient(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          marginBottom: "12px",
+                          background: "rgba(255,255,255,0.05)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: "12px",
+                          color: "#fff",
+                          fontSize: "0.85rem",
+                          fontFamily: "monospace",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="st:sui:... recipient meta-address"
+                        value={stealthMetaInput}
+                        onChange={(e) => setStealthMetaInput(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          marginBottom: "12px",
+                          background: "rgba(147,51,234,0.06)",
+                          border: "1px solid rgba(147,51,234,0.3)",
+                          borderRadius: "12px",
+                          color: "#fff",
+                          fontSize: "0.78rem",
+                          fontFamily: "monospace",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
+                      <span
+                        style={{
+                          alignSelf: "flex-start",
+                          background:
+                            bankSendMode === "stealth"
+                              ? "rgba(147,51,234,0.15)"
+                              : "rgba(0,255,65,0.1)",
+                          border:
+                            bankSendMode === "stealth"
+                              ? "1px solid rgba(147,51,234,0.35)"
+                              : "1px solid rgba(0,255,100,0.25)",
+                          color: bankSendMode === "stealth" ? "#c084fc" : "#00ff41",
+                          fontSize: "0.65rem",
+                          padding: "3px 8px",
+                          borderRadius: "20px",
+                        }}
+                      >
+                        {bankSendMode === "stealth"
+                          ? "🕵️ ZION Stealth Protocol"
+                          : "🔒 Encrypted by Seal Protocol"}
+                      </span>
+                      <span style={{ color: "#555", fontSize: "0.7rem" }}>
+                        {bankSendMode === "stealth"
+                          ? "One-time address + on-chain announce"
+                          : "🔒 Fee: ~$0.01 gas · Encrypted by Seal"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void (bankSendMode === "stealth"
+                          ? handleStealthSend()
+                          : handleBankSend())
+                      }
+                      disabled={bankLoading}
+                      style={{
+                        width: "100%",
+                        padding: "10px",
+                        background:
+                          bankSendMode === "stealth"
+                            ? "linear-gradient(135deg, rgba(147,51,234,0.35) 0%, rgba(80,20,120,0.25) 100%)"
+                            : "linear-gradient(135deg, rgba(0,255,65,0.45) 0%, rgba(0,140,40,0.25) 100%)",
+                        border:
+                          bankSendMode === "stealth"
+                            ? "1px solid #a855f7"
+                            : "1px solid #00ff41",
+                        borderRadius: "12px",
+                        color: bankSendMode === "stealth" ? "#c084fc" : "#00ff41",
+                        fontSize: "1rem",
+                        fontWeight: "bold",
+                        cursor: bankLoading ? "not-allowed" : "pointer",
+                        opacity: bankLoading ? 0.7 : 1,
+                        boxShadow:
+                          bankSendMode === "stealth"
+                            ? "0 0 24px rgba(147,51,234,0.2)"
+                            : "0 0 24px rgba(0,255,65,0.2)",
+                      }}
+                    >
+                      {bankLoading
+                        ? "⏳ Sending..."
+                        : bankSendMode === "stealth"
+                          ? "🕵️ Stealth Send"
+                          : "🔐 Send Privately"}
+                    </button>
+                  </>
+                )}
+
+                {toNetwork === "Ethereum" && (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="0x... Ethereum recipient"
+                      value={ethRecipient}
+                      onChange={(e) => setEthRecipient(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        marginBottom: "12px",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "12px",
+                        color: "#fff",
+                        fontSize: "0.85rem",
+                        fontFamily: "monospace",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <p style={{ color: "#888", fontSize: "0.78rem", lineHeight: 1.5, margin: "0 0 8px" }}>
+                      Bridge Sui → Ethereum via Wormhole, then shield on Ethereum with Railgun
+                    </p>
+                    <p style={{ color: "#666", fontSize: "0.72rem", margin: "0 0 12px" }}>
+                      ⏱ Estimated finality: ~15 minutes
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleWormholeBridge}
+                      disabled={wormholeLoading}
+                      style={{
+                        width: "100%",
+                        padding: "12px",
+                        marginBottom: "10px",
+                        background: "rgba(0,255,100,0.12)",
+                        border: "1px solid rgba(0,255,100,0.45)",
+                        borderRadius: "12px",
+                        color: "#00ff88",
+                        fontSize: "0.9rem",
+                        fontWeight: 700,
+                        cursor: wormholeLoading ? "not-allowed" : "pointer",
+                        opacity: wormholeLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {wormholeLoading ? "Bridging..." : "🌉 Bridge via Wormhole"}
+                    </button>
+                    {wormholeTxHash && (
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          padding: "10px",
+                          background: "rgba(0,255,100,0.06)",
+                          border: "1px solid rgba(0,255,100,0.3)",
+                          borderRadius: "10px",
+                          fontSize: "0.75rem",
+                          color: "#00ff88",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        ✅ Bridge TX: {wormholeTxHash.slice(0, 16)}… —{" "}
+                        <a
+                          href={`https://wormholescan.io/#/tx/${wormholeTxHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#00ff41" }}
+                        >
+                          View on Wormholescan
+                        </a>
+                      </div>
+                    )}
+                    {wormholeBridgeComplete && (
+                      <div
+                        style={{
+                          marginBottom: "12px",
+                          padding: "12px",
+                          background: "rgba(147,51,234,0.08)",
+                          border: "1px solid rgba(147,51,234,0.35)",
+                          borderRadius: "12px",
+                        }}
+                      >
+                        <div style={{ color: "#c084fc", fontWeight: 700, fontSize: "0.85rem", marginBottom: "8px" }}>
+                          Step 2: Shield via Railgun
+                        </div>
+                        <p style={{ color: "#888", fontSize: "0.78rem", lineHeight: 1.5, margin: "0 0 10px" }}>
+                          Bridge complete. Open Railgun and shield your {fromToken} on Ethereum to make
+                          funds private via zk-SNARK.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => window.open("https://app.railgun.org", "_blank")}
+                          style={{
+                            width: "100%",
+                            padding: "10px",
+                            background: "rgba(147,51,234,0.15)",
+                            border: "1px solid rgba(147,51,234,0.4)",
+                            borderRadius: "10px",
+                            color: "#c084fc",
+                            fontSize: "0.85rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Open Railgun Shield →
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+                      <span
+                        style={{
+                          alignSelf: "flex-start",
+                          background: "rgba(147,51,234,0.15)",
+                          border: "1px solid rgba(147,51,234,0.35)",
+                          color: "#c084fc",
+                          fontSize: "0.65rem",
+                          padding: "3px 8px",
+                          borderRadius: "20px",
+                        }}
+                      >
+                        🔒 Privacy powered by Railgun Protocol
+                      </span>
+                      <span
+                        style={{
+                          alignSelf: "flex-start",
+                          background: "rgba(0,255,65,0.1)",
+                          border: "1px solid rgba(0,255,100,0.25)",
+                          color: "#00ff41",
+                          fontSize: "0.65rem",
+                          padding: "3px 8px",
+                          borderRadius: "20px",
+                        }}
+                      >
+                        🔒 Encrypted by Seal Protocol
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {bankTxHash && toNetwork === "Sui" && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      padding: "8px",
                       background: "rgba(0,255,65,0.05)",
                       border: "1px solid #00ff4144",
                       borderRadius: "8px",
                     }}
                   >
-                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "4px" }}>
-                      ✅ Transaction sent!
-                    </div>
+                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "3px" }}>✅ Transaction sent!</div>
                     <a
                       href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
                       target="_blank"
@@ -9536,11 +10814,11 @@ export default function Home() {
                     </a>
                   </div>
                 )}
-                {bankError && (
+                {zbankTab === "send" && bankError && (
                   <div
                     style={{
-                      marginTop: "12px",
-                      padding: "10px",
+                      marginTop: "10px",
+                      padding: "8px",
                       background: "rgba(255,50,50,0.05)",
                       border: "1px solid #ff323244",
                       borderRadius: "8px",
@@ -9549,318 +10827,39 @@ export default function Home() {
                     <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
                   </div>
                 )}
-                <div style={{ color: "#333", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
-                  Powered by Sui Protocol Privacy · sui::ristretto255 · Pedersen commitments
-                </div>
-              </div>
 
-              {/* Cross-chain — ZION Bridge */}
-              <div
-                style={{
-                  border: "1px solid rgba(100,160,255,0.3)",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  marginBottom: "20px",
-                  background: "rgba(100,160,255,0.02)",
-                }}
-              >
-                <div style={{ color: "#64a0ff", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "4px" }}>
-                  🌉 COMING SOON — ZION BRIDGE
+                <div style={{ color: "#444", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
+                  ⚡ Sui → Sui on-chain · Sui → Ethereum via Sui Bridge + Railgun
                 </div>
-                <div style={{ color: "#fff", fontSize: "1.1rem", fontWeight: "bold", marginBottom: "4px" }}>
-                  Private Cross-Chain Transfers
-                </div>
-                <div style={{ color: "#555", fontSize: "0.8rem", marginBottom: "20px" }}>
-                  Send privately across chains · Powered by Wormhole + Sui ETH Bridge
-                </div>
+                  </>
+                )}
 
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    marginBottom: "24px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {[
-                    { chain: "Sui", color: "#64a0ff", icon: "🔵" },
-                    { chain: "Ethereum", color: "#9945ff", icon: "💎" },
-                    { chain: "Solana", color: "#00ff94", icon: "◎" },
-                    { chain: "Arbitrum", color: "#28a0f0", icon: "🔷" },
-                    { chain: "Base", color: "#0052ff", icon: "🔵" },
-                  ].map((c) => (
-                    <div
-                      key={c.chain}
-                      onClick={() => {
-                        if (c.chain !== "Sui") setBridgeToChain(c.chain);
-                      }}
-                      style={{
-                        padding: "10px 16px",
-                        border:
-                          bridgeToChain === c.chain || c.chain === "Sui"
-                            ? `2px solid ${c.color}`
-                            : `1px solid ${c.color}44`,
-                        borderRadius: "10px",
-                        background: bridgeToChain === c.chain ? `${c.color}22` : `${c.color}08`,
-                        textAlign: "center",
-                        minWidth: "80px",
-                        cursor: c.chain === "Sui" ? "default" : "pointer",
-                        transition: "all 0.2s ease",
-                        opacity: c.chain === "Sui" ? 0.6 : 1,
-                      }}
-                    >
-                      <div style={{ fontSize: "1.2rem" }}>{c.icon}</div>
-                      <div style={{ color: c.color, fontSize: "0.72rem", fontWeight: "bold" }}>{c.chain}</div>
-                      {c.chain === "Sui" && (
-                        <div style={{ color: c.color, fontSize: "0.6rem", opacity: 0.7 }}>FROM</div>
-                      )}
-                      {bridgeToChain === c.chain && c.chain !== "Sui" && (
-                        <div style={{ color: c.color, fontSize: "0.6rem" }}>TO ✓</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px", marginBottom: "20px" }}>
-                  {[
-                    { step: "1", title: "Send on Sui", desc: "Send USDC privately on Sui blockchain", color: "#64a0ff" },
-                    {
-                      step: "2",
-                      title: "Wormhole Bridge",
-                      desc: "Automatic cross-chain transfer via Wormhole protocol",
-                      color: "#9945ff",
-                    },
-                    { step: "3", title: "Receive anywhere", desc: "Get USDC on ETH, SOL, Arbitrum or Base", color: "#00ff94" },
-                  ].map((s) => (
-                    <div
-                      key={s.step}
-                      style={{
-                        padding: "14px",
-                        border: `1px solid ${s.color}33`,
-                        borderRadius: "10px",
-                        background: `${s.color}08`,
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "50%",
-                          background: `${s.color}22`,
-                          border: `1px solid ${s.color}`,
-                          color: s.color,
-                          fontSize: "0.85rem",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          margin: "0 auto 8px",
-                        }}
-                      >
-                        {s.step}
-                      </div>
-                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {s.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{s.desc}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ opacity: 0.4, pointerEvents: "none" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                    <div>
-                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                        FROM NETWORK
-                      </label>
-                      <select
-                        style={{
-                          width: "100%",
-                          padding: "10px",
-                          background: "rgba(0,0,0,0.4)",
-                          border: "1px solid #333",
-                          borderRadius: "8px",
-                          color: "#fff",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        <option>🔵 Sui (Private)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ color: "#888", fontSize: "0.72rem", display: "block", marginBottom: "4px" }}>
-                        TO NETWORK
-                      </label>
-                      <div
-                        style={{
-                          width: "100%",
-                          padding: "10px",
-                          background: "rgba(0,0,0,0.4)",
-                          border: "1px solid #64a0ff",
-                          borderRadius: "8px",
-                          color: "#fff",
-                          fontSize: "0.85rem",
-                          boxSizing: "border-box",
-                        }}
-                      >
-                        {bridgeToChain === "Ethereum" && "💎 Ethereum"}
-                        {bridgeToChain === "Solana" && "◎ Solana"}
-                        {bridgeToChain === "Arbitrum" && "🔷 Arbitrum"}
-                        {bridgeToChain === "Base" && "🔵 Base"}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
+                {zbankTab !== "send" && bankError && (
+                  <div
                     style={{
-                      width: "100%",
-                      padding: "14px",
-                      background: "rgba(100,160,255,0.1)",
-                      border: "1px solid #64a0ff",
+                      marginTop: "10px",
+                      padding: "8px",
+                      background: "rgba(255,50,50,0.05)",
+                      border: "1px solid #ff323244",
                       borderRadius: "8px",
-                      color: "#64a0ff",
-                      fontSize: "1rem",
-                      fontWeight: "bold",
                     }}
                   >
-                    🌉 Bridge Privately
-                  </button>
-                </div>
-
-                <div style={{ textAlign: "center", marginTop: "12px" }}>
-                  <span
-                    style={{
-                      background: "rgba(100,160,255,0.1)",
-                      border: "1px solid rgba(100,160,255,0.3)",
-                      color: "#64a0ff",
-                      fontSize: "0.7rem",
-                      padding: "4px 16px",
-                      borderRadius: "20px",
-                    }}
-                  >
-                    🚀 Launching with Sui ETH Bridge · Powered by Wormhole
-                  </span>
-                </div>
+                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
+                  </div>
+                )}
               </div>
 
-              <div
-                style={{
-                  border: "1px solid rgba(255,215,0,0.2)",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  marginBottom: "20px",
-                  background: "rgba(255,215,0,0.03)",
-                }}
-              >
-                <div style={{ color: "#ffd700", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  🔐 HOW IT WORKS
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "1fr 1fr 1fr 1fr",
-                    gap: "12px",
+              {showTokenModal && (
+                <BankTokenModal
+                  token={showTokenModal === "from" ? fromToken : toToken}
+                  onToken={(t) => {
+                    if (showTokenModal === "from") setFromToken(t);
+                    else setToToken(t);
+                    setShowTokenModal(null);
                   }}
-                >
-                  {[
-                    { icon: "💸", title: "Send", desc: "Send SUI or USDC to any address" },
-                    { icon: "🔐", title: "Encrypt", desc: "Amount & recipient encrypted on-chain" },
-                    { icon: "🔑", title: "Key", desc: "Only you hold the viewing key" },
-                    { icon: "📋", title: "Audit", desc: "Reveal details to tax authority if needed" },
-                  ].map((step) => (
-                    <div
-                      key={step.title}
-                      style={{ textAlign: "center", padding: "12px", background: "rgba(0,0,0,0.3)", borderRadius: "8px" }}
-                    >
-                      <div style={{ fontSize: "1.5rem", marginBottom: "6px" }}>{step.icon}</div>
-                      <div style={{ color: "#fff", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {step.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.7rem", lineHeight: "1.4" }}>{step.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid rgba(0,255,65,0.2)",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  marginBottom: "20px",
-                  background: "rgba(0,255,65,0.02)",
-                }}
-              >
-                <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  ⚙️ POWERED BY
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-                  {[
-                    { icon: "🔐", title: "Sui zkLogin", desc: "Sign in with Google — no seed phrase needed" },
-                    { icon: "🛡️", title: "Seal Protocol", desc: "On-chain encryption for private transfers" },
-                    { icon: "🌊", title: "Walrus Storage", desc: "Decentralized storage for transaction history" },
-                    { icon: "⚡", title: "Sui Move", desc: "Smart contracts with object-based security" },
-                    { icon: "🔑", title: "Viewing Key", desc: "Full audit trail — reveal only when needed" },
-                    { icon: "📊", title: "DeepBook", desc: "On-chain liquidity for ZION token transfers" },
-                  ].map((tech) => (
-                    <div
-                      key={tech.title}
-                      style={{
-                        padding: "12px",
-                        background: "rgba(0,0,0,0.3)",
-                        borderRadius: "8px",
-                        border: "1px solid #1a1a1a",
-                      }}
-                    >
-                      <div style={{ fontSize: "1.2rem", marginBottom: "6px" }}>{tech.icon}</div>
-                      <div
-                        style={{
-                          color: "#00ff41",
-                          fontSize: "0.78rem",
-                          fontWeight: "bold",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        {tech.title}
-                      </div>
-                      <div style={{ color: "#555", fontSize: "0.68rem", lineHeight: "1.4" }}>{tech.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ border: "1px solid #222", borderRadius: "12px", padding: "16px" }}>
-                <div style={{ color: "#555", fontSize: "0.75rem", letterSpacing: "0.1em", marginBottom: "12px" }}>
-                  ⚙️ TECHNICAL STACK
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {[
-                    "sui::ristretto255",
-                    "Pedersen commitments",
-                    "zk-SNARK on-chain",
-                    "Stealth addresses",
-                    "Viewing key",
-                    "XChaCha20-Poly1305",
-                  ].map((tech) => (
-                    <span
-                      key={tech}
-                      style={{
-                        background: "rgba(0,255,65,0.05)",
-                        border: "1px solid rgba(0,255,65,0.2)",
-                        color: "#00ff41",
-                        fontSize: "0.7rem",
-                        padding: "4px 10px",
-                        borderRadius: "20px",
-                      }}
-                    >
-                      {tech}
-                    </span>
-                  ))}
-                </div>
-              </div>
+                  onClose={() => setShowTokenModal(null)}
+                />
+              )}
             </div>
           )}
 
