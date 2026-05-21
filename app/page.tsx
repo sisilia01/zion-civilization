@@ -5778,7 +5778,7 @@ export default function Home() {
 
   const fetchPoliceNews = useCallback(async () => {
     try {
-      const res = await fetch("/api/police-wire", { cache: "no-store" });
+      const res = await fetch("/police-wire", { cache: "no-store" });
       setPoliceNews(parseWireResponse(await res.json()));
     } catch {
       /* ignore */
@@ -5787,7 +5787,7 @@ export default function Home() {
 
   const fetchCorporateNews = useCallback(async () => {
     try {
-      const res = await fetch("/api/corporate-wire", { cache: "no-store" });
+      const res = await fetch("/corporate-wire", { cache: "no-store" });
       setCorporateNews(parseWireResponse(await res.json()));
     } catch {
       /* ignore */
@@ -5796,7 +5796,7 @@ export default function Home() {
 
   const fetchClanNews = useCallback(async () => {
     try {
-      const res = await fetch("/api/clan-wire", { cache: "no-store" });
+      const res = await fetch("/clan-wire", { cache: "no-store" });
       setClanNews(parseWireResponse(await res.json()));
     } catch {
       /* ignore */
@@ -6625,13 +6625,13 @@ export default function Home() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch("/api/conversations");
+      const res = await fetch("/conversations");
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         setConversations(data);
       } else {
         await fetch("/api/generate_conversations", { method: "POST" });
-        const res2 = await fetch("/api/conversations");
+        const res2 = await fetch("/conversations");
         const data2 = await res2.json();
         if (Array.isArray(data2)) setConversations(data2);
       }

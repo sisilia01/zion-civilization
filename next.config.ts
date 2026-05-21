@@ -52,6 +52,10 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         destination: "http://localhost:8000/:path*",
       },
+      { source: "/conversations", destination: "http://localhost:8000/conversations" },
+      { source: "/police-wire", destination: "http://localhost:8000/police-wire" },
+      { source: "/corporate-wire", destination: "http://localhost:8000/corporate-wire" },
+      { source: "/clan-wire", destination: "http://localhost:8000/clan-wire" },
     ];
   },
 };
