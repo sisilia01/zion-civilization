@@ -31,6 +31,7 @@ import {
   claimStealthPayment,
   computeStealthAddress,
   generateStealthMetaAddress,
+  getUsdcCoins,
 } from "@/lib/stealth";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
@@ -5615,6 +5616,7 @@ export default function Home() {
   const [claimStatus, setClaimStatus] = useState<{
     digest: string;
     error: string;
+    gasHelpAddress?: string;
   } | null>(null);
   const [keysFileStatus, setKeysFileStatus] = useState<{
     type: "success" | "error";
@@ -6805,8 +6807,8 @@ export default function Home() {
       setBankError("Invalid amount");
       return;
     }
-    if (fromToken !== "SUI") {
-      setBankError(`${fromToken} on-chain send coming soon — use SUI for now`);
+    if (fromToken !== "SUI" && fromToken !== "USDC") {
+      setBankError(`${fromToken} not supported — use SUI or USDC`);
       return;
     }
 
@@ -6814,42 +6816,87 @@ export default function Home() {
     setBankError(null);
     setBankTxHash(null);
 
-    try {
-      const tx = new Transaction();
-      const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
-      const [coin] = tx.splitCoins(tx.gas, [amountMist]);
-      tx.transferObjects([coin], tx.pure.address(bankRecipient));
+    const recordTransfer = (digest: string, token: string) => {
+      setBankTxHash(digest);
+      setBankLoading(false);
+      fetch("/api/bank/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: account.address,
+          to: bankRecipient,
+          amount: parseFloat(bankAmount),
+          token,
+          tx_hash: digest,
+        }),
+      }).catch(() => {});
+    };
 
-      signAndExecute(
-        { transaction: tx, chain: "sui:testnet" },
-        {
-          onSuccess: async (result) => {
-            const digest = suiTxDigest(result);
-            setBankTxHash(digest);
-            setBankLoading(false);
-            fetch("/api/bank/transfer", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                from: account.address,
-                to: bankRecipient,
-                amount: parseFloat(bankAmount),
-                token: "SUI",
-                tx_hash: digest,
-              }),
-            }).catch(() => {});
-          },
-          onError: (err) => {
-            setBankError(err.message);
-            setBankLoading(false);
-          },
+    try {
+      if (fromToken === "SUI") {
+        const tx = new Transaction();
+        const amountMist = BigInt(
+          Math.floor(parseFloat(bankAmount) * 1_000_000_000)
+        );
+        const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+        tx.transferObjects([coin], tx.pure.address(bankRecipient));
+
+        signAndExecute(
+          { transaction: tx, chain: "sui:testnet" },
+          {
+            onSuccess: (result) => recordTransfer(suiTxDigest(result), "SUI"),
+            onError: (err) => {
+              setBankError(err.message);
+              setBankLoading(false);
+            },
+          }
+        );
+      } else if (fromToken === "USDC") {
+        const coins = await getUsdcCoins(suiClientHook, account.address);
+
+        if (coins.data.length === 0) {
+          setBankError("No USDC balance found");
+          setBankLoading(false);
+          return;
         }
-      );
+
+        const amountUsdc = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
+        const tx = new Transaction();
+        const primaryCoinId = coins.data[0].coinObjectId;
+
+        if (coins.data.length > 1) {
+          tx.mergeCoins(
+            tx.object(primaryCoinId),
+            coins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+          );
+        }
+
+        const [splitCoin] = tx.splitCoins(tx.object(primaryCoinId), [amountUsdc]);
+        tx.transferObjects([splitCoin], tx.pure.address(bankRecipient));
+
+        signAndExecute(
+          { transaction: tx, chain: "sui:testnet" },
+          {
+            onSuccess: (result) => recordTransfer(suiTxDigest(result), "USDC"),
+            onError: (err) => {
+              setBankError(err.message);
+              setBankLoading(false);
+            },
+          }
+        );
+      }
     } catch (err: unknown) {
       setBankError(err instanceof Error ? err.message : "Unknown error");
       setBankLoading(false);
     }
-  }, [account?.address, bankRecipient, bankAmount, fromToken, signAndExecute]);
+  }, [
+    account?.address,
+    bankRecipient,
+    bankAmount,
+    fromToken,
+    signAndExecute,
+    suiClientHook,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -7053,8 +7100,8 @@ export default function Home() {
       setBankError("Invalid amount");
       return;
     }
-    if (fromToken !== "SUI") {
-      setBankError(`${fromToken} stealth send coming soon — use SUI for now`);
+    if (fromToken !== "SUI" && fromToken !== "USDC") {
+      setBankError(`${fromToken} not supported — use SUI or USDC`);
       return;
     }
 
@@ -7062,43 +7109,91 @@ export default function Home() {
     setBankError(null);
     setBankTxHash(null);
 
-    try {
-      const { stealthAddress, ephemeralPubKey } =
-        computeStealthAddress(stealthMetaInput);
-      const tx = new Transaction();
-      const amountMist = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000_000));
-      const [coin] = tx.splitCoins(tx.gas, [amountMist]);
-      tx.transferObjects([coin], tx.pure.address(stealthAddress));
-
+    const announcePayment = (
+      ephemeralPubKey: string,
+      stealthAddress: string,
+      digest: string
+    ) => {
+      setBankTxHash(digest);
+      const encryptedMemo =
+        fromToken === "USDC"
+          ? JSON.stringify({ token: "USDC", amount: bankAmount })
+          : "";
+      const announceTx = buildAnnounceTransaction(
+        ephemeralPubKey,
+        stealthAddress,
+        encryptedMemo
+      );
       signAndExecute(
-        { transaction: tx, chain: "sui:testnet" },
+        { transaction: announceTx, chain: "sui:testnet" },
         {
-          onSuccess: (result) => {
-            const digest = suiTxDigest(result);
-            setBankTxHash(digest);
-            const announceTx = buildAnnounceTransaction(
-              ephemeralPubKey,
-              stealthAddress
-            );
-            signAndExecute(
-              { transaction: announceTx, chain: "sui:testnet" },
-              {
-                onSuccess: () => setBankLoading(false),
-                onError: (err) => {
-                  setBankError(
-                    "Payment sent but announce failed: " + err.message
-                  );
-                  setBankLoading(false);
-                },
-              }
-            );
-          },
+          onSuccess: () => setBankLoading(false),
           onError: (err) => {
-            setBankError(err.message);
+            setBankError("Payment sent but announce failed: " + err.message);
             setBankLoading(false);
           },
         }
       );
+    };
+
+    try {
+      const { stealthAddress, ephemeralPubKey } =
+        computeStealthAddress(stealthMetaInput);
+
+      if (fromToken === "SUI") {
+        const tx = new Transaction();
+        const amountMist = BigInt(
+          Math.floor(parseFloat(bankAmount) * 1_000_000_000)
+        );
+        const [coin] = tx.splitCoins(tx.gas, [amountMist]);
+        tx.transferObjects([coin], tx.pure.address(stealthAddress));
+
+        signAndExecute(
+          { transaction: tx, chain: "sui:testnet" },
+          {
+            onSuccess: (result) =>
+              announcePayment(ephemeralPubKey, stealthAddress, suiTxDigest(result)),
+            onError: (err) => {
+              setBankError(err.message);
+              setBankLoading(false);
+            },
+          }
+        );
+      } else if (fromToken === "USDC") {
+        const coins = await getUsdcCoins(suiClientHook, account.address);
+
+        if (coins.data.length === 0) {
+          setBankError("No USDC balance found");
+          setBankLoading(false);
+          return;
+        }
+
+        const amountUsdc = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
+        const tx = new Transaction();
+        const primaryCoinId = coins.data[0].coinObjectId;
+
+        if (coins.data.length > 1) {
+          tx.mergeCoins(
+            tx.object(primaryCoinId),
+            coins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+          );
+        }
+
+        const [splitCoin] = tx.splitCoins(tx.object(primaryCoinId), [amountUsdc]);
+        tx.transferObjects([splitCoin], tx.pure.address(stealthAddress));
+
+        signAndExecute(
+          { transaction: tx, chain: "sui:testnet" },
+          {
+            onSuccess: (result) =>
+              announcePayment(ephemeralPubKey, stealthAddress, suiTxDigest(result)),
+            onError: (err) => {
+              setBankError(err.message);
+              setBankLoading(false);
+            },
+          }
+        );
+      }
     } catch (err: unknown) {
       setBankError(err instanceof Error ? err.message : "Stealth send failed");
       setBankLoading(false);
@@ -7109,6 +7204,7 @@ export default function Home() {
     bankAmount,
     fromToken,
     signAndExecute,
+    suiClientHook,
   ]);
 
   useEffect(() => {
@@ -10327,12 +10423,18 @@ export default function Home() {
                                   setClaimStatus({ digest, error: "" });
                                   setBankError(null);
                                 } catch (err: unknown) {
+                                  const message =
+                                    err instanceof Error
+                                      ? err.message
+                                      : String(err);
                                   setClaimStatus({
                                     digest: "",
-                                    error:
-                                      err instanceof Error
-                                        ? err.message
-                                        : String(err),
+                                    error: message,
+                                    gasHelpAddress: message.includes(
+                                      "USDC found but no SUI"
+                                    )
+                                      ? item.stealthAddress
+                                      : undefined,
                                   });
                                 } finally {
                                   setStealthClaimLoading(null);
@@ -10405,6 +10507,49 @@ export default function Home() {
                         }}
                       >
                         ❌ {claimStatus.error}
+                      </div>
+                    )}
+                    {claimStatus?.gasHelpAddress && (
+                      <div
+                        style={{
+                          padding: "12px",
+                          background: "rgba(255,170,0,0.08)",
+                          border: "1px solid rgba(255,170,0,0.35)",
+                          borderRadius: "8px",
+                          marginTop: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "0.72rem",
+                          color: "#ffaa44",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        Send 0.01 SUI to{" "}
+                        <span style={{ color: "#00ff88", wordBreak: "break-all" }}>
+                          {claimStatus.gasHelpAddress}
+                        </span>{" "}
+                        for gas, then claim again.
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(
+                              claimStatus.gasHelpAddress!
+                            );
+                          }}
+                          style={{
+                            display: "block",
+                            marginTop: "8px",
+                            padding: "6px 12px",
+                            background: "rgba(255,170,0,0.15)",
+                            border: "1px solid rgba(255,170,0,0.4)",
+                            borderRadius: "6px",
+                            color: "#ffaa44",
+                            cursor: "pointer",
+                            fontSize: "0.7rem",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          Copy stealth address
+                        </button>
                       </div>
                     )}
                     {!stealthKeys && (

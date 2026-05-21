@@ -8,6 +8,24 @@ const STEALTH_PACKAGE =
   "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d";
 export { STEALTH_PACKAGE };
 
+export const USDC_TYPES = [
+  "0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC",
+  "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
+] as const;
+
+export const USDC_COIN_TYPE = USDC_TYPES[0];
+
+export async function getUsdcCoins(
+  suiClient: SuiJsonRpcClient,
+  owner: string
+) {
+  for (const coinType of USDC_TYPES) {
+    const coins = await suiClient.getCoins({ owner, coinType });
+    if (coins.data.length > 0) return coins;
+  }
+  return suiClient.getCoins({ owner, coinType: USDC_COIN_TYPE });
+}
+
 function normalizeHex(hex: string): string {
   let clean = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (clean.length % 2 !== 0) clean = "0" + clean;
@@ -113,14 +131,15 @@ export const deriveStealthPrivateKey = (
   return sha256(new Uint8Array([...sharedSecret, ...spendingPubKeyBytes]));
 };
 
-// Claim stealth payment - sweep all SUI to your wallet
+// Claim stealth payment - sweep SUI and USDC to recipient wallet
 export const claimStealthPayment = async (
   ephemeralPubKeyHex: string,
   stealthAddress: string,
   viewingPubKeyHex: string,
   spendingPubKeyHex: string,
   recipientAddress: string,
-  suiClient: SuiJsonRpcClient
+  suiClient: SuiJsonRpcClient,
+  _sponsorAddress?: string
 ): Promise<string> => {
   const stealthPrivKey = deriveStealthPrivateKey(
     ephemeralPubKeyHex,
@@ -134,44 +153,51 @@ export const claimStealthPayment = async (
   console.log("[Stealth Claim] stealth address:", stealthAddress);
   console.log("[Stealth Claim] derived address:", derivedAddress);
 
-  const coins = await suiClient.getCoins({
+  const suiCoins = await suiClient.getCoins({
     owner: stealthAddress,
     coinType: "0x2::sui::SUI",
   });
 
-  if (coins.data.length === 0) {
-    throw new Error("No SUI found at stealth address");
+  const usdcCoins = await getUsdcCoins(suiClient, stealthAddress);
+
+  if (suiCoins.data.length === 0 && usdcCoins.data.length === 0) {
+    throw new Error("No funds found at stealth address");
   }
 
-  console.log(
-    "[Stealth Claim] coins found:",
-    coins.data.length,
-    "total:",
-    coins.data[0].balance
-  );
+  if (suiCoins.data.length === 0 && usdcCoins.data.length > 0) {
+    throw new Error(
+      "USDC found but no SUI for gas. Send 0.01 SUI to stealth address first: " +
+        stealthAddress
+    );
+  }
 
   const tx = new Transaction();
   tx.setSender(stealthAddress);
-
   tx.setGasPayment(
-    coins.data.map((c) => ({
+    suiCoins.data.map((c) => ({
       objectId: c.coinObjectId,
       version: c.version,
       digest: c.digest,
     }))
   );
-  tx.setGasBudget(3_000_000);
+  tx.setGasBudget(5_000_000);
 
-  const totalBalance = BigInt(coins.data[0].balance);
-  const gasReserve = BigInt(3_000_000);
-  const sendAmount = totalBalance - gasReserve;
-
-  if (sendAmount <= BigInt(0)) {
-    throw new Error("Balance too low to cover gas");
+  if (suiCoins.data.length > 0) {
+    const totalSui = suiCoins.data.reduce(
+      (s, c) => s + BigInt(c.balance),
+      BigInt(0)
+    );
+    const sendSui = totalSui - BigInt(5_000_000);
+    if (sendSui > BigInt(0)) {
+      const [coin] = tx.splitCoins(tx.gas, [sendSui]);
+      tx.transferObjects([coin], recipientAddress);
+    }
   }
 
-  const [coin] = tx.splitCoins(tx.gas, [sendAmount]);
-  tx.transferObjects([coin], recipientAddress);
+  if (usdcCoins.data.length > 0) {
+    const usdcObjs = usdcCoins.data.map((c) => tx.object(c.coinObjectId));
+    tx.transferObjects(usdcObjs, recipientAddress);
+  }
 
   const result = await suiClient.signAndExecuteTransaction({
     signer: keypair,
