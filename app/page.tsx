@@ -5,6 +5,7 @@ import {
   useCurrentAccount,
   useDisconnectWallet,
   useSignAndExecuteTransaction,
+  useSuiClient,
   useWallets,
 } from "@mysten/dapp-kit";
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
@@ -23,10 +24,10 @@ import {
 import { createPortal } from "react-dom";
 import { suiClient } from "@/lib/deepbook";
 import {
-  STEALTH_PACKAGE,
   buildAnnounceTransaction,
   buildRegisterTransaction,
   checkStealthAddress,
+  claimStealthPayment,
   computeStealthAddress,
   generateStealthMetaAddress,
 } from "@/lib/stealth";
@@ -5376,6 +5377,7 @@ export default function Home() {
   const { mutate: connectWallet } = useConnectWallet();
   const { mutate: disconnect } = useDisconnectWallet();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const suiClientHook = useSuiClient();
   const connect = () => {
     const w = wallets[0];
     if (w) connectWallet({ wallet: w });
@@ -5573,19 +5575,14 @@ export default function Home() {
   const [zcoLoading, setZcoLoading] = useState(false);
   const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
   const [bankRecipient, setBankRecipient] = useState("");
-  const [ethRecipient, setEthRecipient] = useState("");
   const [bankAmount, setBankAmount] = useState("0.1");
-  const [toNetwork, setToNetwork] = useState<"Sui" | "Ethereum">("Sui");
-  const [showToNetworkDropdown, setShowToNetworkDropdown] = useState(false);
+  const toNetwork = "Sui" as const;
   const [fromToken, setFromToken] = useState("SUI");
   const [toToken, setToToken] = useState("SUI");
   const [showTokenModal, setShowTokenModal] = useState<"from" | "to" | null>(null);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankTxHash, setBankTxHash] = useState<string | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
-  const [wormholeLoading, setWormholeLoading] = useState(false);
-  const [wormholeTxHash, setWormholeTxHash] = useState<string | null>(null);
-  const [wormholeBridgeComplete, setWormholeBridgeComplete] = useState(false);
   const [zbankTab, setZbankTab] = useState<"send" | "receive" | "scan">("send");
   const [stealthKeys, setStealthKeys] = useState<{
     spendingPrivKey: string;
@@ -5601,6 +5598,9 @@ export default function Home() {
   const [stealthMetaInput, setStealthMetaInput] = useState("");
   const [stealthScanLoading, setStealthScanLoading] = useState(false);
   const [stealthRegisterLoading, setStealthRegisterLoading] = useState(false);
+  const [stealthClaimLoading, setStealthClaimLoading] = useState<string | null>(
+    null
+  );
   const [frsStats, setFrsStats] = useState<{
     economy: {
       total_agents: number;
@@ -6774,8 +6774,6 @@ export default function Home() {
   );
 
   const handleBankSend = useCallback(async () => {
-    if (toNetwork !== "Sui") return;
-
     if (!account?.address) {
       setBankError("Connect wallet first");
       return;
@@ -6832,82 +6830,7 @@ export default function Home() {
       setBankError(err instanceof Error ? err.message : "Unknown error");
       setBankLoading(false);
     }
-  }, [toNetwork, account?.address, bankRecipient, bankAmount, fromToken, signAndExecute]);
-
-  const handleWormholeBridge = useCallback(async () => {
-    if (!account?.address) {
-      setBankError("Connect Sui wallet first");
-      return;
-    }
-    if (!ethRecipient.startsWith("0x")) {
-      setBankError("Enter valid ETH address");
-      return;
-    }
-    if (!["USDC", "ETH", "USDT"].includes(fromToken)) {
-      setBankError("Select USDC, ETH or USDT");
-      return;
-    }
-
-    setWormholeLoading(true);
-    setBankError(null);
-    setWormholeTxHash(null);
-    setWormholeBridgeComplete(false);
-
-    try {
-      const { Transaction: WormholeTx } = await import("@mysten/sui/transactions");
-      const tx = new WormholeTx();
-
-      const WORMHOLE_PACKAGE =
-        "0x26efee2b51c911237888e5dc6702868abca3c7ac12c53f76ef8eba0697695e3d";
-      const TOKEN_BRIDGE = "0xa6a3da85bbe05da5bfd953708d56f1a3a023e7fb58e5a9be5d0cd117d12d5b4";
-
-      const amountUnits = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
-      const recipientBytes = Array.from(Buffer.from(ethRecipient.slice(2), "hex"));
-
-      tx.moveCall({
-        target: `${WORMHOLE_PACKAGE}::transfer_tokens_with_relay::transfer_tokens_with_relay`,
-        typeArguments: [
-          "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC",
-        ],
-        arguments: [
-          tx.object(TOKEN_BRIDGE),
-          tx.pure.u64(amountUnits),
-          tx.pure.u64(0),
-          tx.pure.u16(2),
-          tx.pure.vector("u8", recipientBytes),
-          tx.pure.u32(0),
-        ],
-      });
-
-      signAndExecute(
-        { transaction: tx as unknown as Transaction, chain: "sui:testnet" },
-        {
-          onSuccess: (result) => {
-            const digest =
-              suiTxDigest(result) ||
-              (result &&
-              typeof result === "object" &&
-              "transactionDigest" in result &&
-              typeof (result as { transactionDigest: unknown }).transactionDigest === "string"
-                ? (result as { transactionDigest: string }).transactionDigest
-                : "");
-            if (digest) setWormholeTxHash(digest);
-            setWormholeBridgeComplete(true);
-            setWormholeLoading(false);
-          },
-          onError: (err) => {
-            setBankError("Bridge failed: " + err.message);
-            setWormholeLoading(false);
-          },
-        }
-      );
-    } catch (err: unknown) {
-      setBankError(
-        "Bridge error: " + (err instanceof Error ? err.message : String(err))
-      );
-      setWormholeLoading(false);
-    }
-  }, [account?.address, ethRecipient, fromToken, bankAmount, signAndExecute]);
+  }, [account?.address, bankRecipient, bankAmount, fromToken, signAndExecute]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -6962,76 +6885,91 @@ export default function Home() {
     }
   }, [account?.address, stealthKeys, signAndExecute]);
 
-  const parseStealthAnnouncement = useCallback((parsed: unknown) => {
-    if (!parsed || typeof parsed !== "object") return null;
-    const j = parsed as Record<string, unknown>;
-    const stealthAddress =
-      typeof j.stealth_address === "string"
-        ? j.stealth_address
-        : typeof j.stealthAddress === "string"
-          ? j.stealthAddress
-          : null;
-    const rawEphemeral = j.ephemeral_pubkey ?? j.ephemeralPubKey ?? j.ephemeral_pubkey_hex;
-    let ephemeralPubKey = "";
-    if (typeof rawEphemeral === "string") {
-      ephemeralPubKey = rawEphemeral.startsWith("0x")
-        ? rawEphemeral.slice(2)
-        : rawEphemeral;
-    } else if (Array.isArray(rawEphemeral)) {
-      ephemeralPubKey = rawEphemeral
-        .map((b) => Number(b).toString(16).padStart(2, "0"))
-        .join("");
-    }
-    if (!stealthAddress || !ephemeralPubKey) return null;
-    return { stealthAddress, ephemeralPubKey };
-  }, []);
-
-  const handleStealthScan = useCallback(async () => {
+  const handleScan = useCallback(async () => {
     if (!stealthKeys) {
-      setBankError("Generate keys in RECEIVE tab first");
+      setBankError("Generate your stealth address first in RECEIVE tab");
       return;
     }
     setStealthScanLoading(true);
+    setStealthScanResults([]);
     setBankError(null);
+
     try {
-      const { data } = await suiClient.queryEvents({
-        query: {
-          MoveEventType: `${STEALTH_PACKAGE}::stealth::StealthAnnouncement`,
-        },
-        limit: 50,
-        order: "descending",
+      const res = await fetch("https://fullnode.testnet.sui.io:443", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "suix_queryEvents",
+          params: [
+            {
+              MoveEventType:
+                "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d::stealth::StealthSent",
+            },
+            null,
+            50,
+            false,
+          ],
+        }),
       });
-      const found: { stealthAddress: string; ephemeralPubKey: string; txDigest?: string }[] =
-        [];
-      for (const ev of data) {
-        const parsed = parseStealthAnnouncement(ev.parsedJson);
+
+      const data = await res.json();
+      const events = data?.result?.data || [];
+
+      const found: {
+        stealthAddress: string;
+        ephemeralPubKey: string;
+        txDigest?: string;
+      }[] = [];
+      for (const event of events) {
+        const parsed = event.parsedJson;
         if (!parsed) continue;
-        const mine = checkStealthAddress(
-          parsed.ephemeralPubKey,
-          parsed.stealthAddress,
-          stealthKeys.viewingPrivKey,
+
+        const byteArrayToHex = (bytes: number[]) =>
+          Array.from(bytes)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+
+        const ephemeralPubKeyHex = byteArrayToHex(
+          parsed.ephemeral_pubkey as number[]
+        );
+        const stealthAddrRaw = parsed.stealth_address;
+        const stealthAddress =
+          typeof stealthAddrRaw === "string"
+            ? stealthAddrRaw.startsWith("0x")
+              ? stealthAddrRaw
+              : `0x${stealthAddrRaw}`
+            : `0x${byteArrayToHex(stealthAddrRaw as number[])}`;
+
+        const ismine = checkStealthAddress(
+          ephemeralPubKeyHex,
+          stealthAddress,
+          stealthKeys.viewingPubKey,
           stealthKeys.spendingPubKey
         );
-        if (mine) {
+
+        if (ismine) {
           found.push({
-            ...parsed,
-            txDigest: ev.id.txDigest,
+            txDigest: event.id.txDigest,
+            ephemeralPubKey: ephemeralPubKeyHex,
+            stealthAddress,
           });
         }
       }
+
       setStealthScanResults(found);
       if (found.length === 0) {
         setBankError("No incoming stealth payments found");
-      } else {
-        setBankError(null);
       }
     } catch (err: unknown) {
-      setBankError(err instanceof Error ? err.message : "Scan failed");
-      setStealthScanResults([]);
+      setBankError(
+        "Scan failed: " + (err instanceof Error ? err.message : String(err))
+      );
     } finally {
       setStealthScanLoading(false);
     }
-  }, [stealthKeys, parseStealthAnnouncement]);
+  }, [stealthKeys]);
 
   const handleStealthSend = useCallback(async () => {
     if (!account?.address) {
@@ -7105,32 +7043,10 @@ export default function Home() {
   ]);
 
   useEffect(() => {
-    if (toNetwork !== "Ethereum") {
-      setWormholeTxHash(null);
-      setWormholeBridgeComplete(false);
-      setWormholeLoading(false);
-    }
-  }, [toNetwork]);
-
-  useEffect(() => {
-    console.log("toNetwork changed:", toNetwork);
-    if (activeTab === "zbank") {
-      console.log("rendering TO section, toNetwork=", toNetwork);
-    }
-  }, [toNetwork, activeTab]);
-
-  useEffect(() => {
-    if (toNetwork === "Sui" && account?.address) {
+    if (account?.address) {
       setBankRecipient(account.address);
     }
-  }, [toNetwork, account?.address]);
-
-  useEffect(() => {
-    if (!showToNetworkDropdown) return;
-    const handler = () => setShowToNetworkDropdown(false);
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showToNetworkDropdown]);
+  }, [account?.address]);
 
   useEffect(() => {
     if (!account?.address) {
@@ -10161,7 +10077,7 @@ export default function Home() {
                   <div style={{ marginBottom: "12px" }}>
                     <button
                       type="button"
-                      onClick={() => void handleStealthScan()}
+                      onClick={() => void handleScan()}
                       disabled={stealthScanLoading}
                       style={{
                         width: "100%",
@@ -10229,12 +10145,35 @@ export default function Home() {
                             )}
                             <button
                               type="button"
-                              onClick={() => {
-                                setBankRecipient(item.stealthAddress);
-                                setZbankTab("send");
-                                setBankError(
-                                  "Sweep from stealth address: use wallet with spending key (coming soon)"
-                                );
+                              disabled={
+                                stealthClaimLoading ===
+                                `${item.stealthAddress}-${idx}`
+                              }
+                              onClick={async () => {
+                                if (!stealthKeys || !account?.address) return;
+                                const claimKey = `${item.stealthAddress}-${idx}`;
+                                setStealthClaimLoading(claimKey);
+                                try {
+                                  const digest = await claimStealthPayment(
+                                    item.ephemeralPubKey,
+                                    item.stealthAddress,
+                                    stealthKeys.viewingPubKey,
+                                    stealthKeys.spendingPubKey,
+                                    account.address,
+                                    suiClientHook
+                                  );
+                                  alert("Claimed! TX: " + digest);
+                                  setBankError(null);
+                                } catch (err: unknown) {
+                                  alert(
+                                    "Claim failed: " +
+                                      (err instanceof Error
+                                        ? err.message
+                                        : String(err))
+                                  );
+                                } finally {
+                                  setStealthClaimLoading(null);
+                                }
                               }}
                               style={{
                                 width: "100%",
@@ -10245,10 +10184,22 @@ export default function Home() {
                                 color: "#00ff88",
                                 fontSize: "0.8rem",
                                 fontWeight: 600,
-                                cursor: "pointer",
+                                cursor:
+                                  stealthClaimLoading ===
+                                  `${item.stealthAddress}-${idx}`
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  stealthClaimLoading ===
+                                  `${item.stealthAddress}-${idx}`
+                                    ? 0.7
+                                    : 1,
                               }}
                             >
-                              Claim
+                              {stealthClaimLoading ===
+                              `${item.stealthAddress}-${idx}`
+                                ? "Claiming..."
+                                : "Claim to my wallet"}
                             </button>
                           </div>
                         ))}
@@ -10384,95 +10335,46 @@ export default function Home() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                     <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>TO</span>
-                    <div style={{ position: "relative" }}>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          setShowToNetworkDropdown(!showToNetworkDropdown);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          padding: "6px 10px",
-                          background: "rgba(255,255,255,0.05)",
-                          border: "1px solid #333",
-                          borderRadius: "8px",
-                          color: "#fff",
-                          cursor: "pointer",
-                          fontSize: "0.8rem",
-                        }}
-                      >
-                        <img
-                          src={NETWORK_ICONS[toNetwork]}
-                          alt={toNetwork}
-                          style={{ width: 16, height: 16, borderRadius: "50%" }}
-                        />
-                        {toNetwork} ▾
-                      </button>
-                      {showToNetworkDropdown && (
-                        <div
-                          onMouseDown={(e) => e.stopPropagation()}
-                          style={{
-                            position: "absolute",
-                            top: "calc(100% + 4px)",
-                            right: 0,
-                            zIndex: 400,
-                            background: "#1a1a1a",
-                            border: "1px solid #333",
-                            borderRadius: "10px",
-                            minWidth: "180px",
-                            overflow: "hidden",
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-                          }}
-                        >
-                          {(["Sui", "Ethereum"] as const).map((net) => (
-                            <button
-                              key={net}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setToNetwork(net);
-                                setShowToNetworkDropdown(false);
-                                setBankError(null);
-                              }}
-                              style={{
-                                display: "flex",
-                                width: "100%",
-                                padding: "10px 14px",
-                                background: toNetwork === net ? "rgba(0,255,100,0.1)" : "transparent",
-                                border: "none",
-                                color: toNetwork === net ? "#00ff88" : "#fff",
-                                cursor: "pointer",
-                                alignItems: "center",
-                                gap: "8px",
-                                fontSize: "0.85rem",
-                              }}
-                            >
-                              <img
-                                src={NETWORK_ICONS[net]}
-                                alt={net}
-                                style={{ width: 18, height: 18, borderRadius: "50%" }}
-                              />
-                              {net} {toNetwork === net ? "✓" : ""}
-                            </button>
-                          ))}
-                          <div
-                            style={{
-                              borderTop: "1px solid #222",
-                              padding: "8px 14px",
-                              color: "#444",
-                              fontSize: "0.72rem",
-                            }}
-                          >
-                            Coming Soon: Arbitrum · Polygon · BNB · Base · Solana
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#00ff88", fontSize: "0.8rem" }}>
+                      <img
+                        src={NETWORK_ICONS.Sui}
+                        alt="Sui"
+                        style={{ width: 16, height: 16, borderRadius: "50%" }}
+                      />
+                      Sui
+                    </span>
                   </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        background: "rgba(0,255,65,0.1)",
+                        border: "1px solid rgba(0,255,100,0.25)",
+                        borderRadius: "6px",
+                        color: "#00ff41",
+                        fontSize: "0.65rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      🔒 Sui
+                    </span>
+                    <span style={{ color: "#444", fontSize: "0.65rem" }}>locked</span>
+                    <span
+                      style={{
+                        padding: "3px 8px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid #333",
+                        borderRadius: "6px",
+                        color: "#555",
+                        fontSize: "0.65rem",
+                      }}
+                    >
+                      Ethereum · Coming Soon
+                    </span>
+                  </div>
+                  <p style={{ color: "#666", fontSize: "0.72rem", margin: "0 0 10px", lineHeight: 1.4 }}>
+                    ETH bridge coming soon — use Stealth Send for private Sui transfers
+                  </p>
                   <div
                     style={{
                       display: "flex",
@@ -10508,8 +10410,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {toNetwork === "Sui" && (
-                  <>
+                <>
                     <div
                       style={{
                         display: "flex",
@@ -10588,34 +10489,16 @@ export default function Home() {
                         }}
                       />
                     )}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "12px" }}>
-                      <span
-                        style={{
-                          alignSelf: "flex-start",
-                          background:
-                            bankSendMode === "stealth"
-                              ? "rgba(147,51,234,0.15)"
-                              : "rgba(0,255,65,0.1)",
-                          border:
-                            bankSendMode === "stealth"
-                              ? "1px solid rgba(147,51,234,0.35)"
-                              : "1px solid rgba(0,255,100,0.25)",
-                          color: bankSendMode === "stealth" ? "#c084fc" : "#00ff41",
-                          fontSize: "0.65rem",
-                          padding: "3px 8px",
-                          borderRadius: "20px",
-                        }}
-                      >
-                        {bankSendMode === "stealth"
-                          ? "🕵️ ZION Stealth Protocol"
-                          : "🔒 Encrypted by Seal Protocol"}
-                      </span>
-                      <span style={{ color: "#555", fontSize: "0.7rem" }}>
-                        {bankSendMode === "stealth"
-                          ? "One-time address + on-chain announce"
-                          : "🔒 Fee: ~$0.01 gas · Encrypted by Seal"}
-                      </span>
-                    </div>
+                    {bankSendMode === "stealth" && (
+                      <p style={{ color: "#888", fontSize: "0.72rem", margin: "0 0 12px", lineHeight: 1.5 }}>
+                        🕵️ One-time stealth address + on-chain announce
+                      </p>
+                    )}
+                    {bankSendMode === "regular" && (
+                      <p style={{ color: "#555", fontSize: "0.7rem", margin: "0 0 12px" }}>
+                        On-chain SUI transfer · ~$0.01 gas
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -10651,149 +10534,11 @@ export default function Home() {
                         ? "⏳ Sending..."
                         : bankSendMode === "stealth"
                           ? "🕵️ Stealth Send"
-                          : "🔐 Send Privately"}
+                          : "Send SUI"}
                     </button>
-                  </>
-                )}
+                </>
 
-                {toNetwork === "Ethereum" && (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="0x... Ethereum recipient"
-                      value={ethRecipient}
-                      onChange={(e) => setEthRecipient(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        marginBottom: "12px",
-                        background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "12px",
-                        color: "#fff",
-                        fontSize: "0.85rem",
-                        fontFamily: "monospace",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                    <p style={{ color: "#888", fontSize: "0.78rem", lineHeight: 1.5, margin: "0 0 8px" }}>
-                      Bridge Sui → Ethereum via Wormhole, then shield on Ethereum with Railgun
-                    </p>
-                    <p style={{ color: "#666", fontSize: "0.72rem", margin: "0 0 12px" }}>
-                      ⏱ Estimated finality: ~15 minutes
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleWormholeBridge}
-                      disabled={wormholeLoading}
-                      style={{
-                        width: "100%",
-                        padding: "12px",
-                        marginBottom: "10px",
-                        background: "rgba(0,255,100,0.12)",
-                        border: "1px solid rgba(0,255,100,0.45)",
-                        borderRadius: "12px",
-                        color: "#00ff88",
-                        fontSize: "0.9rem",
-                        fontWeight: 700,
-                        cursor: wormholeLoading ? "not-allowed" : "pointer",
-                        opacity: wormholeLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {wormholeLoading ? "Bridging..." : "🌉 Bridge via Wormhole"}
-                    </button>
-                    {wormholeTxHash && (
-                      <div
-                        style={{
-                          marginBottom: "10px",
-                          padding: "10px",
-                          background: "rgba(0,255,100,0.06)",
-                          border: "1px solid rgba(0,255,100,0.3)",
-                          borderRadius: "10px",
-                          fontSize: "0.75rem",
-                          color: "#00ff88",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        ✅ Bridge TX: {wormholeTxHash.slice(0, 16)}… —{" "}
-                        <a
-                          href={`https://wormholescan.io/#/tx/${wormholeTxHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#00ff41" }}
-                        >
-                          View on Wormholescan
-                        </a>
-                      </div>
-                    )}
-                    {wormholeBridgeComplete && (
-                      <div
-                        style={{
-                          marginBottom: "12px",
-                          padding: "12px",
-                          background: "rgba(147,51,234,0.08)",
-                          border: "1px solid rgba(147,51,234,0.35)",
-                          borderRadius: "12px",
-                        }}
-                      >
-                        <div style={{ color: "#c084fc", fontWeight: 700, fontSize: "0.85rem", marginBottom: "8px" }}>
-                          Step 2: Shield via Railgun
-                        </div>
-                        <p style={{ color: "#888", fontSize: "0.78rem", lineHeight: 1.5, margin: "0 0 10px" }}>
-                          Bridge complete. Open Railgun and shield your {fromToken} on Ethereum to make
-                          funds private via zk-SNARK.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => window.open("https://app.railgun.org", "_blank")}
-                          style={{
-                            width: "100%",
-                            padding: "10px",
-                            background: "rgba(147,51,234,0.15)",
-                            border: "1px solid rgba(147,51,234,0.4)",
-                            borderRadius: "10px",
-                            color: "#c084fc",
-                            fontSize: "0.85rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                          }}
-                        >
-                          Open Railgun Shield →
-                        </button>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
-                      <span
-                        style={{
-                          alignSelf: "flex-start",
-                          background: "rgba(147,51,234,0.15)",
-                          border: "1px solid rgba(147,51,234,0.35)",
-                          color: "#c084fc",
-                          fontSize: "0.65rem",
-                          padding: "3px 8px",
-                          borderRadius: "20px",
-                        }}
-                      >
-                        🔒 Privacy powered by Railgun Protocol
-                      </span>
-                      <span
-                        style={{
-                          alignSelf: "flex-start",
-                          background: "rgba(0,255,65,0.1)",
-                          border: "1px solid rgba(0,255,100,0.25)",
-                          color: "#00ff41",
-                          fontSize: "0.65rem",
-                          padding: "3px 8px",
-                          borderRadius: "20px",
-                        }}
-                      >
-                        🔒 Encrypted by Seal Protocol
-                      </span>
-                    </div>
-                  </>
-                )}
-
-                {bankTxHash && toNetwork === "Sui" && (
+                {bankTxHash && (
                   <div
                     style={{
                       marginTop: "10px",
@@ -10829,7 +10574,7 @@ export default function Home() {
                 )}
 
                 <div style={{ color: "#444", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
-                  ⚡ Sui → Sui on-chain · Sui → Ethereum via Sui Bridge + Railgun
+                  · ZION Stealth Protocol · First private transfers on Sui
                 </div>
                   </>
                 )}
