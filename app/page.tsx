@@ -5257,26 +5257,27 @@ function BankAssetTrigger({
   );
 }
 
+type BankTokenModalProps = {
+  token: string;
+  onToken: (t: string) => void;
+  onClose: () => void;
+  bankSendMode: "regular" | "stealth";
+};
+
 function BankTokenModal({
   token,
   onToken,
   onClose,
-  bankSendMode = "regular",
-}: {
-  token: string;
-  onToken: (t: string) => void;
-  onClose: () => void;
-  bankSendMode?: "regular" | "stealth";
-}) {
+  bankSendMode,
+}: BankTokenModalProps) {
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
-  const availableTokens =
+
+  const tokensToShow =
     bankSendMode === "stealth"
       ? (["SUI", "USDC"] as const)
       : (["SUI", "USDC", "USDT", "ETH"] as const);
-  const filteredTokens = availableTokens.filter((t) =>
-    t.toLowerCase().includes(q)
-  );
+  const filteredTokens = tokensToShow.filter((t) => t.toLowerCase().includes(q));
 
   return (
     <div
