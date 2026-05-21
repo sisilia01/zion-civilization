@@ -1,109 +1,194 @@
-// ZION Stealth Address Protocol
-// First stealth address implementation on Sui blockchain
-
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
-import {
-  getPublicKey,
-  ProjectivePoint,
-  utils as secpUtils,
-} from "@noble/secp256k1";
+import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
-export const STEALTH_PACKAGE =
+const STEALTH_PACKAGE =
   "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d";
+export { STEALTH_PACKAGE };
 
-// Generate stealth meta-address (one time, saved by user)
+function normalizeHex(hex: string): string {
+  let clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  if (clean.length % 2 !== 0) clean = "0" + clean;
+  return clean;
+}
+
+/** Shared derivation used by compute, check, and claim */
+function deriveStealthKeypair(
+  ephemeralPubKeyHex: string,
+  viewingPubKeyHex: string,
+  spendingPubKeyHex: string
+): Ed25519Keypair {
+  const ephemeralPubKeyBytes = hexToBytes(normalizeHex(ephemeralPubKeyHex));
+  const viewingPubKeyBytes = hexToBytes(viewingPubKeyHex);
+  const spendingPubKeyBytes = hexToBytes(spendingPubKeyHex);
+
+  const sharedSecret = sha256(
+    new Uint8Array([...ephemeralPubKeyBytes, ...viewingPubKeyBytes])
+  );
+  const stealthPrivKey = sha256(
+    new Uint8Array([...sharedSecret, ...spendingPubKeyBytes])
+  );
+  return Ed25519Keypair.fromSecretKey(stealthPrivKey);
+}
+
+// Generate stealth meta-address using ed25519
 export const generateStealthMetaAddress = () => {
-  const spendingPrivKey = secpUtils.randomPrivateKey();
-  const viewingPrivKey = secpUtils.randomPrivateKey();
-  const spendingPubKey = getPublicKey(spendingPrivKey, true);
-  const viewingPubKey = getPublicKey(viewingPrivKey, true);
+  const spendingKeypair = Ed25519Keypair.generate();
+  const viewingKeypair = Ed25519Keypair.generate();
+
+  const spendingPubKey = bytesToHex(spendingKeypair.getPublicKey().toRawBytes());
+  const viewingPubKey = bytesToHex(viewingKeypair.getPublicKey().toRawBytes());
 
   return {
-    spendingPrivKey: bytesToHex(spendingPrivKey),
-    viewingPrivKey: bytesToHex(viewingPrivKey),
-    spendingPubKey: bytesToHex(spendingPubKey),
-    viewingPubKey: bytesToHex(viewingPubKey),
-    metaAddress: `st:sui:${bytesToHex(spendingPubKey)}:${bytesToHex(viewingPubKey)}`,
+    spendingPrivKey: spendingKeypair.getSecretKey(),
+    viewingPrivKey: viewingKeypair.getSecretKey(),
+    spendingPubKey,
+    viewingPubKey,
+    metaAddress: `st:sui:${spendingPubKey}:${viewingPubKey}`,
   };
 };
 
-// Compute stealth address for recipient (called by sender)
+// Sender: ephemeral keypair → stealth address (uses ephemeral PUBLIC key)
 export const computeStealthAddress = (recipientMetaAddress: string) => {
   const parts = recipientMetaAddress.split(":");
   const spendingPubKeyHex = parts[2];
   const viewingPubKeyHex = parts[3];
 
-  // Generate ephemeral keypair
-  const ephemeralPrivKey = secpUtils.randomPrivateKey();
-  const ephemeralPubKey = getPublicKey(ephemeralPrivKey, true);
-
-  // ECDH: shared_secret = ephemeralPrivKey * viewingPubKey
-  const viewingPubKeyPoint = ProjectivePoint.fromHex(viewingPubKeyHex);
-  const sharedSecret = viewingPubKeyPoint.multiply(
-    BigInt("0x" + bytesToHex(ephemeralPrivKey))
+  const ephemeralKeypair = Ed25519Keypair.generate();
+  const ephemeralPubKeyHex = bytesToHex(
+    ephemeralKeypair.getPublicKey().toRawBytes()
   );
 
-  // Hash shared secret
-  const sharedSecretHash = sha256(hexToBytes(sharedSecret.toHex(true)));
-
-  // Compute stealth pubkey = spendingPubKey + hash*G
-  const spendingPubKeyPoint = ProjectivePoint.fromHex(spendingPubKeyHex);
-  const hashPoint = ProjectivePoint.BASE.multiply(
-    BigInt("0x" + bytesToHex(sharedSecretHash))
+  const stealthKeypair = deriveStealthKeypair(
+    ephemeralPubKeyHex,
+    viewingPubKeyHex,
+    spendingPubKeyHex
   );
-  const stealthPubKey = spendingPubKeyPoint.add(hashPoint);
-
-  // Convert to Sui address (hash of pubkey)
-  const stealthPubKeyBytes = hexToBytes(stealthPubKey.toHex(true));
-  const stealthAddressBytes = sha256(stealthPubKeyBytes);
-  const stealthAddress = "0x" + bytesToHex(stealthAddressBytes).slice(0, 64);
+  const stealthAddress = stealthKeypair.getPublicKey().toSuiAddress();
 
   return {
     stealthAddress,
-    ephemeralPubKey: bytesToHex(ephemeralPubKey),
+    ephemeralPubKey: ephemeralPubKeyHex,
   };
 };
 
-// Check if stealth address belongs to me (called by receiver scanning)
+// Receiver: verify payment from on-chain ephemeral PUBLIC key
 export const checkStealthAddress = (
   ephemeralPubKeyHex: string,
   stealthAddress: string,
-  viewingPrivKeyHex: string,
+  viewingPubKeyHex: string,
   spendingPubKeyHex: string
 ): boolean => {
   try {
-    const ephemeralPubKeyPoint = ProjectivePoint.fromHex(ephemeralPubKeyHex);
-    const viewingPrivKeyBig = BigInt("0x" + viewingPrivKeyHex);
-
-    // ECDH
-    const sharedSecret = ephemeralPubKeyPoint.multiply(viewingPrivKeyBig);
-    const sharedSecretHash = sha256(hexToBytes(sharedSecret.toHex(true)));
-
-    // Compute expected stealth pubkey
-    const spendingPubKeyPoint = ProjectivePoint.fromHex(spendingPubKeyHex);
-    const hashPoint = ProjectivePoint.BASE.multiply(
-      BigInt("0x" + bytesToHex(sharedSecretHash))
-    );
-    const expectedStealthPubKey = spendingPubKeyPoint.add(hashPoint);
-    const expectedBytes = hexToBytes(expectedStealthPubKey.toHex(true));
-    const expectedAddress = "0x" + bytesToHex(sha256(expectedBytes)).slice(0, 64);
-
+    const expectedAddress = deriveStealthKeypair(
+      ephemeralPubKeyHex,
+      viewingPubKeyHex,
+      spendingPubKeyHex
+    ).getPublicKey().toSuiAddress();
     return expectedAddress === stealthAddress;
   } catch {
     return false;
   }
 };
 
-// Build announce transaction (after sending to stealth address)
+// Receiver: derive stealth private key for signing claims
+export const deriveStealthPrivateKey = (
+  ephemeralPubKeyHex: string,
+  viewingPubKeyHex: string,
+  spendingPubKeyHex: string
+): Uint8Array => {
+  const cleanHex =
+    ephemeralPubKeyHex.length % 2 === 0
+      ? ephemeralPubKeyHex
+      : "0" + ephemeralPubKeyHex;
+  const ephemeralPubKeyBytes = hexToBytes(normalizeHex(cleanHex));
+  const viewingPubKeyBytes = hexToBytes(viewingPubKeyHex);
+  const spendingPubKeyBytes = hexToBytes(spendingPubKeyHex);
+
+  const sharedSecret = sha256(
+    new Uint8Array([...ephemeralPubKeyBytes, ...viewingPubKeyBytes])
+  );
+  return sha256(new Uint8Array([...sharedSecret, ...spendingPubKeyBytes]));
+};
+
+// Claim stealth payment - sweep all SUI to your wallet
+export const claimStealthPayment = async (
+  ephemeralPubKeyHex: string,
+  stealthAddress: string,
+  viewingPubKeyHex: string,
+  spendingPubKeyHex: string,
+  recipientAddress: string,
+  suiClient: SuiJsonRpcClient
+): Promise<string> => {
+  const stealthPrivKey = deriveStealthPrivateKey(
+    ephemeralPubKeyHex,
+    viewingPubKeyHex,
+    spendingPubKeyHex
+  );
+
+  const keypair = Ed25519Keypair.fromSecretKey(stealthPrivKey);
+  const derivedAddress = keypair.getPublicKey().toSuiAddress();
+
+  console.log("[Stealth Claim] stealth address:", stealthAddress);
+  console.log("[Stealth Claim] derived address:", derivedAddress);
+
+  const coins = await suiClient.getCoins({
+    owner: stealthAddress,
+    coinType: "0x2::sui::SUI",
+  });
+
+  if (coins.data.length === 0) {
+    throw new Error("No SUI found at stealth address");
+  }
+
+  console.log(
+    "[Stealth Claim] coins found:",
+    coins.data.length,
+    "total:",
+    coins.data[0].balance
+  );
+
+  const tx = new Transaction();
+  tx.setSender(stealthAddress);
+
+  tx.setGasPayment(
+    coins.data.map((c) => ({
+      objectId: c.coinObjectId,
+      version: c.version,
+      digest: c.digest,
+    }))
+  );
+  tx.setGasBudget(3_000_000);
+
+  const totalBalance = BigInt(coins.data[0].balance);
+  const gasReserve = BigInt(3_000_000);
+  const sendAmount = totalBalance - gasReserve;
+
+  if (sendAmount <= BigInt(0)) {
+    throw new Error("Balance too low to cover gas");
+  }
+
+  const [coin] = tx.splitCoins(tx.gas, [sendAmount]);
+  tx.transferObjects([coin], recipientAddress);
+
+  const result = await suiClient.signAndExecuteTransaction({
+    signer: keypair,
+    transaction: tx,
+  });
+
+  console.log("[Stealth Claim] success:", result.digest);
+  return result.digest;
+};
+
+// Build announce transaction
 export const buildAnnounceTransaction = (
   ephemeralPubKey: string,
   stealthAddress: string,
   encryptedMemo: string = ""
 ): Transaction => {
   const tx = new Transaction();
-
   tx.moveCall({
     target: `${STEALTH_PACKAGE}::stealth::announce`,
     arguments: [
@@ -112,17 +197,15 @@ export const buildAnnounceTransaction = (
       tx.pure.vector("u8", Array.from(new TextEncoder().encode(encryptedMemo))),
     ],
   });
-
   return tx;
 };
 
-// Build register transaction (user registers their meta-address)
+// Build register transaction
 export const buildRegisterTransaction = (
   spendingPubKey: string,
   viewingPubKey: string
 ): Transaction => {
   const tx = new Transaction();
-
   tx.moveCall({
     target: `${STEALTH_PACKAGE}::stealth::register`,
     arguments: [
@@ -130,6 +213,31 @@ export const buildRegisterTransaction = (
       tx.pure.vector("u8", Array.from(hexToBytes(viewingPubKey))),
     ],
   });
-
   return tx;
 };
+
+// Self-test (runs once in browser)
+if (typeof window !== "undefined") {
+  try {
+    const keys = generateStealthMetaAddress();
+    const { stealthAddress, ephemeralPubKey } = computeStealthAddress(
+      keys.metaAddress
+    );
+    const isMatch = checkStealthAddress(
+      ephemeralPubKey,
+      stealthAddress,
+      keys.viewingPubKey,
+      keys.spendingPubKey
+    );
+    console.log(
+      "[Stealth Self-Test] address match:",
+      isMatch,
+      stealthAddress
+    );
+    if (!isMatch) {
+      console.error("[Stealth Self-Test] FAILED - formulas inconsistent!");
+    }
+  } catch (e) {
+    console.error("[Stealth Self-Test] ERROR:", e);
+  }
+}
