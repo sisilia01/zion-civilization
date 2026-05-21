@@ -5736,6 +5736,8 @@ export default function Home() {
       avg_confidence?: number;
     };
   } | null>(null);
+  const [walrusReceiptUrl, setWalrusReceiptUrl] = useState<string | null>(null);
+  const [walrusBlobId, setWalrusBlobId] = useState<string | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
   const [zbankTab, setZbankTab] = useState<"send" | "receive" | "scan">("send");
   const [stealthKeys, setStealthKeys] = useState<{
@@ -6958,6 +6960,8 @@ export default function Home() {
     setBankError(null);
     setBankTxHash(null);
     setNotarizeResult(null);
+    setWalrusReceiptUrl(null);
+    setWalrusBlobId(null);
 
     const recordTransfer = (digest: string, token: string) => {
       setBankTxHash(digest);
@@ -7252,6 +7256,53 @@ export default function Home() {
     setBankError(null);
     setBankTxHash(null);
     setNotarizeResult(null);
+    setWalrusReceiptUrl(null);
+    setWalrusBlobId(null);
+
+    const notarizeAndStoreReceipt = async (
+      digest: string,
+      stealthAddress: string
+    ) => {
+      try {
+        const notarizeData = await fetch("/zco/notarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tx_hash: digest,
+            token: fromToken,
+            amount: bankAmount,
+            stealth_address: stealthAddress,
+          }),
+        }).then((r) => r.json());
+        if (!notarizeData?.ok) return;
+        setNotarizeResult({
+          ...notarizeData,
+          tx_hash: notarizeData.tx_hash || digest,
+        });
+        const receiptRes = await fetch("/zco/store_stealth_receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tx_hash: digest,
+            token: fromToken,
+            agent: notarizeData.agent,
+            agent_class: notarizeData.agent_class,
+            decision: notarizeData.decision,
+            consensus: {
+              votes_for: notarizeData.consensus?.votes_for,
+              total_votes: notarizeData.consensus?.total_votes,
+              avg_confidence: notarizeData.consensus?.avg_confidence,
+            },
+          }),
+        }).then((r) => r.json());
+        if (receiptRes?.ok) {
+          setWalrusReceiptUrl(receiptRes.url ?? null);
+          setWalrusBlobId(receiptRes.blob_id ?? null);
+        }
+      } catch {
+        /* notarize / walrus optional */
+      }
+    };
 
     const announcePayment = (
       ephemeralPubKey: string,
@@ -7295,29 +7346,11 @@ export default function Home() {
         signAndExecute(
           { transaction: tx, chain: "sui:testnet" },
           {
-            onSuccess: async (result) => {
+            onSuccess: (result) => {
               const digest = suiTxDigest(result);
               setBankTxHash(digest);
-              try {
-                const data = await fetch("/zco/notarize", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    tx_hash: digest,
-                    token: fromToken,
-                    amount: bankAmount,
-                    stealth_address: stealthAddress,
-                  }),
-                }).then((r) => r.json());
-                if (data?.ok) {
-                  setNotarizeResult({
-                    ...data,
-                    tx_hash: data.tx_hash || digest,
-                  });
-                }
-              } catch {
-                /* notarize optional */
-              }
+              setBankLoading(false);
+              void notarizeAndStoreReceipt(digest, stealthAddress).catch(console.error);
               announcePayment(ephemeralPubKey, stealthAddress, digest);
             },
             onError: (err) => {
@@ -7357,29 +7390,11 @@ export default function Home() {
         signAndExecute(
           { transaction: tx, chain: "sui:testnet" },
           {
-            onSuccess: async (result) => {
+            onSuccess: (result) => {
               const digest = suiTxDigest(result);
               setBankTxHash(digest);
-              try {
-                const data = await fetch("/zco/notarize", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    tx_hash: digest,
-                    token: fromToken,
-                    amount: bankAmount,
-                    stealth_address: stealthAddress,
-                  }),
-                }).then((r) => r.json());
-                if (data?.ok) {
-                  setNotarizeResult({
-                    ...data,
-                    tx_hash: data.tx_hash || digest,
-                  });
-                }
-              } catch {
-                /* notarize optional */
-              }
+              setBankLoading(false);
+              void notarizeAndStoreReceipt(digest, stealthAddress).catch(console.error);
               announcePayment(ephemeralPubKey, stealthAddress, digest);
             },
             onError: (err) => {
@@ -11091,15 +11106,19 @@ export default function Home() {
                       borderRadius: "8px",
                     }}
                   >
-                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "3px" }}>✅ Transaction sent!</div>
-                    <a
-                      href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
-                    >
-                      View on Suiscan →
-                    </a>
+                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "3px" }}>
+                      ✅ Transaction sent!
+                    </div>
+                    {bankSendMode === "regular" && (
+                      <a
+                        href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
+                      >
+                        View on Suiscan →
+                      </a>
+                    )}
                   </div>
                 )}
                 {notarizeResult?.ok && (
@@ -11127,14 +11146,29 @@ export default function Home() {
                       % confidence
                     </span>
                     <br />
-                    {notarizeResult.tx_hash && (
+                    {(notarizeResult.tx_hash || bankTxHash) && (
                       <a
-                        href={`https://suiscan.xyz/testnet/tx/${notarizeResult.tx_hash}`}
+                        href={`https://suiscan.xyz/testnet/tx/${notarizeResult.tx_hash || bankTxHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ color: "#00ff8866", fontSize: "0.68rem" }}
+                        style={{ color: "#00ff8866", fontSize: "0.68rem", display: "block" }}
                       >
                         View stealth TX on Suiscan →
+                      </a>
+                    )}
+                    {walrusBlobId && (
+                      <a
+                        href={`/receipt/${walrusBlobId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "#00aaff",
+                          fontSize: "0.68rem",
+                          display: "block",
+                          marginTop: "6px",
+                        }}
+                      >
+                        View privacy receipt on Walrus →
                       </a>
                     )}
                   </div>
