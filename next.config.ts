@@ -56,6 +56,7 @@ const nextConfig: NextConfig = {
       { source: "/police-wire", destination: "http://localhost:8000/police-wire" },
       { source: "/corporate-wire", destination: "http://localhost:8000/corporate-wire" },
       { source: "/clan-wire", destination: "http://localhost:8000/clan-wire" },
+      { source: "/zco/:path*", destination: "http://localhost:8000/zco/:path*" },
     ];
   },
 };
