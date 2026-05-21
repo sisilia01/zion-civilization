@@ -5194,14 +5194,134 @@ const TOKEN_ICONS: Record<string, string> = {
   ZION: "https://zionciv.com/favicon.ico",
 };
 
-function getStealthGridColor(index: number, keyData: string) {
-  const sliceLen = Math.max(keyData.length - 4, 1);
-  const h = keyData.slice(index % sliceLen, (index % sliceLen) + 4);
-  const val = parseInt(h, 16) || index * 137;
-  const hue = val % 360;
-  const sat = 50 + (val % 40);
-  const light = 35 + (val % 30);
-  return `hsl(${hue}, ${sat}%, ${light}%)`;
+function StealthKaleidoscopeCanvas({
+  spendingPubKey,
+  viewingPubKey,
+}: {
+  spendingPubKey: string;
+  viewingPubKey: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = 260;
+    canvas.height = 260;
+    const W = 260;
+    const H = 260;
+    const CX = W / 2;
+    const CY = H / 2;
+
+    const keyData = spendingPubKey + viewingPubKey;
+    const sliceLen = Math.max(keyData.length - 6, 1);
+    const getVal = (i: number) =>
+      parseInt(keyData.slice(i % sliceLen, (i % sliceLen) + 6), 16) ||
+      i * 7919 + 1;
+
+    const colors = Array.from({ length: 8 }, (_, i) => {
+      const v = getVal(i * 8);
+      return `hsl(${v % 360}, ${50 + (v % 40)}%, ${35 + (v % 30)}%)`;
+    });
+
+    const segments = 12;
+    const angle = (Math.PI * 2) / segments;
+
+    const shapes = Array.from({ length: 6 }, (_, i) => ({
+      r: 20 + (getVal(i * 12) % 80),
+      offset: getVal(i * 12 + 4) % 60,
+      size: 5 + (getVal(i * 12 + 8) % 25),
+      color: colors[i % colors.length],
+    }));
+
+    const offscreen = document.createElement("canvas");
+    offscreen.width = W;
+    offscreen.height = H;
+    const octx = offscreen.getContext("2d");
+    if (!octx) return;
+
+    let frame = 0;
+    let animId = 0;
+
+    const draw = () => {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, W, H);
+
+      const rotation = frame * 0.003;
+
+      octx.fillStyle = "#000";
+      octx.fillRect(0, 0, W, H);
+      octx.save();
+      octx.translate(CX, CY);
+      octx.rotate(rotation);
+
+      shapes.forEach((s, si) => {
+        const t = frame * 0.01 + si;
+        const x = Math.cos(t * 0.7) * s.r;
+        const y = Math.sin(t * 0.5) * s.r;
+        octx.beginPath();
+        octx.arc(x, y, s.size, 0, Math.PI * 2);
+        octx.fillStyle = s.color;
+        octx.globalAlpha = 0.7;
+        octx.fill();
+      });
+      octx.restore();
+      octx.globalAlpha = 1;
+
+      for (let i = 0; i < segments; i++) {
+        ctx.save();
+        ctx.translate(CX, CY);
+        ctx.rotate(angle * i);
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 150, -angle / 2, angle / 2);
+        ctx.closePath();
+        ctx.clip();
+
+        if (i % 2 === 0) {
+          ctx.drawImage(offscreen, -CX, -CY);
+        } else {
+          ctx.scale(-1, 1);
+          ctx.drawImage(offscreen, -CX, -CY);
+        }
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.beginPath();
+      ctx.arc(CX, CY, 125, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.restore();
+      ctx.globalCompositeOperation = "source-over";
+
+      frame++;
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => cancelAnimationFrame(animId);
+  }, [spendingPubKey, viewingPubKey]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        width: "260px",
+        height: "260px",
+        borderRadius: "50%",
+        display: "block",
+        margin: "0 auto 8px",
+      }}
+      aria-hidden
+    />
+  );
 }
 
 function BankIconImg({ src, alt }: { src?: string; alt: string }) {
@@ -7178,8 +7298,10 @@ export default function Home() {
         }
 
         const amountUsdc = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
+        const GAS_AMOUNT = BigInt(5_000_000); // 0.005 SUI for stealth claim gas
         const tx = new Transaction();
         const primaryCoinId = coins.data[0].coinObjectId;
+        const stealthAddr = tx.pure.address(stealthAddress);
 
         if (coins.data.length > 1) {
           tx.mergeCoins(
@@ -7188,8 +7310,11 @@ export default function Home() {
           );
         }
 
-        const [splitCoin] = tx.splitCoins(tx.object(primaryCoinId), [amountUsdc]);
-        tx.transferObjects([splitCoin], tx.pure.address(stealthAddress));
+        const [splitUsdc] = tx.splitCoins(tx.object(primaryCoinId), [amountUsdc]);
+        tx.transferObjects([splitUsdc], stealthAddr);
+
+        const [gasCoin] = tx.splitCoins(tx.gas, [GAS_AMOUNT]);
+        tx.transferObjects([gasCoin], stealthAddr);
 
         signAndExecute(
           { transaction: tx, chain: "sui:testnet" },
@@ -10045,7 +10170,7 @@ export default function Home() {
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "flex-start",
-                paddingTop: "12px",
+                paddingTop: "6px",
                 minHeight: "auto",
                 width: "100%",
                 position: "relative",
@@ -10063,7 +10188,7 @@ export default function Home() {
                   WebkitBackdropFilter: "blur(20px)",
                   border: "1px solid rgba(0, 255, 100, 0.15)",
                   boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
-                  borderRadius: "16px",
+                  borderRadius: "12px",
                   padding: "16px",
                   boxSizing: "border-box",
                 }}
@@ -10071,14 +10196,14 @@ export default function Home() {
                 <div
                   style={{
                     borderBottom: "1px solid rgba(0,255,100,0.15)",
-                    paddingBottom: "8px",
-                    marginBottom: "12px",
+                    paddingBottom: "6px",
+                    marginBottom: "8px",
                   }}
                 >
                   <h2
                     style={{
                       color: "#00ff41",
-                      fontSize: "1.1rem",
+                      fontSize: "1rem",
                       fontWeight: "bold",
                       margin: 0,
                       whiteSpace: "nowrap",
@@ -10091,8 +10216,8 @@ export default function Home() {
                 <div
                   style={{
                     display: "flex",
-                    gap: "6px",
-                    marginBottom: "14px",
+                    gap: "5px",
+                    marginBottom: "8px",
                   }}
                 >
                   {(
@@ -10111,7 +10236,8 @@ export default function Home() {
                       }}
                       style={{
                         flex: 1,
-                        padding: "8px 10px",
+                        minHeight: "36px",
+                        padding: "6px 8px",
                         background:
                           zbankTab === tab
                             ? "rgba(0,255,100,0.15)"
@@ -10134,12 +10260,12 @@ export default function Home() {
                 </div>
 
                 {zbankTab === "receive" && (
-                  <div style={{ marginBottom: "12px" }}>
+                  <div style={{ marginBottom: "8px" }}>
                     <p
                       style={{
                         color: "#ffaa44",
-                        fontSize: "0.72rem",
-                        margin: "0 0 12px",
+                        fontSize: "0.68rem",
+                        margin: "0 0 8px",
                         lineHeight: 1.5,
                       }}
                     >
@@ -10150,13 +10276,14 @@ export default function Home() {
                       onClick={handleGenerateStealth}
                       style={{
                         width: "100%",
-                        padding: "12px",
-                        marginBottom: "10px",
+                        padding: "8px 12px",
+                        marginBottom: "6px",
                         background: "rgba(0,255,100,0.1)",
                         border: "1px solid rgba(0,255,100,0.35)",
-                        borderRadius: "10px",
+                        borderRadius: "8px",
                         color: "#00ff88",
                         fontWeight: 700,
+                        fontSize: "0.8rem",
                         cursor: "pointer",
                       }}
                     >
@@ -10166,18 +10293,18 @@ export default function Home() {
                       <>
                         <div
                           style={{
-                            padding: "14px",
-                            marginBottom: "10px",
+                            padding: "8px 12px",
+                            marginBottom: "6px",
                             background: "rgba(255,255,255,0.04)",
                             border: "1px solid rgba(0,255,100,0.2)",
-                            borderRadius: "12px",
+                            borderRadius: "8px",
                           }}
                         >
                           <div
                             style={{
                               color: "#666",
-                              fontSize: "0.65rem",
-                              marginBottom: "8px",
+                              fontSize: "0.6rem",
+                              marginBottom: "5px",
                               letterSpacing: "0.08em",
                             }}
                           >
@@ -10190,40 +10317,15 @@ export default function Home() {
                               color: "#00ff88",
                               wordBreak: "break-all",
                               lineHeight: 1.5,
-                              marginBottom: "12px",
+                              marginBottom: "8px",
                             }}
                           >
                             {stealthKeys.metaAddress}
                           </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "2px",
-                              maxWidth: "260px",
-                              margin: "0 auto 12px",
-                              justifyContent: "center",
-                            }}
-                            aria-hidden
-                          >
-                            {Array.from({ length: 64 }, (_, i) => {
-                              const keyData =
-                                stealthKeys.spendingPubKey +
-                                stealthKeys.viewingPubKey;
-                              return (
-                                <div
-                                  key={i}
-                                  style={{
-                                    width: "28px",
-                                    height: "28px",
-                                    borderRadius: "4px",
-                                    background: getStealthGridColor(i, keyData),
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
+                          <StealthKaleidoscopeCanvas
+                            spendingPubKey={stealthKeys.spendingPubKey}
+                            viewingPubKey={stealthKeys.viewingPubKey}
+                          />
                         </div>
                         <div
                           style={{
@@ -10340,15 +10442,16 @@ export default function Home() {
                 )}
 
                 {zbankTab === "scan" && (
-                  <div style={{ marginBottom: "12px" }}>
+                  <div style={{ marginBottom: "8px" }}>
                     <button
                       type="button"
                       onClick={() => void handleScan()}
                       disabled={stealthScanLoading}
                       style={{
                         width: "100%",
-                        padding: "12px",
-                        marginBottom: "12px",
+                        minHeight: "36px",
+                        padding: "8px 12px",
+                        marginBottom: "8px",
                         background: "rgba(0,255,100,0.1)",
                         border: "1px solid rgba(0,255,100,0.35)",
                         borderRadius: "10px",
@@ -10575,14 +10678,14 @@ export default function Home() {
                 <div
                   style={{
                     width: "100%",
-                    padding: "16px",
-                    borderRadius: "12px",
+                    padding: "8px 12px",
+                    borderRadius: "10px",
                     background: "rgba(255,255,255,0.05)",
                     boxSizing: "border-box",
                     marginBottom: "0",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
                     <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>FROM</span>
                     <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.7rem", fontFamily: "monospace" }}>
                       <BankIconImg src={NETWORK_ICONS.Sui} alt="Sui" />
@@ -10591,29 +10694,29 @@ export default function Home() {
                         : "Connect wallet"}
                     </span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "6px" }}>
                     <span
                       style={{
-                        padding: "3px 8px",
+                        padding: "2px 6px",
                         background: "rgba(0,255,65,0.1)",
                         border: "1px solid rgba(0,255,100,0.25)",
                         borderRadius: "6px",
                         color: "#00ff41",
-                        fontSize: "0.65rem",
+                        fontSize: "0.6rem",
                         fontWeight: 600,
                       }}
                     >
                       🔒 Sui
                     </span>
-                    <span style={{ color: "#444", fontSize: "0.65rem" }}>locked</span>
+                    <span style={{ color: "#444", fontSize: "0.6rem" }}>locked</span>
                   </div>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      gap: "8px",
-                      marginBottom: "8px",
+                      gap: "6px",
+                      marginBottom: "5px",
                     }}
                   >
                     <input
@@ -10623,7 +10726,7 @@ export default function Home() {
                       value={bankAmount}
                       onChange={(e) => setBankAmount(e.target.value)}
                       style={{
-                        fontSize: "1.6rem",
+                        fontSize: "20px",
                         fontWeight: "bold",
                         background: "transparent",
                         border: "none",
@@ -10640,12 +10743,12 @@ export default function Home() {
                       onClick={() => setShowTokenModal("from")}
                     />
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
-                    <span style={{ color: "#666", fontSize: "0.75rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+                    <span style={{ color: "#666", fontSize: "11px" }}>
                       ${fromToken === "SUI" ? (parseFloat(bankAmount || "0") * 2).toFixed(2) : "0.00"}
                     </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                      <span style={{ color: "#888", fontSize: "0.78rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
+                      <span style={{ color: "#888", fontSize: "11px" }}>
                         Balance: {fromToken === "SUI" ? suiBalance.toFixed(2) : "—"}
                       </span>
                       {(["20", "50", "MAX"] as const).map((pct) => (
@@ -10658,12 +10761,12 @@ export default function Home() {
                             setBankAmount((suiBalance * frac).toFixed(4));
                           }}
                           style={{
-                            padding: "3px 8px",
+                            padding: "2px 6px",
                             background: "rgba(255,255,255,0.06)",
                             border: "1px solid rgba(255,255,255,0.12)",
-                            borderRadius: "8px",
+                            borderRadius: "6px",
                             color: "#aaa",
-                            fontSize: "0.72rem",
+                            fontSize: "11px",
                             cursor: "pointer",
                           }}
                         >
@@ -10675,21 +10778,21 @@ export default function Home() {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "center", margin: "8px 0", position: "relative", zIndex: 2 }}>
-                  <span style={{ color: "#00ff41", fontSize: "1.2rem" }}>⬇</span>
+                  <span style={{ color: "#00ff41", fontSize: "1rem" }}>⬇</span>
                 </div>
 
                 {/* TO */}
                 <div
                   style={{
                     width: "100%",
-                    padding: "16px",
-                    borderRadius: "12px",
+                    padding: "8px 12px",
+                    borderRadius: "10px",
                     background: "rgba(255,255,255,0.05)",
                     boxSizing: "border-box",
-                    marginBottom: "12px",
+                    marginBottom: "8px",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
                     <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>TO</span>
                     <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#00ff88", fontSize: "0.8rem" }}>
                       <img
@@ -10700,35 +10803,35 @@ export default function Home() {
                       Sui
                     </span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px", flexWrap: "wrap" }}>
                     <span
                       style={{
-                        padding: "3px 8px",
+                        padding: "2px 6px",
                         background: "rgba(0,255,65,0.1)",
                         border: "1px solid rgba(0,255,100,0.25)",
                         borderRadius: "6px",
                         color: "#00ff41",
-                        fontSize: "0.65rem",
+                        fontSize: "0.6rem",
                         fontWeight: 600,
                       }}
                     >
                       🔒 Sui
                     </span>
-                    <span style={{ color: "#444", fontSize: "0.65rem" }}>locked</span>
+                    <span style={{ color: "#444", fontSize: "0.6rem" }}>locked</span>
                     <span
                       style={{
-                        padding: "3px 8px",
+                        padding: "2px 6px",
                         background: "rgba(255,255,255,0.03)",
                         border: "1px solid #333",
                         borderRadius: "6px",
                         color: "#555",
-                        fontSize: "0.65rem",
+                        fontSize: "0.6rem",
                       }}
                     >
                       Ethereum · Coming Soon
                     </span>
                   </div>
-                  <p style={{ color: "#666", fontSize: "0.72rem", margin: "0 0 10px", lineHeight: 1.4 }}>
+                  <p style={{ color: "#666", fontSize: "0.65rem", margin: "0 0 6px", lineHeight: 1.3 }}>
                     ETH bridge coming soon — use Stealth Send for private Sui transfers
                   </p>
                   <div
@@ -10736,8 +10839,8 @@ export default function Home() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      gap: "8px",
-                      marginBottom: "8px",
+                      gap: "6px",
+                      marginBottom: "5px",
                     }}
                   >
                     <input
@@ -10747,7 +10850,7 @@ export default function Home() {
                       readOnly
                       value={bankAmount}
                       style={{
-                        fontSize: "1.6rem",
+                        fontSize: "20px",
                         fontWeight: "bold",
                         background: "transparent",
                         border: "none",
@@ -10770,8 +10873,8 @@ export default function Home() {
                     <div
                       style={{
                         display: "flex",
-                        gap: "6px",
-                        marginBottom: "10px",
+                        gap: "5px",
+                        marginBottom: "6px",
                       }}
                     >
                       {(
@@ -10794,7 +10897,8 @@ export default function Home() {
                           }}
                           style={{
                             flex: 1,
-                            padding: "8px",
+                            minHeight: "36px",
+                            padding: "6px 8px",
                             background:
                               bankSendMode === mode
                                 ? "rgba(147,51,234,0.15)"
@@ -10822,13 +10926,13 @@ export default function Home() {
                         onChange={(e) => setBankRecipient(e.target.value)}
                         style={{
                           width: "100%",
-                          padding: "10px 12px",
-                          marginBottom: "12px",
+                          padding: "8px 12px",
+                          marginBottom: "8px",
                           background: "rgba(255,255,255,0.05)",
                           border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: "12px",
+                          borderRadius: "10px",
                           color: "#fff",
-                          fontSize: "0.85rem",
+                          fontSize: "0.8rem",
                           fontFamily: "monospace",
                           boxSizing: "border-box",
                         }}
@@ -10841,25 +10945,27 @@ export default function Home() {
                         onChange={(e) => setStealthMetaInput(e.target.value)}
                         style={{
                           width: "100%",
-                          padding: "10px 12px",
-                          marginBottom: "12px",
+                          padding: "8px 12px",
+                          marginBottom: "8px",
                           background: "rgba(147,51,234,0.06)",
                           border: "1px solid rgba(147,51,234,0.3)",
-                          borderRadius: "12px",
+                          borderRadius: "10px",
                           color: "#fff",
-                          fontSize: "0.78rem",
+                          fontSize: "0.75rem",
                           fontFamily: "monospace",
                           boxSizing: "border-box",
                         }}
                       />
                     )}
                     {bankSendMode === "stealth" && (
-                      <p style={{ color: "#888", fontSize: "0.72rem", margin: "0 0 12px", lineHeight: 1.5 }}>
-                        🕵️ One-time stealth address + on-chain announce
+                      <p style={{ color: "#888", fontSize: "0.65rem", margin: "0 0 6px", lineHeight: 1.35 }}>
+                        {fromToken === "USDC"
+                          ? `Sending ${bankAmount || "0"} USDC + 0.005 SUI for gas`
+                          : "🕵️ One-time stealth address + on-chain announce"}
                       </p>
                     )}
                     {bankSendMode === "regular" && (
-                      <p style={{ color: "#555", fontSize: "0.7rem", margin: "0 0 12px" }}>
+                      <p style={{ color: "#555", fontSize: "0.65rem", margin: "0 0 6px" }}>
                         On-chain SUI transfer · ~$0.01 gas
                       </p>
                     )}
@@ -10873,7 +10979,8 @@ export default function Home() {
                       disabled={bankLoading}
                       style={{
                         width: "100%",
-                        padding: "10px",
+                        minHeight: "40px",
+                        padding: "8px 12px",
                         background:
                           bankSendMode === "stealth"
                             ? "linear-gradient(135deg, rgba(147,51,234,0.35) 0%, rgba(80,20,120,0.25) 100%)"
@@ -10882,9 +10989,9 @@ export default function Home() {
                           bankSendMode === "stealth"
                             ? "1px solid #a855f7"
                             : "1px solid #00ff41",
-                        borderRadius: "12px",
+                        borderRadius: "10px",
                         color: bankSendMode === "stealth" ? "#c084fc" : "#00ff41",
-                        fontSize: "1rem",
+                        fontSize: "0.9rem",
                         fontWeight: "bold",
                         cursor: bankLoading ? "not-allowed" : "pointer",
                         opacity: bankLoading ? 0.7 : 1,
@@ -10937,7 +11044,7 @@ export default function Home() {
                   </div>
                 )}
 
-                <div style={{ color: "#444", fontSize: "0.65rem", textAlign: "center", marginTop: "8px" }}>
+                <div style={{ color: "#444", fontSize: "0.6rem", textAlign: "center", marginTop: "5px" }}>
                   · ZION Stealth Protocol · First private transfers on Sui
                 </div>
                   </>
