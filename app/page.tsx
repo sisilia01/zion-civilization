@@ -1338,6 +1338,113 @@ function zionbetTruncateQuestion(q: string, max = 40): string {
   return `${t.slice(0, max - 1)}…`;
 }
 
+const zionbetMarketQuestionCache: Record<string, string> = {};
+
+function zionbetQuestionLooksLikeMarketId(question: string | undefined | null, marketId?: string): boolean {
+  const q = (question || "").trim();
+  if (!q) return true;
+  const mid = (marketId || "").trim();
+  if (mid && q.toLowerCase() === mid.toLowerCase()) return true;
+  if (/^poly-\d+$/i.test(q)) return true;
+  return false;
+}
+
+function zionbetFindMarketQuestionInLists(
+  marketId: string,
+  polyByTab: Record<string, ZionbetApiMarket[]>,
+  zionbetMarkets: ZionbetMarketsBundle
+): string | null {
+  const fromPoly = Object.values(polyByTab)
+    .flat()
+    .find((m) => m.id === marketId);
+  if (fromPoly?.question?.trim()) return fromPoly.question.trim();
+  const native = [
+    ...zionbetMarkets.crypto,
+    ...zionbetMarkets.sports,
+    ...zionbetMarkets.civilization,
+  ].find((m) => m.id === marketId);
+  return native?.question?.trim() || null;
+}
+
+function zionbetFormatMarketIdFallback(marketId: string): string {
+  const id = marketId.trim();
+  if (id.length <= 18) return id;
+  return `${id.slice(0, 8)}…${id.slice(-6)}`;
+}
+
+function useZionbetBetDisplayQuestion(
+  bet: ZionBetMyBetRow,
+  polyByTab: Record<string, ZionbetApiMarket[]>,
+  zionbetMarkets: ZionbetMarketsBundle
+): { text: string; isFallbackId: boolean } {
+  const resolve = useCallback((): { text: string; isFallbackId: boolean } => {
+    const fromBet = bet.question?.trim();
+    const mid = bet.market_id?.trim();
+    if (fromBet && !zionbetQuestionLooksLikeMarketId(fromBet, mid)) {
+      return { text: zionbetCleanMarketTitle(fromBet), isFallbackId: false };
+    }
+    if (mid) {
+      const cached = zionbetMarketQuestionCache[mid];
+      if (cached) {
+        return { text: zionbetCleanMarketTitle(cached), isFallbackId: false };
+      }
+      const listed = zionbetFindMarketQuestionInLists(mid, polyByTab, zionbetMarkets);
+      if (listed) {
+        zionbetMarketQuestionCache[mid] = listed;
+        return { text: zionbetCleanMarketTitle(listed), isFallbackId: false };
+      }
+      return { text: zionbetFormatMarketIdFallback(mid), isFallbackId: true };
+    }
+    return {
+      text: fromBet ? zionbetCleanMarketTitle(fromBet) : "Unknown market",
+      isFallbackId: !fromBet,
+    };
+  }, [bet.question, bet.market_id, polyByTab, zionbetMarkets]);
+
+  const [state, setState] = useState(resolve);
+
+  useEffect(() => {
+    setState(resolve());
+  }, [resolve]);
+
+  useEffect(() => {
+    const mid = bet.market_id?.trim();
+    if (!mid) return;
+    const listed = zionbetFindMarketQuestionInLists(mid, polyByTab, zionbetMarkets);
+    if (listed) {
+      zionbetMarketQuestionCache[mid] = listed;
+      setState({ text: zionbetCleanMarketTitle(listed), isFallbackId: false });
+      return;
+    }
+    if (zionbetMarketQuestionCache[mid]) return;
+    const fromBet = bet.question?.trim();
+    if (fromBet && !zionbetQuestionLooksLikeMarketId(fromBet, mid)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/zionbet/market/${encodeURIComponent(mid)}`, { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const row = (await res.json()) as { question?: string; error?: string };
+        if (cancelled || row?.error) return;
+        const q = String(row.question || "").trim();
+        if (!q) return;
+        zionbetMarketQuestionCache[mid] = q;
+        setState({ text: zionbetCleanMarketTitle(q), isFallbackId: false });
+      } catch {
+        /* keep fallback label */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bet.market_id, bet.question, polyByTab, zionbetMarkets]);
+
+  return state;
+}
+
+type ZionBetToastPayload = string | { message: string; disclaimer?: string };
+
 function zionbetIsZionNativeMarket(id: string): boolean {
   return !id.startsWith("poly-");
 }
@@ -1814,6 +1921,8 @@ function ZionBetMarketDetailOverlay({
   betLoading,
   onPlaceBet,
   onClose,
+  signAndExecute,
+  onPositionClosed,
 }: {
   apiMarket: ZionbetApiMarket;
   walletConnected: boolean;
@@ -1827,6 +1936,8 @@ function ZionBetMarketDetailOverlay({
   betLoading: boolean;
   onPlaceBet: (market: ZionBetMarket, direction: boolean) => void;
   onClose: () => void;
+  signAndExecute?: SignAndExecuteFn;
+  onPositionClosed?: (payload: ZionBetToastPayload) => void;
 }) {
   const [detailApiMarket, setDetailApiMarket] = useState(apiMarket);
   const market = useMemo(() => zionbetApiToMarket(detailApiMarket), [detailApiMarket]);
@@ -2566,6 +2677,17 @@ function ZionBetMarketDetailOverlay({
                       {positionStats.profitIfNoWins >= 0 ? " profit" : " loss"}
                     </div>
                   </div>
+                  {walletAddress.trim() &&
+                  signAndExecute &&
+                  ((userPosition.status ?? "active").toLowerCase() === "active" ||
+                    (userPosition.status ?? "").toLowerCase() === "pending") ? (
+                    <ZionBetClosePositionButton
+                      bet={userPosition}
+                      walletAddress={walletAddress}
+                      signAndExecute={signAndExecute}
+                      onClosed={onPositionClosed}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -2700,6 +2822,13 @@ type ZionBetMyBetRow = {
   potential_payout?: number;
   payout?: number;
   status?: string;
+  created_at?: string | null;
+  resolves_at?: string | null;
+  end_date?: string | null;
+  current_yes_price?: number | null;
+  current_no_price?: number | null;
+  on_chain_bet_id?: number | null;
+  on_chain_market_id?: number | null;
 };
 
 function notifyMyBetsSettlements(
@@ -3088,11 +3217,1415 @@ function zionMyBetFromApi(row: Record<string, unknown>): ZionMyBetRow {
 type LeaderboardEntry = {
   rank?: number;
   wallet?: string;
+  wallet_address?: string;
   points?: number;
   messages?: number;
   messages_sent?: number;
   zion_spent?: number;
+  zionbet_pnl?: number;
 };
+
+const ZION_AVATARS = [
+  { id: "warrior", color: "#ff6b35", icon: "⚔️" },
+  { id: "dragon", color: "#7c3aed", icon: "🐲" },
+  { id: "fox", color: "#f59e0b", icon: "🦊" },
+  { id: "robot", color: "#06b6d4", icon: "🤖" },
+  { id: "alien", color: "#10b981", icon: "👾" },
+  { id: "ninja", color: "#6366f1", icon: "🥷" },
+  { id: "diamond", color: "#00d4ff", icon: "💎" },
+  { id: "phoenix", color: "#ef4444", icon: "🔥" },
+] as const;
+
+const ZION_AVATAR_LEGACY_EMOJI: Record<string, string> = {
+  "🦁": "warrior",
+  "🐉": "dragon",
+  "🦊": "fox",
+  "🤖": "robot",
+  "👾": "alien",
+  "🎭": "ninja",
+  "💎": "diamond",
+  "🔥": "phoenix",
+  fire: "phoenix",
+};
+
+type ZionProfile = {
+  nickname?: string;
+  avatar?: string;
+  achievements?: string[];
+};
+
+type ZionBetWalletStats = {
+  total_bets: number;
+  wins: number;
+  losses: number;
+  active_bets: number;
+  total_staked: number;
+  total_won: number;
+  net_pnl: number;
+  win_rate: number;
+  total_profit: number;
+};
+
+const ZION_ACHIEVEMENT_DEFS: { id: string; emoji: string; label: string }[] = [
+  { id: "first_bet", emoji: "🎯", label: "First Bet" },
+  { id: "hot_streak", emoji: "🔥", label: "Hot Streak" },
+  { id: "diamond_hands", emoji: "💎", label: "Diamond Hands" },
+  { id: "whale", emoji: "🐋", label: "Whale" },
+  { id: "oracle", emoji: "🧠", label: "Oracle" },
+  { id: "speed_trader", emoji: "⚡", label: "Speed Trader" },
+];
+
+function zionProfileStorageKey(wallet: string): string {
+  return `zion_profile_${wallet.trim().toLowerCase()}`;
+}
+
+function loadZionProfile(wallet: string): ZionProfile {
+  if (typeof window === "undefined" || !wallet.trim()) return {};
+  try {
+    return JSON.parse(localStorage.getItem(zionProfileStorageKey(wallet)) || "{}") as ZionProfile;
+  } catch {
+    return {};
+  }
+}
+
+function saveZionProfile(wallet: string, profile: ZionProfile): void {
+  if (typeof window === "undefined" || !wallet.trim()) return;
+  localStorage.setItem(zionProfileStorageKey(wallet), JSON.stringify(profile));
+}
+
+function zionbetComputeAchievements(bets: ZionBetMyBetRow[], stats: ZionBetWalletStats | null): string[] {
+  const earned: string[] = [];
+  if (bets.length >= 1) earned.push("first_bet");
+  if (bets.length > 10) earned.push("speed_trader");
+  const staked = stats?.total_staked ?? bets.reduce((s, b) => s + b.amount_sui, 0);
+  if (staked > 10) earned.push("whale");
+  const settled = [...bets]
+    .filter((b) => {
+      const s = (b.status || "").toLowerCase();
+      return s === "won" || s === "lost";
+    })
+    .sort((a, b) => b.id - a.id);
+  if (settled.length >= 3 && settled.slice(0, 3).every((b) => (b.status || "").toLowerCase() === "won")) {
+    earned.push("hot_streak");
+  }
+  const winRate = stats?.win_rate ?? 0;
+  if (settled.length > 5 && winRate > 60) earned.push("oracle");
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  if (
+    bets.some((b) => {
+      const s = (b.status || "active").toLowerCase();
+      if (s !== "active" && s !== "pending") return false;
+      const t = b.created_at ? Date.parse(b.created_at) : NaN;
+      return Number.isFinite(t) && now - t >= weekMs;
+    })
+  ) {
+    earned.push("diamond_hands");
+  }
+  return earned;
+}
+
+function zionbetWalletTruncated(wallet: string): string {
+  const w = wallet.trim();
+  if (w.length <= 14) return w;
+  return `${w.slice(0, 6)}...${w.slice(-4)}`;
+}
+
+function zionbetBetPnl(
+  bet: ZionBetMyBetRow,
+  yesCents: number,
+  noCents: number
+): number {
+  const status = (bet.status || "active").toLowerCase();
+  if (status === "won" || status === "closed_early") {
+    return (bet.payout ?? bet.potential_payout ?? 0) - bet.amount_sui;
+  }
+  if (status === "lost") return -bet.amount_sui;
+  const isYes = bet.direction === "YES";
+  const avgCents = Math.max(1, Math.min(99, Math.round(Number(bet.odds) || (isYes ? yesCents : noCents))));
+  const currentCents = isYes ? yesCents : noCents;
+  return (bet.amount_sui * currentCents) / avgCents - bet.amount_sui;
+}
+
+function zionbetBetAvgCents(bet: ZionBetMyBetRow, yesCents: number, noCents: number): number {
+  const isYes = bet.direction === "YES";
+  return Math.max(1, Math.min(99, Math.round(Number(bet.odds) || (isYes ? yesCents : noCents))));
+}
+
+function zionbetBetPotentialWin(bet: ZionBetMyBetRow, yesCents: number, noCents: number): number {
+  const avgCents = zionbetBetAvgCents(bet, yesCents, noCents);
+  return bet.amount_sui * (100 / avgCents) - bet.amount_sui;
+}
+
+/** Mark-to-market exit value: stake × (current¢ / avg¢). */
+function zionbetBetCloseValue(bet: ZionBetMyBetRow, yesCents: number, noCents: number): number {
+  const isYes = bet.direction === "YES";
+  const avgCents = zionbetBetAvgCents(bet, yesCents, noCents);
+  const currentCents = isYes ? yesCents : noCents;
+  return (bet.amount_sui * currentCents) / avgCents;
+}
+
+/** On-chain early close returns 95% of stake (5% house fee). */
+function zionbetEarlyCloseReturnSui(stakeSui: number): number {
+  return stakeSui * 0.95;
+}
+
+function zionNormalizeAvatarId(avatar?: string | null): string {
+  if (!avatar) return ZION_AVATARS[0].id;
+  if (ZION_AVATARS.some((a) => a.id === avatar)) return avatar;
+  return ZION_AVATAR_LEGACY_EMOJI[avatar] ?? ZION_AVATARS[0].id;
+}
+
+function zionAvatarMeta(avatarId?: string | null) {
+  const id = zionNormalizeAvatarId(avatarId);
+  return ZION_AVATARS.find((a) => a.id === id) ?? ZION_AVATARS[0];
+}
+
+function ZionBetAvatarImg({
+  avatarId,
+  size = 40,
+  selected = false,
+  style,
+}: {
+  avatarId?: string | null;
+  size?: number;
+  selected?: boolean;
+  style?: CSSProperties;
+}) {
+  const av = zionAvatarMeta(avatarId);
+  const iconSize = Math.round(size * 0.55);
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        background: av.color,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: iconSize,
+        flexShrink: 0,
+        border: selected ? "2px solid #00ff88" : "1px solid rgba(100, 180, 255, 0.25)",
+        boxShadow: selected ? "0 0 12px rgba(0, 255, 136, 0.8)" : "none",
+        lineHeight: 1,
+        ...style,
+      }}
+      title={av.id}
+    >
+      {av.icon}
+    </div>
+  );
+}
+
+function zionbetBetTimestamp(bet: ZionBetMyBetRow): number {
+  const raw = bet.created_at ?? bet.resolves_at ?? bet.end_date;
+  const t = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(t) ? t : 0;
+}
+
+function zionbetFormatEndsDate(bet: ZionBetMyBetRow): string {
+  const raw = bet.end_date ?? bet.resolves_at;
+  if (raw) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return `Ends ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    }
+  }
+  return "End date TBD";
+}
+
+const ZION_MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function ZionBetPremiumStatCard({
+  label,
+  value,
+  variant,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  variant: "staked" | "won" | "winrate" | "pnl";
+  valueColor?: string;
+}) {
+  const styles: Record<string, { bg: string; valueColor: string }> = {
+    staked: {
+      bg: "linear-gradient(145deg, rgba(30, 80, 160, 0.45) 0%, rgba(15, 50, 90, 0.35) 100%)",
+      valueColor: "#7eb8ff",
+    },
+    won: {
+      bg: "linear-gradient(145deg, rgba(0, 90, 70, 0.4) 0%, rgba(15, 50, 90, 0.35) 100%)",
+      valueColor: ZB_VISTA_YES,
+    },
+    winrate: {
+      bg: "linear-gradient(145deg, rgba(90, 70, 20, 0.4) 0%, rgba(15, 50, 90, 0.35) 100%)",
+      valueColor: "#fcd34d",
+    },
+    pnl: {
+      bg: "linear-gradient(145deg, rgba(15, 50, 90, 0.5) 0%, rgba(10, 30, 60, 0.4) 100%)",
+      valueColor: "#ffffff",
+    },
+  };
+  const s = styles[variant];
+  return (
+    <div
+      style={{
+        padding: "16px 14px",
+        borderRadius: 12,
+        background: s.bg,
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid rgba(100, 180, 255, 0.18)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "0.65rem",
+          fontWeight: 600,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "rgba(150, 200, 255, 0.75)",
+          marginBottom: 8,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: "1.35rem", fontWeight: 800, color: valueColor ?? s.valueColor, lineHeight: 1.1 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+const ZB_BET_CARD_GLASS: CSSProperties = {
+  background: "rgba(15, 50, 90, 0.4)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  border: "1px solid rgba(100, 180, 255, 0.15)",
+  borderRadius: 12,
+  padding: 16,
+};
+
+const ZION_CLOSE_PCT_OPTIONS = [0.25, 0.5, 0.75, 1] as const;
+
+function ZionBetClosePositionButton({
+  bet,
+  walletAddress,
+  signAndExecute,
+  onClosed,
+}: {
+  bet: ZionBetMyBetRow;
+  walletAddress: string;
+  signAndExecute: SignAndExecuteFn;
+  onClosed?: (payload: ZionBetToastPayload) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [partialPct, setPartialPct] = useState(1);
+  const status = (bet.status || "active").toLowerCase();
+  const isActive = status === "active" || status === "pending";
+  const isYes = bet.direction === "YES";
+  const yesCents = Math.round(bet.current_yes_price ?? bet.odds ?? 50);
+  const noCents = Math.round(bet.current_no_price ?? 100 - yesCents);
+  const avgCents = zionbetBetAvgCents(bet, yesCents, noCents);
+  const currentCents = isYes ? yesCents : noCents;
+  const closeStake = bet.amount_sui * partialPct;
+  const closeReturnEstimate = zionbetEarlyCloseReturnSui(closeStake);
+
+  if (!isActive || !walletAddress.trim()) return null;
+
+  const closeBtnStyle: CSSProperties = {
+    width: "100%",
+    marginTop: 10,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(255, 160, 60, 0.55)",
+    background: "rgba(255, 120, 40, 0.12)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    color: "#ffc896",
+    fontSize: "0.8rem",
+    fontWeight: 700,
+    cursor: busy ? "wait" : "pointer",
+    opacity: busy ? 0.65 : 1,
+  };
+
+  const runClose = async () => {
+    const onChainBetId = bet.on_chain_bet_id;
+    if (onChainBetId == null || onChainBetId === undefined) {
+      onClosed?.("Cannot close - on-chain ID not found. Contact support.");
+      return;
+    }
+
+    const marketId = bet.market_id?.trim() || "";
+    if (!marketId) {
+      onClosed?.("Cannot close - missing market id.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await submitOnChainCloseBet(
+        signAndExecute,
+        {
+          marketId,
+          onChainBetId,
+          walletAddress: walletAddress.trim(),
+        },
+        {
+          onSuccess: async () => {
+            try {
+              const res = await fetch("/api/zionbet/close_position", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  bet_id: bet.id,
+                  wallet: walletAddress.trim(),
+                  partial_pct: partialPct,
+                }),
+              });
+              const data = (await res.json()) as {
+                ok?: boolean;
+                error?: string;
+                payout_sui?: number;
+              };
+              if (!data.ok) {
+                onClosed?.(
+                  `On-chain close succeeded but app update failed: ${data.error || "unknown"}. Contact support.`
+                );
+                setBusy(false);
+                return;
+              }
+              const payout = data.payout_sui ?? closeReturnEstimate;
+              onClosed?.(`✅ Position closed on-chain! ${payout.toFixed(2)} SUI returned to wallet`);
+              setConfirming(false);
+            } catch {
+              onClosed?.(
+                "On-chain close succeeded but app update failed. Contact support with your transaction digest."
+              );
+            } finally {
+              setBusy(false);
+            }
+          },
+          onError: (message) => {
+            onClosed?.(message || "On-chain close failed. Position not closed.");
+            setBusy(false);
+          },
+        }
+      );
+    } catch {
+      onClosed?.("Failed to close position");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} role="presentation">
+      {confirming ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255, 160, 60, 0.35)",
+            fontSize: "0.78rem",
+            color: ZB_VISTA_TEXT_SEC,
+            lineHeight: 1.5,
+          }}
+        >
+          <p style={{ margin: "0 0 8px", color: "#fff" }}>
+            Close {Math.round(partialPct * 100)}% ({closeStake.toFixed(2)} SUI stake) · receive ~
+            {closeReturnEstimate.toFixed(2)} SUI (95% of stake)
+          </p>
+          <p style={{ margin: "0 0 10px", color: ZB_VISTA_TEXT_SEC, fontSize: "0.72rem" }}>
+            Bought at {avgCents}¢ · now {currentCents}¢
+          </p>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.7rem", color: ZB_VISTA_LABEL, width: "100%" }}>Close amount</span>
+            {ZION_CLOSE_PCT_OPTIONS.map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                disabled={busy}
+                onClick={() => setPartialPct(pct)}
+                style={{
+                  flex: 1,
+                  minWidth: 52,
+                  padding: "6px 4px",
+                  borderRadius: 6,
+                  border:
+                    partialPct === pct
+                      ? "1px solid rgba(255, 160, 60, 0.8)"
+                      : "1px solid rgba(100,180,255,0.2)",
+                  background: partialPct === pct ? "rgba(255,120,40,0.25)" : "rgba(0,0,0,0.2)",
+                  color: partialPct === pct ? "#ffc896" : ZB_VISTA_TEXT_SEC,
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {Math.round(pct * 100)}%
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" disabled={busy} onClick={() => void runClose()} style={{ ...closeBtnStyle, marginTop: 0, flex: 1 }}>
+              {busy ? "Closing…" : "Confirm close"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+              style={{
+                ...closeBtnStyle,
+                marginTop: 0,
+                flex: 1,
+                border: "1px solid rgba(100,180,255,0.25)",
+                background: "rgba(10,30,60,0.5)",
+                color: ZB_VISTA_TEXT_SEC,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" style={closeBtnStyle} onClick={() => setConfirming(true)}>
+          📤 Close Position · receive ~{zionbetEarlyCloseReturnSui(bet.amount_sui).toFixed(2)} SUI (95% of stake)
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ZionBetMyBetCard({
+  bet,
+  mode,
+  walletAddress,
+  signAndExecute,
+  polyByTab,
+  zionbetMarkets,
+  onOpen,
+  onOpenMarketId,
+  onPositionClosed,
+}: {
+  bet: ZionBetMyBetRow;
+  mode: "active" | "history";
+  walletAddress?: string;
+  signAndExecute?: SignAndExecuteFn;
+  polyByTab: Record<string, ZionbetApiMarket[]>;
+  zionbetMarkets: ZionbetMarketsBundle;
+  onOpen: () => void;
+  onOpenMarketId?: (marketId: string) => void;
+  onPositionClosed?: (payload: ZionBetToastPayload) => void;
+}) {
+  const { text: displayQuestion, isFallbackId } = useZionbetBetDisplayQuestion(
+    bet,
+    polyByTab,
+    zionbetMarkets
+  );
+  const isYes = bet.direction === "YES";
+  const yesCents = Math.round(bet.current_yes_price ?? bet.odds ?? 50);
+  const noCents = Math.round(bet.current_no_price ?? 100 - yesCents);
+  const avgCents = zionbetBetAvgCents(bet, yesCents, noCents);
+  const currentCents = isYes ? yesCents : noCents;
+  const pnl = zionbetBetPnl(bet, yesCents, noCents);
+  const status = (bet.status || "active").toUpperCase();
+  const isActive = status === "ACTIVE" || status === "PENDING";
+  const potentialWin = zionbetBetPotentialWin(bet, yesCents, noCents);
+  const payoutReceived = bet.payout ?? bet.potential_payout ?? 0;
+
+  const handleCardClick = () => {
+    if (bet.market_id && onOpenMarketId) {
+      onOpenMarketId(bet.market_id);
+      return;
+    }
+    onOpen();
+  };
+
+  return (
+    <div
+      style={{ ...ZB_BET_CARD_GLASS, width: "100%", cursor: "pointer" }}
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div style={{ width: "100%", textAlign: "left", color: "inherit" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              margin: 0,
+              color: "#ffffff",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              lineHeight: 1.45,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              ...(isFallbackId
+                ? {
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    color: "rgba(180, 220, 255, 0.88)",
+                    letterSpacing: "0.02em",
+                  }
+                : {}),
+            }}
+          >
+            {displayQuestion}
+          </div>
+          <div style={{ marginTop: 8, fontSize: "0.75rem", color: "rgba(150, 200, 255, 0.7)" }}>
+            {zionbetFormatEndsDate(bet)}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+          <span
+            style={{
+              fontSize: "0.8rem",
+              fontWeight: 800,
+              padding: "6px 14px",
+              borderRadius: 999,
+              color: isYes ? "#042a1f" : "#2a0a0a",
+              background: isYes ? ZB_VISTA_YES : ZB_VISTA_NO,
+              letterSpacing: "0.04em",
+            }}
+          >
+            {bet.direction}
+          </span>
+          <div style={{ fontSize: "0.78rem", color: ZB_VISTA_TEXT_SEC, textAlign: "right" }}>
+            {bet.amount_sui.toFixed(2)} SUI staked
+          </div>
+          <div
+            style={{
+              fontSize: "1.05rem",
+              fontWeight: 800,
+              color: pnl >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO,
+            }}
+          >
+            {pnl >= 0 ? "+" : ""}
+            {pnl.toFixed(2)} SUI
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "rgba(180, 220, 255, 0.85)" }}>
+            {currentCents}¢ now vs {avgCents}¢ avg
+          </div>
+        </div>
+      </div>
+      {mode === "active" && isActive ? (
+        <div
+          style={{
+            fontSize: "0.78rem",
+            color: ZB_VISTA_YES,
+            marginBottom: 10,
+            fontWeight: 600,
+          }}
+        >
+          If wins → +{potentialWin.toFixed(2)} SUI
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingTop: 10,
+          borderTop: "1px solid rgba(100, 180, 255, 0.1)",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: "0.68rem",
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            padding: "4px 10px",
+            borderRadius: 6,
+            color:
+              status === "WON" || status === "CLOSED_EARLY"
+                ? ZB_VISTA_YES
+                : status === "LOST"
+                  ? ZB_VISTA_NO
+                  : "#facc15",
+            background:
+              status === "WON" || status === "CLOSED_EARLY"
+                ? "rgba(0, 212, 170, 0.15)"
+                : status === "LOST"
+                  ? "rgba(255, 107, 107, 0.15)"
+                  : "rgba(250, 204, 21, 0.12)",
+            border: `1px solid ${
+              status === "WON" || status === "CLOSED_EARLY"
+                ? "rgba(0,212,170,0.35)"
+                : status === "LOST"
+                  ? "rgba(255,107,107,0.35)"
+                  : "rgba(250,204,21,0.3)"
+            }`,
+          }}
+        >
+          {status}
+        </span>
+        {status === "CLOSED_EARLY" ? (
+          <span style={{ fontSize: "0.78rem", color: ZB_VISTA_YES, fontWeight: 600 }}>
+            Closed early · {payoutReceived.toFixed(2)} SUI received
+          </span>
+        ) : status === "WON" ? (
+          <span style={{ fontSize: "0.78rem", color: ZB_VISTA_YES, fontWeight: 600 }}>
+            Payout received: {payoutReceived.toFixed(2)} SUI
+          </span>
+        ) : null}
+      </div>
+      </div>
+      {mode === "active" && isActive && walletAddress && signAndExecute ? (
+        <ZionBetClosePositionButton
+          bet={bet}
+          walletAddress={walletAddress}
+          signAndExecute={signAndExecute}
+          onClosed={onPositionClosed}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function zionbetMarketFromBet(
+  bet: ZionBetMyBetRow,
+  polyByTab: Record<string, ZionbetApiMarket[]>,
+  zionbetMarkets: ZionbetMarketsBundle
+): ZionbetApiMarket {
+  const id = bet.market_id?.trim();
+  if (id) {
+    for (const tab of POLY_TABS) {
+      const found = polyByTab[tab]?.find((m) => m.id === id);
+      if (found) return found;
+    }
+    const native = [
+      ...zionbetMarkets.crypto,
+      ...zionbetMarkets.sports,
+      ...zionbetMarkets.civilization,
+    ].find((m) => m.id === id);
+    if (native) return native;
+  }
+  if (id?.startsWith("poly-")) {
+    const yes = bet.current_yes_price ?? bet.odds ?? 50;
+    const no = bet.current_no_price ?? 100 - yes;
+    const cachedQ = zionbetMarketQuestionCache[id];
+    const listedQ = zionbetFindMarketQuestionInLists(id, polyByTab, zionbetMarkets);
+    const question =
+      listedQ ||
+      cachedQ ||
+      (!zionbetQuestionLooksLikeMarketId(bet.question, id) ? bet.question : id);
+    return zionbetPolyRowToApiMarket({
+      market_id: id,
+      question,
+      category: "culture",
+      yes_price: yes,
+      no_price: no,
+      end_date: bet.end_date ?? null,
+    });
+  }
+  const yes = bet.odds ?? 50;
+  return {
+    id: id || `bet-${bet.id}`,
+    question: bet.question,
+    event_type: "zion_bet",
+    yes_pct: yes,
+    no_pct: 100 - yes,
+    seed_yes_cents: yes,
+    end_date: bet.end_date ?? null,
+  };
+}
+
+function ZionBetProfileDropdown({
+  walletAddress,
+  profile,
+  stats,
+  onProfileChange,
+  onRefreshAchievements,
+  onOpenPortfolio,
+  onOpenMyBets,
+  onLeaderboard,
+  onDisconnect,
+  onClose,
+}: {
+  walletAddress: string;
+  profile: ZionProfile;
+  stats: ZionBetWalletStats | null;
+  onProfileChange: (p: ZionProfile) => void;
+  onRefreshAchievements: () => void;
+  onOpenPortfolio: () => void;
+  onOpenMyBets: () => void;
+  onLeaderboard: () => void;
+  onDisconnect: () => void;
+  onClose: () => void;
+}) {
+  const [editingNick, setEditingNick] = useState(false);
+  const [nickDraft, setNickDraft] = useState(profile.nickname || "");
+
+  useEffect(() => {
+    onRefreshAchievements();
+  }, [onRefreshAchievements]);
+
+  useEffect(() => {
+    setNickDraft(profile.nickname || "");
+  }, [profile.nickname]);
+
+  const displayName = profile.nickname?.trim() || "ZION Trader";
+  const avatarId = zionNormalizeAvatarId(profile.avatar);
+  const totalBets = stats?.total_bets ?? 0;
+  const winRate = stats?.win_rate ?? 0;
+  const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
+
+  const menuBtn: CSSProperties = {
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    color: "#c8e6ff",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontSize: "0.82rem",
+    textAlign: "left",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 0,
+        top: "40px",
+        width: "min(320px, 92vw)",
+        background: "linear-gradient(165deg, rgba(12, 35, 70, 0.98) 0%, rgba(8, 18, 40, 0.99) 100%)",
+        border: "1px solid rgba(100, 180, 255, 0.35)",
+        borderRadius: "12px",
+        zIndex: 210,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+        overflow: "hidden",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(100, 180, 255, 0.12)" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <ZionBetAvatarImg avatarId={avatarId} size={48} selected />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {editingNick ? (
+                <input
+                  value={nickDraft}
+                  onChange={(e) => setNickDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const next = { ...profile, nickname: nickDraft.trim() };
+                      onProfileChange(next);
+                      saveZionProfile(walletAddress, next);
+                      setEditingNick(false);
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "rgba(0,0,0,0.35)",
+                    border: "1px solid rgba(100,180,255,0.35)",
+                    borderRadius: 6,
+                    color: "#fff",
+                    padding: "4px 8px",
+                    fontSize: "0.85rem",
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.95rem" }}>{displayName}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingNick) {
+                    const next = { ...profile, nickname: nickDraft.trim() };
+                    onProfileChange(next);
+                    saveZionProfile(walletAddress, next);
+                  }
+                  setEditingNick(!editingNick);
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  opacity: 0.7,
+                }}
+                title="Edit nickname"
+              >
+                ✏️
+              </button>
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "rgba(150,200,255,0.65)", marginTop: 4, fontFamily: "monospace" }}>
+              {zionbetWalletTruncated(walletAddress)}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          {ZION_AVATARS.map((av) => (
+            <button
+              key={av.id}
+              type="button"
+              onClick={() => {
+                const next = { ...profile, avatar: av.id };
+                onProfileChange(next);
+                saveZionProfile(walletAddress, next);
+              }}
+              style={{
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                borderRadius: 8,
+              }}
+              title={av.id}
+            >
+              <ZionBetAvatarImg avatarId={av.id} size={40} selected={avatarId === av.id} />
+            </button>
+          ))}
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 8,
+            marginTop: 12,
+            fontSize: "0.72rem",
+          }}
+        >
+          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div style={{ color: "rgba(150,200,255,0.7)" }}>Total bets</div>
+            <div style={{ color: "#fff", fontWeight: 700, marginTop: 2 }}>{totalBets}</div>
+          </div>
+          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div style={{ color: "rgba(150,200,255,0.7)" }}>Win rate</div>
+            <div style={{ color: "#fff", fontWeight: 700, marginTop: 2 }}>{winRate}%</div>
+          </div>
+          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div style={{ color: "rgba(150,200,255,0.7)" }}>Profit</div>
+            <div
+              style={{
+                color: profit >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO,
+                fontWeight: 700,
+                marginTop: 2,
+              }}
+            >
+              {profit >= 0 ? "+" : ""}
+              {profit.toFixed(2)}
+            </div>
+          </div>
+        </div>
+        {(profile.achievements?.length ?? 0) > 0 ? (
+          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {ZION_ACHIEVEMENT_DEFS.filter((a) => profile.achievements?.includes(a.id)).map((a) => (
+              <span
+                key={a.id}
+                title={a.label}
+                style={{
+                  fontSize: "0.7rem",
+                  padding: "3px 8px",
+                  borderRadius: 999,
+                  background: "rgba(0, 212, 170, 0.12)",
+                  border: "1px solid rgba(0, 212, 170, 0.25)",
+                  color: "#a8ffe8",
+                }}
+              >
+                {a.emoji} {a.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div style={{ padding: "4px 0" }}>
+        <button type="button" style={menuBtn} onClick={() => { onOpenPortfolio(); onClose(); }}>
+          📊 My Portfolio
+        </button>
+        <button type="button" style={menuBtn} onClick={() => { onOpenMyBets(); onClose(); }}>
+          🎯 My Bets
+        </button>
+        <button type="button" style={menuBtn} onClick={() => { onLeaderboard(); onClose(); }}>
+          🏆 Leaderboard
+        </button>
+        <button
+          type="button"
+          style={{ ...menuBtn, color: "#ff6b6b", borderTop: "1px solid rgba(100,180,255,0.1)" }}
+          onClick={() => {
+            onDisconnect();
+            onClose();
+          }}
+        >
+          🔌 Disconnect Wallet
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type ZionBetMyBetsTab = "positions" | "history";
+
+function ZionBetMyBetsOverlay({
+  walletAddress,
+  profile,
+  stats,
+  myBets,
+  polyByTab,
+  zionbetMarkets,
+  signAndExecute,
+  onClose,
+  onOpenMarket,
+  onOpenMarketId,
+  onPositionClosed,
+}: {
+  walletAddress: string;
+  profile: ZionProfile;
+  stats: ZionBetWalletStats | null;
+  myBets: ZionBetMyBetRow[];
+  polyByTab: Record<string, ZionbetApiMarket[]>;
+  zionbetMarkets: ZionbetMarketsBundle;
+  signAndExecute: SignAndExecuteFn;
+  onClose: () => void;
+  onOpenMarket: (m: ZionbetApiMarket) => void;
+  onOpenMarketId?: (marketId: string) => void;
+  onPositionClosed?: (payload: ZionBetToastPayload) => void;
+}) {
+  const now = new Date();
+  const [tab, setTab] = useState<ZionBetMyBetsTab>("positions");
+  const [histMonth, setHistMonth] = useState(now.getMonth());
+  const [histYear, setHistYear] = useState(now.getFullYear());
+  const displayName = profile.nickname?.trim() || "ZION Trader";
+  const avatarId = zionNormalizeAvatarId(profile.avatar);
+  const netPnl = stats?.net_pnl ?? 0;
+
+  const activeBets = useMemo(
+    () =>
+      [...myBets]
+        .filter((b) => {
+          const s = (b.status || "active").toLowerCase();
+          return s === "active" || s === "pending";
+        })
+        .sort((a, b) => b.id - a.id),
+    [myBets]
+  );
+
+  const historyYears = useMemo(() => {
+    const years = new Set<number>([now.getFullYear()]);
+    myBets.forEach((b) => {
+      const t = zionbetBetTimestamp(b);
+      if (t > 0) years.add(new Date(t).getFullYear());
+    });
+    return [...years].sort((a, b) => b - a);
+  }, [myBets, now]);
+
+  const historyBets = useMemo(() => {
+    return [...myBets]
+      .filter((b) => {
+        const s = (b.status || "").toLowerCase();
+        return s === "won" || s === "lost" || s === "closed_early";
+      })
+      .filter((b) => {
+        const t = zionbetBetTimestamp(b);
+        if (!t) return false;
+        const d = new Date(t);
+        return d.getMonth() === histMonth && d.getFullYear() === histYear;
+      })
+      .sort((a, b) => b.id - a.id);
+  }, [myBets, histMonth, histYear]);
+
+  const periodSummary = useMemo(() => {
+    let won = 0;
+    let lost = 0;
+    let realized = 0;
+    for (const bet of historyBets) {
+      const s = (bet.status || "").toLowerCase();
+      if (s === "won") won += 1;
+      if (s === "lost") lost += 1;
+      const yesCents = Math.round(bet.current_yes_price ?? bet.odds ?? 50);
+      const noCents = Math.round(bet.current_no_price ?? 100 - yesCents);
+      realized += zionbetBetPnl(bet, yesCents, noCents);
+    }
+    return { won, lost, total: historyBets.length, realized };
+  }, [historyBets]);
+
+  const tabBtn = (id: ZionBetMyBetsTab, label: string): CSSProperties => ({
+    flex: 1,
+    padding: "10px 8px",
+    borderRadius: 8,
+    border: tab === id ? "1px solid rgba(0, 212, 170, 0.5)" : "1px solid rgba(100, 180, 255, 0.15)",
+    background: tab === id ? "rgba(0, 100, 80, 0.35)" : "rgba(10, 30, 60, 0.5)",
+    color: tab === id ? "#fff" : "rgba(180, 220, 255, 0.7)",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    cursor: "pointer",
+  });
+
+  const listBets = tab === "positions" ? activeBets : historyBets;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 12000,
+        background: "rgba(0, 8, 20, 0.88)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "24px 12px",
+        overflowY: "auto",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "min(720px, 100%)",
+          ...zionbetAeroPanel(),
+          padding: "20px",
+          marginTop: 48,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <ZionBetAvatarImg avatarId={avatarId} size={52} selected />
+            <div>
+              <h2 style={{ margin: 0, color: "#fff", fontSize: "1.25rem" }}>{displayName}</h2>
+              <p style={{ margin: "4px 0 0", fontSize: "0.75rem", color: ZB_VISTA_TEXT_SEC, fontFamily: "monospace" }}>
+                {zionbetWalletTruncated(walletAddress)}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: "#8ab", fontSize: "1.5rem", cursor: "pointer" }}>
+            ×
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10, marginBottom: 16 }}>
+          <ZionBetPremiumStatCard
+            label="Total Staked"
+            value={`${(stats?.total_staked ?? 0).toFixed(2)} SUI`}
+            variant="staked"
+          />
+          <ZionBetPremiumStatCard
+            label="Total Won"
+            value={`${(stats?.total_won ?? 0).toFixed(2)} SUI`}
+            variant="won"
+          />
+          <ZionBetPremiumStatCard label="Win Rate" value={`${stats?.win_rate ?? 0}%`} variant="winrate" />
+          <ZionBetPremiumStatCard
+            label="Net P&L"
+            value={`${netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)} SUI`}
+            variant="pnl"
+            valueColor={netPnl >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button type="button" style={tabBtn("positions", "Active Positions")} onClick={() => setTab("positions")}>
+            Active Positions
+          </button>
+          <button type="button" style={tabBtn("history", "Bet History")} onClick={() => setTab("history")}>
+            Bet History
+          </button>
+        </div>
+
+        {tab === "history" ? (
+          <>
+            <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+              <label style={{ flex: 1, minWidth: 120, fontSize: "0.72rem", color: ZB_VISTA_LABEL }}>
+                Month
+                <select
+                  value={histMonth}
+                  onChange={(e) => setHistMonth(Number(e.target.value))}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: 4,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(100,180,255,0.25)",
+                    background: "rgba(10,30,60,0.7)",
+                    color: "#fff",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {ZION_MONTH_NAMES.map((name, i) => (
+                    <option key={name} value={i}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ flex: 1, minWidth: 100, fontSize: "0.72rem", color: ZB_VISTA_LABEL }}>
+                Year
+                <select
+                  value={histYear}
+                  onChange={(e) => setHistYear(Number(e.target.value))}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: 4,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(100,180,255,0.25)",
+                    background: "rgba(10,30,60,0.7)",
+                    color: "#fff",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {historyYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div
+              style={{
+                ...ZB_BET_CARD_GLASS,
+                marginBottom: 14,
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: 10,
+                fontSize: "0.8rem",
+              }}
+            >
+              <div>
+                <span style={{ color: ZB_VISTA_LABEL }}>Won / Lost / Total</span>
+                <div style={{ color: "#fff", fontWeight: 700, marginTop: 4 }}>
+                  {periodSummary.won} / {periodSummary.lost} / {periodSummary.total}
+                </div>
+              </div>
+              <div>
+                <span style={{ color: ZB_VISTA_LABEL }}>Realized P&L</span>
+                <div
+                  style={{
+                    color: periodSummary.realized >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO,
+                    fontWeight: 800,
+                    marginTop: 4,
+                    fontSize: "1rem",
+                  }}
+                >
+                  {periodSummary.realized >= 0 ? "+" : ""}
+                  {periodSummary.realized.toFixed(2)} SUI
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        {listBets.length === 0 ? (
+          <p style={{ textAlign: "center", color: ZB_VISTA_TEXT_SEC, padding: "24px 0" }}>
+            {tab === "positions" ? "No active positions." : "No settled bets for this period."}
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {listBets.map((bet) => (
+              <ZionBetMyBetCard
+                key={bet.id}
+                bet={bet}
+                mode={tab === "positions" ? "active" : "history"}
+                walletAddress={walletAddress}
+                signAndExecute={signAndExecute}
+                polyByTab={polyByTab}
+                zionbetMarkets={zionbetMarkets}
+                onOpen={() => onOpenMarket(zionbetMarketFromBet(bet, polyByTab, zionbetMarkets))}
+                onOpenMarketId={
+                  onOpenMarketId
+                    ? (marketId) => onOpenMarketId(marketId)
+                    : undefined
+                }
+                onPositionClosed={onPositionClosed}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ZionBetPortfolioPositionRow({
+  bet,
+  polyByTab,
+  zionbetMarkets,
+}: {
+  bet: ZionBetMyBetRow;
+  polyByTab: Record<string, ZionbetApiMarket[]>;
+  zionbetMarkets: ZionbetMarketsBundle;
+}) {
+  const { text: displayQuestion, isFallbackId } = useZionbetBetDisplayQuestion(
+    bet,
+    polyByTab,
+    zionbetMarkets
+  );
+  const isYes = bet.direction === "YES";
+  const yesCents = Math.round(bet.current_yes_price ?? bet.odds ?? 50);
+  const noCents = Math.round(bet.current_no_price ?? 100 - yesCents);
+  const pnl = zionbetBetPnl(bet, yesCents, noCents);
+  return (
+    <div
+      style={{
+        padding: 12,
+        marginBottom: 8,
+        borderRadius: 10,
+        border: `1px solid ${pnl >= 0 ? "rgba(0,212,170,0.35)" : "rgba(255,107,107,0.35)"}`,
+        background: "rgba(0,0,0,0.2)",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: 600,
+          color: isFallbackId ? "rgba(180, 220, 255, 0.88)" : "#fff",
+          fontSize: "0.85rem",
+          fontFamily: isFallbackId ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined,
+        }}
+      >
+        {zionbetTruncateQuestion(displayQuestion, 42)}
+      </div>
+      <div style={{ marginTop: 6, fontSize: "0.78rem", color: ZB_VISTA_TEXT_SEC }}>
+        {bet.direction} · {bet.amount_sui.toFixed(2)} SUI ·{" "}
+        <span style={{ color: pnl >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
+          {pnl >= 0 ? "+" : ""}
+          {pnl.toFixed(2)} unrealized
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ZionBetPortfolioOverlay({
+  walletAddress,
+  profile,
+  stats,
+  myBets,
+  polyByTab,
+  zionbetMarkets,
+  onClose,
+}: {
+  walletAddress: string;
+  profile: ZionProfile;
+  stats: ZionBetWalletStats | null;
+  myBets: ZionBetMyBetRow[];
+  polyByTab: Record<string, ZionbetApiMarket[]>;
+  zionbetMarkets: ZionbetMarketsBundle;
+  onClose: () => void;
+}) {
+  const displayName = profile.nickname?.trim() || "ZION Trader";
+  const avatarId = zionNormalizeAvatarId(profile.avatar);
+  const active = myBets.filter((b) => {
+    const s = (b.status || "active").toLowerCase();
+    return s === "active" || s === "pending";
+  });
+  const netPnl = stats?.net_pnl ?? 0;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 12000,
+        background: "rgba(0, 8, 20, 0.88)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "24px 12px",
+        overflowY: "auto",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{ width: "min(560px, 100%)", ...zionbetAeroPanel(), padding: "20px", marginTop: 48 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <ZionBetAvatarImg avatarId={avatarId} size={52} selected />
+            <div>
+              <h2 style={{ margin: 0, color: "#fff" }}>My Portfolio</h2>
+              <p style={{ margin: 4, fontSize: "0.75rem", color: ZB_VISTA_TEXT_SEC }}>{displayName} · {zionbetWalletTruncated(walletAddress)}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: "#8ab", fontSize: "1.5rem", cursor: "pointer" }}>
+            ×
+          </button>
+        </div>
+        <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+          <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(100,180,255,0.15)" }}>
+            <div style={{ fontSize: "0.72rem", color: ZB_VISTA_LABEL }}>Net P&L</div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 700, color: netPnl >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
+              {netPnl >= 0 ? "+" : ""}
+              {netPnl.toFixed(2)} SUI
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: "0.8rem" }}>
+            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div style={{ color: ZB_VISTA_LABEL }}>Staked</div>
+              <div style={{ color: "#fff", fontWeight: 700 }}>{(stats?.total_staked ?? 0).toFixed(2)}</div>
+            </div>
+            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div style={{ color: ZB_VISTA_LABEL }}>Won</div>
+              <div style={{ color: ZB_VISTA_YES, fontWeight: 700 }}>{(stats?.total_won ?? 0).toFixed(2)}</div>
+            </div>
+            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div style={{ color: ZB_VISTA_LABEL }}>Win %</div>
+              <div style={{ color: "#fff", fontWeight: 700 }}>{stats?.win_rate ?? 0}%</div>
+            </div>
+          </div>
+        </div>
+        <h3 style={{ margin: "0 0 10px", fontSize: "0.85rem", color: ZB_VISTA_LABEL, letterSpacing: "0.1em" }}>
+          ACTIVE POSITIONS ({active.length})
+        </h3>
+        {active.length === 0 ? (
+          <p style={{ color: ZB_VISTA_TEXT_SEC, fontSize: "0.85rem" }}>No open positions.</p>
+        ) : (
+          active.map((bet) => (
+            <ZionBetPortfolioPositionRow
+              key={bet.id}
+              bet={bet}
+              polyByTab={polyByTab}
+              zionbetMarkets={zionbetMarkets}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function shortWallet(w: string) {
   if (!w?.trim()) return "—";
@@ -3809,7 +5342,7 @@ type ZionBetActivityRow = {
 };
 type ZionBetHolderRow = { wallet: string; total_vol: number; yes_vol: number; no_vol: number };
 
-const ZIONBET_PACKAGE = "0x5fe02e40df89feb516bf14ba8adf53375accf8365816b903c0fefd5a56a320f7";
+const ZIONBET_PACKAGE = "0x5e683b01117378f595beb4e100cf8cbf901ce970dc3e3380ef73db52e47c4ed4";
 const BET_HOUSE = "0xe0791c693aa4727da9aa5450e4b3015e10e0488feefbde1619677717ba2aa43f";
 const BET_ADMIN_CAP = "0xb2b5883d02933b0fdea6b1ef4096267b515cd240f9ba2773754f487d5ce15922";
 const SUI_CLOCK = "0x6";
@@ -3917,6 +5450,68 @@ async function submitOnChainBet(
     );
   } catch (err) {
     console.error("[ZionBet] submitOnChainBet threw", err);
+    callbacks.onError(err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function confirmZionBetOnChain(
+  dbBetId: number,
+  txDigest: string,
+  walletAddress: string
+): Promise<{ ok?: boolean; on_chain_bet_id?: number; error?: string }> {
+  if (!dbBetId || !txDigest?.trim()) {
+    return { ok: false, error: "missing_confirm_fields" };
+  }
+  try {
+    const res = await fetch("/api/zionbet/confirm_bet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        db_bet_id: dbBetId,
+        tx_digest: txDigest,
+        wallet: walletAddress.trim(),
+      }),
+    });
+    return (await res.json()) as { ok?: boolean; on_chain_bet_id?: number; error?: string };
+  } catch {
+    return { ok: false, error: "confirm_failed" };
+  }
+}
+
+async function submitOnChainCloseBet(
+  signAndExecute: SignAndExecuteFn,
+  params: {
+    marketId: string;
+    onChainBetId: number;
+    walletAddress: string;
+  },
+  callbacks: { onSuccess: (digest: string) => void; onError: (message: string) => void }
+) {
+  try {
+    const marketU64 = await resolveMarketIdU64(params.marketId);
+    if (marketU64 === null) {
+      callbacks.onError("Missing market id for close bet.");
+      return;
+    }
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${ZIONBET_PACKAGE}::zion_bet::close_bet`,
+      arguments: [
+        tx.object(BET_HOUSE),
+        tx.pure.u64(marketU64),
+        tx.pure.u64(params.onChainBetId),
+        tx.pure.u64(10000),
+        tx.object(SUI_CLOCK),
+      ],
+    });
+    signAndExecute(
+      { transaction: tx, chain: "sui:testnet" },
+      {
+        onSuccess: (result) => callbacks.onSuccess(suiTxDigest(result)),
+        onError: (error) => callbacks.onError(error.message),
+      }
+    );
+  } catch (err) {
     callbacks.onError(err instanceof Error ? err.message : String(err));
   }
 }
@@ -4103,6 +5698,7 @@ function ZionBetTradingControls({
         success?: boolean;
         error?: string;
         potential_payout?: number;
+        bet_id?: number;
       };
 
       if (!dbData.success) {
@@ -4110,6 +5706,7 @@ function ZionBetTradingControls({
         return;
       }
 
+      const dbBetId = dbData.bet_id ?? 0;
       setToast({ message: "Saved to DB. Approve wallet transaction…", type: "success" });
       await submitOnChainBet(
         signAndExecute as SignAndExecuteFn,
@@ -4120,7 +5717,10 @@ function ZionBetTradingControls({
           walletAddress: account.address,
         },
         {
-          onSuccess: (digest) => {
+          onSuccess: async (digest) => {
+            if (dbBetId && digest) {
+              await confirmZionBetOnChain(dbBetId, digest, account.address);
+            }
             setOnChainBet(true);
             setToast({
               message: `✅ On-chain! TX: ${digest.slice(0, 8)}... Win: ${dbData.potential_payout} SUI`,
@@ -6270,6 +7870,10 @@ export default function Home() {
   } | null>(null);
   const [detailMarket, setDetailMarket] = useState<ZionbetApiMarket | null>(null);
   const [detailOverlayMounted, setDetailOverlayMounted] = useState(false);
+  const [zionProfile, setZionProfile] = useState<ZionProfile>({});
+  const [zionBetStats, setZionBetStats] = useState<ZionBetWalletStats | null>(null);
+  const [showMyBetsOverlay, setShowMyBetsOverlay] = useState(false);
+  const [showPortfolioOverlay, setShowPortfolioOverlay] = useState(false);
 
   useEffect(() => {
     setDetailOverlayMounted(true);
@@ -6288,7 +7892,7 @@ export default function Home() {
   const [betCurrency, setBetCurrency] = useState<"SUI" | "USDC">("SUI");
   const [betLoading, setBetLoading] = useState(false);
   const [betResult, setBetResult] = useState<Record<string, unknown> | null>(null);
-  const [zionBetToast, setZionBetToast] = useState<string | null>(null);
+  const [zionBetToast, setZionBetToast] = useState<ZionBetToastPayload | null>(null);
   const [zionBetNotify, setZionBetNotify] = useState<{ message: string; type: "success" | "error" } | null>(
     null
   );
@@ -7482,6 +9086,33 @@ export default function Home() {
     console.log("filtered events:", filteredEvents.length, eventFilter);
   }, [filteredEvents, eventFilter]);
 
+  const loadZionBetStats = useCallback(async () => {
+    const w = account?.address?.trim();
+    if (!w) {
+      setZionBetStats(null);
+      return;
+    }
+    try {
+      const r = await fetch(`/api/zionbet/stats/${encodeURIComponent(w)}`, { cache: "no-store" });
+      const data = await r.json();
+      if (data && !data.error) setZionBetStats(data as ZionBetWalletStats);
+      else setZionBetStats(null);
+    } catch {
+      setZionBetStats(null);
+    }
+  }, [account?.address]);
+
+  const refreshZionAchievements = useCallback(() => {
+    const w = account?.address?.trim();
+    if (!w) return;
+    const earned = zionbetComputeAchievements(myBetsRef.current, zionBetStats);
+    setZionProfile((prev) => {
+      const merged = { ...prev, achievements: earned };
+      saveZionProfile(w, merged);
+      return merged;
+    });
+  }, [account?.address, zionBetStats]);
+
   const loadMyBets = useCallback(async () => {
     const w = account?.address?.trim();
     if (!w) {
@@ -7497,11 +9128,26 @@ export default function Home() {
       notifyMyBetsSettlements(prev, fetched, setZionBetNotify);
       myBetsRef.current = fetched;
       setMyBets(fetched);
+      const earned = zionbetComputeAchievements(fetched, zionBetStats);
+      setZionProfile((p) => {
+        const merged = { ...p, achievements: earned };
+        saveZionProfile(w, merged);
+        return merged;
+      });
     } catch {
       myBetsRef.current = [];
       setMyBets([]);
     }
-  }, [account?.address]);
+  }, [account?.address, zionBetStats]);
+
+  const handlePositionClosed = useCallback(
+    (payload: ZionBetToastPayload) => {
+      setZionBetToast(payload);
+      void loadMyBets();
+      void loadZionBetStats();
+    },
+    [loadMyBets, loadZionBetStats]
+  );
 
   const handlePlaceCardBet = useCallback(
     async (modalMarket: ZionBetMarket, modalDirection: boolean) => {
@@ -7537,6 +9183,7 @@ export default function Home() {
           error?: string;
           potential_payout?: number;
           points_earned?: number;
+          bet_id?: number;
         };
         if (!data.success) {
           setZionBetToast(
@@ -7549,9 +9196,11 @@ export default function Home() {
           return;
         }
 
+        const dbBetId = data.bet_id ?? 0;
         setBetResult(data);
         setBetModal(null);
         void loadMyBets();
+        void loadZionBetStats();
         void loadZionBetMarkets();
         fetch("/api/zionbet/markets")
           .then((r) => r.json())
@@ -7579,10 +9228,14 @@ export default function Home() {
             walletAddress: account.address,
           },
           {
-            onSuccess: (digest) => {
+            onSuccess: async (digest) => {
+              if (dbBetId && digest) {
+                await confirmZionBetOnChain(dbBetId, digest, account.address);
+              }
               const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
               setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
               void loadMyBets();
+              void loadZionBetStats();
             },
             onError: (message) => {
               setZionBetToast(`On-chain failed (DB bet saved): ${message}`);
@@ -8165,6 +9818,20 @@ export default function Home() {
   }, [account?.address]);
 
   useEffect(() => {
+    const w = walletAddress.trim();
+    if (!w) {
+      setZionProfile({});
+      setZionBetStats(null);
+      return;
+    }
+    const loaded = loadZionProfile(w);
+    const normalized = { ...loaded, avatar: zionNormalizeAvatarId(loaded.avatar) };
+    if (normalized.avatar !== loaded.avatar) saveZionProfile(w, normalized);
+    setZionProfile(normalized);
+    void loadZionBetStats();
+  }, [walletAddress, loadZionBetStats]);
+
+  useEffect(() => {
     if (!account?.address) {
       myBetsRef.current = [];
       setMyBets([]);
@@ -8180,6 +9847,12 @@ export default function Home() {
           notifyMyBetsSettlements(prev, bets, setZionBetNotify);
           myBetsRef.current = bets;
           setMyBets(bets);
+          const earned = zionbetComputeAchievements(bets, zionBetStats);
+          setZionProfile((p) => {
+            const merged = { ...p, achievements: earned };
+            saveZionProfile(account.address!, merged);
+            return merged;
+          });
         })
         .catch(() => {});
     };
@@ -8187,7 +9860,7 @@ export default function Home() {
     pollMyBets();
     const interval = window.setInterval(pollMyBets, 30000);
     return () => clearInterval(interval);
-  }, [account?.address]);
+  }, [account?.address, zionBetStats]);
 
   useEffect(() => {
     if (!faucetCooldownEndsAt || faucetCooldownEndsAt <= Date.now()) return;
@@ -8499,6 +10172,7 @@ export default function Home() {
         error?: string;
         potential_payout?: number;
         points_earned?: number;
+        bet_id?: number;
       };
       if (!d.success) {
         setZionBetToast(
@@ -8507,6 +10181,7 @@ export default function Home() {
         return;
       }
 
+      const dbBetId = d.bet_id ?? 0;
       const ur = await fetch(`/api/user/${encodeURIComponent(w)}`);
       const ud = await ur.json();
       const raw = ud.points ?? ud.total_points ?? 0;
@@ -8525,7 +10200,10 @@ export default function Home() {
           walletAddress: w,
         },
         {
-          onSuccess: (digest) => {
+          onSuccess: async (digest) => {
+            if (dbBetId && digest) {
+              await confirmZionBetOnChain(dbBetId, digest, w);
+            }
             const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
             setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
             void loadMyBets();
@@ -8687,6 +10365,74 @@ export default function Home() {
     agents.length,
   ]);
 
+  const openZionProfileMenu = () => {
+    const w = walletAddress.trim();
+    if (w) {
+      setZionProfile(loadZionProfile(w));
+      void loadZionBetStats();
+    }
+    setShowWalletMenu((v) => !v);
+    setShowUserMenu(false);
+  };
+
+  const renderZionWalletProfileMenu = () => {
+    const w = walletAddress.trim();
+    if (!w) return null;
+    const nick = zionProfile.nickname?.trim();
+    const avatarId = zionNormalizeAvatarId(zionProfile.avatar);
+    const btnLabel = nick
+      ? nick.length > 12
+        ? `${nick.slice(0, 10)}…`
+        : nick
+      : `${w.slice(0, 6)}...${w.slice(-4)}`;
+    return (
+      <div style={{ position: "relative" }}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openZionProfileMenu();
+          }}
+          style={{
+            background: "transparent",
+            border: "1px solid #00ff41",
+            color: "#00ff41",
+            padding: "6px 10px 6px 6px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontFamily: "monospace",
+            fontSize: "0.78rem",
+            letterSpacing: "0.5px",
+            height: "36px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <ZionBetAvatarImg avatarId={avatarId} size={26} />
+          <span>{`${btnLabel} ▾`}</span>
+        </button>
+        {showWalletMenu ? (
+          <ZionBetProfileDropdown
+            walletAddress={w}
+            profile={zionProfile}
+            stats={zionBetStats}
+            onProfileChange={(p) => {
+              setZionProfile(p);
+              saveZionProfile(w, p);
+            }}
+            onRefreshAchievements={refreshZionAchievements}
+            onOpenPortfolio={() => setShowPortfolioOverlay(true)}
+            onOpenMyBets={() => setShowMyBetsOverlay(true)}
+            onLeaderboard={() => setActiveTab("leaderboard")}
+            onDisconnect={() => disconnect()}
+            onClose={() => setShowWalletMenu(false)}
+          />
+        ) : null}
+      </div>
+    );
+  };
+
   const renderAuthToolbar = () => (
     <>
         {!isGoogleConnected && !isWalletConnected && (
@@ -8763,79 +10509,7 @@ export default function Home() {
             </button>
           </>
         )}
-        {!isGoogleConnected && isWalletConnected && account?.address ? (
-          <div style={{ position: "relative" }}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowWalletMenu(!showWalletMenu);
-                setShowUserMenu(false);
-              }}
-              style={{
-                background: "transparent",
-                border: "1px solid #00ff41",
-                color: "#00ff41",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontFamily: "monospace",
-                fontSize: "0.78rem",
-                letterSpacing: "0.5px",
-                height: "36px",
-              }}
-            >
-              {`⚡ ${walletAddress.trim().slice(0, 6)}...${walletAddress.trim().slice(-4)} ▾`}
-            </button>
-
-            {showWalletMenu ? (
-              <div
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "40px",
-                  background: "#0a0a0a",
-                  border: "1px solid #00ff41",
-                  borderRadius: "6px",
-                  minWidth: "200px",
-                  zIndex: 200,
-                }}
-              >
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    color: "#555",
-                    fontFamily: "monospace",
-                    fontSize: "0.7rem",
-                    borderBottom: "1px solid #111",
-                  }}
-                >
-                  {`${walletAddress.trim().slice(0, 16)}...`}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    disconnect();
-                    setShowWalletMenu(false);
-                  }}
-                  style={{
-                    width: "100%",
-                    background: "transparent",
-                    border: "none",
-                    color: "#ff4141",
-                    padding: "10px 14px",
-                    cursor: "pointer",
-                    fontFamily: "monospace",
-                    fontSize: "0.78rem",
-                    textAlign: "left",
-                  }}
-                >
-                  ⏻ Disconnect Wallet
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {!isGoogleConnected && isWalletConnected && account?.address ? renderZionWalletProfileMenu() : null}
         {isGoogleConnected && !isWalletConnected && zkLoginUser ? (
           <div style={{ position: "relative" }}>
             <button
@@ -9006,77 +10680,7 @@ export default function Home() {
                 </div>
               ) : null}
             </div>
-            <div style={{ position: "relative" }}>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowWalletMenu(!showWalletMenu);
-                  setShowUserMenu(false);
-                }}
-                style={{
-                  background: "transparent",
-                  border: "1px solid #00ff41",
-                  color: "#00ff41",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontFamily: "monospace",
-                  fontSize: "0.78rem",
-                  letterSpacing: "0.5px",
-                  height: "36px",
-                }}
-              >
-                {`⚡ ${walletAddress.trim().slice(0, 6)}...${walletAddress.trim().slice(-4)} ▾`}
-              </button>
-
-              {showWalletMenu ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "40px",
-                    background: "#0a0a0a",
-                    border: "1px solid #00ff41",
-                    borderRadius: "6px",
-                    minWidth: "200px",
-                    zIndex: 200,
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      color: "#555",
-                      fontFamily: "monospace",
-                      fontSize: "0.7rem",
-                      borderBottom: "1px solid #111",
-                    }}
-                  >
-                    {`${walletAddress.trim().slice(0, 16)}...`}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      disconnect();
-                      setShowWalletMenu(false);
-                    }}
-                    style={{
-                      width: "100%",
-                      background: "transparent",
-                      border: "none",
-                      color: "#ff4141",
-                      padding: "10px 14px",
-                      cursor: "pointer",
-                      fontFamily: "monospace",
-                      fontSize: "0.78rem",
-                      textAlign: "left",
-                    }}
-                  >
-                    ⏻ Disconnect Wallet
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            {renderZionWalletProfileMenu()}
           </>
         ) : null}
     </>
@@ -10435,7 +12039,16 @@ export default function Home() {
               </header>
               {zionBetToast ? (
                 <div className="zionBetToast" role="status">
-                  {zionBetToast}
+                  {typeof zionBetToast === "string" ? (
+                    zionBetToast
+                  ) : (
+                    <>
+                      <div>{zionBetToast.message}</div>
+                      {zionBetToast.disclaimer ? (
+                        <div className="zionBetToastDisclaimer">{zionBetToast.disclaimer}</div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
               {zionBetNotify ? (
@@ -11079,12 +12692,13 @@ export default function Home() {
                       <th>Points</th>
                       <th>Messages</th>
                       <th>ZION Spent</th>
+                      <th>ZionBet P&L</th>
                     </tr>
                   </thead>
                   <tbody>
                     {leaderboard.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="leaderboardEmpty">
+                        <td colSpan={6} className="leaderboardEmpty">
                           No leaderboard data yet.
                         </td>
                       </tr>
@@ -11101,6 +12715,21 @@ export default function Home() {
                               "—"}
                           </td>
                           <td>{row.zion_spent ?? (row as { zionSpent?: number }).zionSpent ?? "—"}</td>
+                          <td
+                            style={{
+                              color:
+                                (row.zionbet_pnl ?? 0) > 0
+                                  ? "#00ff41"
+                                  : (row.zionbet_pnl ?? 0) < 0
+                                    ? "#ff3232"
+                                    : undefined,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {row.zionbet_pnl != null
+                              ? `${row.zionbet_pnl >= 0 ? "+" : ""}${row.zionbet_pnl} SUI`
+                              : "—"}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -13571,6 +15200,12 @@ export default function Home() {
           letter-spacing: 0;
           box-shadow: none;
         }
+        .zionBetToastDisclaimer {
+          margin-top: 6px;
+          font-size: 11px;
+          color: #6b7280;
+          font-style: italic;
+        }
         .zionBetToast--success {
           border-color: #bbf7d0;
           background: #f0fdf4;
@@ -15566,6 +17201,57 @@ export default function Home() {
           }
       `}</style>
 
+      {showMyBetsOverlay && walletAddress.trim()
+        ? createPortal(
+            <ZionBetMyBetsOverlay
+              walletAddress={walletAddress.trim()}
+              profile={zionProfile}
+              stats={zionBetStats}
+              myBets={myBets}
+              polyByTab={polyByTab}
+              zionbetMarkets={zionbetMarkets}
+              signAndExecute={signAndExecute as SignAndExecuteFn}
+              onClose={() => setShowMyBetsOverlay(false)}
+              onOpenMarket={(m) => {
+                setShowMyBetsOverlay(false);
+                setDetailMarket(m);
+              }}
+              onOpenMarketId={(marketId) => {
+                setShowMyBetsOverlay(false);
+                const fromLists = [
+                  ...Object.values(polyByTab).flat(),
+                  ...zionbetMarkets.crypto,
+                  ...zionbetMarkets.sports,
+                  ...zionbetMarkets.civilization,
+                ].find((m) => m.id === marketId);
+                const fromBet = myBets.find((b) => b.market_id === marketId);
+                if (fromLists) {
+                  setDetailMarket(fromLists);
+                } else if (fromBet) {
+                  setDetailMarket(zionbetMarketFromBet(fromBet, polyByTab, zionbetMarkets));
+                }
+              }}
+              onPositionClosed={handlePositionClosed}
+            />,
+            document.body
+          )
+        : null}
+
+      {showPortfolioOverlay && walletAddress.trim()
+        ? createPortal(
+            <ZionBetPortfolioOverlay
+              walletAddress={walletAddress.trim()}
+              profile={zionProfile}
+              stats={zionBetStats}
+              myBets={myBets}
+              polyByTab={polyByTab}
+              zionbetMarkets={zionbetMarkets}
+              onClose={() => setShowPortfolioOverlay(false)}
+            />,
+            document.body
+          )
+        : null}
+
       {detailMarket && detailOverlayMounted
         ? createPortal(
             <ZionBetMarketDetailOverlay
@@ -15581,6 +17267,8 @@ export default function Home() {
               betLoading={betLoading}
               onPlaceBet={(market, direction) => void handlePlaceCardBet(market, direction)}
               onClose={() => setDetailMarket(null)}
+              signAndExecute={signAndExecute as SignAndExecuteFn}
+              onPositionClosed={handlePositionClosed}
             />,
             document.body
           )
