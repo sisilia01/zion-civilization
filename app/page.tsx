@@ -161,87 +161,176 @@ function presidentPartyDisplay(partyId: string | undefined) {
   );
 }
 
-const ECO_CARD_BG = "#1a1a2e";
-const ECO_CARD_BORDER = "#2a2a4e";
+const ECO_GREEN = "#00ff88";
 const ECO_GOLD = "#ffd700";
+const ECO_WARN = "#ffd700";
+const ECO_DANGER = "#ff4444";
+const ECO_PURPLE = "#a78bfa";
+const ECO_BLUE = "#4DA2FF";
+const ECO_ORANGE = "#ff8800";
+const ECO_SENATE_SEATS = 9;
 
-function EcoDashCard({
-  title,
-  children,
-  maxHeight = 300,
-}: {
-  title: string;
-  children: ReactNode;
-  maxHeight?: number;
-}) {
-  return (
-    <div
-      style={{
-        background: ECO_CARD_BG,
-        border: `1px solid ${ECO_CARD_BORDER}`,
-        borderRadius: "8px",
-        padding: "12px 14px",
-        maxHeight,
-        overflowY: "auto",
-      }}
-    >
-      <div
-        style={{
-          color: ECO_GOLD,
-          fontFamily: "monospace",
-          fontSize: "0.7rem",
-          fontWeight: "bold",
-          letterSpacing: "1px",
-          marginBottom: "10px",
-        }}
-      >
-        {title}
-      </div>
-      {children}
-    </div>
-  );
+const ECO_BG_GOLD = "#0a0800";
+const ECO_BG_GREEN = "#000a05";
+const ECO_BG_ORANGE = "#0a0500";
+const ECO_BG_PURPLE = "#05000a";
+const ECO_BG_BLUE = "#000508";
+
+const ECO_CARD_BASE: CSSProperties = {
+  borderRadius: 6,
+  padding: 14,
+  overflow: "hidden",
+  minWidth: 0,
+  boxSizing: "border-box",
+};
+
+const ECO_LABEL: CSSProperties = {
+  color: "#666666",
+  fontSize: 11,
+  letterSpacing: 3,
+  textTransform: "uppercase",
+  marginBottom: 12,
+};
+
+function ecoZrsStateColor(state: string) {
+  const s = String(state).toUpperCase();
+  if (s === "HYPERINFLATION" || s === "CRISIS" || s === "DEPRESSION") return "#ff4444";
+  if (s === "RECESSION") return "#ff8800";
+  if (s === "BOOM") return "#00ff88";
+  if (s === "STABLE") return "#ffd700";
+  if (s === "VOLATILE" || s === "INFLATION") return "#ff8800";
+  return "#ffd700";
 }
 
-function EcoTopStatCard({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        background: ECO_CARD_BG,
-        border: `1px solid ${ECO_CARD_BORDER}`,
-        borderRadius: "8px",
-        padding: "12px 14px",
-        minHeight: "88px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-      }}
-    >
-      {children}
-    </div>
-  );
+function ecoZrsBorderColor(state: string) {
+  const s = String(state).toUpperCase();
+  if (s === "HYPERINFLATION" || s === "CRISIS") return "#ff4444";
+  if (s === "RECESSION") return "#ff8800";
+  if (s === "BOOM") return "#00ff88";
+  return "#ffd700";
 }
 
-function EcoIndexBadge({ label, value, color }: { label: string; value: string; color: string }) {
+function ecoRevMeterColor(meter: number) {
+  if (meter < 30) return ECO_GREEN;
+  if (meter < 60) return ECO_WARN;
+  return ECO_DANGER;
+}
+
+function ecoPollBar(pct: number, blocks = 10) {
+  const filled = Math.round(Math.min(100, Math.max(0, pct)) / (100 / blocks));
+  return `${"█".repeat(filled)}${"░".repeat(blocks - filled)}`;
+}
+
+function ecoPresidentMessageColor(description: string) {
+  const u = description.toUpperCase();
+  if (u.includes("BREAKING")) return "#ff4444";
+  if (description.trim().startsWith("AI:") || /\bAI:/i.test(description)) return "#aaaaff";
+  return "#ffffff";
+}
+
+function ecoSheriffMessageColor(description: string) {
+  const u = description.toUpperCase();
+  if (u.includes("ELECT") || u.includes("VOTE") || u.includes("CANDIDATE")) return "#4488ff";
+  if (u.includes("CORRUPT") || u.includes("BRIBE") || u.includes("SCANDAL")) return "#ff4444";
+  if (u.includes("CRIME") || u.includes("ARREST") || u.includes("RAID") || u.includes("POLICE")) return "#ff8800";
+  return "#ffffff";
+}
+
+function ecoPollPartyColor(partyId: string) {
+  if (partyId === "conservatives") return "#ffd700";
+  if (partyId === "populists") return "#ff4444";
+  return "#4488ff";
+}
+
+function ecoVipRoleIcon(vipType: string) {
+  if (vipType === "president") return "🏛️";
+  if (vipType === "party_leader") return "🎩";
+  if (vipType === "clan_leader") return "⚔️";
+  return "👤";
+}
+
+function EcoTermDivider() {
+  return <div style={{ height: 1, background: "#111111", margin: "8px 0" }} />;
+}
+
+function EcoTermBadge({ text, color }: { text: string; color: string }) {
   return (
     <span
       style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "4px",
-        padding: "2px 8px",
-        borderRadius: "4px",
-        background: `${color}18`,
-        border: `1px solid ${color}44`,
+        border: `1px solid ${color}`,
         color,
-        fontFamily: "monospace",
-        fontSize: "0.58rem",
-        fontWeight: "bold",
+        fontSize: 10,
+        padding: "2px 6px",
+        letterSpacing: 0.5,
         whiteSpace: "nowrap",
       }}
     >
-      {label} {value}
+      {text}
     </span>
   );
+}
+
+function EcoApprovalBar({ pct, color = "#ffd700" }: { pct: number; color?: string }) {
+  const width = `${Math.min(100, Math.max(0, pct))}%`;
+  return (
+    <div style={{ width: "100%", height: 2, background: "#111111", borderRadius: 1 }}>
+      <div
+        className="ecoBarFillAnim"
+        style={{ ["--bar-width" as string]: width, height: 2, background: color, borderRadius: 1 } as CSSProperties}
+      />
+    </div>
+  );
+}
+
+function EcoPollBar({ pct, color }: { pct: number; color: string }) {
+  const width = `${Math.min(100, Math.max(0, pct))}%`;
+  return (
+    <div style={{ flex: 1, height: 4, background: "#111111", borderRadius: 2, minWidth: 0 }}>
+      <div
+        className="ecoBarFillAnim"
+        style={{ ["--bar-width" as string]: width, height: 4, background: color, borderRadius: 2 } as CSSProperties}
+      />
+    </div>
+  );
+}
+
+function EcoRect({
+  label,
+  borderColor,
+  background = "#050505",
+  children,
+  style,
+  bodyStyle,
+}: {
+  label: string;
+  borderColor: string;
+  background?: string;
+  children: ReactNode;
+  style?: CSSProperties;
+  bodyStyle?: CSSProperties;
+}) {
+  return (
+    <div
+      className="ecoRect"
+      style={{
+        ...ECO_CARD_BASE,
+        border: `1px solid ${borderColor}`,
+        background,
+        ...style,
+      }}
+    >
+      <div style={ECO_LABEL}>{label}</div>
+      <div style={{ overflow: "hidden", minHeight: 0, ...bodyStyle }}>{children}</div>
+    </div>
+  );
+}
+
+function ecoFormatZionShort(n: number) {
+  const v = Math.abs(n);
+  if (v >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `${(n / 1e6).toFixed(0)}M`;
+  if (v >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return Math.round(n).toLocaleString("en-US");
 }
 
 const WALRUS_TICKER_TYPE_ICONS: Record<string, string> = {
@@ -5675,6 +5764,13 @@ export default function Home() {
       market_share: number;
     }>
   >([]);
+  const uniqueCorporations = useMemo(
+    () =>
+      corporations.filter(
+        (corp, index, self) => index === self.findIndex((c) => c.id === corp.id)
+      ),
+    [corporations]
+  );
   const [policeDivisions, setPoliceDivisions] = useState<{
     uprising_active?: boolean;
     divisions: PoliceDivisionCard[];
@@ -5972,7 +6068,6 @@ export default function Home() {
   } | null>(null);
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
-  const [treasuryNews, setTreasuryNews] = useState<string[]>([]);
   const [policeNews, setPoliceNews] = useState<WireNewsItem[]>([]);
   const [corporateNews, setCorporateNews] = useState<WireNewsItem[]>([]);
   const [clanNews, setClanNews] = useState<WireNewsItem[]>([]);
@@ -6161,66 +6256,6 @@ export default function Home() {
     newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
     localStorage.removeItem('conv_cache');
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "treasury") {
-      fetchEcoPol();
-      fetchGovernmentData();
-      const ecoInterval = setInterval(() => {
-        fetchEcoPol();
-        fetchGovernmentData();
-      }, 60_000);
-      fetch("/api/president/actions")
-        .then((r) => r.json())
-        .then((d) => {
-          if (Array.isArray(d)) setPresidentActions(d);
-        })
-        .catch(() => {});
-      fetch("/api/sheriff-log")
-        .then((r) => r.json())
-        .then((d) => {
-          if (Array.isArray(d)) setSheriffActions(d);
-        })
-        .catch(() => {});
-      fetch("/api/state/treasury").then(r => r.json()).then(d => setStateTreasury(d)).catch(() => {});
-      fetch("/api/frs/stats")
-        .then((r) => r.json())
-        .then((d) => {
-          setFrsStats(d);
-          const news: string[] = [];
-          if (d.status === "CRISIS") news.push("🚨 ZRS ALERT: Economy in CRISIS — QE stimulus activated");
-          if (d.status === "INFLATION") news.push("⚠️ ZRS WARNING: Inflation detected — tightening policy");
-          if (d.status === "STABLE") news.push("✅ ZRS REPORT: Economy stable — holding rates");
-          if (d.president)
-            news.push(
-              `🏛️ PRESIDENT: ${d.president.agent_name} (${presidentPartyDisplay(d.president.party).label}) in office`
-            );
-          if (d.active_law) news.push(`📜 NEW LAW: ${d.active_law.law_text}`);
-          if (d.corporations)
-            news.push(
-              `🏢 MARKET: ${d.corporations.count} active corporations — treasury ${d.corporations.total_treasury.toFixed(0)} ZION`
-            );
-          news.push(`📊 RATE: ZRS interest rate at ${d.interest_rate}%`);
-          news.push(
-            `💰 ECONOMY: Avg balance ${d.economy?.avg_balance?.toFixed(1)} ZION — ${d.economy?.poor_pct}% population in poverty`
-          );
-          news.push(
-            `👥 POPULATION: ${d.economy?.total_agents} alive agents — Elite ${d.economy?.elite_count} / Middle ${d.economy?.middle_count} / Poor ${d.economy?.poor_count}`
-          );
-          news.push(`⚡ ZIONBET: Prediction markets live on DeepBook Predict — BTC/USD oracles active`);
-          news.push(`🔮 ZCO: Consensus Oracle validating ${d.economy?.total_agents || 0} agent decisions on-chain`);
-          news.push(`🌐 SUI TESTNET: ZION civilization running ${d.economy?.total_agents || 0} AI agents 24/7`);
-          news.push(`🏦 TREASURY: Total wealth in circulation ${(d.economy?.total_money || 0).toFixed(0)} ZION`);
-          news.push(`⚔️ CLANS: 7 active clans competing for power and resources`);
-          news.push(`🕵️ ESPIONAGE: Shadow agents infiltrating rival clan treasuries`);
-          news.push(`🎰 CASINO: Underground gambling operations running despite police crackdowns`);
-          news.push(`💍 SOCIETY: Marriage and divorce rates reflect economic conditions`);
-          setTreasuryNews(news);
-        })
-        .catch(() => {});
-      return () => clearInterval(ecoInterval);
-    }
-  }, [activeTab, fetchEcoPol, fetchGovernmentData]);
 
   useEffect(() => {
     if (activeTab !== "civilization") return;
@@ -8099,8 +8134,136 @@ export default function Home() {
   const isWalletConnected = !!account?.address;
 
   const sheriffActionsDisplay = sheriffActions.slice(0, 5);
-  const presidentActionsDisplay = presidentActions.slice(0, 5);
+  const presidentActionsDisplay = useMemo(() => {
+    type DecreeEntry = { description: string; created_at: string; count: number };
+    const deduped = presidentActions.reduce<DecreeEntry[]>((acc, entry) => {
+      const last = acc[acc.length - 1];
+      if (last && last.description === entry.description) {
+        last.count = (last.count || 1) + 1;
+      } else {
+        acc.push({ ...entry, count: 1 });
+      }
+      return acc;
+    }, []);
+    return deduped.slice(0, 5);
+  }, [presidentActions]);
   const vipFeedDisplay = vipMemoryFeed.slice(0, 8);
+
+  useEffect(() => {
+    if (activeTab !== "treasury") return;
+
+    const loadEcoHud = async () => {
+      await Promise.all([fetchEcoPol(), fetchGovernmentData()]);
+    };
+    void loadEcoHud();
+    const ecoInterval = setInterval(() => {
+      void loadEcoHud();
+    }, 60_000);
+
+    fetch("/api/president/actions")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setPresidentActions(d);
+      })
+      .catch(() => {});
+    fetch("/api/sheriff-log")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d)) setSheriffActions(d);
+      })
+      .catch(() => {});
+    fetch("/api/state/treasury").then((r) => r.json()).then((d) => setStateTreasury(d)).catch(() => {});
+    fetch("/api/frs/stats")
+      .then((r) => r.json())
+      .then((d) => setFrsStats(d))
+      .catch(() => {});
+
+    return () => clearInterval(ecoInterval);
+  }, [activeTab, fetchEcoPol, fetchGovernmentData]);
+
+  const ecoPolTickerMessages = useMemo(() => {
+    const items: { text: string; breaking?: boolean }[] = [];
+
+    if (ecoPolData?.uprising?.active) {
+      items.push({
+        text: `UPRISING ACTIVE — Revolution meter ${ecoPolData.uprising.meter ?? 0}%`,
+        breaking: true,
+      });
+    }
+    const hasMartialLaw = ecoPolData?.active_effects?.some((ef) => {
+      const et = (ef as { type?: string }).type ?? ef.effect_type;
+      return et === "martial_law";
+    });
+    if (hasMartialLaw) {
+      items.push({ text: "MARTIAL LAW — State of emergency in effect", breaking: true });
+    }
+    if (ecoPolData?.epidemic?.active) {
+      items.push({
+        text: `EPIDEMIC — ${ecoPolData.epidemic.infected_count} agents infected`,
+        breaking: true,
+      });
+    }
+
+    if (presidentState) {
+      const partyUi = presidentPartyDisplay(presidentState.party);
+      items.push({
+        text: `🏛️ President ${presidentState.agent_name} · ${partyUi.label} · ${presidentState.approval_rating}% approval · Corruption ${Math.round(presidentState.corruption_index ?? 0)}%`,
+      });
+    }
+
+    if (sheriffState) {
+      items.push({
+        text: `⚖️ Sheriff ${sheriffState.agent_name} · ${sheriffState.sheriff_type.toUpperCase()} · ${sheriffState.approval_rating}% approval · ${sheriffState.police_count} officers`,
+      });
+    }
+
+    const topParty =
+      partiesData && partiesData.length > 0
+        ? [...partiesData].sort((a, b) => (b.approval_rating ?? 0) - (a.approval_rating ?? 0))[0]
+        : null;
+    if (topParty) {
+      items.push({
+        text: `🗳️ ${topParty.name} leads with ${topParty.approval_rating ?? 0}% · ${(topParty.members_count ?? 0).toLocaleString("en-US")} members`,
+      });
+    }
+
+    const zrsStateMsg = ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—";
+    const zrsRateMsg = frsStats?.interest_rate ?? 0;
+    const zrsReserveMsg =
+      frsStats?.government?.zrs?.reserve ?? stateTreasury?.zrs_fund ?? 0;
+    items.push({
+      text: `🏦 ZRS ${zrsStateMsg} · Reserve ${Math.round(zrsReserveMsg).toLocaleString("en-US")} ZION · Rate ${zrsRateMsg}%`,
+    });
+
+    const meterMsg = ecoPolData?.uprising?.meter ?? 0;
+    const povertyMsg = ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0;
+    const aliveMsg = stats?.alive ?? agents.length;
+    items.push({
+      text: `🌡️ Revolution meter ${meterMsg}% · Poverty ${Number(povertyMsg).toFixed(1)}% · ${aliveMsg.toLocaleString("en-US")} agents alive`,
+    });
+
+    if (senateData) {
+      items.push({
+        text: `🏛️ Senate: ${senateData.senator_count} senators · Speaker: ${senateData.speaker || "—"}`,
+      });
+    }
+
+    if (items.length === 0) {
+      items.push({ text: "Scanning political situation…" });
+    }
+
+    return items;
+  }, [
+    ecoPolData,
+    frsStats,
+    presidentState,
+    sheriffState,
+    partiesData,
+    senateData,
+    stateTreasury,
+    stats?.alive,
+    agents.length,
+  ]);
 
   const renderAuthToolbar = () => (
     <>
@@ -9011,7 +9174,7 @@ export default function Home() {
               </section>
 
 
-              {corporations.length > 0 && (
+              {uniqueCorporations.length > 0 && (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
                     <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #4DA2FF)" }} />
@@ -9021,7 +9184,7 @@ export default function Home() {
                     <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #4DA2FF)" }} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-                    {corporations.map((corp) => (
+                    {uniqueCorporations.map((corp) => (
                       <div
                         key={corp.id}
                         style={{
@@ -12082,38 +12245,47 @@ export default function Home() {
           })()}
 
           {activeTab === "treasury" && (
-            <div style={{ padding: "24px" }}>
-              {/* Header */}
-              <div style={{ marginBottom: "24px" }}>
-                <h2 style={{ color: "#ffd700", fontSize: "1.4rem", fontWeight: "bold", margin: "0 0 4px 0" }}>
-                  💹 ZION ECO-POL
-                </h2>
-                <p style={{ color: "#888", fontSize: "0.8rem", margin: 0 }}>
-                  Economics · Politics · Central Bank · Powered by Sui & Walrus
-                </p>
+            <div className="ecoTermRoot">
+            <div className="ecoHudWrap">
+              <div className="ecoHudHeader">
+                <h2>ZION ECO-POL — GOV MONITOR</h2>
+                <p>Economics · Politics · Central Bank</p>
+
+                <div className="ecoNewsTicker" aria-live="polite">
+                  <div className="ecoNewsTickerBadge">LIVE WIRE</div>
+                  <div className="ecoNewsTickerViewport">
+                    {ecoPolTickerMessages.length > 0 ? (
+                      <div className="ecoNewsTickerTrack">
+                        {[...ecoPolTickerMessages, ...ecoPolTickerMessages].map((msg, i) => (
+                          <span
+                            key={`eco-news-${i}`}
+                            className={`ecoNewsItem ${msg.breaking ? "breaking" : "normal"}`}
+                          >
+                            {msg.breaking ? `BREAKING: ${msg.text}` : msg.text}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="ecoNewsItem normal" style={{ padding: "0 12px" }}>
+                        Scanning political situation…
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {(ecoPolData || frsStats) && (() => {
                 const meter = ecoPolData?.uprising?.meter ?? 0;
                 const revLabel =
-                  meter >= 100 ? "REVOLUTION!" :
-                  meter >= 80 ? "CRITICAL" :
-                  meter >= 60 ? "VOLATILE" :
-                  meter >= 30 ? "TENSE" : "STABLE";
-                const revColor =
-                  meter >= 100 ? "#ff0000" :
-                  meter >= 80 ? "#ff3232" :
-                  meter >= 60 ? "#ff8800" :
-                  meter >= 30 ? "#ffaa00" : "#00ff41";
+                  meter >= 80 ? "CRITICAL" : meter >= 30 ? "TENSE" : "STABLE";
+                const revMeterColor = ecoRevMeterColor(meter);
                 const corruptionIdx = presidentState?.corruption_index ?? 30;
-                const corruptColor =
-                  corruptionIdx < 30 ? "#00ff41" : corruptionIdx <= 60 ? "#ffaa00" : "#ff3232";
                 const povertyPct = ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0;
                 const povertyColor =
-                  povertyPct < 20 ? "#00ff41" :
-                  povertyPct < 40 ? "#ffaa00" :
-                  povertyPct < 60 ? "#ff8800" : "#ff3232";
+                  povertyPct < 20 ? "#00ff88" : povertyPct < 40 ? "#ffd700" : povertyPct < 60 ? "#ff8800" : "#ff4444";
                 const zrsState = ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—";
+                const zrsStateColor = ecoZrsStateColor(zrsState);
+                const zrsBorderColor = ecoZrsBorderColor(zrsState);
                 const zrsRate = frsStats?.interest_rate ?? 0;
                 const zrsReserve =
                   frsStats?.government?.zrs?.reserve ??
@@ -12123,453 +12295,281 @@ export default function Home() {
                 const totalZion = ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0;
                 const corpActive = ecoPolData?.corporations.active ?? frsStats?.corporations.count ?? 0;
                 const corpTreasury = ecoPolData?.corporations.total_treasury ?? frsStats?.corporations.total_treasury ?? 0;
-                const gridCols4 = isMobile ? "1fr" : "repeat(4, 1fr)";
-                const gridCols2 = isMobile ? "1fr" : "1fr 1fr";
+                const ecoRow2 = isMobile ? "1fr" : "1fr 1fr";
+                const ecoRow3 = isMobile ? "1fr" : "repeat(3, 1fr)";
+                const ecoRow4 = isMobile ? "1fr" : "repeat(4, 1fr)";
 
                 return (
-                <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div className="ecoDashLayout">
                   {ecoPolData?.uprising?.active && (
-                    <div style={{
-                      padding: "10px 14px",
-                      background: "rgba(255,100,0,0.12)", border: "1px solid rgba(255,150,0,0.5)",
-                      borderRadius: "8px", animation: "pulse 1.5s infinite",
-                    }}>
-                      <div style={{ color: "#ff8800", fontFamily: "monospace", fontSize: "0.75rem", fontWeight: "bold" }}>
-                        ⚡ UPRISING ACTIVE — Meter {ecoPolData.uprising.meter}% ({ecoPolData.uprising.meter_change})
-                      </div>
+                    <div className="ecoAlertStrip ecoAlertStripDanger">
+                      UPRISING ACTIVE — Meter {ecoPolData.uprising.meter}% ({ecoPolData.uprising.meter_change})
                     </div>
                   )}
 
                   {ecoPolData?.active_effects && ecoPolData.active_effects.length > 0 && (
-                    <div style={{
-                      padding: "8px 12px",
-                      background: "rgba(255,50,50,0.08)", border: `1px solid ${ECO_CARD_BORDER}`,
-                      borderRadius: "8px",
-                    }}>
+                    <div className="ecoAlertStrip" style={{ marginTop: ecoPolData?.uprising?.active ? 6 : 0 }}>
                       {ecoPolData.epidemic?.active && (
-                        <div style={{ color: "#ff66aa", fontFamily: "monospace", fontSize: "0.68rem", marginBottom: "4px" }}>
-                          💉 EPIDEMIC — {ecoPolData.epidemic.infected_count} infected
-                        </div>
+                        <div style={{ color: "#ffffff" }}>EPIDEMIC — {ecoPolData.epidemic.infected_count} infected</div>
                       )}
                       {ecoPolData.active_effects.map((ef, i) => {
                         const hrs = (ef as { expires_in?: string }).expires_in
                           ?? `${Math.round(Math.max(0, (new Date(ef.expires_at).getTime() - Date.now()) / 3600000))}h`;
                         const et = (ef as { type?: string }).type ?? ef.effect_type;
+                        const isMartial = et === "martial_law";
                         return (
-                          <div key={i} style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.68rem" }}>
-                            📜 {String(et).toUpperCase()} — {hrs} remaining
+                          <div
+                            key={i}
+                            className={isMartial ? "ecoMartialBanner" : undefined}
+                            style={{ color: "#ffffff", marginTop: i > 0 || ecoPolData.epidemic?.active ? 4 : 0 }}
+                          >
+                            {isMartial ? `MARTIAL LAW — ${hrs} remaining` : `${String(et).toUpperCase()} — ${hrs} remaining`}
                           </div>
                         );
                       })}
                     </div>
                   )}
 
-                  {/* ROW 1 — Top stats bar */}
-                  <div style={{ display: "grid", gridTemplateColumns: gridCols4, gap: "10px" }}>
+                  <div className="ecoRow4" style={{ gridTemplateColumns: ecoRow4 }}>
                     {presidentState && (() => {
                       const partyUi = presidentPartyDisplay(presidentState.party);
                       return (
-                        <EcoTopStatCard>
-                          <div style={{ color: ECO_GOLD, fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "6px" }}>
-                            🏛️ PRESIDENT
-                          </div>
-                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.78rem", fontWeight: "bold", lineHeight: 1.3, marginBottom: "6px" }}>
+                        <EcoRect label="PRESIDENT" borderColor="#ffd700" background={ECO_BG_GOLD} style={{ height: 130 }}>
+                          <div style={{ color: "#ffd700", fontSize: 15, fontWeight: "bold", wordBreak: "break-word" }}>
                             {presidentState.agent_name}
-                            {!presidentState.is_dictator && (
-                              <span style={{ color: partyUi.color, fontWeight: "normal" }}> · {partyUi.label}</span>
-                            )}
                           </div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
-                            <EcoIndexBadge label="CORRUPT" value={`${corruptionIdx.toFixed(0)}%`} color={corruptColor} />
-                            <EcoIndexBadge label="POVERTY" value={`${povertyPct.toFixed(0)}%`} color={povertyColor} />
+                          {!presidentState.is_dictator && (
+                            <div style={{ color: "#ffffff", fontSize: 12, marginTop: 4 }}>{partyUi.label}</div>
+                          )}
+                          <EcoTermDivider />
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <EcoTermBadge text={`CORRUPT ${corruptionIdx.toFixed(0)}%`} color="#ff4444" />
+                            <EcoTermBadge text={`POVERTY ${povertyPct.toFixed(1)}%`} color="#ff8800" />
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <div style={{ flex: 1, height: "5px", background: "#111", borderRadius: "3px", overflow: "hidden" }}>
-                              <div style={{
-                                width: `${presidentState.approval_rating}%`, height: "100%",
-                                background: presidentState.approval_rating > 50 ? "#00ff41" : presidentState.approval_rating > 25 ? "#ffaa00" : "#ff3232",
-                              }} />
-                            </div>
-                            <span style={{ color: "#ccc", fontFamily: "monospace", fontSize: "0.72rem" }}>
-                              {presidentState.approval_rating}% approval
-                            </span>
+                          <div style={{ width: "100%", background: "rgba(255,255,255,0.08)", height: "3px", borderRadius: "2px", marginTop: "10px" }}>
+                            <div
+                              style={{
+                                width: `${presidentState.approval_rating ?? 0}%`,
+                                height: "3px",
+                                borderRadius: "2px",
+                                background:
+                                  (presidentState.approval_rating ?? 0) > 60
+                                    ? "#00ff88"
+                                    : (presidentState.approval_rating ?? 0) > 30
+                                      ? "#ffd700"
+                                      : "#ff4444",
+                              }}
+                            />
                           </div>
-                        </EcoTopStatCard>
+                        </EcoRect>
                       );
                     })()}
 
-                    {sheriffState && (
-                      <EcoTopStatCard>
-                        <div style={{ color: ECO_GOLD, fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "6px" }}>
-                          ⚖️ SHERIFF
-                        </div>
-                        <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.78rem", fontWeight: "bold", marginBottom: "4px" }}>
-                          {sheriffState.agent_name}
-                        </div>
-                        <div style={{
-                          display: "inline-block", marginBottom: "8px",
-                          padding: "2px 8px", borderRadius: "4px",
-                          background: sheriffState.sheriff_type === "honest" ? "rgba(77,162,255,0.15)" : "rgba(255,136,0,0.15)",
-                          color: sheriffState.sheriff_type === "honest" ? "#4DA2FF" : "#ff8800",
-                          fontFamily: "monospace", fontSize: "0.62rem", fontWeight: "bold",
-                        }}>
-                          {sheriffState.sheriff_type.toUpperCase()}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ flex: 1, height: "5px", background: "#111", borderRadius: "3px", overflow: "hidden" }}>
-                            <div style={{
-                              width: `${sheriffState.approval_rating}%`, height: "100%",
-                              background: sheriffState.approval_rating > 60 ? "#4DA2FF" : "#ffaa00",
-                            }} />
+                    {sheriffState && (() => {
+                      const isHonest = sheriffState.sheriff_type === "honest";
+                      const badgeColor = isHonest ? "#00ff88" : "#ff4444";
+                      return (
+                        <EcoRect label="SHERIFF" borderColor="#00ff88" background={ECO_BG_GREEN} style={{ height: 130 }}>
+                          <div style={{ color: "#00ff88", fontSize: 15, fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {sheriffState.agent_name}
                           </div>
-                          <span style={{ color: "#ccc", fontFamily: "monospace", fontSize: "0.72rem" }}>
-                            {sheriffState.approval_rating}% approval
-                          </span>
-                        </div>
-                      </EcoTopStatCard>
-                    )}
+                          <div style={{ marginTop: 8 }}>
+                            <EcoTermBadge text={sheriffState.sheriff_type.toUpperCase()} color={badgeColor} />
+                          </div>
+                          <div style={{ fontSize: 12, color: "#ffffff", marginTop: "auto", paddingTop: 8 }}>
+                            {sheriffState.approval_rating}% approval · {sheriffState.police_count} officers
+                          </div>
+                        </EcoRect>
+                      );
+                    })()}
 
-                    <EcoTopStatCard>
-                      <div style={{ color: ECO_GOLD, fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "6px" }}>
-                        🏦 ZRS
+                    <EcoRect label="ZRS CENTRAL BANK" borderColor={zrsBorderColor} background={ECO_BG_ORANGE} style={{ height: 130 }}>
+                      <div style={{ color: zrsStateColor, fontSize: 15, fontWeight: "bold", wordBreak: "break-word" }}>{zrsState}</div>
+                      <div style={{ fontSize: 12, color: "#ffffff", marginTop: 8 }}>
+                        Rate {zrsRate}% · Reserve {ecoFormatZionShort(zrsReserve)} ZION
                       </div>
-                      <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.82rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {zrsState}
-                      </div>
-                      <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.68rem", lineHeight: 1.5 }}>
-                        Rate {zrsRate}%<br />
-                        Reserve {Math.round(zrsReserve).toLocaleString("en-US")} ZION
-                      </div>
-                    </EcoTopStatCard>
+                    </EcoRect>
 
-                    <EcoTopStatCard>
-                      <div style={{ color: ECO_GOLD, fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "6px" }}>
-                        🌡️ REVOLUTION
-                      </div>
-                      <div style={{ color: revColor, fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold", marginBottom: "8px" }}>
-                        {meter}% {revLabel}
-                      </div>
-                      <div style={{ width: "100%", height: "8px", background: "#111", borderRadius: "4px", overflow: "hidden" }}>
-                        <div style={{ width: `${Math.min(meter, 100)}%`, height: "100%", background: revColor, transition: "width 0.5s" }} />
-                      </div>
-                    </EcoTopStatCard>
+                    <EcoRect label="REVOLUTION METER" borderColor={revMeterColor} background="#050505" style={{ height: 130 }}>
+                      <div style={{ fontSize: 28, fontWeight: "bold", color: revMeterColor, lineHeight: 1 }}>{Math.round(meter)}%</div>
+                      <div style={{ fontSize: 12, color: revMeterColor, marginTop: 6, letterSpacing: 2 }}>{revLabel}</div>
+                    </EcoRect>
                   </div>
 
-                  {/* ROW 2 — Two columns */}
-                  <div style={{ display: "grid", gridTemplateColumns: gridCols2, gap: "12px", alignItems: "start" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {partiesData && partiesData.length > 0 && (
-                        <EcoDashCard title="🗳️ POLITICAL PARTIES">
-                          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                            {partiesData.slice(0, 3).map((party) => {
-                              const partyUi = presidentPartyDisplay(party.party_id);
-                              const approval = party.approval_rating ?? 0;
+                  <div className="ecoRow2" style={{ gridTemplateColumns: ecoRow2 }}>
+                    {partiesData && partiesData.length > 0 && (
+                      <EcoRect label="ELECTION POLL" borderColor="#ffd700" background={ECO_BG_GOLD}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {partiesData.slice(0, 3).map((party) => {
+                            const partyUi = presidentPartyDisplay(party.party_id);
+                            const rating = party.approval_rating ?? 0;
+                            const barColor = ecoPollPartyColor(party.party_id);
+                            return (
+                              <div key={party.party_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ flex: "0 0 auto", maxWidth: "40%", color: "#ffffff", fontSize: 12, wordBreak: "break-word" }}>
+                                  {party.emoji || partyUi.emoji} {party.name}
+                                </span>
+                                <EcoPollBar pct={rating} color={barColor} />
+                                <span style={{ width: 35, textAlign: "right", fontSize: 12, color: barColor }}>{rating}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </EcoRect>
+                    )}
+
+                    {senateData && (
+                      <EcoRect label="SENATE" borderColor="#00ff88" background={ECO_BG_GREEN}>
+                        <div style={{ fontSize: 15, color: "#00ff88", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          SPEAKER: {senateData.speaker || "—"}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#ffffff", marginTop: 4 }}>
+                          {senateData.senator_count}/{ECO_SENATE_SEATS} SEATS FILLED
+                        </div>
+                        <EcoTermDivider />
+                        <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 6 }}>RECENT LAWS</div>
+                        {senateData.recent_laws.length === 0 ? (
+                          <div style={{ color: "#666666", fontSize: 12 }}>No recent votes</div>
+                        ) : (
+                          <>
+                            <div className="ecoLawTableHead">
+                              <span>Law</span>
+                              <span>Votes</span>
+                              <span>Status</span>
+                            </div>
+                            {senateData.recent_laws.slice(0, 5).map((law) => {
+                              const passed = law.status === "passed";
                               return (
-                                <div key={party.party_id}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                                    <span style={{ color: partyUi.color, fontFamily: "monospace", fontSize: "0.72rem", fontWeight: "bold" }}>
-                                      {party.emoji || partyUi.emoji} {party.name}
-                                    </span>
-                                    <span style={{ color: partyUi.color, fontFamily: "monospace", fontSize: "0.7rem" }}>{approval}%</span>
-                                  </div>
-                                  <div style={{ width: "100%", height: "5px", background: "#111", borderRadius: "3px", overflow: "hidden" }}>
-                                    <div style={{ width: `${Math.min(100, approval)}%`, height: "100%", background: partyUi.color }} />
-                                  </div>
-                                  <div style={{ color: "#777", fontFamily: "monospace", fontSize: "0.6rem", marginTop: "4px" }}>
-                                    {party.leader_name || "—"} · {party.members_count?.toLocaleString("en-US") ?? 0} members
-                                  </div>
+                                <div key={`recent-${law.id}`} className="ecoLawRow">
+                                  <span style={{ color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{law.title}</span>
+                                  <span style={{ color: "#ffffff" }}>{law.votes_for}-{law.votes_against}</span>
+                                  <span style={{ color: passed ? "#00ff88" : "#ff4444", flexShrink: 0 }}>{passed ? "PASS" : "FAIL"}</span>
                                 </div>
                               );
                             })}
-                          </div>
-                        </EcoDashCard>
-                      )}
-
-                      {senateData && (
-                        <EcoDashCard title="🏛️ SENATE">
-                          <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.68rem", marginBottom: "10px" }}>
-                            Speaker: <span style={{ color: "#fff" }}>{senateData.speaker || "—"}</span>
-                            {" · "}
-                            Senators: <span style={{ color: "#00ff41" }}>{senateData.senator_count}</span>
-                          </div>
-                          <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "6px" }}>RECENT LAWS</div>
-                          {senateData.recent_laws.length === 0 ? (
-                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.65rem" }}>No recent votes</div>
-                          ) : (
-                            senateData.recent_laws.slice(0, 5).map((law) => {
-                              const passed = law.status === "passed";
-                              const statusColor = passed ? "#00ff41" : "#ff3232";
-                              return (
-                                <div
-                                  key={`recent-${law.id}`}
-                                  style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr auto auto",
-                                    gap: "6px",
-                                    padding: "5px 0",
-                                    borderBottom: "1px solid #2a2a4e",
-                                    fontFamily: "monospace",
-                                    fontSize: "0.62rem",
-                                  }}
-                                >
-                                  <span style={{ color: "#ccc" }}>{law.title}</span>
-                                  <span style={{ color: "#888" }}>{law.votes_for}-{law.votes_against}</span>
-                                  <span style={{ color: statusColor, fontWeight: "bold" }}>{passed ? "PASS" : "FAIL"}</span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </EcoDashCard>
-                      )}
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <EcoDashCard title="🏛️ PRESIDENTIAL DECREE LOG">
-                        {presidentActionsDisplay.length === 0 ? (
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.68rem" }}>No decrees yet</div>
-                        ) : (
-                          presidentActionsDisplay.map((action, i) => (
-                            <div
-                              key={i}
-                              style={{
-                                display: "flex",
-                                gap: "8px",
-                                padding: "5px 0",
-                                borderBottom: i < presidentActionsDisplay.length - 1 ? "1px solid #2a2a4e" : "none",
-                              }}
-                            >
-                              <span style={{ color: "#666", fontFamily: "monospace", fontSize: "0.58rem", whiteSpace: "nowrap" }}>
-                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                              <span style={{ color: "#ddd", fontFamily: "monospace", fontSize: "0.68rem", lineHeight: 1.35 }}>{action.description}</span>
-                            </div>
-                          ))
+                          </>
                         )}
-                      </EcoDashCard>
-
-                      <EcoDashCard title="🚔 SHERIFF ACTIVITY LOG">
-                        {sheriffActionsDisplay.length === 0 ? (
-                          <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.68rem" }}>No activity yet</div>
-                        ) : (
-                          sheriffActionsDisplay.map((action, i) => (
-                            <div
-                              key={i}
-                              style={{
-                                display: "flex",
-                                gap: "8px",
-                                padding: "5px 0",
-                                borderBottom: i < sheriffActionsDisplay.length - 1 ? "1px solid #2a2a4e" : "none",
-                              }}
-                            >
-                              <span style={{ color: "#666", fontFamily: "monospace", fontSize: "0.58rem", whiteSpace: "nowrap" }}>
-                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                              <span style={{ color: "#ddd", fontFamily: "monospace", fontSize: "0.68rem", lineHeight: 1.35 }}>{action.description}</span>
-                            </div>
-                          ))
-                        )}
-                      </EcoDashCard>
-                    </div>
+                      </EcoRect>
+                    )}
                   </div>
 
-                  {/* ROW 3 — Economy, corporations, ZRS */}
-                  <EcoDashCard title="📊 ECONOMY STATS">
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "10px", marginBottom: "12px" }}>
-                      <div>
-                        <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.58rem" }}>AVG BALANCE</div>
-                        <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
-                          {avgBal.toLocaleString("en-US", { maximumFractionDigits: 1 })} ZION
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.58rem" }}>TOTAL ZION</div>
-                        <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
-                          {Math.round(totalZion).toLocaleString("en-US")} ZION
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ color: "#666", fontFamily: "monospace", fontSize: "0.58rem" }}>POVERTY</div>
-                        <div style={{ color: povertyColor, fontFamily: "monospace", fontSize: "0.85rem", fontWeight: "bold" }}>
-                          {povertyPct.toFixed(1)}%
-                        </div>
-                      </div>
-                    </div>
-                    {frsStats && (
-                      <div style={{ display: "flex", gap: "3px", height: "18px", borderRadius: "4px", overflow: "hidden" }}>
-                        {[
-                          { cls: "Elite", cnt: frsStats.economy.elite_count, color: "#ffd700" },
-                          { cls: "Middle", cnt: frsStats.economy.middle_count, color: "#4DA2FF" },
-                          { cls: "Poor", cnt: frsStats.economy.poor_count, color: "#ff6464" },
-                        ].map((c) => {
-                          const pct = ((c.cnt / Math.max(frsStats.economy.total_agents, 1)) * 100).toFixed(0);
-                          return (
-                            <div
-                              key={c.cls}
-                              style={{
-                                flex: Math.max(c.cnt, 1),
-                                background: `${c.color}22`,
-                                borderLeft: `2px solid ${c.color}`,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minWidth: c.cnt > 0 ? "40px" : 0,
-                              }}
-                            >
-                              <span style={{ color: c.color, fontFamily: "monospace", fontSize: "0.55rem" }}>
-                                {c.cls} {pct}%
+                  <div className="ecoRow2" style={{ gridTemplateColumns: ecoRow2 }}>
+                    <EcoRect label="PRESIDENTIAL DECREES" borderColor="#ffd700" background={ECO_BG_GOLD} bodyStyle={{ maxHeight: 220, overflowY: "auto" }}>
+                      {presidentActionsDisplay.length === 0 ? (
+                        <div style={{ color: "#666666", fontSize: 12 }}>No decrees yet</div>
+                      ) : (
+                        presidentActionsDisplay.map((action, i) => (
+                          <div key={i}>
+                            {i > 0 && <EcoTermDivider />}
+                            <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <span style={{ color: "#00ff88" }}>
+                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              <span style={{ color: "#555555" }}> | </span>
+                              <span style={{ color: ecoPresidentMessageColor(action.description) }}>
+                                {action.description}
+                                {action.count > 1 ? ` ×${action.count}` : ""}
                               </span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </EcoDashCard>
+                          </div>
+                        ))
+                      )}
+                    </EcoRect>
 
-                  <div style={{ display: "grid", gridTemplateColumns: gridCols2, gap: "12px" }}>
-                    <EcoDashCard title="🏢 CORPORATIONS">
-                      <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "1rem", fontWeight: "bold", marginBottom: "4px" }}>
-                        {corpActive.toLocaleString("en-US")} active
-                      </div>
-                      <div style={{ color: "#aaa", fontFamily: "monospace", fontSize: "0.68rem" }}>
-                        Treasury: {Math.round(corpTreasury).toLocaleString("en-US")} ZION
-                      </div>
-                    </EcoDashCard>
+                    <EcoRect label="SHERIFF ACTIVITY" borderColor="#00ff88" background={ECO_BG_GREEN} bodyStyle={{ maxHeight: 220, overflowY: "auto" }}>
+                      {sheriffActionsDisplay.length === 0 ? (
+                        <div style={{ color: "#666666", fontSize: 12 }}>No activity yet</div>
+                      ) : (
+                        sheriffActionsDisplay.map((action, i) => (
+                          <div key={i}>
+                            {i > 0 && <EcoTermDivider />}
+                            <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <span style={{ color: "#00ff88" }}>
+                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              <span style={{ color: "#555555" }}> | </span>
+                              <span style={{ color: ecoSheriffMessageColor(action.description) }}>{action.description}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </EcoRect>
+                  </div>
 
-                    <EcoDashCard title="📋 ZRS LAST ACTION">
+                  <div className="ecoRow3" style={{ gridTemplateColumns: ecoRow3 }}>
+                    <EcoRect label="ECONOMY" borderColor="#00ff88" background={ECO_BG_GREEN}>
+                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>AVG BALANCE</div>
+                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#ffffff", marginBottom: 12 }}>
+                        {avgBal.toLocaleString("en-US", { maximumFractionDigits: 1 })}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>TOTAL ZION</div>
+                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#00ff88", marginBottom: 12 }}>
+                        {ecoFormatZionShort(totalZion)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>POVERTY</div>
+                      <div style={{ fontSize: 18, fontWeight: "bold", color: povertyColor }}>{povertyPct.toFixed(1)}%</div>
+                    </EcoRect>
+
+                    <EcoRect label="CORPORATIONS" borderColor="#4488ff" background={ECO_BG_BLUE}>
+                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#ffffff", marginBottom: 8 }}>
+                        {corpActive.toLocaleString("en-US")} ACTIVE
+                      </div>
+                      <div style={{ fontSize: 12, color: "#ffffff" }}>
+                        Treasury: {ecoFormatZionShort(corpTreasury)} ZION
+                      </div>
+                    </EcoRect>
+
+                    <EcoRect label="ZRS LAST ACTION" borderColor={zrsBorderColor} background={ECO_BG_ORANGE}>
                       {ecoPolData?.zrs_last_action ? (
                         <>
-                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "4px" }}>
+                          <div style={{ color: zrsStateColor, fontWeight: "bold", fontSize: 15, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {ecoPolData.zrs_last_action.state} · {ecoPolData.zrs_last_action.action_taken}
                           </div>
-                          <div style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.72rem", marginBottom: "4px" }}>
-                            {Math.round(ecoPolData.zrs_last_action.amount).toLocaleString("en-US")} ZION
+                          <div style={{ color: "#00ff88", fontSize: 15, marginBottom: 4 }}>
+                            {ecoFormatZionShort(ecoPolData.zrs_last_action.amount)} ZION
                           </div>
-                          <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.62rem", lineHeight: 1.4 }}>
+                          <div style={{ color: "#ffffff", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {ecoPolData.zrs_last_action.news_headline}
                           </div>
                         </>
                       ) : frsStats?.recent_actions?.[0] ? (
                         <>
-                          <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
+                          <div style={{ color: "#ffffff", fontWeight: "bold", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {frsStats.recent_actions[0].action}
                           </div>
-                          <div style={{ color: "#888", fontFamily: "monospace", fontSize: "0.62rem" }}>
+                          <div style={{ color: "#ffffff", fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {frsStats.recent_actions[0].reason?.slice(0, 80)}
                           </div>
                         </>
                       ) : (
-                        <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.68rem" }}>No actions yet</div>
+                        <div style={{ color: "#666666", fontSize: 12 }}>No actions yet</div>
                       )}
-                    </EcoDashCard>
+                    </EcoRect>
                   </div>
 
-                  {/* ROW 4 — VIP feed */}
                   {vipFeedDisplay.length > 0 && (
-                    <EcoDashCard title="🧠 VIP DECISIONS" maxHeight={300}>
-                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "8px" }}>
-                        {vipFeedDisplay.map((item, i) => {
-                          const roleLabel =
-                            item.vip_type === "president"
-                              ? "🏛️ President"
-                              : item.vip_type === "party_leader"
-                                ? "🗳️ Party"
-                                : item.vip_type === "clan_leader"
-                                  ? "⚔️ Clan"
-                                  : item.vip_type;
-                          return (
-                            <div
-                              key={`${item.vip_type}-${item.vip_id}-${item.day}-${i}`}
-                              style={{
-                                padding: "6px 8px",
-                                background: "rgba(0,0,0,0.25)",
-                                borderLeft: `2px solid ${ECO_GOLD}`,
-                                borderRadius: "4px",
-                              }}
-                            >
-                              <div style={{ color: ECO_GOLD, fontFamily: "monospace", fontSize: "0.62rem", marginBottom: "2px" }}>
-                                {roleLabel}: <span style={{ color: "#fff" }}>{item.decision || "—"}</span>
-                              </div>
-                              <div style={{
-                                color: "#777", fontFamily: "monospace", fontSize: "0.58rem", lineHeight: 1.3,
-                                overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box",
-                                WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                              }}>
-                                {item.reasoning || "—"}
-                              </div>
+                    <EcoRect label="INTELLIGENCE BRIEFING" borderColor="#7c3aed" background={ECO_BG_PURPLE}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+                        {vipFeedDisplay.map((item, i) => (
+                          <div key={`${item.vip_type}-${item.vip_id}-${item.day}-${i}`} style={{ borderBottom: "1px solid #111111", paddingBottom: 8 }}>
+                            <div style={{ fontSize: 15, marginBottom: 4 }}>
+                              <span>{ecoVipRoleIcon(item.vip_type)} </span>
+                              <span style={{ color: "#ffffff", fontWeight: "bold" }}>{item.decision || "—"}</span>
                             </div>
-                          );
-                        })}
+                            <div style={{ color: "#666666", fontSize: 12, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {item.reasoning || "—"}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </EcoDashCard>
+                    </EcoRect>
                   )}
 
                 </div>
                 );
               })()}
 
-
-              {treasuryNews.length > 0 && (
-                <div
-                  style={{
-                    marginTop: "16px",
-                    background: "#050a10",
-                    border: "1px solid #1a3a1a",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    position: "relative",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "rgba(0,255,65,0.1)",
-                      padding: "4px 12px",
-                      borderBottom: "1px solid #1a3a1a",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "6px",
-                        height: "6px",
-                        borderRadius: "50%",
-                        background: "#00ff41",
-                        animation: "pulse 1s infinite",
-                      }}
-                    />
-                    <span style={{ color: "#00ff41", fontFamily: "monospace", fontSize: "0.65rem", letterSpacing: "2px" }}>
-                      ZRS FINANCIAL WIRE
-                    </span>
-                  </div>
-                  <div style={{ overflow: "hidden", padding: "8px 0", position: "relative" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        width: "max-content",
-                        animation: "marquee 80s linear infinite",
-                      }}
-                    >
-                      {[...treasuryNews, ...treasuryNews, ...treasuryNews].map((item, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            color: "#ccc",
-                            fontFamily: "monospace",
-                            fontSize: "0.75rem",
-                            flexShrink: 0,
-                            paddingRight: "60px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {item}
-                          <span style={{ color: "#666", marginLeft: "20px" }}>◆</span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+            </div>
             </div>
           )}
         </div>
@@ -14295,6 +14295,345 @@ export default function Home() {
         .statCard.gold { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
         .statCard.red { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
         .statCard.purple { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
+        @keyframes barFill {
+          from { width: 0; }
+          to { width: var(--bar-width); }
+        }
+        .ecoTermRoot {
+          background: #000000;
+        }
+        .ecoHudWrap {
+          position: relative;
+          padding: 16px 18px;
+        }
+        .ecoDashLayout {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 8px;
+        }
+        .ecoRow4,
+        .ecoRow2,
+        .ecoRow3 {
+          display: grid;
+          gap: 12px;
+        }
+        .ecoRect {
+          min-width: 0;
+        }
+        .ecoBarFillAnim {
+          width: 0;
+          animation: barFill 1s ease-out forwards;
+        }
+        .ecoHudHeader {
+          margin-bottom: 10px;
+        }
+        .ecoHudHeader h2 {
+          margin: 0;
+          color: #ffffff;
+          font-size: 12px;
+          letter-spacing: 3px;
+          text-transform: uppercase;
+          font-weight: bold;
+        }
+        .ecoHudHeader p {
+          margin: 4px 0 0;
+          color: #666666;
+          font-size: 12px;
+          letter-spacing: 1px;
+        }
+        .ecoNewsTicker {
+          position: relative;
+          margin-top: 8px;
+          display: flex;
+          align-items: stretch;
+          background: #0a0800;
+          border: 1px solid #ffd700;
+          overflow: hidden;
+        }
+        .ecoNewsTickerBadge {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          background: #0a0800;
+          border-right: 1px solid #ffd700;
+          color: #ffd700;
+          font-size: 11px;
+          font-weight: bold;
+          letter-spacing: 2px;
+        }
+        .ecoNewsTickerViewport {
+          flex: 1;
+          overflow: hidden;
+          min-height: 34px;
+          display: flex;
+          align-items: center;
+        }
+        .ecoNewsTickerTrack {
+          display: flex;
+          width: max-content;
+          animation: ecoNewsScroll 90s linear infinite;
+          will-change: transform;
+        }
+        @keyframes ecoNewsScroll {
+          0% { transform: translate3d(0, 0, 0); }
+          100% { transform: translate3d(-50%, 0, 0); }
+        }
+        .ecoNewsItem {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 32px;
+          font-size: 12px;
+          white-space: nowrap;
+        }
+        .ecoNewsItem.normal { color: #ffffff; }
+        .ecoNewsItem.breaking {
+          color: #ff4444;
+          font-weight: bold;
+        }
+        .ecoAlertStrip {
+          padding: 8px 10px;
+          background: #050505;
+          border: 1px solid #2a2a2a;
+          color: #ffffff;
+          font-size: 12px;
+          letter-spacing: 1px;
+        }
+        .ecoAlertStripDanger {
+          border: 1px solid #ff4444;
+          color: #ff4444;
+        }
+        .ecoMartialBanner {
+          padding: 6px 8px;
+          border: 1px solid #ff4444;
+          color: #ff4444;
+          font-weight: bold;
+        }
+        .ecoCmdGrid {
+          display: grid;
+          gap: 8px;
+        }
+        .ecoCmdPanel {
+          border-radius: 0;
+          padding: 8px 10px;
+          background: rgba(0, 0, 0, 0.88);
+          border: 1px solid rgba(0, 255, 136, 0.18);
+          border-left-width: 4px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .ecoCmdMicro {
+          font-size: 0.52rem;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: #555;
+        }
+        .ecoCmdNameGold {
+          font-size: 1.05rem;
+          font-weight: bold;
+          color: #ffd700;
+          line-height: 1.15;
+          text-shadow: 0 0 12px rgba(255, 215, 0, 0.25);
+        }
+        .ecoCmdNameGreen {
+          font-size: 1rem;
+          font-weight: bold;
+          color: #00ff88;
+          line-height: 1.15;
+        }
+        .ecoPartyTag {
+          display: inline-block;
+          font-size: 0.58rem;
+          color: #666;
+          padding: 1px 6px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          margin-top: 2px;
+        }
+        .ecoSheriffPill {
+          display: inline-block;
+          align-self: flex-start;
+          padding: 2px 8px;
+          font-size: 0.55rem;
+          font-weight: bold;
+          letter-spacing: 1px;
+          border-radius: 0;
+          border: 1px solid;
+        }
+        .ecoCmdStateHuge {
+          font-size: clamp(0.9rem, 2vw, 1.3rem);
+          font-weight: bold;
+          letter-spacing: 1px;
+          line-height: 1.1;
+        }
+        .ecoCmdRevHuge {
+          font-size: 2rem;
+          font-weight: bold;
+          line-height: 1;
+          text-shadow: 0 0 16px currentColor;
+        }
+        .ecoCmdRevLabel {
+          font-size: 0.55rem;
+          letter-spacing: 2px;
+          color: #666;
+          text-transform: uppercase;
+        }
+        .ecoDangerWarn {
+          display: inline-flex;
+          flex-direction: column;
+          gap: 1px;
+          padding: 3px 8px;
+          border: 1px solid;
+          font-size: 0.52rem;
+        }
+        .ecoDangerWarnLabel { opacity: 0.85; letter-spacing: 1px; }
+        .ecoDangerWarnValue { font-size: 0.68rem; font-weight: bold; }
+        .ecoMiniBar {
+          height: 4px;
+          width: 100%;
+          background: rgba(255, 255, 255, 0.1);
+          margin-top: 4px;
+        }
+        .ecoMiniBarFill { height: 100%; transition: width 0.4s; }
+        .ecoHudPanel {
+          border-radius: 0;
+          padding: 8px 10px;
+          background: rgba(0, 0, 0, 0.82);
+          border: 1px solid rgba(0, 255, 136, 0.2);
+        }
+        .ecoHudPanelTitle {
+          font-size: 0.55rem;
+          font-weight: bold;
+          letter-spacing: 2.5px;
+          text-transform: uppercase;
+          color: #ffd700;
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.12);
+        }
+        .ecoPollRow {
+          padding: 6px 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .ecoPollRow:last-child { border-bottom: none; }
+        .ecoPollHead {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.68rem;
+          margin-bottom: 3px;
+        }
+        .ecoPollBarLine {
+          font-size: 0.62rem;
+          letter-spacing: 1px;
+          margin-bottom: 3px;
+        }
+        .ecoPollMeta {
+          font-size: 0.55rem;
+          color: #666;
+        }
+        .ecoSenateSpeaker {
+          font-size: 0.62rem;
+          color: #ffd700;
+          letter-spacing: 1px;
+          margin-bottom: 4px;
+        }
+        .ecoSenateSeats {
+          font-size: 0.68rem;
+          color: #00ff88;
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.15);
+        }
+        .ecoLawTableHead {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          gap: 6px;
+          font-size: 11px;
+          color: #666666;
+          letter-spacing: 1px;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+        .ecoLawRow {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          gap: 6px;
+          padding: 4px 0;
+          font-size: 12px;
+          border-bottom: 1px solid #111111;
+        }
+        .ecoClassifiedRow {
+          display: flex;
+          gap: 8px;
+          padding: 5px 0;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.08);
+          font-size: 0.65rem;
+          line-height: 1.35;
+        }
+        .ecoClassifiedRow:last-child { border-bottom: none; }
+        .ecoClassifiedTime {
+          color: #00ff88;
+          flex-shrink: 0;
+          font-size: 0.58rem;
+        }
+        .ecoMetricCard {
+          padding: 8px;
+          background: rgba(0, 255, 136, 0.03);
+          border: 1px solid rgba(0, 255, 136, 0.12);
+        }
+        .ecoMetricLabel {
+          font-size: 0.5rem;
+          letter-spacing: 2px;
+          color: #555;
+          margin-bottom: 4px;
+        }
+        .ecoMetricGlow {
+          font-size: 1rem;
+          font-weight: bold;
+          text-shadow: 0 0 14px currentColor;
+        }
+        .ecoClassBarWrap { margin-top: 8px; }
+        .ecoClassBarLabels {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 4px;
+          font-size: 0.52rem;
+        }
+        .ecoClassBarTrack {
+          display: flex;
+          height: 14px;
+          border: 1px solid rgba(0, 255, 136, 0.15);
+        }
+        .ecoClassBarSeg { display: flex; align-items: center; justify-content: center; min-width: 2px; }
+        .ecoIntelCard {
+          padding: 6px 8px;
+          border: 1px solid rgba(0, 255, 136, 0.12);
+          background: rgba(0, 10, 5, 0.6);
+        }
+        .ecoIntelHead {
+          display: flex;
+          gap: 6px;
+          align-items: flex-start;
+          margin-bottom: 3px;
+        }
+        .ecoIntelDecision {
+          font-weight: bold;
+          color: #e8ffe8;
+          font-size: 0.65rem;
+        }
+        .ecoIntelReason {
+          font-size: 0.58rem;
+          color: #777;
+          font-style: italic;
+          line-height: 1.3;
+        }
+        .ecoDashGrid2 {
+          display: grid;
+          gap: 8px;
+        }
         .civilizationSidebarRow {
           display: flex;
           justify-content: flex-end;
