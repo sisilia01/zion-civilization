@@ -1589,89 +1589,114 @@ def get_markets():
 @app.post("/api/bet")
 async def place_user_bet(request: Request):
     """Разместить ставку пользователя"""
-    body = await request.json()
-    wallet = body.get("wallet")
-    market_id = body.get("market_id")
-    direction = body.get("direction")  # true=YES, false=NO
-    amount_sui = float(body.get("amount_sui", 0.1))
-    
-    if not wallet or not market_id or direction is None:
-        return {"error": "Missing fields"}
-    
-    market = next((m for m in MARKETS_CONFIG if m["id"] == market_id), None)
-    if not market:
-        market = {
-            "id": market_id,
-            "question": body.get("question") or str(market_id),
-            "token": "POLY" if str(market_id).startswith("poly-") else "ZION",
-            "timeframe": body.get("timeframe", "24h"),
-            "category": "polymarket" if str(market_id).startswith("poly-") else "events",
-        }
-    
-    yes, no = 50, 50
-    entry_price = 0.0
-    if market.get("cg_id"):
-        yes, no = get_crypto_odds(market["cg_id"])
-        try:
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={market['cg_id']}&vs_currencies=usd"
-            req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                entry_price = float(json.loads(r.read())[market["cg_id"]]["usd"])
-        except Exception:
-            pass
-    elif _needs_onchain_market_create(market_id):
-        entry_price = 100.0
+    try:
+        body = await request.json()
+        print(f"[BET API] received: {body}", flush=True)
+        wallet = body.get("wallet")
+        market_id = body.get("market_id")
+        direction = body.get("direction")  # true=YES, false=NO
+        amount_sui = float(body.get("amount_sui", 0.1))
+        skip_ensure = bool(body.get("skip_onchain_ensure"))
 
-    if _needs_onchain_market_create(market_id):
-        tf = market.get("timeframe", "24h")
-        deadline_map = {
-            "15m": 15,
-            "1h": 60,
-            "4h": 240,
-            "24h": 1440,
-            "7d": 10080,
-            "30d": 43200,
-        }
-        deadline_min = deadline_map.get(tf, 1440)
-        onchain_entry = entry_price if entry_price > 0 else 100.0
-        if not ensure_onchain_market(market_id, onchain_entry, deadline_min):
-            return {
-                "success": False,
-                "error": "Could not prepare on-chain market. Try again shortly.",
+        if not wallet or not market_id or direction is None:
+            return {"success": False, "error": "Missing fields"}
+
+        market = next((m for m in MARKETS_CONFIG if m["id"] == market_id), None)
+        if not market:
+            market = {
+                "id": market_id,
+                "question": body.get("question") or str(market_id),
+                "token": "POLY" if str(market_id).startswith("poly-") else "ZION",
+                "timeframe": body.get("timeframe", "24h"),
+                "category": "polymarket" if str(market_id).startswith("poly-") else "events",
             }
-    
-    odds = yes if direction else no
-    potential_payout = amount_sui * (100 / odds)
-    
-    timeframe = market.get("timeframe", "24h")
-    intervals = {"15m": "15 minutes", "1h": "1 hour", "4h": "4 hours", 
-                 "24h": "24 hours", "7d": "7 days", "30d": "30 days"}
-    interval = intervals.get(timeframe, "24 hours")
-    
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(f"""
-        INSERT INTO user_bets 
-        (wallet_address, market_id, event_type, question, amount_sui, amount,
-         prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}')
-        RETURNING id
-    """, (wallet, market_id, market.get("token",""), market["question"],
-          amount_sui, amount_sui, direction, odds, potential_payout, entry_price))
-    bet_id = cur.fetchone()[0]
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return {
-        "success": True,
-        "bet_id": bet_id,
-        "market": market["question"],
-        "direction": "YES" if direction else "NO",
-        "amount_sui": amount_sui,
-        "odds": odds,
-        "potential_payout": round(potential_payout, 4)
-    }
+
+        yes, no = 50, 50
+        entry_price = 0.0
+        if market.get("cg_id"):
+            yes, no = get_crypto_odds(market["cg_id"])
+            try:
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={market['cg_id']}&vs_currencies=usd"
+                req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    entry_price = float(json.loads(r.read())[market["cg_id"]]["usd"])
+            except Exception:
+                pass
+        elif _needs_onchain_market_create(market_id):
+            entry_price = 100.0
+
+        raw_odds = body.get("odds_at_bet")
+        if raw_odds is not None:
+            try:
+                odds = float(raw_odds)
+                if odds > 0:
+                    yes, no = (odds, 100 - odds) if direction else (100 - odds, odds)
+            except (TypeError, ValueError):
+                pass
+
+        if not skip_ensure and _needs_onchain_market_create(market_id):
+            ensured, ensure_err = _zionbet_ensure_market_onchain(market_id, market)
+            if not ensured:
+                return {"success": False, "error": ensure_err or "Could not prepare on-chain market."}
+
+        odds = yes if direction else no
+        potential_payout = amount_sui * (100 / odds)
+
+        timeframe = market.get("timeframe", "24h")
+        intervals = {
+            "15m": "15 minutes",
+            "1h": "1 hour",
+            "4h": "4 hours",
+            "24h": "24 hours",
+            "7d": "7 days",
+            "30d": "30 days",
+        }
+        interval = intervals.get(timeframe, "24 hours")
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            INSERT INTO user_bets 
+            (wallet_address, market_id, event_type, question, amount_sui, amount,
+             prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}')
+            RETURNING id
+            """,
+            (
+                wallet,
+                market_id,
+                market.get("token", ""),
+                market["question"],
+                amount_sui,
+                amount_sui,
+                direction,
+                odds,
+                potential_payout,
+                entry_price,
+            ),
+        )
+        bet_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        result = {
+            "success": True,
+            "bet_id": bet_id,
+            "market": market["question"],
+            "direction": "YES" if direction else "NO",
+            "amount_sui": amount_sui,
+            "odds": odds,
+            "potential_payout": round(potential_payout, 4),
+        }
+        print(f"[BET API] saved bet_id={bet_id}", flush=True)
+        return result
+    except Exception as e:
+        import traceback
+        print(f"[BET API] error: {e}", flush=True)
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 def _zionbet_wallet_stats(cur, wallet: str) -> dict:
     """Aggregate ZionBet stats for a wallet from user_bets."""
@@ -1929,6 +1954,7 @@ def get_my_bets(wallet: str):
             FROM user_bets ub
             LEFT JOIN polymarket_markets pm ON pm.market_id = ub.market_id
             WHERE ub.wallet_address = %s
+              AND (COALESCE(ub.amount_sui, 0) > 0 OR COALESCE(ub.amount, 0) > 0)
             ORDER BY ub.created_at DESC
             LIMIT 50
             """,
@@ -2014,6 +2040,66 @@ def _parse_bet_placed_from_tx_json(tx_data: dict) -> tuple[int | None, int | Non
         except (TypeError, ValueError):
             continue
     return None, None
+
+
+def _zionbet_ensure_market_onchain(market_id: str, market: dict) -> tuple[bool, str | None]:
+    """Create on-chain BetHouse market entry when required (poly / dynamic ids)."""
+    if not _needs_onchain_market_create(market_id):
+        return True, None
+
+    entry_price = 0.0
+    if market.get("cg_id"):
+        try:
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={market['cg_id']}&vs_currencies=usd"
+            req = urllib.request.Request(url, headers={"User-Agent": "ZION/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                entry_price = float(json.loads(r.read())[market["cg_id"]]["usd"])
+        except Exception:
+            pass
+    else:
+        entry_price = 100.0
+
+    tf = market.get("timeframe", "24h")
+    deadline_map = {
+        "15m": 15,
+        "1h": 60,
+        "4h": 240,
+        "24h": 1440,
+        "7d": 10080,
+        "30d": 43200,
+    }
+    deadline_min = deadline_map.get(tf, 1440)
+    onchain_entry = entry_price if entry_price > 0 else 100.0
+    if ensure_onchain_market(market_id, onchain_entry, deadline_min):
+        return True, None
+    return False, "Could not prepare on-chain market. Try again shortly."
+
+
+@app.post("/zionbet/ensure_market")
+async def zionbet_ensure_market(request: Request):
+    """Ensure BetHouse has a market row before wallet place_bet (chain-first flow)."""
+    body = await request.json()
+    market_id = (body.get("market_id") or "").strip()
+    if not market_id:
+        return {"ok": False, "error": "missing_market_id"}
+
+    market = next((m for m in MARKETS_CONFIG if m["id"] == market_id), None)
+    if not market:
+        market = {
+            "id": market_id,
+            "question": body.get("question") or str(market_id),
+            "token": "POLY" if str(market_id).startswith("poly-") else "ZION",
+            "timeframe": body.get("timeframe", "24h"),
+            "category": "polymarket" if str(market_id).startswith("poly-") else "events",
+        }
+
+    if not _needs_onchain_market_create(market_id):
+        return {"ok": True, "skipped": True, "market_id": market_id}
+
+    ok, err = _zionbet_ensure_market_onchain(market_id, market)
+    if ok:
+        return {"ok": True, "market_id": market_id}
+    return {"ok": False, "error": err or "ensure_failed"}
 
 
 @app.post("/zionbet/confirm_bet")
