@@ -20,6 +20,7 @@ from civ_governance import (
     process_sheriff_orders,
     record_last_sheriff_agent,
 )
+from civ_common import transfer_power, zrs_add_reserve
 
 conn = psycopg2.connect(
     host="localhost",
@@ -239,26 +240,28 @@ def sheriff_actions(sheriff):
 
         if budget >= 200:
             new_cops = random.randint(2, 8)
-            cost = new_cops * 10
+            hire_bonus = 10.0
+            cost = round(new_cops * hire_bonus, 2)
             cur.execute(
                 """
                 UPDATE sheriff_state
                 SET police_count = police_count + %s, police_budget = police_budget - %s
-                WHERE is_active = true
+                WHERE is_active = true AND police_budget >= %s
                 """,
-                (new_cops, cost),
+                (new_cops, cost, cost),
             )
-            cur.execute(
-                """
-                UPDATE agents SET balance = balance + 15, class = 'poor'
-                WHERE is_alive = true AND class = 'critical'
-                AND id IN (
-                    SELECT id FROM agents WHERE class = 'critical'
-                    ORDER BY RANDOM() LIMIT %s
+            if cur.rowcount == 1:
+                cur.execute(
+                    """
+                    UPDATE agents SET balance = balance + %s, class = 'poor'
+                    WHERE is_alive = true AND class = 'critical'
+                    AND id IN (
+                        SELECT id FROM agents WHERE class = 'critical'
+                        ORDER BY RANDOM() LIMIT %s
+                    )
+                    """,
+                    (hire_bonus, new_cops),
                 )
-                """,
-                (new_cops,),
-            )
             police += new_cops
 
         log_event(
@@ -287,10 +290,14 @@ def sheriff_actions(sheriff):
                 "UPDATE clans SET treasury = treasury - %s WHERE id = %s",
                 (bribe, clan["id"]),
             )
+            sheriff_share = round(bribe * 0.7, 2)
+            zrs_share = round(bribe - sheriff_share, 2)
             cur.execute(
-                "UPDATE agents SET balance = balance + %s WHERE id = %s",
-                (bribe * 0.7, sid),
+                "UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active = true",
+                (sheriff_share,),
             )
+            if zrs_share > 0:
+                zrs_add_reserve(cur, zrs_share)
             bribes += bribe
 
         log_event(
@@ -304,25 +311,51 @@ def sheriff_actions(sheriff):
 
         cur.execute(
             """
-            UPDATE agents SET balance = balance - 3
+            SELECT id FROM agents
             WHERE is_alive = true AND class IN ('poor', 'critical')
-            AND id IN (SELECT id FROM agents ORDER BY RANDOM() LIMIT 50)
+            ORDER BY RANDOM() LIMIT 50
             """
         )
+        shake_targets = cur.fetchall()
+        shake = round(3.0 * len(shake_targets), 2)
+        for row in shake_targets:
+            cur.execute(
+                "UPDATE agents SET balance = GREATEST(0, balance - 3) WHERE id = %s",
+                (row["id"],),
+            )
+        if shake > 0:
+            cur.execute(
+                """
+                UPDATE sheriff_state SET police_budget = police_budget + %s
+                WHERE is_active = true
+                """,
+                (shake,),
+            )
         print(f"Corrupt sheriff: {bribes:.0f} ZION in bribes")
 
     elif stype == "junta":
         # Junta actively builds military power
         if budget > 80:
             new_cops = random.randint(5, 15)
-            cost = new_cops * 8
-            cur.execute("UPDATE sheriff_state SET police_count = police_count + %s, police_budget = police_budget - %s WHERE is_active=true",
-                       (new_cops, cost))
-            cur.execute("""
-                UPDATE agents SET balance = balance + 10, class = 'poor'
-                WHERE is_alive=true AND class='critical'
-                AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
-            """, (new_cops,))
+            hire_bonus = 8.0
+            cost = round(new_cops * hire_bonus, 2)
+            cur.execute(
+                """
+                UPDATE sheriff_state SET police_count = police_count + %s,
+                police_budget = police_budget - %s
+                WHERE is_active=true AND police_budget >= %s
+                """,
+                (new_cops, cost, cost),
+            )
+            if cur.rowcount == 1:
+                cur.execute(
+                    """
+                    UPDATE agents SET balance = balance + %s, class = 'poor'
+                    WHERE is_alive=true AND class='critical'
+                    AND id IN (SELECT id FROM agents WHERE class='critical' ORDER BY RANDOM() LIMIT %s)
+                    """,
+                    (hire_bonus, new_cops),
+                )
             log_event(sid, 'sheriff_action',
                      f"⚔️ Junta Sheriff {name} expands military! Recruited {new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
                      cost)
@@ -345,17 +378,21 @@ def sheriff_actions(sheriff):
             president = cur.fetchone()
 
             if president and random.random() < 0.4:
-                cur.execute("UPDATE president_state SET is_active = false WHERE is_active = true")
                 cur.execute(
                     "UPDATE agents SET balance = balance - 100 WHERE id = %s",
                     (president["agent_id"],),
                 )
-                log_event(
-                    sid,
-                    "sheriff_action",
+                transfer_power(
+                    cur,
                     f"COUP! Sheriff {name} arrested President {president['agent_name']}! "
-                    f"Military junta takes control! Martial law declared!",
-                    0,
+                    f"Military junta takes control!",
+                    new_agent_id=sid,
+                    new_agent_name=name,
+                    new_party="junta",
+                    phase="interim",
+                    is_dictator=True,
+                    dictatorship_mode=True,
+                    log_agent_id=sid,
                 )
                 print(f"COUP! Sheriff arrested President {president['agent_name']}!")
 

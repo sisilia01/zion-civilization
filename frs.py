@@ -273,6 +273,8 @@ def zrs_recently_active():
 
 
 def main():
+    print("frs.py retired — economy conservation: use zrs.py + senate.py only.")
+    return
     print(f"\n🏦 ZION Reserve System (legacy FRS) — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
     

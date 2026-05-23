@@ -267,6 +267,8 @@ def run_rebellion(cur):
         print(f"☮️ No rebellion ({angry} angry = {pct*100:.0f}%)")
 
 def main():
+    print("politics.py retired — economy conservation: use senate.py + political_parties.py.")
+    return
     print(f"\n🏛️ ZION Politics v2 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
     

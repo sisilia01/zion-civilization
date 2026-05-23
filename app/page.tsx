@@ -94,6 +94,44 @@ const sectorEmoji: Record<string, string> = {
   media: "📺",
 };
 
+const PARTY_DISPLAY: Record<
+  string,
+  { label: string; emoji: string; color: string; background: string }
+> = {
+  conservatives: {
+    label: "Conservative Party",
+    emoji: "🎩",
+    color: "#ffd700",
+    background: "rgba(255,215,0,0.08)",
+  },
+  centrists: {
+    label: "Centrist Alliance",
+    emoji: "⚖️",
+    color: "#4DA2FF",
+    background: "rgba(77,162,255,0.08)",
+  },
+  populists: {
+    label: "People's Front",
+    emoji: "✊",
+    color: "#ff6464",
+    background: "rgba(255,50,50,0.08)",
+  },
+};
+
+function presidentPartyDisplay(partyId: string | undefined) {
+  const key = (partyId || "centrists").toLowerCase();
+  if (key === "blue") return PARTY_DISPLAY.centrists;
+  if (key === "red") return PARTY_DISPLAY.populists;
+  return (
+    PARTY_DISPLAY[key] ?? {
+      label: partyId || "Unknown",
+      emoji: "🏛️",
+      color: "#aaa",
+      background: "rgba(128,128,128,0.08)",
+    }
+  );
+}
+
 const WALRUS_TICKER_TYPE_ICONS: Record<string, string> = {
   election: "👑",
   catastrophe: "🌋",
@@ -5434,7 +5472,7 @@ export default function Home() {
       if (data.president?.agent_name) {
         setPresidentState({
           agent_name: data.president.agent_name,
-          party: data.president.party ?? "blue",
+          party: data.president.party ?? "centrists",
           term_number: Number(data.president.term_number) || 1,
           is_dictator: Boolean(data.president.is_dictator),
           approval_rating: Number(data.president.approval_rating) || 0,
@@ -5569,7 +5607,7 @@ export default function Home() {
           if (d.status === "STABLE") news.push("✅ ZRS REPORT: Economy stable — holding rates");
           if (d.president)
             news.push(
-              `🏛️ PRESIDENT: ${d.president.agent_name} (${d.president.party === "blue" ? "Blue Alliance" : "Red Coalition"}) in office`
+              `🏛️ PRESIDENT: ${d.president.agent_name} (${presidentPartyDisplay(d.president.party).label}) in office`
             );
           if (d.active_law) news.push(`📜 NEW LAW: ${d.active_law.law_text}`);
           if (d.corporations)
@@ -10420,23 +10458,25 @@ export default function Home() {
                     </div>
 
                     {/* TOP RIGHT — President */}
-                    {presidentState && (
+                    {presidentState && (() => {
+                      const partyUi = presidentPartyDisplay(presidentState.party);
+                      return (
                       <div style={{
                         padding:"14px 16px",
-                        background: presidentState.is_dictator ? "rgba(180,0,0,0.12)" :
-                          presidentState.party === "blue" ? "rgba(77,162,255,0.08)" : "rgba(255,50,50,0.08)",
-                        border: `1px solid ${presidentState.is_dictator ? "#ff3232" : presidentState.party === "blue" ? "#4DA2FF" : "#ff6464"}44`,
+                        background: presidentState.is_dictator ? "rgba(180,0,0,0.12)" : partyUi.background,
+                        border: `1px solid ${presidentState.is_dictator ? "#ff3232" : partyUi.color}44`,
                         borderRadius:"10px",
                       }}>
                         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
                           <span style={{fontSize:"1rem"}}>
-                            {presidentState.is_dictator ? "👑" : presidentState.party === "blue" ? "🔵" : "🔴"}
+                            {presidentState.is_dictator ? "👑" : partyUi.emoji}
                           </span>
                           <span style={{
-                            color: presidentState.is_dictator ? "#ff3232" : presidentState.party === "blue" ? "#4DA2FF" : "#ff6464",
+                            color: presidentState.is_dictator ? "#ff3232" : partyUi.color,
                             fontFamily:"monospace", fontWeight:"bold", fontSize:"0.85rem"
                           }}>
                             {presidentState.is_dictator ? "DICTATOR" : "PRESIDENT"}: {presidentState.agent_name}
+                            {!presidentState.is_dictator ? ` · ${partyUi.label}` : ""}
                           </span>
                         </div>
                         <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px"}}>
@@ -10458,7 +10498,8 @@ export default function Home() {
                           🏛️ State Fund: {presidentState.personal_fund?.toFixed(0)} ZION · 🎖️ Police Allocation: {presidentState.police_fund?.toFixed(0)} ZION
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* BOTTOM LEFT — Corruption & Crime Rate */}
                     <div style={{

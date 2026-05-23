@@ -3,7 +3,7 @@
 import json
 import random
 
-from civ_common import economy_snapshot, log_event
+from civ_common import economy_snapshot, log_event, transfer_power
 
 
 ORDER_TYPES = [
@@ -413,30 +413,22 @@ def attempt_coup(cur, sheriff, president):
     if sheriff_side > president_side:
         cur.execute(
             """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'coup'
-            WHERE id = %s
-            """,
-            (president["agent_id"],),
-        )
-        cur.execute(
-            """
-            UPDATE president_state SET is_active = false, is_dictator = false
-            WHERE is_active = true
-            """
-        )
-        cur.execute(
-            """
             UPDATE sheriff_state SET coup_points = 0, sheriff_type = 'junta'
             WHERE is_active = true
             """
         )
-        log_event(
+        transfer_power(
             cur,
-            sheriff["agent_id"],
-            "sheriff_action",
             f"COUP SUCCESS! Sheriff {sname} is now DICTATOR. President {pname} executed!",
-            0,
-            priority="breaking",
+            new_agent_id=sheriff["agent_id"],
+            new_agent_name=sname,
+            new_party="junta",
+            phase="interim",
+            is_dictator=True,
+            dictatorship_mode=True,
+            kill_old_agent=True,
+            death_cause="coup",
+            log_agent_id=sheriff["agent_id"],
         )
     else:
         deactivate_sheriff(cur)

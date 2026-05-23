@@ -7,7 +7,7 @@ import urllib.request
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from openrouter_key import get_openrouter_key
@@ -736,6 +736,46 @@ def get_events(limit: int = 20):
             "agent": row["agent_name"], "time": row["created_at"].strftime("%H:%M:%S")})
     cur.close(); conn.close()
     return events
+
+@app.get("/events/by_type")
+def get_events_by_type(limit: int = 50):
+    """Returns mixed events — up to `limit` per meaningful type, excluding prayer/birth/death spam"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Get events for each type separately to avoid spam types drowning others
+    types = [
+        'education', 'religion', 'neo', 'neo_prophecy', 'blessing',
+        'election', 'president', 'rebellion', 'revolution',
+        'corporation', 'market', 'trade', 'frs', 'zrs', 'tax', 'law',
+        'casino', 'marriage', 'divorce', 'espionage', 'police',
+        'police_action', 'sheriff_action', 'street_crime', 'clan_war',
+        'catastrophe', 'epidemic', 'famine', 'lottery', 'work',
+        'death', 'birth', 'prayer', 'news', 'clan_join'
+    ]
+
+    events = []
+    for etype in types:
+        cur.execute("""
+            SELECT e.id, e.event_type, e.description, e.zion_amount, e.created_at, a.name as agent_name
+            FROM events e LEFT JOIN agents a ON e.agent_id = a.id
+            WHERE e.event_type = %s
+            AND e.created_at >= NOW() - INTERVAL '3 days'
+            ORDER BY e.created_at DESC LIMIT 10
+        """, (etype,))
+        for row in cur.fetchall():
+            events.append({
+                "id": row["id"],
+                "type": row["event_type"],
+                "description": row["description"],
+                "amount": float(row["zion_amount"]) if row["zion_amount"] else 0,
+                "agent": row["agent_name"],
+                "time": row["created_at"].strftime("%H:%M:%S")
+            })
+
+    cur.close(); conn.close()
+    # Sort all by time desc
+    return sorted(events, key=lambda x: x["time"], reverse=True)
 
 @app.get("/clans")
 def get_clans():
@@ -2300,7 +2340,6 @@ async def get_frs_stats():
         """)
         economy = cur.fetchone()
         
-        # Last ZRS policy actions (zrs_policy table — not legacy frs_actions)
         cur.execute("""
             SELECT action_taken AS action, amount,
                    news_headline AS reason, created_at AS performed_at, state
@@ -2309,23 +2348,53 @@ async def get_frs_stats():
             LIMIT 5
         """)
         actions = cur.fetchall()
-        
-        # Президент
+
         cur.execute("""
-            SELECT agent_name, party, votes, term_start
-            FROM presidents WHERE is_active = true LIMIT 1
+            SELECT agent_name, party, approval_rating, personal_fund, police_fund,
+                   term_number, days_in_power, hours_in_power, is_dictator,
+                   dictatorship_mode, COALESCE(corruption_index, 30) AS corruption_index
+            FROM president_state WHERE is_active = true LIMIT 1
         """)
         president = cur.fetchone()
-        
-        # Активный закон
-        cur.execute("""
-            SELECT law_text, party, passed_at
-            FROM active_laws WHERE is_active = true 
-            AND expires_at > NOW() LIMIT 1
-        """)
-        law = cur.fetchone()
 
-        # Corporations with treasury > 0 (active in economy)
+        cur.execute("""
+            SELECT policy_mode, COALESCE(reserve, 0) AS reserve, tax_modifier, loans_frozen
+            FROM zrs_state WHERE id = 1
+        """)
+        zrs_state = cur.fetchone()
+
+        cur.execute("""
+            SELECT state, action_taken, amount, news_headline, created_at
+            FROM zrs_policy
+            ORDER BY created_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """)
+        zrs_latest = cur.fetchone()
+
+        cur.execute("""
+            SELECT COUNT(*) AS c FROM senate s
+            INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+            WHERE s.is_active = true
+        """)
+        senate_count = int((cur.fetchone() or {}).get("c") or 0)
+
+        cur.execute("""
+            SELECT title, law_type, status, votes_for, votes_against, voted_at
+            FROM senate_laws
+            WHERE status = 'passed'
+            ORDER BY voted_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """)
+        active_law = cur.fetchone()
+
+        cur.execute("""
+            SELECT party_id, name, emoji, ideology, approval_rating, members_count,
+                   treasury, leader_name, wins, losses
+            FROM political_parties
+            ORDER BY approval_rating DESC NULLS LAST
+        """)
+        parties = [dict(p) for p in cur.fetchall()]
+
         cur.execute("""
             SELECT COUNT(*) AS count, COALESCE(SUM(treasury), 0) AS total_treasury
             FROM corporations WHERE is_active = true
@@ -2334,17 +2403,34 @@ async def get_frs_stats():
 
         poor_pct = float(economy['poor_count']) / max(float(economy['total_agents']), 1)
         avg_bal = float(economy['avg_balance'] or 0)
-        
-        # Определяем статус экономики
-        if poor_pct > 0.4:
+
+        status = (zrs_state or {}).get("policy_mode") or "NORMAL"
+        if zrs_latest and zrs_latest.get("state"):
+            status = zrs_latest["state"]
+        if poor_pct > 0.4 and status == "NORMAL":
             status = "CRISIS"
-            rate = 1
-        elif avg_bal > 500:
-            status = "INFLATION"
-            rate = 8
-        else:
-            status = "STABLE"
-            rate = 4
+        interest_rate = {
+            "BOOM": 10.0,
+            "NORMAL": 5.0,
+            "RECESSION": 3.0,
+            "CRISIS": 0.0,
+            "DEPRESSION": 0.0,
+            "HYPERINFLATION": 0.0,
+        }.get(str(status), 5.0)
+
+        government = {
+            "president": dict(president) if president else None,
+            "zrs": {
+                "policy_mode": (zrs_state or {}).get("policy_mode"),
+                "reserve": round(float((zrs_state or {}).get("reserve") or 0), 2),
+                "tax_modifier": float((zrs_state or {}).get("tax_modifier") or 0),
+                "loans_frozen": bool((zrs_state or {}).get("loans_frozen")),
+                "latest_action": dict(zrs_latest) if zrs_latest else None,
+            },
+            "senate": {"active_senators": senate_count},
+            "parties": parties,
+            "active_law": dict(active_law) if active_law else None,
+        }
 
         return {
             "economy": {
@@ -2358,18 +2444,153 @@ async def get_frs_stats():
                 "max_balance": round(float(economy['max_balance'] or 0), 2),
             },
             "status": status,
-            "interest_rate": rate,
-            "president": dict(president) if president else None,
-            "active_law": dict(law) if law else None,
+            "interest_rate": interest_rate,
+            "president": government["president"],
+            "active_law": government["active_law"],
             "corporations": {
                 "count": int(corps['count'] or 0),
                 "total_treasury": round(float(corps['total_treasury'] or 0), 2),
             },
             "recent_actions": [dict(a) for a in actions],
+            "government": government,
         }
     finally:
         cur.close()
         db.close()
+
+# ============ SENATE & PARTIES (ECO-POL dashboard) ============
+@app.get("/senate")
+async def get_senate():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT s.agent_name, s.party_id, s.role, s.approval_rating, s.is_active
+            FROM senate s
+            INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+            WHERE s.is_active = true
+            ORDER BY s.role DESC, s.approval_rating DESC NULLS LAST
+            """
+        )
+        senators = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT id, title, law_type, status, votes_for, votes_against, proposed_at
+            FROM senate_laws
+            WHERE status = 'pending'
+            ORDER BY proposed_at ASC NULLS LAST, id ASC
+            """
+        )
+        pending_laws = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if d.get("proposed_at") and hasattr(d["proposed_at"], "isoformat"):
+                d["proposed_at"] = d["proposed_at"].isoformat()
+            pending_laws.append(d)
+
+        cur.execute(
+            """
+            SELECT id, title, law_type, status, votes_for, votes_against, voted_at, proposed_at
+            FROM senate_laws
+            WHERE status IN ('passed', 'blocked', 'vetoed', 'failed')
+            ORDER BY COALESCE(voted_at, proposed_at) DESC NULLS LAST, id DESC
+            LIMIT 5
+            """
+        )
+        recent_laws = []
+        for row in cur.fetchall():
+            d = dict(row)
+            for k in ("proposed_at", "voted_at"):
+                if d.get(k) and hasattr(d[k], "isoformat"):
+                    d[k] = d[k].isoformat()
+            recent_laws.append(d)
+
+        speaker = next((s["agent_name"] for s in senators if s.get("role") == "speaker"), None)
+
+        return {
+            "senators": senators,
+            "pending_laws": pending_laws,
+            "recent_laws": recent_laws,
+            "senator_count": len(senators),
+            "speaker": speaker,
+        }
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/political_parties")
+async def get_political_parties():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT party_id, name, emoji, ideology, leader_name,
+                   COALESCE(treasury, 0) AS treasury,
+                   COALESCE(approval_rating, 0) AS approval_rating,
+                   COALESCE(members_count, 0) AS members_count,
+                   last_action
+            FROM political_parties
+            ORDER BY approval_rating DESC NULLS LAST
+            """
+        )
+        parties = []
+        for row in cur.fetchall():
+            p = dict(row)
+            p["treasury"] = round(float(p.get("treasury") or 0), 2)
+            p["approval_rating"] = int(p.get("approval_rating") or 0)
+            p["members_count"] = int(p.get("members_count") or 0)
+            if not p.get("last_action"):
+                cur.execute(
+                    """
+                    SELECT decision, reasoning
+                    FROM vip_memory
+                    WHERE vip_type = 'party_leader' AND vip_id = %s
+                    ORDER BY created_at DESC NULLS LAST, id DESC
+                    LIMIT 1
+                    """,
+                    (p["party_id"],),
+                )
+                mem = cur.fetchone()
+                if mem:
+                    dec = mem.get("decision") or ""
+                    reas = mem.get("reasoning") or ""
+                    p["last_action"] = f"{dec}: {reas}".strip(": ")
+            parties.append(p)
+        return parties
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/vip_memory")
+async def get_vip_memory(limit: int = 10):
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT vip_type, vip_id, day, decision, reasoning, created_at
+            FROM vip_memory
+            ORDER BY created_at DESC NULLS LAST, id DESC
+            LIMIT %s
+            """,
+            (max(1, min(int(limit), 50)),),
+        )
+        rows = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            rows.append(d)
+        return rows
+    finally:
+        cur.close()
+        db.close()
+
 
 # ============ ECO / POLITICS (live president + sheriff) ============
 @app.get("/eco-pol")
@@ -3012,3 +3233,227 @@ async def get_polymarkets(category: str | None = None, limit: int = 50):
     finally:
         cur.close()
         db.close()
+
+@app.post("/zco/notarize")
+async def zco_notarize(request: Request):
+    try:
+        body = await request.json()
+        tx_hash = body.get("tx_hash", "")
+        token = body.get("token", "SUI")
+        amount = body.get("amount", "0")
+        stealth_address = body.get("stealth_address", "")
+        
+        # Pick random agent as notary
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT id, name, class FROM agents WHERE is_alive=true ORDER BY RANDOM() LIMIT 1")
+                agent = cur.fetchone()
+        
+        if not agent:
+            return {"ok": False, "error": "No agents available"}
+        
+        # ZCO decision
+        question = f"Should agent {agent['name']} notarize this private transfer of {amount} {token}? TX: {tx_hash[:16]}..."
+        result = zco_decide(agent["name"], agent["class"], 100.0, question)
+        
+        notarized = result.get("decision") in ["WORK", "PRAY", "YES"]
+        
+        return {
+            "ok": True,
+            "notarized": notarized,
+            "agent": agent['name'],
+            "agent_class": agent['class'],
+            "decision": result.get("decision"),
+            "consensus": result.get("consensus"),
+            "tx_hash": tx_hash,
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/zco/store_stealth_receipt")
+async def store_stealth_receipt(request: Request):
+    try:
+        body = await request.json()
+        
+        receipt = {
+            "type": "stealth_transfer",
+            "protocol": "ZION Stealth Protocol",
+            "network": "Sui Testnet",
+            "tx_hash": body.get("tx_hash"),
+            "token": body.get("token"),
+            "timestamp": datetime.now().isoformat(),
+            "notary": {
+                "agent": body.get("agent"),
+                "agent_class": body.get("agent_class"),
+                "consensus": body.get("consensus"),
+            },
+            "privacy": {
+                "sender": "hidden",
+                "receiver": "hidden", 
+                "one_time_address": "destroyed after claim",
+                "method": "Ed25519 stealth addresses",
+                "proof": "stealth address derived from recipient public key only"
+            }
+        }
+        
+        import subprocess, json as _json
+        proc = subprocess.run(
+            ["python3", "/root/zion_backend/walrus.py", "--store-receipt"],
+            input=_json.dumps(receipt),
+            capture_output=True, text=True, timeout=30
+        )
+        result = None
+        for line in proc.stdout.splitlines():
+            if line.startswith("BLOB_ID:"):
+                blob_id = line.split("BLOB_ID:")[1].strip()
+                result = {"blob_id": blob_id}
+                break
+        
+        if result:
+            return {
+                "ok": True,
+                "blob_id": result.get("blob_id"),
+                "url": f"https://aggregator.walrus-testnet.walrus.space/v1/blobs/{result.get('blob_id')}"
+            }
+        return {"ok": False, "error": "Walrus storage failed"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ============ INSTANT RECEIPT SYSTEM ============
+import uuid as _uuid
+
+def ensure_receipts_table():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS stealth_receipts (
+                id TEXT PRIMARY KEY,
+                tx_hash TEXT,
+                token TEXT,
+                agent TEXT,
+                agent_class TEXT,
+                decision TEXT,
+                consensus JSONB,
+                walrus_blob_id TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"ensure_receipts_table error: {e}")
+
+ensure_receipts_table()
+
+@app.post("/zco/instant_receipt")
+async def instant_receipt(request: Request, background_tasks: BackgroundTasks):
+    try:
+        body = await request.json()
+        receipt_id = str(_uuid.uuid4())
+        
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO stealth_receipts (id, tx_hash, token, agent, agent_class, decision, consensus)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            receipt_id,
+            body.get("tx_hash"),
+            body.get("token"),
+            body.get("agent", ""),
+            body.get("agent_class", ""),
+            body.get("decision", ""),
+            json.dumps(body.get("consensus", {}))
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # Walrus в фоне
+        background_tasks.add_task(store_receipt_on_walrus, receipt_id, body)
+
+        return {"ok": True, "receipt_id": receipt_id, "url": f"/receipt/{receipt_id}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@app.post("/zco/instant_receipt/update")
+async def update_instant_receipt(request: Request):
+    try:
+        body = await request.json()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE stealth_receipts 
+            SET agent=%s, agent_class=%s, decision=%s, consensus=%s
+            WHERE id=%s
+        """, (
+            body.get("agent"),
+            body.get("agent_class"),
+            body.get("decision"),
+            json.dumps(body.get("consensus", {})),
+            body.get("receipt_id")
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+async def store_receipt_on_walrus(receipt_id: str, body: dict):
+    try:
+        import subprocess, json as _json
+        receipt = {
+            "type": "stealth_transfer",
+            "protocol": "ZION Stealth Protocol",
+            "network": "Sui Testnet",
+            "tx_hash": body.get("tx_hash"),
+            "token": body.get("token"),
+            "timestamp": datetime.now().isoformat(),
+            "notary": {
+                "agent": body.get("agent"),
+                "agent_class": body.get("agent_class"),
+                "consensus": body.get("consensus"),
+            },
+            "privacy": {
+                "sender": "hidden",
+                "receiver": "hidden",
+                "method": "Ed25519 stealth addresses",
+            }
+        }
+        proc = subprocess.run(
+            ["python3", "/root/zion_backend/walrus.py", "--store-receipt"],
+            input=_json.dumps(receipt),
+            capture_output=True, text=True, timeout=30
+        )
+        blob_id = None
+        for line in proc.stdout.splitlines():
+            if line.startswith("BLOB_ID:"):
+                blob_id = line.split("BLOB_ID:")[1].strip()
+                break
+        if blob_id:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("UPDATE stealth_receipts SET walrus_blob_id=%s WHERE id=%s", (blob_id, receipt_id))
+            conn.commit()
+            cur.close()
+            conn.close()
+    except Exception as e:
+        print(f"Walrus background store error: {e}")
+
+@app.get("/zco/receipt/{receipt_id}")
+async def get_receipt(receipt_id: str):
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM stealth_receipts WHERE id=%s", (receipt_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return {"ok": True, "receipt": dict(row)}
+        return {"ok": False, "error": "Not found"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

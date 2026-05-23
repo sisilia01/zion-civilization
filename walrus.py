@@ -157,5 +157,19 @@ def main():
         cur.close()
         conn.close()
 
+def handle_store_receipt():
+    import sys
+    data = json.loads(sys.stdin.read())
+    result = store_blob(data, blob_type="stealth_receipt")
+    if result:
+        print(f"BLOB_ID:{result['blob_id']}")
+    else:
+        print("BLOB_ID:error")
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--store-receipt" in sys.argv:
+        handle_store_receipt()
+    else:
+        main()
+

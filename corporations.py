@@ -11,6 +11,7 @@ from civ_common import (
     get_zrs_state,
     log_event,
     set_corporate_crisis,
+    zrs_add_reserve,
     zrs_deduct_reserve,
     zrs_reserve,
     ZRS_RESERVE_FLOOR,
@@ -196,6 +197,8 @@ def gang_extortion(cur, corp: dict):
             "UPDATE clans SET treasury = COALESCE(treasury, 0) + %s WHERE id = %s",
             (taken, clan_id),
         )
+    else:
+        zrs_add_reserve(cur, taken)
     log_event(
         cur,
         None,
@@ -325,6 +328,8 @@ def run_cycle():
 
         mult = sector_multiplier(corp["corp_type"])
         revenue = compute_revenue(cur, corp["id"], mult)
+        if revenue > 0 and not zrs_deduct_reserve(cur, revenue):
+            revenue = 0.0
         payroll = pay_salaries(cur, corp["id"])
 
         cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))

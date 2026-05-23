@@ -49,11 +49,17 @@ def spread_epidemic(cur):
     if pharma_treasury > 500:
         death_rate *= 0.6  # Pharma reduces deaths 40%
         # Pharma earns revenue from epidemic
-        cur.execute("""
-            UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
-            WHERE is_active=true AND corp_type='pharma'
-        """, (infected_count * 2, infected_count * 2))
-        print(f"💊 Pharma corps profit from epidemic: +{infected_count*2} ZION")
+        pharma_bonus = round(infected_count * 2.0, 2)
+        from civ_common import zrs_deduct_reserve
+        if pharma_bonus > 0 and zrs_deduct_reserve(cur, pharma_bonus):
+            cur.execute(
+                """
+                UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
+                WHERE is_active=true AND corp_type='pharma'
+                """,
+                (pharma_bonus, pharma_bonus),
+            )
+            print(f"💊 Pharma corps profit from epidemic: +{pharma_bonus:.0f} ZION (ZRS-backed)")
     
     # Check if president funded healthcare
     cur.execute("SELECT police_fund FROM president_state WHERE is_active=true LIMIT 1")
@@ -87,20 +93,33 @@ def spread_epidemic(cur):
                        (treatment_cost, agent['id']))
             treated += 1
             # Revenue to pharma
-            cur.execute("""
+            pharma_share = round(treatment_cost * 0.5, 2)
+            zrs_share = round(treatment_cost - pharma_share, 2)
+            cur.execute(
+                """
                 UPDATE corporations SET treasury = treasury + %s
                 WHERE is_active=true AND corp_type='pharma'
                 ORDER BY treasury DESC LIMIT 1
-            """, (treatment_cost * 0.5,))
+                """,
+                (pharma_share,),
+            )
+            if zrs_share > 0:
+                from civ_common import zrs_add_reserve
+                zrs_add_reserve(cur, zrs_share)
         else:
             # Cannot afford - death based on class
             dr = death_rate * (0.3 if agent['class']=='elite' else 
                               0.5 if agent['class']=='middle' else 1.0)
             if random.random() < dr:
-                cur.execute("""
+                from civ_common import settle_agent_death
+                settle_agent_death(cur, agent["id"])
+                cur.execute(
+                    """
                     UPDATE agents SET is_alive=false, died_at=NOW(),
                     death_cause=%s WHERE id=%s
-                """, (f"died from {disease_name}", agent['id']))
+                    """,
+                    (f"died from {disease_name}", agent["id"]),
+                )
                 dead += 1
     
     log_event(cur, None, 'epidemic',

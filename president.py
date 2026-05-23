@@ -14,6 +14,7 @@ from civ_common import (
     insert_active_effect,
     is_uprising_active,
     log_event,
+    nationalize_corporations_from_zrs,
     process_revolution_cycle,
     apply_martial_law_divisions,
     apply_stimulus_revolution_bonus,
@@ -38,6 +39,7 @@ def ensure_president_schema(cur):
         ("corruption_index", "NUMERIC(5,2) DEFAULT 30"),
         ("tax_relief_until", "TIMESTAMP"),
         ("martial_law_until", "TIMESTAMP"),
+        ("hours_in_power", "INTEGER DEFAULT 0"),
     ]:
         try:
             cur.execute(
@@ -158,30 +160,13 @@ def update_corruption(cur, data: dict, action: str) -> float:
 
 
 def nationalize_bankrupt_corps(cur, president: dict):
-    cur.execute(
-        """
-        SELECT id, name FROM corporations
-        WHERE is_active = false
-        ORDER BY id DESC LIMIT 3
-        """
+    nationalize_corporations_from_zrs(
+        cur,
+        president["agent_id"],
+        president["agent_name"],
+        limit=3,
+        source="president",
     )
-    for corp in cur.fetchall():
-        cur.execute(
-            """
-            UPDATE corporations SET is_active = true, treasury = treasury + 1000,
-                owner = 'state', negative_cycles = 0
-            WHERE id = %s
-            """,
-            (corp["id"],),
-        )
-        log_event(
-            cur,
-            president["agent_id"],
-            "president",
-            f"President {president['agent_name']} nationalized {corp['name']}",
-            1000,
-            priority="urgent",
-        )
 
 
 def execute_decision(cur, data: dict):
@@ -245,30 +230,29 @@ def execute_decision(cur, data: dict):
         )
     elif data["poverty_pct"] > 60 and data["treasury"] > 10000:
         action = "STIMULUS"
-        cur.execute(
-            """
-            UPDATE agents SET balance = balance + %s
-            WHERE is_alive = true AND balance < 10
-            """,
-            (STIMULUS_AMOUNT,),
-        )
-        cur.execute(
-            "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
-            (STIMULUS_AMOUNT * 100,),
-        )
-        insert_active_effect(
-            cur, "stimulus", 24, poverty_modifier=-0.15,
-            metadata={"amount": STIMULUS_AMOUNT, "source": "president"},
-        )
-        apply_stimulus_revolution_bonus(cur)
-        log_event(
+        from civ_common import debit_personal_fund_pay_agents
+
+        n_paid, total_paid = debit_personal_fund_pay_agents(
             cur,
-            pid,
-            "president",
-            f"STIMULUS: President {pname} gave {STIMULUS_AMOUNT:.0f} ZION to all poor agents",
             STIMULUS_AMOUNT,
-            priority="urgent",
+            "is_alive = true AND balance < 10",
         )
+        if n_paid == 0:
+            action = None
+        else:
+            insert_active_effect(
+                cur, "stimulus", 24, poverty_modifier=-0.15,
+                metadata={"amount": STIMULUS_AMOUNT, "source": "president"},
+            )
+            apply_stimulus_revolution_bonus(cur)
+            log_event(
+                cur,
+                pid,
+                "president",
+                f"STIMULUS: President {pname} gave {STIMULUS_AMOUNT:.0f} ZION to {n_paid} poor agents ({total_paid:.0f} from personal fund)",
+                total_paid,
+                priority="urgent",
+            )
     elif data["corp_bankruptcies_week"] > 3:
         action = "NATIONALIZE_CORPS"
         nationalize_bankrupt_corps(cur, pres)
@@ -338,27 +322,44 @@ def execute_decision(cur, data: dict):
 
 
 def ensure_president_exists(cur):
-    if get_president(cur):
-        return
-    cur.execute(
-        """
-        SELECT id, name, charisma FROM agents
-        WHERE is_alive = true ORDER BY charisma DESC, balance DESC LIMIT 1
-        """
-    )
-    ag = cur.fetchone()
-    if not ag:
-        return
-    cur.execute(
-        """
-        INSERT INTO president_state (
-            agent_id, agent_name, party, approval_rating, personal_fund,
-            police_fund, is_active, phase, corruption_index
-        ) VALUES (%s, %s, 'blue', 60, 1000, 500, true, 'ruling', 30)
-        """,
-        (ag["id"], ag["name"]),
-    )
-    log_event(cur, ag["id"], "election", f"President {ag['name']} inaugurated", 0, priority="normal")
+    """Fill vacant or dead-president office via senate election (not legacy blue bootstrap)."""
+    president = get_president(cur)
+    if president:
+        cur.execute(
+            "SELECT is_alive FROM agents WHERE id = %s",
+            (president["agent_id"],),
+        )
+        agent = cur.fetchone()
+        if agent and agent.get("is_alive"):
+            return
+        cur.execute(
+            """
+            UPDATE president_state
+            SET is_active = false, phase = 'deceased'
+            WHERE is_active = true
+            """
+        )
+        log_event(
+            cur,
+            president["agent_id"],
+            "election",
+            f"President {president['agent_name']} office vacated — agent deceased",
+            0,
+            priority="breaking",
+        )
+
+    from senate import run_election
+
+    winner = run_election(cur, "president")
+    if winner:
+        log_event(
+            cur,
+            winner["agent_id"],
+            "election",
+            f"President {winner['name']} inaugurated after vacancy",
+            0,
+            priority="normal",
+        )
 
 
 def main():
@@ -390,7 +391,12 @@ def main():
         )
 
         cur.execute(
-            "UPDATE president_state SET days_in_power = COALESCE(days_in_power, 0) + 1 WHERE is_active = true"
+            """
+            UPDATE president_state SET
+                hours_in_power = COALESCE(hours_in_power, 0) + 1,
+                days_in_power = COALESCE(days_in_power, 0) + 1
+            WHERE is_active = true
+            """
         )
 
         execute_decision(cur, data)
@@ -409,6 +415,8 @@ def main():
                     0,
                     priority="breaking",
                 )
+                ensure_president_exists(cur)
+                president = get_president(cur)
             check_compliance(cur, president)
             if not is_uprising_active(cur):
                 sync_police_divisions(cur)

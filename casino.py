@@ -21,38 +21,53 @@ def run_casino(cur):
     """)
     gamblers = cur.fetchall()
     
-    jackpot = 0
+    house_pool = 0.0
     winners = 0
     losers = 0
     
     for gambler in gamblers:
         bet = round(min(float(gambler['balance']) * 0.2, 50), 2)
+        if bet <= 0:
+            continue
+        cur.execute(
+            "UPDATE agents SET balance = balance - %s WHERE id = %s AND balance >= %s",
+            (bet, gambler['id'], bet),
+        )
+        if cur.rowcount != 1:
+            continue
         
-        # Казино всегда выигрывает в среднем (55% проигрыш)
-        if random.random() < 0.45:  # выиграл
+        if random.random() < 0.45:
             winnings = round(bet * random.uniform(1.5, 3.0), 2)
-            net_win = round(winnings - bet, 2)  # net profit only
-            cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                       (net_win, gambler['id']))
+            from_pool = min(winnings, house_pool)
+            house_pool -= from_pool
+            from_zrs = round(winnings - from_pool, 2)
+            if from_zrs > 0:
+                from civ_common import zrs_deduct_reserve
+                if zrs_deduct_reserve(cur, from_zrs):
+                    house_pool += 0
+                else:
+                    winnings = from_pool
+            if winnings > 0:
+                cur.execute(
+                    "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                    (winnings, gambler['id']),
+                )
             log_event(cur, gambler['id'], 'casino',
                      f"🎰 {gambler['name']} won {winnings:.1f} ZION at underground casino!",
                      winnings)
             winners += 1
-            jackpot -= winnings
             print(f"🎰 {gambler['name']} WON {winnings:.1f} ZION!")
-        else:  # проиграл
-            cur.execute("UPDATE agents SET balance = balance - %s WHERE id = %s",
-                       (bet, gambler['id']))
+        else:
+            house_pool += bet
             log_event(cur, gambler['id'], 'casino',
                      f"💸 {gambler['name']} lost {bet:.1f} ZION at underground casino!",
                      bet)
             losers += 1
-            jackpot += bet
             print(f"💸 {gambler['name']} lost {bet:.1f} ZION")
     
-    # Полиция иногда накрывает казино
     if random.random() < 0.2:
-        confiscated = abs(jackpot)
+        confiscated = round(house_pool, 2)
+        house_pool = 0.0
         if confiscated > 0:
             cur.execute("""
                 UPDATE sheriff_state SET police_budget = police_budget + %s 

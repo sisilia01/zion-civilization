@@ -10,6 +10,7 @@ from civ_common import (
     get_conn,
     get_cursor,
     log_event,
+    zrs_add_reserve,
 )
 
 UNIVERSITY_DAYS = 3
@@ -46,6 +47,7 @@ def process_children(cur):
                     "UPDATE agents SET balance = balance - %s WHERE id = %s",
                     (CHILD_MAINTENANCE, pid),
                 )
+                zrs_add_reserve(cur, CHILD_MAINTENANCE)
 
         age = int(child["age_days"] or 0) + 1
         if age >= CHILD_MAX_DAY:
@@ -129,6 +131,7 @@ def process_studying(cur):
                     "UPDATE agents SET balance = balance - %s WHERE id = %s",
                     (UNIVERSITY_COST, ag["id"]),
                 )
+                zrs_add_reserve(cur, UNIVERSITY_COST)
             if elapsed >= UNIVERSITY_DAYS:
                 cur.execute(
                     """
@@ -164,6 +167,7 @@ def process_studying(cur):
                     "UPDATE agents SET balance = balance - %s WHERE id = %s",
                     (ACADEMY_COST, ag["id"]),
                 )
+                zrs_add_reserve(cur, ACADEMY_COST)
             if elapsed >= ACADEMY_DAYS:
                 cur.execute(
                     """

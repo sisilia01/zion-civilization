@@ -134,6 +134,8 @@ def food_crisis(cur, prices):
             starving += 1
             death_chance = 0.1 if agent['class'] == 'elite' else 0.2 if agent['class'] == 'middle' else 0.35
             if random.random() < death_chance:
+                from civ_common import settle_agent_death
+                settle_agent_death(cur, agent['id'])
                 cur.execute("""
                     UPDATE agents SET is_alive=false, died_at=NOW(),
                     death_cause='starvation' WHERE id=%s
@@ -145,10 +147,14 @@ def food_crisis(cur, prices):
         cur.execute("SELECT COUNT(*) as cnt FROM corporations WHERE is_active=true AND corp_type='agro'")
         agro_count = max(cur.fetchone()['cnt'], 1)
         per_corp = round(agro_revenue * 0.9 / agro_count, 2)
+        zrs_slice = round(agro_revenue * 0.1, 2)
         cur.execute("""
             UPDATE corporations SET treasury = treasury + %s, revenue = revenue + %s
             WHERE is_active=true AND corp_type='agro'
         """, (per_corp, per_corp))
+        if zrs_slice > 0:
+            from civ_common import zrs_add_reserve
+            zrs_add_reserve(cur, zrs_slice)
     
     if dead > 0:
         log_event(cur, None, 'famine',
@@ -169,6 +175,9 @@ def trade_resources(cur, prices):
     
     for trader in traders:
         profit = round(random.uniform(5, 30), 2)
+        from civ_common import zrs_deduct_reserve
+        if not zrs_deduct_reserve(cur, profit):
+            continue
         cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
                    (profit, trader['id']))
         log_event(cur, trader['id'], 'trade',

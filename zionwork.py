@@ -182,12 +182,16 @@ def run_zionwork():
 
         if worker:
             worker_id, worker_name, skill_val = worker
-            worker_reward = reward * 0.98
+            worker_reward = round(reward * 0.98, 2)
+            platform_fee = round(reward - worker_reward, 2)
 
             cur.execute(
                 "UPDATE agents SET balance = balance + %s WHERE id = %s",
                 (worker_reward, worker_id),
             )
+            if platform_fee > 0:
+                from civ_common import zrs_add_reserve
+                zrs_add_reserve(cur, platform_fee)
 
             cur.execute(
                 """

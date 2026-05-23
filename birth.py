@@ -3,10 +3,19 @@
 import random
 from datetime import datetime
 
-from civ_common import agent_class_from_balance, ensure_schema, get_conn, get_cursor, log_event
+from civ_common import (
+    agent_class_from_balance,
+    ensure_schema,
+    fund_birth_from_zrs,
+    get_conn,
+    get_cursor,
+    log_event,
+    settle_agent_death,
+)
 from names_pool import generate_unique_name
 
 OLD_AGE_DAYS = 100
+BIRTH_COST = 50.0
 
 
 def birth_name(cur, gender: str) -> str:
@@ -60,10 +69,11 @@ def run_birth_cycle():
     for ag in all_agents:
         age = int(ag["age_days"] or 0)
         if age > OLD_AGE_DAYS:
+            settle_agent_death(cur, ag["id"])
             cur.execute(
                 """
                 UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                    death_cause = 'old_age', balance = 0
+                    death_cause = 'old_age'
                 WHERE id = %s
                 """,
                 (ag["id"],),
@@ -81,10 +91,11 @@ def run_birth_cycle():
         bal = float(ag["balance"] or 0)
         debt = float(ag["debt"] or 0)
         if bal <= 0 and debt > STARVATION_DEBT:
+            settle_agent_death(cur, ag["id"])
             cur.execute(
                 """
                 UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                    death_cause = 'starvation', balance = 0, debt = 0
+                    death_cause = 'starvation', debt = 0
                 WHERE id = %s
                 """,
                 (ag["id"],),
@@ -93,8 +104,8 @@ def run_birth_cycle():
 
     cur.execute(
         """
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = TRUE AND balance >= 5
+        SELECT id, name FROM agents
+        WHERE is_alive = TRUE
         ORDER BY RANDOM()
         """
     )
@@ -106,14 +117,8 @@ def run_birth_cycle():
         if births >= max_births:
             break
 
-        parent_balance = float(parent["balance"] or 0)
-        child_balance = max(5.0, min(100.0, round(parent_balance * 0.20, 2)))
-        if parent_balance < child_balance + 1:
-            continue
-
         gender = random.choice(["male", "female"])
         child_name = birth_name(cur, gender)
-        child_class = agent_class_from_balance(child_balance)
 
         cur.execute(
             """
@@ -122,15 +127,13 @@ def run_birth_cycle():
                 charisma, aggression, faith, intelligence, strength, loyalty,
                 education_status, job_status, age_days
             ) VALUES (
-                %s, %s, %s, %s, %s,
+                %s, 'poor', 0, %s, %s,
                 %s, %s, %s, %s, %s, %s,
                 'child', 'unemployed', 0
             ) RETURNING id
             """,
             (
                 child_name,
-                child_class,
-                child_balance,
                 parent["id"],
                 gender,
                 random.randint(1, 15),
@@ -142,21 +145,20 @@ def run_birth_cycle():
             ),
         )
         child_id = cur.fetchone()["id"]
+        if not fund_birth_from_zrs(cur, child_id, BIRTH_COST):
+            cur.execute("DELETE FROM agents WHERE id = %s", (child_id,))
+            continue
 
-        cur.execute(
-            "UPDATE agents SET balance = balance - %s WHERE id = %s",
-            (child_balance, parent["id"]),
-        )
-
+        child_share = round(BIRTH_COST * 0.20, 2)
         log_event(
             cur,
             child_id,
             "birth",
-            f"New citizen {child_name} born to {parent['name']} with {child_balance:.0f} ZION",
-            child_balance,
+            f"New citizen {child_name} born to {parent['name']} — ZRS funded {child_share:.0f} ZION",
+            child_share,
             priority="normal",
         )
-        print(f"👶 {parent['name']} → {child_name} ({child_balance:.0f} ZION)")
+        print(f"👶 {parent['name']} → {child_name} (ZRS birth grant {child_share:.0f} ZION)")
         births += 1
 
     conn.commit()

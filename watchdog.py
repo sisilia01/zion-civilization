@@ -39,6 +39,9 @@ CRON_SCRIPTS = {
     "police":       ("police.py",         3600),   # 1 hour
     "sheriff":      ("sheriff.py",        3600),   # 1 hour
     "president":    ("president.py",      3600),   # 1 hour
+    "senate":       ("senate.py",         3600),   # 1 hour — legislature & elections
+    "political_parties": ("political_parties.py", 3600),
+    "vip_reflection": ("vip_reflection.py", 86400),  # once per day
     "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
@@ -51,7 +54,7 @@ CRON_SCRIPTS = {
     "casino":       ("casino.py",         1800),
     "catastrophes": ("catastrophes.py",   7200),
     "zionwork":     ("zionwork.py",       1800),
-    "politics":     ("politics.py",       3600),
+    # Retired - replaced by senate.py + president.py + political_parties.py
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),

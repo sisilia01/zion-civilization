@@ -12,7 +12,9 @@ from civ_common import (
     get_zrs_state,
     hungry_agent_pct,
     log_event,
+    route_food_spending,
     route_tax_revenue,
+    settle_agent_death,
     tax_rate_for_balance,
     zrs_deduct_reserve,
     zrs_reserve,
@@ -52,10 +54,11 @@ def hunger_check(cur) -> tuple[int, int, float]:
             health -= 10
             hungry += 1
             if health <= 0:
+                settle_agent_death(cur, ag["id"])
                 cur.execute(
                     """
                     UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                        death_cause = 'starvation', balance = 0, health = 0
+                        death_cause = 'starvation', health = 0
                     WHERE id = %s
                     """,
                     (ag["id"],),
@@ -75,6 +78,21 @@ def hunger_check(cur) -> tuple[int, int, float]:
             "UPDATE agents SET balance = %s, health = %s WHERE id = %s",
             (balance, health, ag["id"]),
         )
+
+    cur.execute(
+        """
+        UPDATE agents SET dust_days = dust_days + 1
+        WHERE is_alive = true AND balance < %s
+        """,
+        (food_cost,),
+    )
+    cur.execute(
+        """
+        UPDATE agents SET dust_days = 0
+        WHERE is_alive = true AND balance >= %s AND dust_days > 0
+        """,
+        (food_cost,),
+    )
 
     if hungry > 0:
         cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
@@ -117,6 +135,20 @@ def apply_tax_cycle():
 
     cur.execute(
         """
+        SELECT tax_relief_until FROM president_state
+        WHERE is_active = true LIMIT 1
+        """
+    )
+    relief_row = cur.fetchone()
+    tax_relief_active = False
+    if relief_row and relief_row.get("tax_relief_until"):
+        cur.execute(
+            "SELECT (tax_relief_until > NOW()) AS active FROM president_state WHERE is_active = true LIMIT 1"
+        )
+        tax_relief_active = bool((cur.fetchone() or {}).get("active"))
+
+    cur.execute(
+        """
         SELECT id, name, class, balance, COALESCE(debt, 0) AS debt
         FROM agents WHERE is_alive = TRUE
         """
@@ -130,73 +162,96 @@ def apply_tax_cycle():
     )
 
     total_tax = 0.0
+    corp_tax_total = 0.0
 
-    for ag in agents:
-        balance = float(ag["balance"] or 0)
-        debt = float(ag["debt"] or 0)
-        base_rate = tax_rate_for_balance(balance)
-        rate = max(0.0, base_rate + tax_modifier_pct)
-        tax_amount = round(balance * rate, 4)
+    if tax_relief_active:
+        log_event(
+            cur,
+            None,
+            "tax",
+            "Tax relief active — president cancelled collections this cycle",
+            0,
+            priority="urgent",
+        )
+        print("Tax relief active — skipping agent and corporate tax collection")
+        for ag in agents:
+            cur.execute(
+                """
+                UPDATE agents SET age_days = COALESCE(age_days, 0) + 1
+                WHERE id = %s
+                """,
+                (ag["id"],),
+            )
+    else:
+        for ag in agents:
+            balance = float(ag["balance"] or 0)
+            debt = float(ag["debt"] or 0)
+            base_rate = tax_rate_for_balance(balance)
+            rate = max(0.0, base_rate + tax_modifier_pct)
+            tax_amount = round(balance * rate, 4)
 
-        paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
-        unpaid = round(tax_amount - paid, 4)
-        new_balance = round(balance - paid, 4)
-        new_debt = round(debt + unpaid, 4)
+            paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
+            unpaid = round(tax_amount - paid, 4)
+            new_balance = round(balance - paid, 4)
+            new_debt = round(debt + unpaid, 4)
 
-        if new_balance < STARVATION_BALANCE_THRESHOLD and new_debt > DEBT_DEATH_THRESHOLD:
-            if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
-                zrs_deduct_reserve(cur, ZRS_EMERGENCY_AID)
-                new_balance = ZRS_EMERGENCY_AID
-                log_event(
-                    cur,
-                    ag["id"],
-                    "zrs",
-                    f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION before starvation",
-                    ZRS_EMERGENCY_AID,
-                    priority="urgent",
-                )
-            else:
-                cur.execute(
-                    """
-                    UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                        death_cause = 'starvation', balance = 0, debt = 0, health = 0
-                    WHERE id = %s
-                    """,
-                    (ag["id"],),
-                )
-                starvation_deaths += 1
-                continue
+            if new_balance < STARVATION_BALANCE_THRESHOLD and new_debt > DEBT_DEATH_THRESHOLD:
+                if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
+                    zrs_deduct_reserve(cur, ZRS_EMERGENCY_AID)
+                    new_balance = ZRS_EMERGENCY_AID
+                    log_event(
+                        cur,
+                        ag["id"],
+                        "zrs",
+                        f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION before starvation",
+                        ZRS_EMERGENCY_AID,
+                        priority="urgent",
+                    )
+                else:
+                    settle_agent_death(cur, ag["id"])
+                    cur.execute(
+                        """
+                        UPDATE agents SET is_alive = FALSE, died_at = NOW(),
+                            death_cause = 'starvation', debt = 0, health = 0
+                        WHERE id = %s
+                        """,
+                        (ag["id"],),
+                    )
+                    starvation_deaths += 1
+                    continue
 
-        new_class = agent_class_from_balance(new_balance)
+            new_class = agent_class_from_balance(new_balance)
+            cur.execute(
+                """
+                UPDATE agents SET balance = %s, debt = %s, class = %s,
+                    age_days = COALESCE(age_days, 0) + 1
+                WHERE id = %s
+                """,
+                (new_balance, new_debt, new_class, ag["id"]),
+            )
+            total_tax += paid
+
         cur.execute(
             """
-            UPDATE agents SET balance = %s, debt = %s, class = %s,
-                age_days = COALESCE(age_days, 0) + 1
-            WHERE id = %s
-            """,
-            (new_balance, new_debt, new_class, ag["id"]),
+            SELECT id, name, COALESCE(last_cycle_revenue, revenue, 0) AS rev, treasury
+            FROM corporations WHERE is_active = TRUE
+            """
         )
-        total_tax += paid
+        for corp in cur.fetchall():
+            rev = float(corp["rev"] or 0)
+            if rev <= 0:
+                continue
+            ctax = round(rev * CORP_TAX_RATE * tax_collection_mult, 2)
+            treasury = float(corp["treasury"] or 0)
+            paid = min(ctax, max(treasury, 0))
+            cur.execute(
+                "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+                (paid, corp["id"]),
+            )
+            corp_tax_total += paid
 
-    corp_tax_total = 0.0
-    cur.execute(
-        """
-        SELECT id, name, COALESCE(last_cycle_revenue, revenue, 0) AS rev, treasury
-        FROM corporations WHERE is_active = TRUE
-        """
-    )
-    for corp in cur.fetchall():
-        rev = float(corp["rev"] or 0)
-        if rev <= 0:
-            continue
-        ctax = round(rev * CORP_TAX_RATE * tax_collection_mult, 2)
-        treasury = float(corp["treasury"] or 0)
-        paid = min(ctax, max(treasury, 0))
-        cur.execute(
-            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
-            (paid, corp["id"]),
-        )
-        corp_tax_total += paid
+    if total_food > 0:
+        route_food_spending(cur, total_food)
 
     grand_total = total_tax + corp_tax_total
     if grand_total > 0:

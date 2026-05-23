@@ -12,6 +12,7 @@ from civ_common import (
     get_division_officers,
     get_zrs_policy_mode,
     log_event,
+    zrs_add_reserve,
 )
 
 RECRUIT_BONUS = 5.0
@@ -287,6 +288,11 @@ def dissolve_empty_clans(cur):
         """
     )
     for clan in cur.fetchall():
+        cur.execute("SELECT treasury FROM clans WHERE id = %s", (clan["id"],))
+        row = cur.fetchone()
+        remainder = round(float((row or {}).get("treasury") or 0), 2)
+        if remainder > 0:
+            zrs_add_reserve(cur, remainder)
         cur.execute("DELETE FROM clan_territory WHERE clan_id = %s", (clan["id"],))
         cur.execute(
             "UPDATE clans SET treasury = 0, members_count = 0 WHERE id = %s",

@@ -3,7 +3,16 @@
 import random
 from datetime import datetime
 
-from civ_common import ensure_schema, get_conn, get_cursor, hungry_agent_pct, log_event
+from civ_common import (
+    ensure_schema,
+    get_conn,
+    get_cursor,
+    hungry_agent_pct,
+    log_event,
+    settle_agent_death,
+    zrs_add_reserve,
+    zrs_deduct_reserve,
+)
 
 CATASTROPHES = [
     {"name": "Great Plague", "type": "plague", "damage": 0.30, "emoji": "🦠"},
@@ -137,12 +146,21 @@ def run_catastrophe(cur):
         cur.execute("SELECT id, name, balance FROM agents WHERE is_alive = TRUE")
         agents = cur.fetchall()
         affected = random.sample(agents, max(1, int(len(agents) * random.uniform(0.3, 0.6))))
+        blessing_total = 0.0
+        grants = []
         for agent_id, name, balance in [(a["id"], a["name"], a["balance"]) for a in affected]:
-            bonus = float(balance) * blessing["bonus"]
-            cur.execute(
-                "UPDATE agents SET balance = balance + %s WHERE id = %s",
-                (bonus, agent_id),
-            )
+            bonus = round(float(balance) * blessing["bonus"], 2)
+            if bonus > 0:
+                grants.append((agent_id, bonus))
+                blessing_total += bonus
+        if blessing_total > 0 and zrs_deduct_reserve(cur, blessing_total):
+            for agent_id, bonus in grants:
+                cur.execute(
+                    "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                    (bonus, agent_id),
+                )
+        else:
+            grants = []
         log_event(
             cur,
             None,
@@ -161,15 +179,17 @@ def run_catastrophe(cur):
         damage = float(balance) * cat["damage"]
         new_balance = float(balance) - damage
         if new_balance < 1:
+            settle_agent_death(cur, agent_id)
             cur.execute(
                 """
-                UPDATE agents SET balance = 0, is_alive = FALSE,
+                UPDATE agents SET is_alive = FALSE,
                 died_at = NOW(), death_cause = %s WHERE id = %s
                 """,
                 (cat["type"], agent_id),
             )
             deaths += 1
         else:
+            zrs_add_reserve(cur, damage)
             cur.execute(
                 "UPDATE agents SET balance = %s WHERE id = %s",
                 (new_balance, agent_id),

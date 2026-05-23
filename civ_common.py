@@ -364,6 +364,11 @@ def ensure_schema(cur):
         ("revolution_meter", "NUMERIC(8,2) DEFAULT 0"),
         ("orders_given_cycle", "INTEGER DEFAULT 0"),
         ("compliance_low_cycles", "INTEGER DEFAULT 0"),
+        ("hours_in_power", "INTEGER DEFAULT 0"),
+        ("dissolved_until", "TIMESTAMP"),
+        ("dictatorship_mode", "BOOLEAN DEFAULT false"),
+        ("vetoes_used", "INTEGER DEFAULT 0"),
+        ("election_delayed", "BOOLEAN DEFAULT false"),
     ]:
         try:
             cur.execute(
@@ -371,6 +376,16 @@ def ensure_schema(cur):
             )
         except Exception:
             pass
+
+    try:
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS president_state_one_active
+            ON president_state (is_active) WHERE is_active = true
+            """
+        )
+    except Exception:
+        pass
 
     for col, typedef in [
         ("coup_points", "INTEGER DEFAULT 0"),
@@ -1061,30 +1076,211 @@ def get_zrs_state(cur):
 
 
 def route_tax_revenue(cur, total_tax: float):
-    """40% president | 30% ZRS reserve | 20% sheriff | 10% burned."""
+    """40% president personal_fund | 40% ZRS reserve | 20% sheriff (no burn — full conservation)."""
     pres = round(total_tax * 0.40, 2)
-    zrs = round(total_tax * 0.30, 2)
-    sheriff = round(total_tax * 0.20, 2)
-    burned = round(total_tax - pres - zrs - sheriff, 2)
-    cur.execute(
-        "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s WHERE id = 1",
-        (zrs,),
-    )
+    zrs = round(total_tax * 0.40, 2)
+    sheriff = round(total_tax - pres - zrs, 2)
+    if zrs > 0:
+        cur.execute(
+            "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s WHERE id = 1",
+            (zrs,),
+        )
+    if pres > 0:
+        cur.execute(
+            """
+            UPDATE president_state SET personal_fund = personal_fund + %s
+            WHERE is_active = true
+            """,
+            (pres,),
+        )
+    if sheriff > 0:
+        cur.execute(
+            """
+            UPDATE sheriff_state SET police_budget = police_budget + %s
+            WHERE is_active = true
+            """,
+            (sheriff,),
+        )
+    return pres, zrs, sheriff, 0.0
+
+
+def transfer_agent_balance(cur, from_id: int, to_id: int, amount: float) -> bool:
+    """Debit one agent, credit another — same amount."""
+    amount = round(float(amount), 2)
+    if amount <= 0 or from_id == to_id:
+        return False
     cur.execute(
         """
-        UPDATE president_state SET personal_fund = personal_fund + %s
-        WHERE is_active = true
+        UPDATE agents SET balance = balance - %s
+        WHERE id = %s AND is_alive = true AND balance >= %s
         """,
-        (pres,),
+        (amount, from_id, amount),
     )
+    if cur.rowcount != 1:
+        return False
+    cur.execute(
+        "UPDATE agents SET balance = balance + %s WHERE id = %s AND is_alive = true",
+        (amount, to_id),
+    )
+    return True
+
+
+def settle_agent_balance_to_zrs(cur, agent_id: int, amount: float | None = None) -> float:
+    """Move agent balance into ZRS reserve (no destruction)."""
+    if amount is None:
+        cur.execute("SELECT balance FROM agents WHERE id = %s", (agent_id,))
+        row = cur.fetchone()
+        amount = float((row or {}).get("balance") or 0)
+    amount = round(max(0.0, float(amount)), 2)
+    if amount <= 0:
+        return 0.0
+    cur.execute("UPDATE agents SET balance = 0 WHERE id = %s", (agent_id,))
+    zrs_add_reserve(cur, amount)
+    return amount
+
+
+def settle_agent_death(cur, agent_id: int) -> float:
+    """Death settlement: living parent inherits; otherwise ZRS reserve."""
+    cur.execute(
+        "SELECT balance, parent_id FROM agents WHERE id = %s",
+        (agent_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return 0.0
+    amount = round(max(0.0, float(row["balance"] or 0)), 2)
+    if amount <= 0:
+        return 0.0
+    cur.execute("UPDATE agents SET balance = 0 WHERE id = %s", (agent_id,))
+    heir = row.get("parent_id")
+    if heir:
+        cur.execute(
+            "SELECT id FROM agents WHERE id = %s AND is_alive = true",
+            (heir,),
+        )
+        if cur.fetchone():
+            cur.execute(
+                "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                (amount, heir),
+            )
+            return amount
+    zrs_add_reserve(cur, amount)
+    return amount
+
+
+def route_food_spending(cur, total_food: float):
+    """Agent food payments → ZRS reserve (conservation)."""
+    total_food = round(float(total_food), 2)
+    if total_food > 0:
+        zrs_add_reserve(cur, total_food)
+
+
+BIRTH_CHILD_SHARE = 0.20
+
+
+def fund_birth_from_zrs(cur, child_id: int, birth_cost: float) -> bool:
+    """
+    ZRS pays birth_cost: child receives 20%, remainder returns to ZRS reserve.
+    No parent balance debit.
+    """
+    birth_cost = round(float(birth_cost), 2)
+    if birth_cost <= 0:
+        return False
+    if not zrs_deduct_reserve(cur, birth_cost):
+        return False
+    child_share = round(birth_cost * BIRTH_CHILD_SHARE, 2)
+    recycle = round(birth_cost - child_share, 2)
+    cur.execute(
+        "UPDATE agents SET balance = %s WHERE id = %s",
+        (child_share, child_id),
+    )
+    if recycle > 0:
+        zrs_add_reserve(cur, recycle)
+    return True
+
+
+def grant_from_zrs_to_agents(
+    cur,
+    total_amount: float,
+    per_agent: float,
+    where_sql: str,
+    limit: int | None = None,
+) -> tuple[int, float]:
+    """Deduct total from ZRS, credit each matching agent per_agent. Returns (count, paid)."""
+    total_amount = round(float(total_amount), 2)
+    per_agent = round(float(per_agent), 2)
+    if total_amount <= 0 or per_agent <= 0:
+        return 0, 0.0
+    if not zrs_deduct_reserve(cur, total_amount):
+        return 0, 0.0
+    lim = f" LIMIT {int(limit)}" if limit else ""
+    cur.execute(
+        f"SELECT id FROM agents WHERE {where_sql}{lim}",
+    )
+    rows = cur.fetchall()
+    for row in rows:
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (per_agent, row["id"]),
+        )
+    paid = round(per_agent * len(rows), 2)
+    refund = round(total_amount - paid, 2)
+    if refund > 0:
+        zrs_add_reserve(cur, refund)
+    return len(rows), paid
+
+
+def debit_personal_fund_pay_agents(
+    cur,
+    per_agent: float,
+    where_sql: str,
+) -> tuple[int, float]:
+    """Debit president personal_fund for exact payout to matching agents."""
+    cur.execute(
+        f"SELECT id FROM agents WHERE {where_sql}",
+    )
+    rows = cur.fetchall()
+    n = len(rows)
+    total = round(per_agent * n, 2)
+    if n == 0 or total <= 0:
+        return 0, 0.0
     cur.execute(
         """
-        UPDATE sheriff_state SET police_budget = police_budget + %s
-        WHERE is_active = true
+        UPDATE president_state
+        SET personal_fund = personal_fund - %s
+        WHERE is_active = true AND personal_fund >= %s
         """,
-        (sheriff,),
+        (total, total),
     )
-    return pres, zrs, sheriff, burned
+    if cur.rowcount != 1:
+        return 0, 0.0
+    for row in rows:
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (per_agent, row["id"]),
+        )
+    return n, total
+
+
+def zrs_pay_elite_tax_to_reserve(cur) -> float:
+    """Collect 3% elite wealth into ZRS (VIP raise_taxes) — returns amount seized."""
+    cur.execute(
+        """
+        SELECT COALESCE(SUM(balance * 0.03), 0) AS s
+        FROM agents WHERE is_alive = true AND class = 'elite'
+        """
+    )
+    seized = round(float(cur.fetchone()["s"] or 0), 2)
+    if seized <= 0:
+        return 0.0
+    cur.execute(
+        """
+        UPDATE agents SET balance = GREATEST(0, balance * 0.97)
+        WHERE is_alive = true AND class = 'elite'
+        """
+    )
+    zrs_add_reserve(cur, seized)
+    return seized
 
 
 def zrs_reserve(cur) -> float:
@@ -1110,6 +1306,121 @@ def zrs_add_reserve(cur, amount: float):
     cur.execute(
         "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s, updated_at = NOW() WHERE id = 1",
         (amount,),
+    )
+
+
+NATIONALIZE_ZRS_PER_CORP = 1000.0
+
+
+def nationalize_corporations_from_zrs(
+    cur,
+    president_agent_id: int,
+    president_name: str,
+    limit: int = 3,
+    source: str = "president",
+) -> float:
+    """Reactivate bankrupt corps; fund each from ZRS (no mint). Returns total ZRS spent."""
+    cur.execute(
+        """
+        SELECT id, name FROM corporations
+        WHERE is_active = false
+        ORDER BY id DESC LIMIT %s
+        """,
+        (limit,),
+    )
+    corps = cur.fetchall()
+    total = 0.0
+    for corp in corps:
+        if not zrs_deduct_reserve(cur, NATIONALIZE_ZRS_PER_CORP):
+            break
+        cur.execute(
+            """
+            UPDATE corporations
+            SET is_active = true, treasury = treasury + %s,
+                owner = 'state', negative_cycles = 0
+            WHERE id = %s
+            """,
+            (NATIONALIZE_ZRS_PER_CORP, corp["id"]),
+        )
+        total += NATIONALIZE_ZRS_PER_CORP
+        log_event(
+            cur,
+            president_agent_id,
+            source,
+            f"Nationalized {corp['name']}: +{NATIONALIZE_ZRS_PER_CORP:.0f} ZION from ZRS ({president_name})",
+            NATIONALIZE_ZRS_PER_CORP,
+            priority="urgent",
+        )
+    return total
+
+
+def transfer_power(
+    cur,
+    reason: str,
+    *,
+    new_agent_id: int | None = None,
+    new_agent_name: str | None = None,
+    new_party: str | None = None,
+    phase: str = "interim",
+    is_dictator: bool = False,
+    dictatorship_mode: bool = False,
+    kill_old_agent: bool = False,
+    death_cause: str = "coup",
+    log_agent_id: int | None = None,
+):
+    """Deactivate current president; INSERT new leader or run senate.run_election."""
+    cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
+    old = cur.fetchone()
+    old_name = (old or {}).get("agent_name", "Unknown")
+    old_aid = (old or {}).get("agent_id")
+
+    if old and kill_old_agent and old_aid:
+        settle_agent_death(cur, old_aid)
+        cur.execute(
+            """
+            UPDATE agents
+            SET is_alive = false, died_at = NOW(), death_cause = %s
+            WHERE id = %s
+            """,
+            (death_cause, old_aid),
+        )
+
+    cur.execute(
+        "UPDATE president_state SET is_active = false WHERE is_active = true"
+    )
+
+    if new_agent_id and new_agent_name:
+        party = new_party or "centrists"
+        cur.execute(
+            """
+            INSERT INTO president_state (
+                agent_id, agent_name, party, approval_rating, personal_fund,
+                police_fund, is_active, phase, corruption_index, days_in_power,
+                hours_in_power, vetoes_used, dictatorship_mode, is_dictator, dissolved_until
+            ) VALUES (%s, %s, %s, 40, 0, 0, true, %s, 60, 0, 0, 0, %s, %s, NULL)
+            """,
+            (
+                new_agent_id,
+                new_agent_name,
+                party,
+                phase,
+                dictatorship_mode,
+                is_dictator,
+            ),
+        )
+    else:
+        from senate import run_election
+
+        run_election(cur, "president")
+
+    aid = log_agent_id or new_agent_id or old_aid
+    log_event(
+        cur,
+        aid,
+        "election",
+        f"BREAKING: {reason} — power transfer from President {old_name}",
+        0,
+        priority="breaking",
     )
 
 
