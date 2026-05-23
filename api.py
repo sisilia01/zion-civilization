@@ -3,6 +3,7 @@ import re
 import json
 import hashlib
 import random
+import subprocess
 import urllib.request
 import psycopg2
 import psycopg2.extras
@@ -433,6 +434,24 @@ def _ensure_user_bets_table(cur):
         )
     """)
     cur.execute("ALTER TABLE user_bets ADD COLUMN IF NOT EXISTS resolves_at TIMESTAMP WITH TIME ZONE")
+    _ensure_user_bets_zionbet_columns(cur)
+
+
+def _ensure_user_bets_zionbet_columns(cur):
+    """Columns used by ZionBet place/close (idempotent)."""
+    alters = [
+        ("market_id", "TEXT"),
+        ("amount_sui", "DECIMAL(20, 4)"),
+        ("odds_at_bet", "DECIMAL(8, 2)"),
+        ("potential_payout", "DECIMAL(20, 4)"),
+        ("status", "VARCHAR(32) DEFAULT 'active'"),
+        ("payout", "DECIMAL(20, 4) DEFAULT 0"),
+        ("entry_price", "DECIMAL(20, 4)"),
+        ("on_chain_bet_id", "BIGINT"),
+        ("on_chain_market_id", "BIGINT"),
+    ]
+    for col, typ in alters:
+        cur.execute(f"ALTER TABLE user_bets ADD COLUMN IF NOT EXISTS {col} {typ}")
 
 
 def _ensure_resolves_at_backfill(cur):
@@ -803,15 +822,48 @@ def get_nfts(limit: int = 20):
 def get_leaderboard():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT wallet_address, points, messages_sent, zion_spent, referral_code FROM users ORDER BY points DESC LIMIT 20")
-    users = []
-    for row in cur.fetchall():
-        addr = row["wallet_address"]
-        users.append({"wallet": f"{addr[:6]}...{addr[-4:]}", "points": row["points"],
-            "messages": row["messages_sent"], "zion_spent": float(row["zion_spent"]),
-            "ref_code": row["referral_code"]})
-    cur.close(); conn.close()
-    return users
+    try:
+        _ensure_user_bets_table(cur)
+        cur.execute(
+            """
+            SELECT u.wallet_address, u.points, u.messages_sent, u.zion_spent, u.referral_code,
+                   COALESCE(b.net_pnl, 0) AS zionbet_pnl
+            FROM users u
+            LEFT JOIN (
+                SELECT wallet_address,
+                    SUM(
+                        CASE
+                            WHEN LOWER(COALESCE(status, '')) = 'won'
+                                THEN COALESCE(payout, potential_payout, 0) - amount_sui
+                            WHEN LOWER(COALESCE(status, '')) = 'lost'
+                                THEN -amount_sui
+                            ELSE 0
+                        END
+                    ) AS net_pnl
+                FROM user_bets
+                GROUP BY wallet_address
+            ) b ON b.wallet_address = u.wallet_address
+            ORDER BY u.points DESC
+            LIMIT 20
+            """
+        )
+        users = []
+        for row in cur.fetchall():
+            addr = row["wallet_address"]
+            pnl = float(row.get("zionbet_pnl") or 0)
+            users.append({
+                "wallet": f"{addr[:6]}...{addr[-4:]}",
+                "wallet_address": addr,
+                "points": row["points"],
+                "messages": row["messages_sent"],
+                "zion_spent": float(row["zion_spent"]),
+                "ref_code": row["referral_code"],
+                "zionbet_pnl": round(pnl, 2),
+            })
+        return users
+    finally:
+        cur.close()
+        conn.close()
 
 @app.get("/user/{wallet}")
 def get_user(wallet: str):
@@ -1621,35 +1673,416 @@ async def place_user_bet(request: Request):
         "potential_payout": round(potential_payout, 4)
     }
 
+def _zionbet_wallet_stats(cur, wallet: str) -> dict:
+    """Aggregate ZionBet stats for a wallet from user_bets."""
+    cur.execute(
+        """
+        SELECT
+            COUNT(*)::int AS total_bets,
+            COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) = 'won')::int AS wins,
+            COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) = 'lost')::int AS losses,
+            COUNT(*) FILTER (
+                WHERE LOWER(COALESCE(status, 'active')) IN ('active', 'pending')
+            )::int AS active_bets,
+            COALESCE(SUM(amount_sui), 0) AS total_staked,
+            COALESCE(
+                SUM(
+                    CASE WHEN LOWER(COALESCE(status, '')) = 'won'
+                    THEN COALESCE(payout, potential_payout, 0) ELSE 0 END
+                ),
+                0
+            ) AS total_won,
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) IN ('won', 'closed_early')
+                            THEN COALESCE(payout, potential_payout, 0) - amount_sui
+                        WHEN LOWER(COALESCE(status, '')) = 'lost'
+                            THEN -amount_sui
+                        ELSE 0
+                    END
+                ),
+                0
+            ) AS net_pnl
+        FROM user_bets
+        WHERE wallet_address = %s
+        """,
+        (wallet,),
+    )
+    row = cur.fetchone() or {}
+    total_bets = int(row.get("total_bets") or 0)
+    wins = int(row.get("wins") or 0)
+    settled = wins + int(row.get("losses") or 0)
+    win_rate = round((wins / settled) * 100, 1) if settled > 0 else 0.0
+    total_staked = float(row.get("total_staked") or 0)
+    total_won = float(row.get("total_won") or 0)
+    net_pnl = float(row.get("net_pnl") or 0)
+    return {
+        "total_bets": total_bets,
+        "wins": wins,
+        "losses": int(row.get("losses") or 0),
+        "active_bets": int(row.get("active_bets") or 0),
+        "total_staked": round(total_staked, 4),
+        "total_won": round(total_won, 4),
+        "net_pnl": round(net_pnl, 4),
+        "win_rate": win_rate,
+        "total_profit": round(net_pnl, 4),
+    }
+
+
+def _zionbet_resolve_entry_odds(row: dict) -> float:
+    """Entry price in cents (1–99) from odds_at_bet or polymarket yes/no."""
+    raw = row.get("odds_at_bet")
+    if raw is not None and float(raw) > 0:
+        return max(1.0, min(99.0, float(raw)))
+    is_yes = bool(row.get("prediction"))
+    yes_p = row.get("yes_price")
+    no_p = row.get("no_price")
+    if is_yes and yes_p is not None:
+        return max(1.0, min(99.0, float(yes_p)))
+    if not is_yes and no_p is not None:
+        return max(1.0, min(99.0, float(no_p)))
+    if yes_p is not None:
+        return max(1.0, min(99.0, float(yes_p if is_yes else (100 - float(yes_p)))))
+    return 50.0
+
+
+def _zionbet_resolve_current_odds(row: dict, entry_odds: float) -> float:
+    """Current mark price in cents for the bet side."""
+    is_yes = bool(row.get("prediction"))
+    yes_p = row.get("yes_price")
+    no_p = row.get("no_price")
+    if is_yes and yes_p is not None:
+        return max(1.0, min(99.0, float(yes_p)))
+    if not is_yes and no_p is not None:
+        return max(1.0, min(99.0, float(no_p)))
+    if yes_p is not None:
+        other = no_p if no_p is not None else (100 - float(yes_p))
+        return max(1.0, min(99.0, float(yes_p if is_yes else other)))
+    return entry_odds
+
+
+@app.post("/zionbet/close_position")
+async def close_zionbet_position(request: Request):
+    """Early exit: full or partial mark-to-market close (DB; on-chain transfer pending)."""
+    body = await request.json()
+    bet_id = int(body.get("bet_id") or 0)
+    wallet = (body.get("wallet") or "").strip()
+    partial_pct = float(body.get("partial_pct", 1.0))
+    partial_pct = max(0.01, min(1.0, partial_pct))
+
+    if not bet_id or not wallet:
+        return {"ok": False, "error": "missing_fields"}
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        _ensure_user_bets_table(cur)
+        conn.commit()
+
+        cur.execute(
+            """
+            SELECT ub.id, ub.wallet_address, ub.prediction, ub.amount_sui, ub.amount,
+                   ub.odds_at_bet, ub.status, ub.market_id, ub.event_type, ub.question,
+                   ub.potential_payout, ub.resolves_at,
+                   pm.yes_price, pm.no_price
+            FROM user_bets ub
+            LEFT JOIN polymarket_markets pm ON pm.market_id = ub.market_id
+            WHERE ub.id = %s AND ub.wallet_address = %s
+            LIMIT 1
+            """,
+            (bet_id, wallet),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"ok": False, "error": "not_found"}
+
+        status = (row.get("status") or "active").lower()
+        if status not in ("active", "pending", ""):
+            return {"ok": False, "error": f"not_active:{status}"}
+
+        stake = float(row.get("amount_sui") or row.get("amount") or 0)
+        if stake <= 0:
+            return {"ok": False, "error": "invalid_stake"}
+
+        entry_odds = _zionbet_resolve_entry_odds(row)
+        current = _zionbet_resolve_current_odds(row, entry_odds)
+        closed_stake = round(stake * partial_pct, 4)
+        remainder_stake = round(stake - closed_stake, 4)
+        full_close = partial_pct >= 0.999 or remainder_stake < 0.0001
+
+        payout_sui = round(closed_stake * current / entry_odds, 4)
+        profit_sui = round(payout_sui - closed_stake, 4)
+
+        if full_close:
+            cur.execute(
+                """
+                UPDATE user_bets
+                SET status = 'closed_early',
+                    payout = %s,
+                    amount_sui = %s,
+                    settled = TRUE,
+                    settled_at = NOW()
+                WHERE id = %s AND wallet_address = %s
+                """,
+                (payout_sui, closed_stake, bet_id, wallet),
+            )
+            if cur.rowcount < 1:
+                conn.rollback()
+                return {"ok": False, "error": "update_failed"}
+        else:
+            new_potential = round(remainder_stake * (100.0 / entry_odds), 4)
+            cur.execute(
+                """
+                INSERT INTO user_bets (
+                    wallet_address, market_id, event_type, question, amount_sui, amount,
+                    prediction, odds_at_bet, potential_payout, status, payout, settled, settled_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'closed_early', %s, TRUE, NOW())
+                """,
+                (
+                    wallet,
+                    row.get("market_id"),
+                    row.get("event_type") or "",
+                    (row.get("question") or "") + " (partial close)",
+                    closed_stake,
+                    closed_stake,
+                    bool(row.get("prediction")),
+                    entry_odds,
+                    payout_sui,
+                    payout_sui,
+                ),
+            )
+            cur.execute(
+                """
+                UPDATE user_bets
+                SET amount_sui = %s,
+                    amount = %s,
+                    potential_payout = %s,
+                    status = 'active'
+                WHERE id = %s AND wallet_address = %s
+                """,
+                (remainder_stake, remainder_stake, new_potential, bet_id, wallet),
+            )
+            if cur.rowcount < 1:
+                conn.rollback()
+                return {"ok": False, "error": "update_failed"}
+
+        conn.commit()
+        return {
+            "ok": True,
+            "payout_sui": payout_sui,
+            "profit_sui": profit_sui,
+            "partial_pct": partial_pct,
+            "closed_stake_sui": closed_stake,
+            "remainder_stake_sui": 0 if full_close else remainder_stake,
+            "entry_odds_cents": entry_odds,
+            "current_odds_cents": current,
+            "pending_transfer": True,
+            "message": "Position closed; SUI transfer pending on-chain settlement.",
+        }
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zionbet/stats/{wallet}")
+def get_zionbet_stats(wallet: str):
+    """ZionBet profile stats for wallet dropdown and portfolio."""
+    w = (wallet or "").strip()
+    if not w:
+        return {"error": "missing_wallet"}
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        _ensure_user_bets_table(cur)
+        conn.commit()
+        return _zionbet_wallet_stats(cur, w)
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.get("/my_bets/{wallet}")
 def get_my_bets(wallet: str):
     """История ставок пользователя"""
+    w = (wallet or "").strip()
+    if not w:
+        return []
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("""
-        SELECT id, market_id, question, prediction, amount_sui, 
-               odds_at_bet, potential_payout, status, created_at, payout
-        FROM user_bets 
-        WHERE wallet_address = %s 
-        ORDER BY created_at DESC LIMIT 20
-    """, (wallet,))
-    bets = []
-    for row in cur.fetchall():
-        bets.append({
-            "id": row["id"],
-            "market_id": row["market_id"],
-            "question": row["question"],
-            "direction": "YES" if row["prediction"] else "NO",
-            "amount_sui": float(row["amount_sui"] or 0),
-            "odds": row["odds_at_bet"],
-            "potential_payout": float(row["potential_payout"] or 0),
-            "status": row["status"],
-            "created_at": str(row["created_at"]),
-            "payout": float(row["payout"] or 0)
-        })
-    cur.close()
-    conn.close()
-    return bets
+    try:
+        _ensure_user_bets_table(cur)
+        cur.execute(
+            """
+            SELECT ub.id, ub.market_id, ub.question, ub.prediction, ub.amount_sui,
+                   ub.odds_at_bet, ub.potential_payout, ub.status, ub.created_at, ub.payout,
+                   ub.resolves_at, ub.on_chain_bet_id, ub.on_chain_market_id,
+                   pm.yes_price AS current_yes_price,
+                   pm.no_price AS current_no_price,
+                   pm.end_date
+            FROM user_bets ub
+            LEFT JOIN polymarket_markets pm ON pm.market_id = ub.market_id
+            WHERE ub.wallet_address = %s
+            ORDER BY ub.created_at DESC
+            LIMIT 50
+            """,
+            (w,),
+        )
+        bets = []
+        for row in cur.fetchall():
+            end = row.get("end_date")
+            resolves = row.get("resolves_at")
+            bets.append({
+                "id": row["id"],
+                "market_id": row["market_id"],
+                "question": row["question"],
+                "direction": "YES" if row["prediction"] else "NO",
+                "amount_sui": float(row["amount_sui"] or 0),
+                "odds": row["odds_at_bet"],
+                "potential_payout": float(row["potential_payout"] or 0),
+                "status": row["status"],
+                "created_at": str(row["created_at"]) if row["created_at"] else None,
+                "payout": float(row["payout"] or 0),
+                "resolves_at": resolves.isoformat() if hasattr(resolves, "isoformat") else (
+                    str(resolves) if resolves else None
+                ),
+                "end_date": end.isoformat() if hasattr(end, "isoformat") else (
+                    str(end) if end else None
+                ),
+                "current_yes_price": (
+                    float(row["current_yes_price"])
+                    if row.get("current_yes_price") is not None
+                    else None
+                ),
+                "current_no_price": (
+                    float(row["current_no_price"])
+                    if row.get("current_no_price") is not None
+                    else None
+                ),
+                "on_chain_bet_id": (
+                    int(row["on_chain_bet_id"])
+                    if row.get("on_chain_bet_id") is not None
+                    else None
+                ),
+                "on_chain_market_id": (
+                    int(row["on_chain_market_id"])
+                    if row.get("on_chain_market_id") is not None
+                    else None
+                ),
+            })
+        return bets
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _parse_bet_placed_from_tx_json(tx_data: dict) -> tuple[int | None, int | None]:
+    """Extract (market_id, bet_id) from BetPlaced event in sui client tx JSON."""
+    if not tx_data:
+        return None, None
+    events = tx_data.get("events") or []
+    if not events and isinstance(tx_data.get("transaction"), dict):
+        events = tx_data["transaction"].get("events") or []
+    if not events and isinstance(tx_data.get("effects"), dict):
+        events = tx_data["effects"].get("events") or []
+
+    bet_placed_suffix = "::zion_bet::BetPlaced"
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        ev_type = str(ev.get("type") or "")
+        if bet_placed_suffix not in ev_type:
+            continue
+        parsed = ev.get("parsedJson") or ev.get("parsed_json") or {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        market_raw = parsed.get("market_id")
+        bet_raw = parsed.get("bet_id")
+        if market_raw is None or bet_raw is None:
+            fields = ev.get("fields") or ev.get("bcs") or {}
+            if isinstance(fields, dict):
+                market_raw = market_raw if market_raw is not None else fields.get("market_id")
+                bet_raw = bet_raw if bet_raw is not None else fields.get("bet_id")
+        try:
+            return int(market_raw), int(bet_raw)
+        except (TypeError, ValueError):
+            continue
+    return None, None
+
+
+@app.post("/zionbet/confirm_bet")
+async def confirm_zionbet_bet(request: Request):
+    """Parse BetPlaced from chain tx and store Move bet_id on user_bets row."""
+    body = await request.json()
+    db_bet_id = int(body.get("db_bet_id") or 0)
+    tx_digest = (body.get("tx_digest") or "").strip()
+    wallet = (body.get("wallet") or "").strip()
+
+    if not db_bet_id or not tx_digest or not wallet:
+        return {"ok": False, "error": "missing_fields"}
+
+    try:
+        result = subprocess.run(
+            ["sui", "client", "tx-block", tx_digest, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        if result.returncode != 0:
+            result = subprocess.run(
+                ["sui", "client", "tx", tx_digest, "--json"],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        if result.returncode != 0:
+            return {"ok": False, "error": "tx_lookup_failed", "detail": (result.stderr or result.stdout)[:200]}
+
+        tx_data = json.loads(result.stdout)
+        market_id, on_chain_bet_id = _parse_bet_placed_from_tx_json(tx_data)
+        if on_chain_bet_id is None:
+            return {"ok": False, "error": "bet_placed_event_not_found"}
+
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            _ensure_user_bets_table(cur)
+            conn.commit()
+            cur.execute(
+                """
+                UPDATE user_bets
+                SET on_chain_bet_id = %s,
+                    on_chain_market_id = %s
+                WHERE id = %s AND wallet_address = %s
+                """,
+                (on_chain_bet_id, market_id, db_bet_id, wallet),
+            )
+            if cur.rowcount < 1:
+                conn.rollback()
+                return {"ok": False, "error": "bet_not_found"}
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+        return {
+            "ok": True,
+            "on_chain_bet_id": on_chain_bet_id,
+            "on_chain_market_id": market_id,
+        }
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "invalid_tx_json"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)}
+
 
 if __name__ == "__main__":
     import uvicorn
