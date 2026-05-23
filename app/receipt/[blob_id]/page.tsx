@@ -8,21 +8,26 @@ import type { CSSProperties } from "react";
 const WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
 const ZION_GREEN = "#00ff41";
 
-type StealthReceipt = {
-  type?: string;
+type DbReceipt = {
+  id?: string;
   tx_hash?: string;
   token?: string;
-  amount?: string;
-  timestamp?: string;
   agent?: string;
   agent_class?: string;
-  consensus?: {
+  decision?: string;
+  consensus?: string | {
     votes_for?: number;
     total_votes?: number;
     avg_confidence?: number;
-    decision?: string;
-    method?: string;
   };
+  walrus_blob_id?: string | null;
+  created_at?: string;
+};
+
+type StealthReceipt = {
+  tx_hash?: string;
+  token?: string;
+  timestamp?: string;
   notary?: {
     agent?: string;
     agent_class?: string;
@@ -33,9 +38,38 @@ type StealthReceipt = {
       avg_confidence?: number;
     };
   };
-  privacy_proof?: string;
-  stealth_address?: string;
+  walrus_blob_id?: string | null;
 };
+
+function parseConsensus(raw?: DbReceipt["consensus"]) {
+  if (!raw) return undefined;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw) as {
+      votes_for?: number;
+      total_votes?: number;
+      avg_confidence?: number;
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function mapDbReceipt(row: DbReceipt): StealthReceipt {
+  const consensus = parseConsensus(row.consensus);
+  return {
+    tx_hash: row.tx_hash,
+    token: row.token,
+    timestamp: row.created_at,
+    notary: {
+      agent: row.agent,
+      agent_class: row.agent_class,
+      decision: row.decision,
+      consensus,
+    },
+    walrus_blob_id: row.walrus_blob_id,
+  };
+}
 
 function formatTimestamp(ts?: string): string {
   if (!ts) return new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -60,13 +94,13 @@ function formatTimestamp(ts?: string): string {
 
 export default function StealthReceiptPage() {
   const params = useParams();
-  const blobId = typeof params.blob_id === "string" ? params.blob_id : "";
+  const receiptId = typeof params.blob_id === "string" ? params.blob_id : "";
   const [receipt, setReceipt] = useState<StealthReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!blobId) {
+    if (!receiptId) {
       setLoading(false);
       setError(true);
       return;
@@ -77,14 +111,17 @@ export default function StealthReceiptPage() {
     void (async () => {
       try {
         const res = await fetch(
-          `${WALRUS_AGGREGATOR}/v1/blobs/${encodeURIComponent(blobId)}`
+          `/zco/receipt/${encodeURIComponent(receiptId)}`
         );
-        if (!res.ok) {
+        const data = (await res.json()) as {
+          ok?: boolean;
+          receipt?: DbReceipt;
+        };
+        if (!res.ok || !data?.ok || !data.receipt) {
           if (!cancelled) setError(true);
           return;
         }
-        const data = (await res.json()) as StealthReceipt;
-        if (!cancelled) setReceipt(data);
+        if (!cancelled) setReceipt(mapDbReceipt(data.receipt));
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -95,9 +132,12 @@ export default function StealthReceiptPage() {
     return () => {
       cancelled = true;
     };
-  }, [blobId]);
+  }, [receiptId]);
 
-  const walrusUrl = `${WALRUS_AGGREGATOR}/v1/blobs/${blobId}`;
+  const walrusBlobId = receipt?.walrus_blob_id;
+  const walrusUrl = walrusBlobId
+    ? `${WALRUS_AGGREGATOR}/v1/blobs/${walrusBlobId}`
+    : null;
   const suiscanUrl = receipt?.tx_hash
     ? `https://suiscan.xyz/testnet/tx/${receipt.tx_hash}`
     : null;
@@ -172,19 +212,11 @@ export default function StealthReceiptPage() {
 
         {loading ? (
           <section style={{ padding: "24px", color: "rgba(0,255,65,0.6)" }}>
-            Loading receipt from Walrus…
+            Loading receipt…
           </section>
         ) : error || !receipt ? (
           <section style={{ padding: "24px", color: "#ff6464" }}>
-            <p style={{ margin: "0 0 14px" }}>Could not load receipt from Walrus.</p>
-            <a
-              href={walrusUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "#00aaff", fontSize: "0.75rem" }}
-            >
-              View raw Walrus blob →
-            </a>
+            <p style={{ margin: 0 }}>Could not load receipt.</p>
           </section>
         ) : (
           <>
@@ -196,9 +228,6 @@ export default function StealthReceiptPage() {
             >
               <ReceiptRow label="Transaction" value={receipt.tx_hash || "—"} />
               <ReceiptRow label="Token" value={receipt.token || "—"} />
-              {receipt.amount ? (
-                <ReceiptRow label="Amount" value={String(receipt.amount)} />
-              ) : null}
               <ReceiptRow label="Timestamp" value={formatTimestamp(receipt.timestamp)} />
             </section>
 
@@ -260,10 +289,11 @@ export default function StealthReceiptPage() {
                   color: "rgba(0,255,65,0.75)",
                 }}
               >
-                {receipt.privacy_proof ||
-                  "Sender address hidden on-chain. One-time stealth address derived from recipient viewing key only. Address is unusable after claim. Transfer notarized by ZCO consensus oracle and stored immutably on Walrus."}
+                Sender address hidden on-chain. One-time stealth address derived
+                from recipient viewing key only. Address is unusable after claim.
+                Transfer notarized by ZCO consensus oracle.
               </p>
-              <ReceiptRow label="Walrus Blob" value={blobId} small />
+              <ReceiptRow label="Receipt ID" value={receiptId} small />
               <div
                 style={{
                   display: "flex",
@@ -272,14 +302,6 @@ export default function StealthReceiptPage() {
                   marginTop: "14px",
                 }}
               >
-                <a
-                  href={walrusUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={linkStyle}
-                >
-                  Walrus blob ↗
-                </a>
                 {suiscanUrl ? (
                   <a
                     href={suiscanUrl}
@@ -292,6 +314,16 @@ export default function StealthReceiptPage() {
                     }}
                   >
                     Suiscan TX ↗
+                  </a>
+                ) : null}
+                {walrusUrl ? (
+                  <a
+                    href={walrusUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={linkStyle}
+                  >
+                    View on Walrus →
                   </a>
                 ) : null}
               </div>
