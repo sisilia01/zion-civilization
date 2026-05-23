@@ -37,6 +37,8 @@ import { encryptStealthMemo } from "@/lib/seal-stealth";
 import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -1324,6 +1326,44 @@ function zionbetMarketEmoji(
   return { emoji: "🌐", tint: zionbetEmojiTint("geopolitics") };
 }
 
+const ZB_VISTA_YES = "#00d4aa";
+const ZB_VISTA_NO = "#ff6b6b";
+const ZB_VISTA_TEXT_SEC = "rgba(180, 220, 255, 0.7)";
+const ZB_VISTA_LABEL = "rgba(150, 200, 255, 0.6)";
+const ZB_VISTA_BG =
+  "linear-gradient(135deg, #050d1a 0%, #0a1628 50%, #050d1a 100%)";
+const ZB_VISTA_GLASS: CSSProperties = {
+  background: "rgba(15, 50, 90, 0.35)",
+  backdropFilter: "blur(25px)",
+  WebkitBackdropFilter: "blur(25px)",
+  border: "1px solid rgba(100, 180, 255, 0.2)",
+  borderRadius: "16px",
+  boxShadow:
+    "0 8px 32px rgba(0,0,30,0.5), inset 0 1px 0 rgba(255,255,255,0.1)",
+};
+
+function zionbetAeroPanel(extra?: CSSProperties): CSSProperties {
+  return { ...ZB_VISTA_GLASS, padding: "20px", ...extra };
+}
+
+function zionbetCountdownMs(ms: number): string {
+  if (ms <= 0) return "Ended";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (d > 0) return `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}`;
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+
+function zionbetCleanMarketTitle(question?: string | null): string {
+  if (!question?.trim()) return "";
+  const cleaned = question.split(" — ")[0].trim();
+  return cleaned || question.trim();
+}
+
 function zionbetSparklinePoints(yesPct: number): number[] {
   const end = Math.max(5, Math.min(95, yesPct));
   const start = yesPct > 50 ? Math.max(5, end - 18) : Math.min(95, end + 18);
@@ -1568,6 +1608,7 @@ function ZionBetMarketDetailOverlay({
   apiMarket,
   walletConnected,
   walletAddress,
+  walletBalanceSui,
   myBets,
   betAmount,
   setBetAmount,
@@ -1580,6 +1621,7 @@ function ZionBetMarketDetailOverlay({
   apiMarket: ZionbetApiMarket;
   walletConnected: boolean;
   walletAddress: string;
+  walletBalanceSui: number;
   myBets: ZionBetMyBetRow[];
   betAmount: string;
   setBetAmount: (v: string) => void;
@@ -1590,9 +1632,10 @@ function ZionBetMarketDetailOverlay({
   onClose: () => void;
 }) {
   const market = useMemo(() => zionbetApiToMarket(apiMarket), [apiMarket]);
-  const yes = apiMarket.yes_pct ?? apiMarket.seed_yes_cents ?? 50;
-  const no = apiMarket.no_pct ?? 100 - yes;
+  const cleanTitle = zionbetCleanMarketTitle(apiMarket.question);
+  const { yes, no } = zionBetDisplayOdds(market);
   const [betDirection, setBetDirection] = useState(true);
+  const [countdown, setCountdown] = useState("—");
   const odds = zionBetDisplayOdds(market);
   const volumeLabel = zionbetMarketVolumeLabel(
     apiMarket.volume,
@@ -1611,117 +1654,136 @@ function ZionBetMarketDetailOverlay({
   const categoryLabel =
     apiMarket.category?.replace(/_/g, " ").toUpperCase() ||
     (zionbetIsPolyMarket(apiMarket.id) ? "MARKET" : "CIVILIZATION");
-  const tfLabel = apiMarket.timeframe
-    ? zionBetTimeframeShort(apiMarket.timeframe)
-    : endLabel.replace(/^Ends /, "");
+  const createdBy = zionbetIsPolyMarket(apiMarket.id) ? "Polymarket" : "ZION Bet";
   const about = zionbetAboutMarketText(apiMarket);
-  const sparkPts = useMemo(() => zionbetSparklinePoints(yes), [yes]);
-  const yesBook = useMemo(() => zionbetOrderBookRows("yes", yes, apiMarket.id), [yes, apiMarket.id]);
-  const noBook = useMemo(() => zionbetOrderBookRows("no", no, apiMarket.id), [no, apiMarket.id]);
+  const chartData = useMemo(
+    () => buildYesPriceChartData(market, myBets, yes),
+    [market, myBets, yes]
+  );
   const userPosition = useMemo(
     () => myBets.find((b) => b.market_id === apiMarket.id || b.question === apiMarket.question),
     [myBets, apiMarket]
   );
 
+  useEffect(() => {
+    const tick = () => {
+      if (!apiMarket.end_date) {
+        setCountdown(endLabel.replace(/^Ends /, "") || "—");
+        return;
+      }
+      const ms = new Date(apiMarket.end_date).getTime() - Date.now();
+      setCountdown(zionbetCountdownMs(ms));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [apiMarket.end_date, endLabel]);
+
   const amt = parseFloat(betAmount || "0");
   const oddsCents = betDirection ? odds.yes : odds.no;
   const payout = oddsCents > 0 ? amt * (100 / oddsCents) : 0;
-  const chartW = 640;
-  const chartH = 180;
-  const pad = { l: 48, r: 16, t: 14, b: 36 };
-  const chartXLabels = ["7d ago", "6d", "5d", "4d", "3d", "2d", "1d", "today"];
-  const innerW = chartW - pad.l - pad.r;
-  const innerH = chartH - pad.t - pad.b;
-  const linePath = sparkPts
-    .map((p, i) => {
-      const x = pad.l + (i / 6) * innerW;
-      const y = pad.t + innerH - (p / 100) * innerH;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
 
-  const sectionTitleStyle: CSSProperties = {
-    color: "#4DA2FF",
-    fontSize: "11px",
-    letterSpacing: "0.1em",
-    textTransform: "uppercase",
-    marginBottom: "12px",
-    marginTop: 0,
-    fontWeight: 600,
-  };
-  const panelStyle: CSSProperties = {
-    background: "#0d1117",
-    border: "1px solid #1e2d3d",
-    borderRadius: "8px",
-    padding: "20px",
-    marginBottom: "16px",
-  };
   const addQuickAmount = (n: number) => {
     const cur = parseFloat(betAmount || "0") || 0;
     setBetAmount(String(Math.round((cur + n) * 100) / 100));
   };
-  const yesBtnSelected: CSSProperties = {
-    background: "#22c55e",
-    color: "white",
-    border: "none",
-    borderRadius: "6px",
-    height: "40px",
-    fontSize: "14px",
+
+  const aeroSectionTitle: CSSProperties = {
+    margin: "0 0 14px",
+    fontSize: "11px",
+    fontWeight: 600,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+    color: ZB_VISTA_LABEL,
+  };
+
+  const outcomeBtn = (selected: boolean, side: "yes" | "no"): CSSProperties => {
+    if (side === "yes") {
+      return {
+        flex: 1,
+        height: "52px",
+        borderRadius: "12px",
+        fontSize: "15px",
+        fontWeight: 700,
+        cursor: "pointer",
+        transition: "box-shadow 0.2s, background 0.2s, border-color 0.2s",
+        border: selected
+          ? "1px solid rgba(0,255,180,0.5)"
+          : "1px solid rgba(100, 180, 255, 0.2)",
+        background: selected
+          ? "linear-gradient(135deg, rgba(0,180,130,0.6), rgba(0,120,90,0.4))"
+          : "rgba(255,255,255,0.06)",
+        color: selected ? ZB_VISTA_YES : ZB_VISTA_TEXT_SEC,
+        boxShadow: selected ? "0 0 20px rgba(0,255,180,0.3)" : "none",
+      };
+    }
+    return {
+      flex: 1,
+      height: "52px",
+      borderRadius: "12px",
+      fontSize: "15px",
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "box-shadow 0.2s, background 0.2s, border-color 0.2s",
+      border: selected
+        ? "1px solid rgba(255,100,100,0.5)"
+        : "1px solid rgba(100, 180, 255, 0.2)",
+      background: selected
+        ? "linear-gradient(135deg, rgba(255,80,80,0.6), rgba(200,40,40,0.4))"
+        : "rgba(255,255,255,0.06)",
+      color: selected ? ZB_VISTA_NO : ZB_VISTA_TEXT_SEC,
+      boxShadow: selected ? "0 0 20px rgba(255,80,80,0.3)" : "none",
+    };
+  };
+
+  const quickBtn: CSSProperties = {
+    flex: 1,
+    padding: "8px 0",
+    borderRadius: "8px",
+    border: "1px solid rgba(100,180,255,0.2)",
+    background: "rgba(255,255,255,0.06)",
+    color: "rgba(180,220,255,0.85)",
+    fontSize: "12px",
     fontWeight: 600,
     cursor: "pointer",
+    transition: "background 0.15s",
   };
-  const noBtnSelected: CSSProperties = {
-    background: "#ef4444",
-    color: "white",
-    border: "none",
-    borderRadius: "6px",
-    height: "40px",
-    fontSize: "14px",
-    fontWeight: 600,
-    cursor: "pointer",
-  };
-  const toggleBtnUnselected: CSSProperties = {
-    background: "#1e2d3d",
-    color: "#8b9ab1",
-    border: "1px solid #2d3f55",
-    borderRadius: "6px",
-    height: "40px",
-    fontSize: "14px",
-    fontWeight: 600,
-    cursor: "pointer",
-  };
+
+  const placeGradient = betDirection
+    ? "linear-gradient(135deg, #00c896, #007a5e)"
+    : "linear-gradient(135deg, #ff5555, #cc2222)";
+  const placeShadow = betDirection
+    ? "0 4px 20px rgba(0,200,150,0.4)"
+    : "0 4px 20px rgba(255,80,80,0.35)";
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={apiMarket.question}
+      aria-label={cleanTitle}
+      className="zbMarketDetailOverlay"
       style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        inset: 0,
         zIndex: 9999,
         overflowY: "auto",
-        background: "#0a0e1a",
-        fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+        background: ZB_VISTA_BG,
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}
     >
       <div
         style={{
-          position: "fixed",
+          position: "sticky",
           top: 0,
-          left: 0,
-          right: 0,
-          height: "52px",
-          background: "#0d1117",
-          borderBottom: "1px solid #1e2d3d",
+          zIndex: 10001,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 24px",
-          zIndex: 10001,
+          padding: "14px 20px",
+          background: "rgba(10, 30, 60, 0.45)",
+          backdropFilter: "blur(30px)",
+          WebkitBackdropFilter: "blur(30px)",
+          borderBottom: "1px solid rgba(100, 180, 255, 0.15)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
         }}
       >
         <button
@@ -1729,286 +1791,281 @@ function ZionBetMarketDetailOverlay({
           onClick={onClose}
           style={{
             cursor: "pointer",
-            color: "#4DA2FF",
+            color: "#ffffff",
             fontSize: "14px",
             display: "flex",
             alignItems: "center",
             gap: "6px",
-            background: "none",
-            border: "none",
-            padding: 0,
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            padding: "6px 14px",
+            borderRadius: "8px",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            transition: "background 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.12)";
+            e.currentTarget.style.borderColor = "rgba(100, 180, 255, 0.35)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
           }}
         >
           ← Back
         </button>
-        <span
-          style={{
-            color: "#8b9ab1",
-            fontSize: 13,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "min(520px, 55vw)",
-          }}
-        >
-          {apiMarket.question}
-        </span>
       </div>
 
-      <div style={{ marginTop: "52px", minHeight: "100vh", background: "#0a0e1a" }}>
-        <div
-          style={{
-            background: "#0d1117",
-            borderBottom: "1px solid #1e2d3d",
-            padding: "28px 40px",
-          }}
-        >
-          <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              <span
+      <div
+        style={{
+          maxWidth: "1120px",
+          margin: "0 auto",
+          padding: "8px 20px 48px",
+        }}
+      >
+        {/* 1. Header */}
+        <header style={{ marginBottom: "20px" }}>
+          <span
+            style={{
+              display: "inline-block",
+              padding: "5px 12px",
+              fontSize: "10px",
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              marginBottom: "14px",
+              borderRadius: "999px",
+              background: "rgba(0, 120, 255, 0.3)",
+              border: "1px solid rgba(100, 180, 255, 0.4)",
+              color: "rgba(150, 210, 255, 1)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+          >
+            {categoryLabel}
+          </span>
+          <h1
+            style={{
+              margin: "0 0 14px",
+              fontSize: "1.4rem",
+              fontWeight: 600,
+              lineHeight: 1.35,
+              color: "#ffffff",
+            }}
+          >
+            {cleanTitle}
+          </h1>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "13px",
+              color: ZB_VISTA_TEXT_SEC,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "6px 16px",
+              alignItems: "center",
+            }}
+          >
+            <span>{volumeLabel}</span>
+            <span style={{ opacity: 0.4, color: "rgba(100,180,255,0.5)" }}>·</span>
+            <span>{endLabel}</span>
+            <span style={{ opacity: 0.4, color: "rgba(100,180,255,0.5)" }}>·</span>
+            <span>Created by {createdBy}</span>
+          </p>
+        </header>
+
+        <div className="zbMarketDetailGrid">
+          <div className="zbMarketDetailMain">
+            {/* 2. Probability bar */}
+            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+              <div
                 style={{
-                  background: "#1e2d3d",
-                  color: "#4DA2FF",
-                  fontSize: "11px",
-                  padding: "4px 10px",
-                  borderRadius: "4px",
-                  fontWeight: 500,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: "14px",
                 }}
               >
-                {categoryLabel}
-              </span>
-              {tfLabel ? (
-                <span
-                  style={{
-                    background: "#1e2d3d",
-                    color: "#8b9ab1",
-                    fontSize: "11px",
-                    padding: "4px 10px",
-                    borderRadius: "4px",
-                    fontWeight: 500,
-                  }}
-                >
-                  {tfLabel}
+                <span style={{ fontSize: "1.75rem", fontWeight: 700, color: ZB_VISTA_YES }}>
+                  YES {yes}%
                 </span>
-              ) : null}
-            </div>
-            <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#e6edf3", margin: "0 0 16px", lineHeight: 1.3 }}>
-              {apiMarket.question}
-            </h1>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-              <span style={{ color: "#8b9ab1", fontSize: "13px" }}>{volumeLabel}</span>
-              <span style={{ color: "#8b9ab1", fontSize: "13px" }}>{endLabel}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "#22c55e" }}>YES {yes}¢</span>
-              <span style={{ fontSize: "22px", fontWeight: 700, color: "#ef4444" }}>NO {no}¢</span>
-            </div>
-            <div
-              style={{
-                height: "8px",
-                background: "#1e2d3d",
-                borderRadius: "4px",
-                overflow: "hidden",
-                display: "flex",
-              }}
-            >
-              <div style={{ width: `${yes}%`, background: "#22c55e", minWidth: yes > 0 ? 2 : 0 }} />
-              <div style={{ width: `${no}%`, background: "#ef4444", minWidth: no > 0 ? 2 : 0 }} />
-            </div>
-          </div>
-        </div>
+                <span style={{ fontSize: "1.75rem", fontWeight: 700, color: ZB_VISTA_NO }}>
+                  NO {no}%
+                </span>
+              </div>
+              <div style={{ position: "relative", height: "10px", borderRadius: "5px", overflow: "visible" }}>
+                <div
+                  style={{
+                    height: "100%",
+                    borderRadius: "5px",
+                    background: `linear-gradient(90deg, ${ZB_VISTA_YES} 0%, ${ZB_VISTA_YES} ${yes}%, ${ZB_VISTA_NO} ${yes}%, ${ZB_VISTA_NO} 100%)`,
+                    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.25)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${Math.max(2, Math.min(98, yes))}%`,
+                    top: "50%",
+                    transform: "translate(-50%, -50%)",
+                    width: "14px",
+                    height: "14px",
+                    borderRadius: "50%",
+                    background: "#ffffff",
+                    boxShadow:
+                      "0 0 14px rgba(100,180,255,0.9), 0 0 6px rgba(255,255,255,0.8), 0 2px 8px rgba(0,40,80,0.5)",
+                    border: "2px solid rgba(150,200,255,0.6)",
+                    transition: "left 0.35s ease",
+                  }}
+                />
+              </div>
+            </section>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 340px",
-            gap: "24px",
-            padding: "24px 40px",
-            background: "#0a0e1a",
-            maxWidth: "1180px",
-            margin: "0 auto",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            <section style={{ marginBottom: 16 }}>
-              <h3 style={sectionTitleStyle}>Price chart</h3>
+            {/* 3. Price history chart */}
+            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+              <h2 style={aeroSectionTitle}>PRICE HISTORY</h2>
               <div
                 style={{
-                  background: "#0d1117",
-                  border: "1px solid #1e2d3d",
-                  borderRadius: "8px",
-                  padding: "20px",
+                  height: 220,
+                  width: "100%",
+                  borderRadius: "12px",
+                  background: "rgba(10, 30, 60, 0.5)",
+                  border: "1px solid rgba(100, 180, 255, 0.12)",
+                  padding: "8px 4px 4px",
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ background: "#0a0e1a", borderRadius: "6px", padding: "8px 4px" }}>
-                  <svg width="100%" viewBox={`0 0 ${chartW} ${chartH}`} style={{ display: "block", height: 200 }}>
-                    {[25, 50, 75].map((tick) => {
-                      const y = pad.t + innerH - (tick / 100) * innerH;
-                      return (
-                        <line
-                          key={`grid-${tick}`}
-                          x1={pad.l}
-                          y1={y}
-                          x2={chartW - pad.r}
-                          y2={y}
-                          stroke="#1e2d3d"
-                          strokeWidth={1}
-                          strokeDasharray="4 3"
-                        />
-                      );
-                    })}
-                    {[0, 25, 50, 75, 100].map((tick) => {
-                      const y = pad.t + innerH - (tick / 100) * innerH;
-                      return (
-                        <text
-                          key={`y-${tick}`}
-                          x={pad.l - 8}
-                          y={y + 4}
-                          fill="#8b9ab1"
-                          fontSize={10}
-                          textAnchor="end"
-                          fontFamily="ui-sans-serif, system-ui, sans-serif"
-                        >
-                          {tick}¢
-                        </text>
-                      );
-                    })}
-                    <path d={linePath} fill="none" stroke="#4DA2FF" strokeWidth={2} />
-                    {sparkPts.map((p, i) => {
-                      const x = pad.l + (i / 6) * innerW;
-                      const y = pad.t + innerH - (p / 100) * innerH;
-                      return <circle key={i} cx={x} cy={y} r={4} fill="#4DA2FF" />;
-                    })}
-                    {chartXLabels.map((label, i) => {
-                      const x = pad.l + (i / (chartXLabels.length - 1)) * innerW;
-                      return (
-                        <text
-                          key={`x-${label}`}
-                          x={x}
-                          y={chartH - 8}
-                          fill="#8b9ab1"
-                          fontSize={9}
-                          textAnchor="middle"
-                          fontFamily="ui-sans-serif, system-ui, sans-serif"
-                        >
-                          {label}
-                        </text>
-                      );
-                    })}
-                  </svg>
-                </div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="zbYesFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={ZB_VISTA_YES} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={ZB_VISTA_YES} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      stroke="rgba(100, 180, 255, 0.1)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fill: ZB_VISTA_LABEL, fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fill: ZB_VISTA_LABEL, fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => `${v}%`}
+                      width={36}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        ...ZB_VISTA_GLASS,
+                        border: "1px solid rgba(100, 180, 255, 0.25)",
+                        fontSize: 12,
+                        color: "#fff",
+                      }}
+                      labelStyle={{ color: ZB_VISTA_TEXT_SEC }}
+                      formatter={(val: unknown) => [
+                        `${typeof val === "number" ? val : "—"}%`,
+                        "YES probability",
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="yes"
+                      stroke={ZB_VISTA_YES}
+                      strokeWidth={2}
+                      fill="url(#zbYesFill)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: ZB_VISTA_YES, stroke: "#0a1628", strokeWidth: 1 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </section>
 
-            <section style={{ marginTop: 16 }}>
-              <h3 style={sectionTitleStyle}>About this market</h3>
-              <div style={{ ...panelStyle, marginTop: 0 }}>
-                <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.6, color: "#8b9ab1" }}>
-                  <strong style={{ color: "#e6edf3" }}>This market resolves YES if:</strong> {about.yesCondition}
-                </p>
-                <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.6, color: "#8b9ab1" }}>
-                  <strong style={{ color: "#e6edf3" }}>Resolution source:</strong> {about.source}
-                </p>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: "#8b9ab1" }}>
-                  <strong style={{ color: "#e6edf3" }}>Settlement:</strong> {about.settlement}
-                </p>
+            {/* 5. Market stats (main column on mobile follows chart; desktop stats also in sidebar duplicate removed - only here) */}
+            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+              <h2 style={aeroSectionTitle}>MARKET STATS</h2>
+              <div style={{ display: "grid", gap: 0 }}>
+                {[
+                  ["Total volume", `${volumeStatsLabel} ${zionbetIsPolyMarket(apiMarket.id) ? "USD" : "SUI"}`, "#ffffff"],
+                  ["YES holders", `${yes}%`, ZB_VISTA_YES],
+                  ["NO holders", `${no}%`, ZB_VISTA_NO],
+                  ["Resolution source", about.source, "#ffffff"],
+                  ["Time remaining", countdown, "#ffffff"],
+                ].map(([label, value, color], idx, arr) => (
+                  <div
+                    key={String(label)}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      fontSize: "13px",
+                      padding: "12px 0",
+                      borderBottom:
+                        idx < arr.length - 1
+                          ? "1px solid rgba(100, 180, 255, 0.08)"
+                          : "none",
+                    }}
+                  >
+                    <span style={{ color: ZB_VISTA_LABEL }}>{label}</span>
+                    <span style={{ color: color as string, fontWeight: 600 }}>{value}</span>
+                  </div>
+                ))}
               </div>
             </section>
 
-            <section style={{ marginTop: 16 }}>
-              <h3 style={sectionTitleStyle}>Order book</h3>
-              <div style={{ ...panelStyle, padding: "16px", marginTop: 0 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <div>
-                    <div style={{ color: "#4DA2FF", fontSize: 11, marginBottom: 10, fontWeight: 600, letterSpacing: "0.06em" }}>
-                      YES BIDS
-                    </div>
-                    {yesBook.map((row, idx) => (
-                      <div
-                        key={`y-${row.price}`}
-                        style={{
-                          position: "relative",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: 12,
-                          padding: "6px 8px",
-                          marginBottom: 4,
-                          borderRadius: 4,
-                          background: `linear-gradient(90deg, rgba(34,197,94,0.1) ${Math.min(100, 20 + idx * 18)}%, transparent ${Math.min(100, 20 + idx * 18)}%)`,
-                        }}
-                      >
-                        <span style={{ color: "#22c55e", fontWeight: 500 }}>{row.price}¢</span>
-                        <span style={{ color: "#8b9ab1" }}>{row.size} SUI</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div style={{ color: "#4DA2FF", fontSize: 11, marginBottom: 10, fontWeight: 600, letterSpacing: "0.06em" }}>
-                      NO BIDS
-                    </div>
-                    {noBook.map((row, idx) => (
-                      <div
-                        key={`n-${row.price}`}
-                        style={{
-                          position: "relative",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: 12,
-                          padding: "6px 8px",
-                          marginBottom: 4,
-                          borderRadius: 4,
-                          background: `linear-gradient(90deg, rgba(239,68,68,0.1) ${Math.min(100, 20 + idx * 18)}%, transparent ${Math.min(100, 20 + idx * 18)}%)`,
-                        }}
-                      >
-                        <span style={{ color: "#ef4444", fontWeight: 500 }}>{row.price}¢</span>
-                        <span style={{ color: "#8b9ab1" }}>{row.size} SUI</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            {/* 6. About */}
+            <section style={zionbetAeroPanel()}>
+              <h2 style={aeroSectionTitle}>ABOUT</h2>
+              <p style={{ margin: "0 0 12px", fontSize: "14px", lineHeight: 1.65, color: ZB_VISTA_TEXT_SEC }}>
+                <strong style={{ color: "#ffffff", fontWeight: 600 }}>Resolves YES if: </strong>
+                {about.yesCondition}
+              </p>
+              <p style={{ margin: "0 0 12px", fontSize: "13px", lineHeight: 1.6, color: ZB_VISTA_TEXT_SEC }}>
+                <strong style={{ color: "rgba(200,230,255,0.95)" }}>Settlement: </strong>
+                {about.settlement}
+              </p>
             </section>
           </div>
 
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                background: "#0d1117",
-                border: "1px solid #1e2d3d",
-                borderRadius: "12px",
-                padding: "20px",
-                position: "sticky",
-                top: "68px",
-              }}
-            >
-              <h3 style={{ color: "#e6edf3", fontSize: "16px", fontWeight: 600, margin: "0 0 16px" }}>
-                Place bet
-              </h3>
-              <div
+          {/* 4. Bet panel */}
+          <aside className="zbMarketDetailSidebar">
+            <div style={{ ...zionbetAeroPanel(), position: "sticky", top: "72px" }}>
+              <h2
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "8px",
-                  marginBottom: "16px",
+                  margin: "0 0 18px",
+                  fontSize: "17px",
+                  fontWeight: 600,
+                  color: "#ffffff",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setBetDirection(true)}
-                  style={betDirection ? yesBtnSelected : toggleBtnUnselected}
-                >
+                Place Bet
+              </h2>
+              <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+                <button type="button" onClick={() => setBetDirection(true)} style={outcomeBtn(betDirection, "yes")}>
                   YES {odds.yes}¢
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setBetDirection(false)}
-                  style={!betDirection ? noBtnSelected : toggleBtnUnselected}
-                >
+                <button type="button" onClick={() => setBetDirection(false)} style={outcomeBtn(!betDirection, "no")}>
                   NO {odds.no}¢
                 </button>
               </div>
-              <label style={{ display: "block", color: "#8b9ab1", fontSize: "12px", marginBottom: "6px" }}>
-                Amount (SUI)
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "12px",
+                  color: ZB_VISTA_LABEL,
+                  marginBottom: "8px",
+                }}
+              >
+                Amount ({betCurrency})
               </label>
               <input
                 type="number"
@@ -2018,32 +2075,30 @@ function ZionBetMarketDetailOverlay({
                 onChange={(e) => setBetAmount(e.target.value)}
                 style={{
                   width: "100%",
-                  height: "40px",
-                  background: "#1e2d3d",
-                  border: "1px solid #2d3f55",
-                  color: "#e6edf3",
-                  borderRadius: "6px",
-                  padding: "0 12px",
-                  fontSize: "14px",
-                  marginBottom: "8px",
+                  height: "44px",
                   boxSizing: "border-box",
+                  marginBottom: "10px",
+                  padding: "0 14px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(100, 180, 255, 0.3)",
+                  background: "rgba(10, 30, 60, 0.6)",
+                  color: "#ffffff",
+                  fontSize: "15px",
+                  outline: "none",
                 }}
               />
-              <div style={{ display: "flex", gap: 6, margin: "8px 0" }}>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
                 {[1, 5, 10, 100].map((n) => (
                   <button
                     key={n}
                     type="button"
                     onClick={() => addQuickAmount(n)}
-                    style={{
-                      background: "#1e2d3d",
-                      color: "#4DA2FF",
-                      border: "1px solid #2d3f55",
-                      borderRadius: "4px",
-                      padding: "4px 10px",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                      flex: 1,
+                    style={quickBtn}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.12)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.06)";
                     }}
                   >
                     +{n}
@@ -2054,13 +2109,13 @@ function ZionBetMarketDetailOverlay({
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 4,
+                  marginBottom: "14px",
+                  fontSize: "13px",
                 }}
               >
-                <span style={{ color: "#8b9ab1", fontSize: "13px" }}>Potential payout</span>
-                <span style={{ color: "#22c55e", fontSize: "13px", fontWeight: 600 }}>
-                  {payout.toFixed(3)} {betCurrency}
+                <span style={{ color: ZB_VISTA_LABEL }}>Potential payout</span>
+                <span style={{ color: betDirection ? ZB_VISTA_YES : ZB_VISTA_NO, fontWeight: 700 }}>
+                  {payout.toFixed(2)} {betCurrency}
                 </span>
               </div>
               <button
@@ -2069,156 +2124,80 @@ function ZionBetMarketDetailOverlay({
                 onClick={() => onPlaceBet(market, betDirection)}
                 style={{
                   width: "100%",
-                  height: "44px",
-                  marginTop: "12px",
-                  background: "linear-gradient(135deg, #4DA2FF 0%, #2d7fe0 100%)",
-                  color: "white",
+                  height: "48px",
                   border: "none",
-                  borderRadius: "8px",
-                  fontSize: "15px",
+                  borderRadius: "12px",
+                  background: placeGradient,
+                  color: "#ffffff",
+                  fontSize: "1rem",
                   fontWeight: 600,
                   cursor: betLoading || !walletConnected ? "not-allowed" : "pointer",
-                  opacity: betLoading || !walletConnected ? 0.5 : 1,
+                  opacity: betLoading || !walletConnected ? 0.45 : 1,
+                  boxShadow: placeShadow,
+                  textShadow: "0 1px 2px rgba(0,0,0,0.25)",
                 }}
               >
                 {betLoading ? "Placing…" : "Place Bet"}
               </button>
-              {!walletConnected ? (
-                <p style={{ textAlign: "center", color: "#8b9ab1", fontSize: 12, marginTop: 10 }}>
-                  Connect wallet to bet
-                </p>
-              ) : null}
-            </div>
-
-            {userPosition ? (
-              <div
+              <p
                 style={{
-                  background: "#0d1117",
-                  border: "1px solid #1e2d3d",
-                  borderRadius: "8px",
-                  padding: "20px",
-                  marginTop: 16,
+                  margin: "12px 0 0",
+                  textAlign: "center",
+                  fontSize: "12px",
+                  color: ZB_VISTA_TEXT_SEC,
                 }}
               >
-                <h3 style={{ color: "#4DA2FF", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 12px" }}>
-                  Your position
-                </h3>
-                <div style={{ fontSize: 13, color: "#8b9ab1", lineHeight: 1.8 }}>
+                {walletConnected
+                  ? `Wallet balance: ${walletBalanceSui.toFixed(4)} SUI`
+                  : "Connect wallet to bet"}
+              </p>
+
+              {userPosition ? (
+                <div
+                  style={{
+                    marginTop: "18px",
+                    paddingTop: "18px",
+                    borderTop: "1px solid rgba(100, 180, 255, 0.08)",
+                    fontSize: "12px",
+                    color: ZB_VISTA_TEXT_SEC,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 6 }}>
+                    Your position
+                  </div>
                   <div>
                     Side:{" "}
-                    <span style={{ color: userPosition.direction === "YES" ? "#22c55e" : "#ef4444" }}>
+                    <span style={{ color: userPosition.direction === "YES" ? ZB_VISTA_YES : ZB_VISTA_NO }}>
                       {userPosition.direction}
                     </span>
                   </div>
                   <div>Amount: {userPosition.amount_sui} SUI</div>
-                  <div>Avg price: {userPosition.odds ?? oddsCents}¢</div>
-                  <div>
-                    Potential win:{" "}
-                    <span style={{ color: "#22c55e" }}>
-                      {(userPosition.potential_payout ?? payout).toFixed(3)} SUI
-                    </span>
-                  </div>
                   <div>Status: {(userPosition.status ?? "active").toUpperCase()}</div>
                 </div>
-              </div>
-            ) : null}
-
-            <div
-              style={{
-                marginTop: "16px",
-                padding: "16px",
-                background: "#0a0e1a",
-                borderRadius: "8px",
-                border: "1px solid #1e2d3d",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "11px",
-                  color: "#4DA2FF",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  marginBottom: "12px",
-                }}
-              >
-                Market Stats
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ color: "#8b9ab1", fontSize: "12px" }}>Total volume</span>
-                <span style={{ color: "#e6edf3", fontSize: "12px", fontWeight: 500 }}>
-                  {volumeStatsLabel} SUI
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ color: "#8b9ab1", fontSize: "12px" }}>YES holders</span>
-                <span style={{ color: "#22c55e", fontSize: "12px", fontWeight: 500 }}>
-                  {yes}%
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ color: "#8b9ab1", fontSize: "12px" }}>NO holders</span>
-                <span style={{ color: "#ef4444", fontSize: "12px", fontWeight: 500 }}>
-                  {no}%
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#8b9ab1", fontSize: "12px" }}>Closes</span>
-                <span style={{ color: "#e6edf3", fontSize: "12px", fontWeight: 500 }}>{endLabel}</span>
-              </div>
+              ) : null}
             </div>
-
-            <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const text = `${apiMarket.question} — YES ${yes}¢ / NO ${no}¢ on ZionBet`;
-                  void navigator.clipboard?.writeText(text);
-                }}
-                style={{
-                  flex: 1,
-                  height: "36px",
-                  background: "#1e2d3d",
-                  color: "#8b9ab1",
-                  border: "1px solid #2d3f55",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-              >
-                📤 Share
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    const saved = JSON.parse(localStorage.getItem("zionbet_saved_markets") ?? "[]") as string[];
-                    if (!saved.includes(apiMarket.id)) {
-                      localStorage.setItem(
-                        "zionbet_saved_markets",
-                        JSON.stringify([...saved, apiMarket.id])
-                      );
-                    }
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  height: "36px",
-                  background: "#1e2d3d",
-                  color: "#8b9ab1",
-                  border: "1px solid #2d3f55",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-              >
-                🔖 Save
-              </button>
-            </div>
-          </div>
+          </aside>
         </div>
       </div>
+
+      <style>{`
+        .zbMarketDetailGrid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 16px;
+          align-items: start;
+        }
+        @media (min-width: 900px) {
+          .zbMarketDetailGrid {
+            grid-template-columns: 1fr 340px;
+            gap: 24px;
+          }
+          .zbMarketDetailMain {
+            min-width: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -3219,26 +3198,60 @@ function zionBetMarketRulesText(m: ZionBetMarket): string {
   return `YES wins if ${stem} according to civilization simulation before this market’s resolve time. Final resolution follows ZionBet settlement (after the listed resolve time and the 24h minimum pending period).`;
 }
 
-function buildYesPriceChartData(m: ZionBetMarket): { label: string; yes: number }[] {
-  const { yes: target } = zionBetDisplayOdds(m);
-  const yesN = typeof m.yes_count === "number" ? m.yes_count : 0;
-  const noN = typeof m.no_count === "number" ? m.no_count : 0;
+function buildYesPriceChartData(
+  market: ZionBetMarket,
+  bets: ZionBetMyBetRow[] = [],
+  yesPctOverride?: number
+): { label: string; yes: number }[] {
+  const yesPct =
+    yesPctOverride != null && Number.isFinite(yesPctOverride)
+      ? Math.max(1, Math.min(99, Math.round(yesPctOverride)))
+      : zionBetDisplayOdds(market).yes;
+
+  const marketBets = bets.filter(
+    (b) =>
+      (b.market_id && b.market_id === market.id) ||
+      (market.question && b.question === market.question)
+  );
+  const yesN = typeof market.yes_count === "number" ? market.yes_count : 0;
+  const noN = typeof market.no_count === "number" ? market.no_count : 0;
   const total = yesN + noN;
-  const points = 42;
-  const series: { label: string; yes: number }[] = [];
-  let v = 50;
-  for (let i = 0; i < points; i++) {
-    const progress = i / Math.max(1, points - 1);
-    const imbalance = total > 0 ? (yesN - noN) / Math.max(1, total) : 0;
-    const wobble =
-      Math.sin(i * 0.41 + imbalance * 5) * (4.2 + Math.min(total, 40) * 0.06) + Math.cos(i * 0.27) * 2.4;
-    v = 50 + (target - 50) * progress + wobble * (1 - progress * 0.78);
-    v = Math.max(1, Math.min(99, Math.round(v)));
-    const label = i % 7 === 0 ? `${Math.round((i / (points - 1)) * 24)}h` : "";
-    series.push({ label, yes: v });
+
+  if (marketBets.length > 5 || total > 0) {
+    const target = yesPct;
+    const points = 42;
+    const series: { label: string; yes: number }[] = [];
+    let v = 50;
+    for (let i = 0; i < points; i++) {
+      const progress = i / Math.max(1, points - 1);
+      const imbalance = total > 0 ? (yesN - noN) / Math.max(1, total) : 0;
+      const wobble =
+        Math.sin(i * 0.41 + imbalance * 5) * (4.2 + Math.min(total, 40) * 0.06) +
+        Math.cos(i * 0.27) * 2.4;
+      v = 50 + (target - 50) * progress + wobble * (1 - progress * 0.78);
+      v = Math.max(1, Math.min(99, Math.round(v)));
+      const label = i % 7 === 0 ? `${Math.round((i / (points - 1)) * 24)}h` : "";
+      series.push({ label, yes: v });
+    }
+    series[points - 1] = { label: "now", yes: target };
+    return series;
   }
-  series[points - 1] = { label: "now", yes: target };
-  return series;
+
+  const points = 20;
+  const data: { label: string; yes: number }[] = [];
+  for (let i = 0; i <= points; i++) {
+    const progress = i / points;
+    const noise = Math.sin(i * 2.3) * 8 + Math.cos(i * 1.7) * 5;
+    const driftedValue = 50 + (yesPct - 50) * progress + noise * (1 - progress * 0.7);
+    const clampedValue = Math.max(1, Math.min(99, driftedValue));
+    const showLabel = i === 0 || i === points || i % 5 === 0;
+    data.push({
+      label:
+        i === 0 ? "start" : i === points ? "now" : showLabel ? `${Math.round(progress * 100)}%` : "",
+      yes: Math.round(clampedValue),
+    });
+  }
+  return data;
 }
 
 /** CoinGecko `ids` slug for live USD chart/spot in market detail (ZION has no CG listing). */
@@ -15150,6 +15163,7 @@ export default function Home() {
               apiMarket={detailMarket}
               walletConnected={Boolean(walletAddress.trim())}
               walletAddress={walletAddress}
+              walletBalanceSui={suiBalance}
               myBets={myBets}
               betAmount={betAmount}
               setBetAmount={setBetAmount}
