@@ -878,6 +878,10 @@ type ZionbetApiMarket = {
   end_date?: string | null;
   token?: string;
   image_url?: string | null;
+  description?: string | null;
+  resolution_criteria?: string | null;
+  resolution_source?: string | null;
+  created_at?: string | null;
 };
 
 type ZionbetMarketsBundle = {
@@ -1109,6 +1113,15 @@ function zionbetIsPolyMarket(id: string): boolean {
   return id.startsWith("poly-");
 }
 
+const ZION_POLY_RESOLUTION_SOURCE = "ZION Oracle Network";
+
+function zionbetDisplayResolutionSource(m: ZionbetApiMarket): string {
+  const raw = m.resolution_source?.trim();
+  if (raw === "Polymarket / UMA" || raw === "Real-world data") return ZION_POLY_RESOLUTION_SOURCE;
+  if (raw) return raw;
+  return zionbetIsPolyMarket(m.id) ? ZION_POLY_RESOLUTION_SOURCE : "ZION Simulation";
+}
+
 function zionbetResolutionCriteria(m: ZionbetApiMarket): string {
   if (zionbetIsPolyMarket(m.id)) {
     return "Market resolves based on real-world outcome. Settlement within 24h of event completion.";
@@ -1146,13 +1159,49 @@ type ZionPolyMarket = {
   volume_sui?: number;
   end_date?: string | null;
   image_url?: string | null;
+  description?: string | null;
+  resolution_criteria?: string | null;
+  resolution_source?: string | null;
+  created_at?: string | null;
 };
+
+function zionbetNormalizePolyApiRow(row: Record<string, unknown>): ZionPolyMarket {
+  const marketId = String(row.market_id ?? row.id ?? "");
+  const descRaw = row.description;
+  const critRaw = row.resolution_criteria;
+  return {
+    market_id: marketId,
+    question: String(row.question ?? ""),
+    category: String(row.category ?? "culture"),
+    yes_price: Number(row.yes_price ?? row.yes_pct ?? 50),
+    no_price: Number(row.no_price ?? row.no_pct ?? 50),
+    volume: row.volume != null ? Number(row.volume) : undefined,
+    volume_sui: row.volume_sui != null ? Number(row.volume_sui) : undefined,
+    end_date: (row.end_date as string | null | undefined) ?? null,
+    image_url: (row.image_url as string | null | undefined) ?? null,
+    description:
+      typeof descRaw === "string"
+        ? descRaw
+        : descRaw != null && descRaw !== ""
+          ? String(descRaw)
+          : null,
+    resolution_criteria: typeof critRaw === "string" ? critRaw : critRaw != null ? String(critRaw) : null,
+    resolution_source:
+      typeof row.resolution_source === "string"
+        ? row.resolution_source
+        : row.resolution_source != null
+          ? String(row.resolution_source)
+          : null,
+    created_at: row.created_at != null ? String(row.created_at) : null,
+  };
+}
 
 function polyToApiMarket(m: ZionPolyMarket): ZionbetApiMarket {
   const yes = Math.round(Number(m.yes_price) || 50);
   const id = String(m.market_id).startsWith("poly-") ? m.market_id : `poly-${m.market_id}`;
   const volumeSui =
     m.volume_sui != null ? Number(m.volume_sui) : m.volume != null ? Number(m.volume) / 1000 : undefined;
+  const desc = (m.description || m.resolution_criteria || "").trim() || null;
   return {
     id,
     question: m.question,
@@ -1165,7 +1214,104 @@ function polyToApiMarket(m: ZionPolyMarket): ZionbetApiMarket {
     volume_sui: volumeSui,
     end_date: m.end_date,
     image_url: m.image_url ?? null,
+    description: desc,
+    resolution_criteria: m.resolution_criteria?.trim() || desc,
+    resolution_source: m.resolution_source ?? null,
+    created_at: m.created_at ?? null,
   };
+}
+
+function zionbetMarketDescriptionText(m: ZionbetApiMarket): string {
+  const fromApi = m.description?.trim() || m.resolution_criteria?.trim();
+  if (fromApi) return fromApi;
+  return zionbetResolutionCriteria(m);
+}
+
+function zionbetPolyRowToApiMarket(row: ZionPolyMarket | Record<string, unknown>): ZionbetApiMarket {
+  const m = zionbetNormalizePolyApiRow(
+    row && typeof row === "object" ? (row as Record<string, unknown>) : {}
+  );
+  return polyToApiMarket(m);
+}
+
+function zionbetFormatMarketOpened(iso?: string | null): string | null {
+  if (!iso?.trim()) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ZionBetResolutionRulesCard({
+  market,
+  sectionTitleStyle,
+}: {
+  market: ZionbetApiMarket;
+  sectionTitleStyle: CSSProperties;
+}) {
+  const [showFullDesc, setShowFullDesc] = useState(false);
+
+  useEffect(() => {
+    setShowFullDesc(false);
+  }, [market.id, market.description, market.resolution_criteria]);
+
+  const bodyText = zionbetMarketDescriptionText(market);
+  const resolutionSource = zionbetDisplayResolutionSource(market);
+  const openedLabel = zionbetFormatMarketOpened(market.created_at);
+
+  return (
+    <section style={zionbetAeroPanel()}>
+      <h2 style={sectionTitleStyle}>RESOLUTION RULES</h2>
+      {bodyText ? (
+        <div>
+          <div
+            style={{
+              fontSize: "0.85rem",
+              color: "rgba(180,220,255,0.8)",
+              lineHeight: "1.6",
+              marginBottom: "12px",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {showFullDesc
+              ? bodyText
+              : bodyText.slice(0, 300) + (bodyText.length > 300 ? "..." : "")}
+          </div>
+          {bodyText.length > 300 && (
+            <button
+              type="button"
+              onClick={() => setShowFullDesc(!showFullDesc)}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(100,180,255,0.2)",
+                color: "rgba(150,210,255,0.8)",
+                padding: "4px 12px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                marginBottom: "14px",
+              }}
+            >
+              {showFullDesc ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ color: "rgba(255,255,255,0.4)", marginBottom: "12px", fontSize: "0.85rem" }}>
+          No description available
+        </div>
+      )}
+      <p style={{ margin: "0 0 8px", fontSize: "13px", lineHeight: 1.6, color: ZB_VISTA_LABEL }}>
+        <strong style={{ color: "rgba(200,230,255,0.95)", fontWeight: 600 }}>Resolution source: </strong>
+        {resolutionSource}
+      </p>
+      {openedLabel ? (
+        <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: ZB_VISTA_LABEL }}>
+          <strong style={{ color: "rgba(200,230,255,0.95)", fontWeight: 600 }}>Market opened: </strong>
+          {openedLabel}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 function zionbetEndDateLabel(endDate?: string | null, timeframe?: string): string {
@@ -1403,7 +1549,7 @@ function zionbetAboutMarketText(m: ZionbetApiMarket): {
     yesCondition: poly
       ? "the real-world outcome matches the market question as stated"
       : rules.replace(/^This market resolves YES if\s*/i, "").replace(/\.$/, "") || rules,
-    source: poly ? "Real-world data" : "ZION Simulation",
+    source: poly ? ZION_POLY_RESOLUTION_SOURCE : "ZION Simulation",
     settlement: "Within 24h of event end date",
   };
 }
@@ -1631,53 +1777,88 @@ function ZionBetMarketDetailOverlay({
   onPlaceBet: (market: ZionBetMarket, direction: boolean) => void;
   onClose: () => void;
 }) {
-  const market = useMemo(() => zionbetApiToMarket(apiMarket), [apiMarket]);
-  const cleanTitle = zionbetCleanMarketTitle(apiMarket.question);
+  const [detailApiMarket, setDetailApiMarket] = useState(apiMarket);
+  const market = useMemo(() => zionbetApiToMarket(detailApiMarket), [detailApiMarket]);
+  const cleanTitle = zionbetCleanMarketTitle(detailApiMarket.question);
+
+  useEffect(() => {
+    setDetailApiMarket(apiMarket);
+  }, [apiMarket.id]);
+
+  useEffect(() => {
+    if (!apiMarket.id.startsWith("poly-")) return;
+    let cancelled = false;
+    fetch(`/api/zionbet/market/${encodeURIComponent(apiMarket.id)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((row: Record<string, unknown> | { error?: string } | null) => {
+        if (cancelled || !row || typeof row !== "object" || "error" in row) return;
+        const fresh = zionbetPolyRowToApiMarket(row);
+        setDetailApiMarket((prev) =>
+          prev.id === fresh.id
+            ? {
+                ...prev,
+                ...fresh,
+                description: fresh.description ?? prev.description,
+                resolution_criteria: fresh.resolution_criteria ?? prev.resolution_criteria,
+                resolution_source: fresh.resolution_source ?? prev.resolution_source,
+                created_at: fresh.created_at ?? prev.created_at,
+              }
+            : fresh
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [apiMarket.id]);
   const { yes, no } = zionBetDisplayOdds(market);
   const [betDirection, setBetDirection] = useState(true);
   const [countdown, setCountdown] = useState("—");
   const odds = zionBetDisplayOdds(market);
   const volumeLabel = zionbetMarketVolumeLabel(
-    apiMarket.volume,
-    apiMarket.id,
-    apiMarket.volume_sui
+    detailApiMarket.volume,
+    detailApiMarket.id,
+    detailApiMarket.volume_sui
   );
-  const volumeStatsLabel = zionbetIsPolyMarket(apiMarket.id)
-    ? zionbetPolyDollarVolumeLabel(apiMarket.volume).replace(" Объём", "")
+  const volumeStatsLabel = zionbetIsPolyMarket(detailApiMarket.id)
+    ? zionbetPolyDollarVolumeLabel(detailApiMarket.volume).replace(" Объём", "")
     : (() => {
-        const volumeSui = zionbetVolumeSuiAmount(apiMarket.volume, apiMarket.id);
+        const volumeSui = zionbetVolumeSuiAmount(detailApiMarket.volume, detailApiMarket.id);
         if (volumeSui >= 1_000_000) return `${(volumeSui / 1_000_000).toFixed(1)}M`;
         if (volumeSui >= 1_000) return `${(volumeSui / 1_000).toFixed(1)}K`;
         return volumeSui.toLocaleString();
       })();
-  const endLabel = zionbetEndDateLabel(apiMarket.end_date, apiMarket.timeframe);
+  const endLabel = zionbetEndDateLabel(detailApiMarket.end_date, detailApiMarket.timeframe);
   const categoryLabel =
-    apiMarket.category?.replace(/_/g, " ").toUpperCase() ||
-    (zionbetIsPolyMarket(apiMarket.id) ? "MARKET" : "CIVILIZATION");
-  const createdBy = zionbetIsPolyMarket(apiMarket.id) ? "Polymarket" : "ZION Bet";
-  const about = zionbetAboutMarketText(apiMarket);
+    detailApiMarket.category?.replace(/_/g, " ").toUpperCase() ||
+    (zionbetIsPolyMarket(detailApiMarket.id) ? "MARKET" : "CIVILIZATION");
+  const createdBy = "ZION Bet";
+  const resolutionSource = zionbetDisplayResolutionSource(detailApiMarket);
   const chartData = useMemo(
     () => buildYesPriceChartData(market, myBets, yes),
     [market, myBets, yes]
   );
   const userPosition = useMemo(
-    () => myBets.find((b) => b.market_id === apiMarket.id || b.question === apiMarket.question),
-    [myBets, apiMarket]
+    () =>
+      myBets.find(
+        (b) => b.market_id === detailApiMarket.id || b.question === detailApiMarket.question
+      ),
+    [myBets, detailApiMarket]
   );
 
   useEffect(() => {
     const tick = () => {
-      if (!apiMarket.end_date) {
+      if (!detailApiMarket.end_date) {
         setCountdown(endLabel.replace(/^Ends /, "") || "—");
         return;
       }
-      const ms = new Date(apiMarket.end_date).getTime() - Date.now();
+      const ms = new Date(detailApiMarket.end_date).getTime() - Date.now();
       setCountdown(zionbetCountdownMs(ms));
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [apiMarket.end_date, endLabel]);
+  }, [detailApiMarket.end_date, endLabel]);
 
   const amt = parseFloat(betAmount || "0");
   const oddsCents = betDirection ? odds.yes : odds.no;
@@ -1995,10 +2176,10 @@ function ZionBetMarketDetailOverlay({
               <h2 style={aeroSectionTitle}>MARKET STATS</h2>
               <div style={{ display: "grid", gap: 0 }}>
                 {[
-                  ["Total volume", `${volumeStatsLabel} ${zionbetIsPolyMarket(apiMarket.id) ? "USD" : "SUI"}`, "#ffffff"],
+                  ["Total volume", `${volumeStatsLabel} ${zionbetIsPolyMarket(detailApiMarket.id) ? "USD" : "SUI"}`, "#ffffff"],
                   ["YES holders", `${yes}%`, ZB_VISTA_YES],
                   ["NO holders", `${no}%`, ZB_VISTA_NO],
-                  ["Resolution source", about.source, "#ffffff"],
+                  ["Resolution source", resolutionSource, "#ffffff"],
                   ["Time remaining", countdown, "#ffffff"],
                 ].map(([label, value, color], idx, arr) => (
                   <div
@@ -2022,18 +2203,7 @@ function ZionBetMarketDetailOverlay({
               </div>
             </section>
 
-            {/* 6. About */}
-            <section style={zionbetAeroPanel()}>
-              <h2 style={aeroSectionTitle}>ABOUT</h2>
-              <p style={{ margin: "0 0 12px", fontSize: "14px", lineHeight: 1.65, color: ZB_VISTA_TEXT_SEC }}>
-                <strong style={{ color: "#ffffff", fontWeight: 600 }}>Resolves YES if: </strong>
-                {about.yesCondition}
-              </p>
-              <p style={{ margin: "0 0 12px", fontSize: "13px", lineHeight: 1.6, color: ZB_VISTA_TEXT_SEC }}>
-                <strong style={{ color: "rgba(200,230,255,0.95)" }}>Settlement: </strong>
-                {about.settlement}
-              </p>
-            </section>
+            <ZionBetResolutionRulesCard market={detailApiMarket} sectionTitleStyle={aeroSectionTitle} />
           </div>
 
           {/* 4. Bet panel */}
@@ -6788,10 +6958,12 @@ export default function Home() {
   const loadPolyTab = useCallback((tab: ZionbetBetTab) => {
     if (!POLY_TABS.includes(tab)) return;
     setZionbetTabLoading((prev) => ({ ...prev, [tab]: true }));
-    fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(tab)}`)
+    fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(tab)}&t=${Date.now()}`, {
+      cache: "no-store",
+    })
       .then((r) => r.json())
-      .then((d: ZionPolyMarket[]) => {
-        const markets = Array.isArray(d) ? d.map(polyToApiMarket) : [];
+      .then((d: unknown) => {
+        const markets = Array.isArray(d) ? d.map((row) => zionbetPolyRowToApiMarket(row as Record<string, unknown>)) : [];
         setPolyByTab((prev) => ({ ...prev, [tab]: markets }));
       })
       .catch(() => setPolyByTab((prev) => ({ ...prev, [tab]: [] })))
@@ -6804,15 +6976,17 @@ export default function Home() {
     });
     Promise.all(
       POLY_TABS.map((tab) =>
-        fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(tab)}`).then((r) =>
-          r.json().then((d: ZionPolyMarket[]) => ({ tab, d }))
-        )
+        fetch(`/api/zionbet/polymarkets?category=${encodeURIComponent(tab)}&t=${Date.now()}`, {
+          cache: "no-store",
+        }).then((r) => r.json().then((d: unknown) => ({ tab, d })))
       )
     )
       .then((results) => {
         const next: Record<string, ZionbetApiMarket[]> = {};
         for (const { tab, d } of results) {
-          next[tab] = Array.isArray(d) ? d.map(polyToApiMarket) : [];
+          next[tab] = Array.isArray(d)
+            ? d.map((row) => zionbetPolyRowToApiMarket(row as Record<string, unknown>))
+            : [];
         }
         setPolyByTab((prev) => ({ ...prev, ...next }));
       })
@@ -6840,6 +7014,19 @@ export default function Home() {
       loadPolyTab(betTab);
     }
   }, [activeTab, betTab, loadCivilizationMarkets, loadPolyTab]);
+
+  useEffect(() => {
+    if (!detailMarket?.id.startsWith("poly-")) return;
+    const hasDesc = Boolean(detailMarket.description?.trim() || detailMarket.resolution_criteria?.trim());
+    if (hasDesc) return;
+    for (const tab of POLY_TABS) {
+      const found = polyByTab[tab]?.find((m) => m.id === detailMarket.id);
+      if (found?.description?.trim() || found?.resolution_criteria?.trim()) {
+        setDetailMarket((prev) => (prev?.id === found.id ? { ...prev, ...found } : prev));
+        break;
+      }
+    }
+  }, [polyByTab, detailMarket?.id, detailMarket?.description, detailMarket?.resolution_criteria]);
 
   const zionbetTabCounts = useMemo(
     () => ({
