@@ -5,7 +5,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
 const STEALTH_PACKAGE =
-  "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d";
+  "0x6d31b619bf7bd687a87b276d571109fead5774f3defd32be512b0f081571c084";
 export { STEALTH_PACKAGE };
 
 export const USDC_TYPES = [
@@ -173,6 +173,7 @@ export const claimStealthPayment = async (
 
   const tx = new Transaction();
   tx.setSender(stealthAddress);
+
   tx.setGasPayment(
     suiCoins.data.map((c) => ({
       objectId: c.coinObjectId,
@@ -180,23 +181,27 @@ export const claimStealthPayment = async (
       digest: c.digest,
     }))
   );
-  tx.setGasBudget(5_000_000);
+  tx.setGasBudget(10_000_000);
 
+  // Transfer USDC coin objects directly (separate from gas coin)
+  if (usdcCoins.data.length > 0) {
+    tx.transferObjects(
+      usdcCoins.data.map((c) => tx.object(c.coinObjectId)),
+      recipientAddress
+    );
+  }
+
+  // Transfer remaining SUI (minus gas budget)
   if (suiCoins.data.length > 0) {
     const totalSui = suiCoins.data.reduce(
       (s, c) => s + BigInt(c.balance),
       BigInt(0)
     );
-    const sendSui = totalSui - BigInt(5_000_000);
+    const sendSui = totalSui - BigInt(10_000_000);
     if (sendSui > BigInt(0)) {
       const [coin] = tx.splitCoins(tx.gas, [sendSui]);
       tx.transferObjects([coin], recipientAddress);
     }
-  }
-
-  if (usdcCoins.data.length > 0) {
-    const usdcObjs = usdcCoins.data.map((c) => tx.object(c.coinObjectId));
-    tx.transferObjects(usdcObjs, recipientAddress);
   }
 
   const result = await suiClient.signAndExecuteTransaction({

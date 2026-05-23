@@ -33,6 +33,8 @@ import {
   generateStealthMetaAddress,
   getUsdcCoins,
 } from "@/lib/stealth";
+import { encryptStealthMemo } from "@/lib/seal-stealth";
+import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
   CartesianGrid,
@@ -5727,6 +5729,7 @@ export default function Home() {
     ok?: boolean;
     notarized?: boolean;
     tx_hash?: string;
+    blob_id?: string;
     agent?: string;
     agent_class?: string;
     decision?: string;
@@ -5748,16 +5751,20 @@ export default function Home() {
     metaAddress: string;
   } | null>(null);
   const [stealthScanResults, setStealthScanResults] = useState<
-    { stealthAddress: string; ephemeralPubKey: string; txDigest?: string }[]
+    {
+      stealthAddress: string;
+      ephemeralPubKey: string;
+      txDigest?: string;
+      memoDisplay?: string;
+    }[]
   >([]);
   const [bankSendMode, setBankSendMode] = useState<"regular" | "stealth">("regular");
   const [stealthMetaInput, setStealthMetaInput] = useState("");
   const [stealthScanLoading, setStealthScanLoading] = useState(false);
   const [stealthRegisterLoading, setStealthRegisterLoading] = useState(false);
-  const [stealthClaimLoading, setStealthClaimLoading] = useState<string | null>(
-    null
-  );
+  const [claimingIndex, setClaimingIndex] = useState<number | null>(null);
   const [claimStatus, setClaimStatus] = useState<{
+    index: number;
     digest: string;
     error: string;
     gasHelpAddress?: string;
@@ -7158,32 +7165,48 @@ export default function Home() {
     setBankError(null);
 
     try {
-      const res = await fetch("https://fullnode.testnet.sui.io:443", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "suix_queryEvents",
-          params: [
-            {
-              MoveEventType:
-                "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d::stealth::StealthSent",
-            },
-            null,
-            50,
-            false,
-          ],
-        }),
-      });
+      const OLD_PACKAGE =
+        "0xf9e099a8c77f430461af76689f4cca5d5e5dd0eed2aacdba9077c9d7b3fb986d";
+      const NEW_PACKAGE =
+        "0x6d31b619bf7bd687a87b276d571109fead5774f3defd32be512b0f081571c084";
+      const rpcUrl = "https://fullnode.testnet.sui.io:443";
 
-      const data = await res.json();
-      const events = data?.result?.data || [];
+      const queryStealthSent = (packageId: string) =>
+        fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "suix_queryEvents",
+            params: [
+              { MoveEventType: `${packageId}::stealth::StealthSent` },
+              null,
+              50,
+              false,
+            ],
+          }),
+        });
+
+      const [res1, res2] = await Promise.all([
+        queryStealthSent(OLD_PACKAGE),
+        queryStealthSent(NEW_PACKAGE),
+      ]);
+      const events1 = (await res1.json())?.result?.data || [];
+      const events2 = (await res2.json())?.result?.data || [];
+      const seen = new Set<string>();
+      const events = [...events1, ...events2].filter((event: { id?: { txDigest?: string; eventSeq?: string } }) => {
+        const key = `${event.id?.txDigest ?? ""}:${event.id?.eventSeq ?? ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
       const found: {
         stealthAddress: string;
         ephemeralPubKey: string;
         txDigest?: string;
+        memoDisplay?: string;
       }[] = [];
       for (const event of events) {
         const parsed = event.parsedJson;
@@ -7213,10 +7236,35 @@ export default function Home() {
         );
 
         if (ismine) {
+          const memoBytes = parsed.encrypted_memo as number[] | undefined;
+          let memoDisplay = "Amount: unknown";
+          if (memoBytes?.length) {
+            try {
+              const text = new TextDecoder().decode(new Uint8Array(memoBytes));
+              const parsedMemo = JSON.parse(text);
+              if (Array.isArray(parsedMemo)) {
+                memoDisplay = "Amount: encrypted (claim to reveal)";
+              } else if (
+                parsedMemo &&
+                typeof parsedMemo === "object" &&
+                parsedMemo.amount != null
+              ) {
+                memoDisplay = `Amount: ${parsedMemo.amount}${
+                  parsedMemo.token ? ` ${parsedMemo.token}` : ""
+                }`;
+              } else {
+                memoDisplay = "Amount: encrypted (claim to reveal)";
+              }
+            } catch {
+              memoDisplay = "Amount: encrypted (claim to reveal)";
+            }
+          }
+
           found.push({
             txDigest: event.id.txDigest,
             ephemeralPubKey: ephemeralPubKeyHex,
             stealthAddress,
+            memoDisplay,
           });
         }
       }
@@ -7275,10 +7323,7 @@ export default function Home() {
           }),
         }).then((r) => r.json());
         if (!notarizeData?.ok) return;
-        setNotarizeResult({
-          ...notarizeData,
-          tx_hash: notarizeData.tx_hash || digest,
-        });
+
         const receiptRes = await fetch("/zco/store_stealth_receipt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -7295,30 +7340,48 @@ export default function Home() {
             },
           }),
         }).then((r) => r.json());
+
+        const blobId =
+          receiptRes?.blob_id ??
+          receiptRes?.blobId ??
+          (typeof receiptRes?.url === "string"
+            ? receiptRes.url.split("/blobs/").pop()?.split("?")[0]
+            : null) ??
+          null;
+
         if (receiptRes?.ok) {
           setWalrusReceiptUrl(receiptRes.url ?? null);
-          setWalrusBlobId(receiptRes.blob_id ?? null);
         }
+        if (blobId) {
+          console.log("[Walrus] blobId:", blobId);
+          setWalrusBlobId(blobId);
+        }
+
+        setNotarizeResult({
+          ...notarizeData,
+          tx_hash: notarizeData.tx_hash || digest,
+          ...(blobId ? { blob_id: blobId } : {}),
+        });
       } catch {
         /* notarize / walrus optional */
       }
     };
 
+    const gasReserve = 10_000_000; // 0.01 SUI reserved for announce tx
+
     const announcePayment = (
       ephemeralPubKey: string,
       stealthAddress: string,
-      digest: string
+      digest: string,
+      encryptedMemo: string
     ) => {
       setBankTxHash(digest);
-      const encryptedMemo =
-        fromToken === "USDC"
-          ? JSON.stringify({ token: "USDC", amount: bankAmount })
-          : "";
       const announceTx = buildAnnounceTransaction(
         ephemeralPubKey,
         stealthAddress,
         encryptedMemo
       );
+      announceTx.setGasBudget(gasReserve);
       signAndExecute(
         { transaction: announceTx, chain: "sui:testnet" },
         {
@@ -7335,11 +7398,34 @@ export default function Home() {
       const { stealthAddress, ephemeralPubKey } =
         computeStealthAddress(stealthMetaInput);
 
+      let encryptedMemo = "";
+      try {
+        const memoData = {
+          amount: bankAmount,
+          token: fromToken,
+          timestamp: new Date().toISOString(),
+        };
+        const encrypted = await encryptStealthMemo(
+          suiClientHook as SuiJsonRpcClient,
+          memoData,
+          stealthAddress,
+        );
+        encryptedMemo = JSON.stringify(Array.from(encrypted));
+      } catch (e) {
+        console.warn("[Seal encrypt failed, using plain memo]", e);
+        encryptedMemo = JSON.stringify({
+          amount: bankAmount,
+          token: fromToken,
+        });
+      }
+
       if (fromToken === "SUI") {
         const tx = new Transaction();
         const amountMist = BigInt(
           Math.floor(parseFloat(bankAmount) * 1_000_000_000)
         );
+        // Cap send tx gas so gasReserve remains in wallet for announce
+        tx.setGasBudget(5_000_000);
         const [coin] = tx.splitCoins(tx.gas, [amountMist]);
         tx.transferObjects([coin], tx.pure.address(stealthAddress));
 
@@ -7351,7 +7437,12 @@ export default function Home() {
               setBankTxHash(digest);
               setBankLoading(false);
               void notarizeAndStoreReceipt(digest, stealthAddress).catch(console.error);
-              announcePayment(ephemeralPubKey, stealthAddress, digest);
+              announcePayment(
+                ephemeralPubKey,
+                stealthAddress,
+                digest,
+                encryptedMemo
+              );
             },
             onError: (err) => {
               setBankError(err.message);
@@ -7369,8 +7460,9 @@ export default function Home() {
         }
 
         const amountUsdc = BigInt(Math.floor(parseFloat(bankAmount) * 1_000_000));
-        const GAS_AMOUNT = BigInt(5_000_000); // 0.005 SUI for stealth claim gas
+        const GAS_AMOUNT = BigInt(15_000_000); // 0.015 SUI for stealth claim gas
         const tx = new Transaction();
+        tx.setGasBudget(5_000_000); // cap USDC send gas so announce tx has funds
         const primaryCoinId = coins.data[0].coinObjectId;
         const stealthAddr = tx.pure.address(stealthAddress);
 
@@ -7395,7 +7487,12 @@ export default function Home() {
               setBankTxHash(digest);
               setBankLoading(false);
               void notarizeAndStoreReceipt(digest, stealthAddress).catch(console.error);
-              announcePayment(ephemeralPubKey, stealthAddress, digest);
+              announcePayment(
+                ephemeralPubKey,
+                stealthAddress,
+                digest,
+                encryptedMemo
+              );
             },
             onError: (err) => {
               setBankError(err.message);
@@ -10562,6 +10659,17 @@ export default function Home() {
                             >
                               🕵️ Incoming stealth payment
                             </div>
+                            {item.memoDisplay && (
+                              <div
+                                style={{
+                                  color: "#c8ffc8",
+                                  fontSize: "0.72rem",
+                                  marginBottom: "6px",
+                                }}
+                              >
+                                {item.memoDisplay}
+                              </div>
+                            )}
                             <div
                               style={{
                                 fontFamily: "monospace",
@@ -10579,25 +10687,28 @@ export default function Home() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
-                                  color: "#4DA2FF",
+                                  color: "#444",
                                   fontSize: "0.68rem",
                                   display: "block",
                                   marginBottom: "8px",
                                 }}
                               >
-                                View announcement →
+                                View announce TX →
                               </a>
                             )}
                             <button
                               type="button"
-                              disabled={
-                                stealthClaimLoading ===
-                                `${item.stealthAddress}-${idx}`
-                              }
+                              disabled={claimingIndex === idx}
                               onClick={async () => {
-                                if (!stealthKeys || !account?.address) return;
-                                const claimKey = `${item.stealthAddress}-${idx}`;
-                                setStealthClaimLoading(claimKey);
+                                if (!stealthKeys || !account?.address) {
+                                  setClaimStatus({
+                                    index: idx,
+                                    digest: "",
+                                    error: "Connect wallet and generate stealth keys first",
+                                  });
+                                  return;
+                                }
+                                setClaimingIndex(idx);
                                 setClaimStatus(null);
                                 try {
                                   const digest = await claimStealthPayment(
@@ -10606,9 +10717,9 @@ export default function Home() {
                                     stealthKeys.viewingPubKey,
                                     stealthKeys.spendingPubKey,
                                     account.address,
-                                    suiClientHook
+                                    suiClientHook as SuiJsonRpcClient
                                   );
-                                  setClaimStatus({ digest, error: "" });
+                                  setClaimStatus({ index: idx, digest, error: "" });
                                   setBankError(null);
                                 } catch (err: unknown) {
                                   const message =
@@ -10616,6 +10727,7 @@ export default function Home() {
                                       ? err.message
                                       : String(err);
                                   setClaimStatus({
+                                    index: idx,
                                     digest: "",
                                     error: message,
                                     gasHelpAddress: message.includes(
@@ -10625,7 +10737,7 @@ export default function Home() {
                                       : undefined,
                                   });
                                 } finally {
-                                  setStealthClaimLoading(null);
+                                  setClaimingIndex(null);
                                 }
                               }}
                               style={{
@@ -10637,118 +10749,81 @@ export default function Home() {
                                 color: "#00ff88",
                                 fontSize: "0.8rem",
                                 fontWeight: 600,
-                                cursor:
-                                  stealthClaimLoading ===
-                                  `${item.stealthAddress}-${idx}`
-                                    ? "not-allowed"
-                                    : "pointer",
-                                opacity:
-                                  stealthClaimLoading ===
-                                  `${item.stealthAddress}-${idx}`
-                                    ? 0.7
-                                    : 1,
+                                cursor: claimingIndex === idx ? "not-allowed" : "pointer",
+                                opacity: claimingIndex === idx ? 0.7 : 1,
                               }}
                             >
-                              {stealthClaimLoading ===
-                              `${item.stealthAddress}-${idx}`
+                              {claimingIndex === idx
                                 ? "Claiming..."
                                 : "Claim to my wallet"}
                             </button>
+                            {claimStatus?.index === idx && claimStatus.digest && (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  padding: "8px",
+                                  background: "rgba(0,255,100,0.08)",
+                                  border: "1px solid rgba(0,255,100,0.3)",
+                                  borderRadius: "8px",
+                                  fontSize: "0.72rem",
+                                }}
+                              >
+                                <span style={{ color: "#00ff88" }}>✅ Claimed!</span>
+                                <a
+                                  href={`https://suiscan.xyz/testnet/tx/${claimStatus.digest}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    color: "#00ff88",
+                                    fontSize: "0.68rem",
+                                    display: "block",
+                                    marginTop: "4px",
+                                  }}
+                                >
+                                  View claim on Suiscan →
+                                </a>
+                              </div>
+                            )}
+                            {claimStatus?.index === idx && claimStatus.error && (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  padding: "8px",
+                                  background: "rgba(255,50,50,0.1)",
+                                  border: "1px solid rgba(255,50,50,0.3)",
+                                  borderRadius: "8px",
+                                  fontSize: "0.72rem",
+                                  color: "#ff6666",
+                                }}
+                              >
+                                ❌ {claimStatus.error}
+                              </div>
+                            )}
+                            {claimStatus?.index === idx &&
+                              claimStatus.gasHelpAddress && (
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    padding: "8px",
+                                    background: "rgba(255,170,0,0.08)",
+                                    border: "1px solid rgba(255,170,0,0.35)",
+                                    borderRadius: "8px",
+                                    fontSize: "0.68rem",
+                                    color: "#ffaa44",
+                                    lineHeight: 1.5,
+                                  }}
+                                >
+                                  Send 0.01 SUI to{" "}
+                                  <span
+                                    style={{ color: "#00ff88", wordBreak: "break-all" }}
+                                  >
+                                    {claimStatus.gasHelpAddress}
+                                  </span>{" "}
+                                  for gas, then claim again.
+                                </div>
+                              )}
                           </div>
                         ))}
-                      </div>
-                    )}
-                    {claimStatus?.digest && (
-                      <div
-                        style={{
-                          padding: "12px",
-                          background: "rgba(0,255,100,0.08)",
-                          border: "1px solid rgba(0,255,100,0.3)",
-                          borderRadius: "8px",
-                          marginTop: "8px",
-                          fontFamily: "monospace",
-                          fontSize: "0.75rem",
-                        }}
-                      >
-                        ✅ Claimed!
-                        <a
-                          href={`https://suiscan.xyz/testnet/tx/${claimStatus.digest}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#00ff88", marginLeft: "8px" }}
-                        >
-                          View on Suiscan →
-                        </a>
-                        <br />
-                        <br />
-                        <span style={{ color: "#444", fontSize: "0.68rem" }}>
-                          🔒 ZION Stealth Protocol · Private transfer verified
-                          <br />
-                          Sender address: hidden · One-time address destroyed after
-                          claim
-                          <br />
-                          Proof: stealth address derived from recipient public key
-                          only
-                        </span>
-                      </div>
-                    )}
-                    {claimStatus?.error && (
-                      <div
-                        style={{
-                          padding: "12px",
-                          background: "rgba(255,50,50,0.1)",
-                          border: "1px solid rgba(255,50,50,0.3)",
-                          borderRadius: "8px",
-                          marginTop: "8px",
-                          fontFamily: "monospace",
-                          fontSize: "0.75rem",
-                          color: "#ff6666",
-                        }}
-                      >
-                        ❌ {claimStatus.error}
-                      </div>
-                    )}
-                    {claimStatus?.gasHelpAddress && (
-                      <div
-                        style={{
-                          padding: "12px",
-                          background: "rgba(255,170,0,0.08)",
-                          border: "1px solid rgba(255,170,0,0.35)",
-                          borderRadius: "8px",
-                          marginTop: "8px",
-                          fontFamily: "monospace",
-                          fontSize: "0.72rem",
-                          color: "#ffaa44",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        Send 0.01 SUI to{" "}
-                        <span style={{ color: "#00ff88", wordBreak: "break-all" }}>
-                          {claimStatus.gasHelpAddress}
-                        </span>{" "}
-                        for gas, then claim again.
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(
-                              claimStatus.gasHelpAddress!
-                            );
-                          }}
-                          style={{
-                            display: "block",
-                            marginTop: "8px",
-                            padding: "6px 12px",
-                            background: "rgba(255,170,0,0.15)",
-                            border: "1px solid rgba(255,170,0,0.4)",
-                            borderRadius: "6px",
-                            color: "#ffaa44",
-                            cursor: "pointer",
-                            fontSize: "0.7rem",
-                            fontFamily: "monospace",
-                          }}
-                        >
-                          Copy stealth address
-                        </button>
                       </div>
                     )}
                     {!stealthKeys && (
@@ -11047,7 +11122,7 @@ export default function Home() {
                     {bankSendMode === "stealth" && (
                       <p style={{ color: "#888", fontSize: "0.65rem", margin: "0 0 6px", lineHeight: 1.35 }}>
                         {fromToken === "USDC"
-                          ? `Sending ${bankAmount || "0"} USDC + 0.005 SUI for gas`
+                          ? `Sending ${bankAmount || "0"} USDC + 0.015 SUI for gas`
                           : "🕵️ One-time stealth address + on-chain announce"}
                       </p>
                     )}
@@ -11156,16 +11231,16 @@ export default function Home() {
                         View stealth TX on Suiscan →
                       </a>
                     )}
-                    {walrusBlobId && (
+                    {(walrusBlobId || notarizeResult.blob_id) && (
                       <a
-                        href={`/receipt/${walrusBlobId}`}
+                        href={`/receipt/${walrusBlobId || notarizeResult.blob_id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
                           color: "#00aaff",
                           fontSize: "0.68rem",
                           display: "block",
-                          marginTop: "6px",
+                          marginTop: "4px",
                         }}
                       >
                         View privacy receipt on Walrus →
