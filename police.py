@@ -24,8 +24,52 @@ def get_sheriff(cur):
     return cur.fetchone()
 
 
+def target_officers_for_budget(budget: float) -> int:
+    """Staffing from division budget: floor(budget/10), capped when well-funded."""
+    target = int(budget // 10)
+    if budget > 500:
+        return min(target, 50)
+    if budget > 100:
+        return min(target, 10)
+    return target
+
+
+def hire_divisions_from_budget(cur):
+    """Set each division's officers from its budget; sync sheriff total."""
+    if is_uprising_active(cur):
+        return 0
+
+    cur.execute("SELECT division_name, officers, budget FROM police_divisions")
+    divs = cur.fetchall()
+    if not divs:
+        return 0
+
+    total = 0
+    hired = 0
+    for div in divs:
+        budget = float(div.get("budget") or 0)
+        target = target_officers_for_budget(budget)
+        current = int(div.get("officers") or 0)
+        if target > current:
+            hired += target - current
+        total += target
+        cur.execute(
+            """
+            UPDATE police_divisions SET officers = %s
+            WHERE division_name = %s
+            """,
+            (target, div["division_name"]),
+        )
+
+    cur.execute(
+        "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
+        (max(5, total),),
+    )
+    return hired
+
+
 def police_salary_check(cur) -> int:
-    """Pay 5 ZION/officer/cycle; underfunded divisions lose officers proportionally."""
+    """Pay 8 ZION/officer/cycle; underfunded divisions lose officers proportionally."""
     cur.execute(
         "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
     )
@@ -254,46 +298,11 @@ def main():
         )
         print(f"❌ Raid failed: -{loss} officers (no civilian casualties)")
 
-    # Passive recruitment when under-staffed and funded
-    cur.execute(
-        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
-    )
-    row = cur.fetchone()
-    if row and int(row["police_count"] or 0) < 22 and float(row["police_budget"] or 0) > 250:
-        hire = min(6, int(float(row["police_budget"]) / 60))
-        cost = hire * 15
-        cur.execute(
-            """
-            UPDATE sheriff_state SET
-                police_count = police_count + %s,
-                police_budget = police_budget - %s
-            WHERE is_active = true
-            """,
-            (hire, cost),
-        )
-        print(f"  👮 Recruitment drive: +{hire} officers (-{cost:.0f} ZION budget)")
-
-    # Emergency staffing when at minimum — keeps raids viable after 24h
-    cur.execute(
-        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
-    )
-    row2 = cur.fetchone()
-    if row2 and int(row2["police_count"] or 0) <= 10 and float(row2["police_budget"] or 0) > 80:
-        boost = min(4, 12 - int(row2["police_count"] or 0))
-        cost = boost * 12
-        cur.execute(
-            """
-            UPDATE sheriff_state SET
-                police_count = police_count + %s,
-                police_budget = police_budget - %s
-            WHERE is_active = true
-            """,
-            (boost, cost),
-        )
-        print(f"  🚨 Emergency staffing: +{boost} officers")
-
     if not is_uprising_active(cur):
         sync_police_divisions(cur)
+        added = hire_divisions_from_budget(cur)
+        if added:
+            print(f"  👮 Division hiring: +{added} officers (budget-based staffing)")
     conn.commit()
     print("✅ Police cycle complete!\n")
     cur.close()

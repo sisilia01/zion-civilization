@@ -1100,6 +1100,7 @@ def get_zionbet_markets():
 
             market["yes_pct"] = yes_pct
             market["no_pct"] = 100 - yes_pct
+            market.update(_market_resolution_meta(market))
             markets.append(market)
 
         crypto = [m for m in markets if m.get("category") == "crypto"]
@@ -1385,6 +1386,60 @@ def get_market_resolves_at(market_id: str, timeframe: str) -> str:
 import urllib.request as _ur
 import json as _json
 
+
+def _market_resolution_meta(m: dict) -> dict:
+    """Description / resolution fields for ZionBet market detail UI."""
+    q = (m.get("question") or m.get("display_question") or "").strip()
+    mid = str(m.get("id") or m.get("market_id") or "")
+    cat = (m.get("category") or "").lower()
+    et = (m.get("event_type") or "").lower()
+    token = str(m.get("token") or "asset")
+    tf = str(m.get("timeframe") or "24h")
+
+    if m.get("description"):
+        desc = str(m["description"]).strip()
+    elif m.get("resolution_criteria"):
+        desc = str(m["resolution_criteria"]).strip()
+    elif mid.startswith("poly-"):
+        desc = (
+            f"This market resolves to YES or NO based on whether the real-world outcome "
+            f"occurs as described in the question: {q}"
+        )
+    elif cat == "crypto" or m.get("cg_id") or m.get("market_kind") == "updown" or "_price" in et:
+        desc = (
+            f"YES (Up) wins if {token} / USD on CoinGecko is higher at resolution than at "
+            f"the start of this {tf} window. NO (Down) wins otherwise."
+        )
+    else:
+        stem = q.rstrip("?. ").strip()
+        desc = (
+            f"YES wins if {stem}, as determined by the live ZION civilization simulation "
+            f"before the listed resolve time. NO wins if the condition is not met."
+        )
+
+    if m.get("resolution_source"):
+        source = str(m["resolution_source"]).strip()
+        if source in ("Polymarket / UMA", "Real-world data"):
+            source = "ZION Oracle Network"
+    elif mid.startswith("poly-"):
+        source = "ZION Oracle Network"
+    elif cat == "crypto" or m.get("cg_id"):
+        source = "CoinGecko USD spot"
+    else:
+        source = "ZION Simulation"
+
+    created = m.get("created_at")
+    if hasattr(created, "isoformat"):
+        created = created.isoformat()
+
+    return {
+        "description": desc,
+        "resolution_criteria": desc,
+        "resolution_source": source,
+        "created_at": created,
+    }
+
+
 MARKETS_CONFIG = [
     {"id": "btc_1h", "token": "BTC", "timeframe": "1h", "question": "Will BTC go UP in next 1 hour?", "category": "crypto", "cg_id": "bitcoin"},
     {"id": "btc_24h", "token": "BTC", "timeframe": "24h", "question": "Will BTC go UP today?", "category": "crypto", "cg_id": "bitcoin"},
@@ -1442,9 +1497,30 @@ def get_markets():
         row = cur.fetchone()
         
         resolves_at = get_market_resolves_at(m["id"], m.get("timeframe", "24h"))
-        
+        meta = _market_resolution_meta(m)
+        db_description = None
+        if str(m.get("id", "")).startswith("poly-"):
+            cur.execute(
+                """
+                SELECT description, resolution_criteria, resolution_source, created_at
+                FROM polymarket_markets WHERE market_id = %s
+                """,
+                (m["id"],),
+            )
+            poly_row = cur.fetchone()
+            if poly_row:
+                db_description = poly_row.get("description")
+                if poly_row.get("resolution_criteria"):
+                    meta["resolution_criteria"] = poly_row["resolution_criteria"]
+                if poly_row.get("resolution_source"):
+                    meta["resolution_source"] = poly_row["resolution_source"]
+                if poly_row.get("created_at"):
+                    meta["created_at"] = poly_row["created_at"]
+
         markets.append({
             **m,
+            **meta,
+            "description": db_description or meta.get("description"),
             "yes_cents": yes,
             "no_cents": no,
             "yes_count": row["yes_count"] or 0,
@@ -3199,7 +3275,8 @@ async def get_polymarkets(category: str | None = None, limit: int = 50):
             cur.execute(
                 """
                 SELECT market_id, question, category, yes_price, no_price,
-                       volume, end_date, image_url, is_active, closed
+                       volume, end_date, image_url, is_active, closed,
+                       description, resolution_criteria, resolution_source, created_at
                 FROM polymarket_markets
                 WHERE is_active = true AND closed = false AND category = %s
                 ORDER BY volume DESC
@@ -3211,7 +3288,8 @@ async def get_polymarkets(category: str | None = None, limit: int = 50):
             cur.execute(
                 """
                 SELECT market_id, question, category, yes_price, no_price,
-                       volume, end_date, image_url, is_active, closed
+                       volume, end_date, image_url, is_active, closed,
+                       description, resolution_criteria, resolution_source, created_at
                 FROM polymarket_markets
                 WHERE is_active = true AND closed = false
                 ORDER BY volume DESC
@@ -3223,9 +3301,37 @@ async def get_polymarkets(category: str | None = None, limit: int = 50):
         out = []
         for r in rows:
             d = dict(r)
+            if d.get("market_id") == "poly-692258":
+                print(
+                    f"DEBUG after dict: desc={d.get('description', 'MISSING')[:50] if d.get('description') else 'NULL'}",
+                    flush=True,
+                )
             vol = float(d.get("volume") or 0)
             d["volume_sui"] = round(vol / 1000, 2)
             d["image_url"] = d.get("image_url") or None
+            meta = _market_resolution_meta({**d, "id": d.get("market_id")})
+            if d.get("market_id") == "poly-692258":
+                print(
+                    f"DEBUG after meta: desc={d.get('description', 'MISSING')[:50] if d.get('description') else 'NULL'}",
+                    flush=True,
+                )
+            for key, val in meta.items():
+                if not d.get(key):
+                    d[key] = val
+            desc_db = (d.get("description") or "").strip()
+            desc_crit = (d.get("resolution_criteria") or "").strip()
+            d["description"] = desc_db or desc_crit or (meta.get("description") or "")
+            if d.get("market_id") == "poly-692258":
+                print(f"DEBUG final desc: {d.get('description', 'NULL')[:50]}", flush=True)
+            if d.get("created_at") is not None and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            if d.get("end_date") is not None and hasattr(d["end_date"], "isoformat"):
+                d["end_date"] = d["end_date"].isoformat()
+            rs = (d.get("resolution_source") or "").strip()
+            if str(d.get("market_id", "")).startswith("poly-") and (
+                not rs or rs in ("Polymarket / UMA", "Real-world data")
+            ):
+                d["resolution_source"] = "ZION Oracle Network"
             out.append(d)
         return out
     except Exception:
@@ -3233,6 +3339,52 @@ async def get_polymarkets(category: str | None = None, limit: int = 50):
     finally:
         cur.close()
         db.close()
+
+
+@app.get("/zionbet/market/{market_id}")
+def get_zionbet_market(market_id: str):
+    """Single Polymarket row with description for detail view."""
+    mid = (market_id or "").strip()
+    if not mid.startswith("poly-"):
+        return {"error": "not_found"}
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT market_id, poly_id, question, category, yes_price, no_price,
+                   volume, end_date, image_url, is_active, closed,
+                   description, resolution_criteria, resolution_source, created_at
+            FROM polymarket_markets
+            WHERE market_id = %s
+            LIMIT 1
+            """,
+            (mid,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": "not_found"}
+        d = dict(row)
+        vol = float(d.get("volume") or 0)
+        d["volume_sui"] = round(vol / 1000, 2)
+        meta = _market_resolution_meta({**d, "id": d.get("market_id")})
+        desc_db = (d.get("description") or "").strip()
+        desc_crit = (d.get("resolution_criteria") or "").strip()
+        d["description"] = desc_db or desc_crit or (meta.get("description") or "")
+        if not (d.get("resolution_source") or "").strip():
+            d["resolution_source"] = meta.get("resolution_source")
+        rs = (d.get("resolution_source") or "").strip()
+        if not rs or rs in ("Polymarket / UMA", "Real-world data"):
+            d["resolution_source"] = "ZION Oracle Network"
+        if d.get("created_at") is not None and hasattr(d["created_at"], "isoformat"):
+            d["created_at"] = d["created_at"].isoformat()
+        if d.get("end_date") is not None and hasattr(d["end_date"], "isoformat"):
+            d["end_date"] = d["end_date"].isoformat()
+        return d
+    finally:
+        cur.close()
+        db.close()
+
 
 @app.post("/zco/notarize")
 async def zco_notarize(request: Request):

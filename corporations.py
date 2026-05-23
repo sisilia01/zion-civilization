@@ -8,7 +8,6 @@ from civ_common import (
     ensure_schema,
     get_conn,
     get_cursor,
-    get_zrs_state,
     log_event,
     set_corporate_crisis,
     zrs_add_reserve,
@@ -17,100 +16,141 @@ from civ_common import (
     ZRS_RESERVE_FLOOR,
 )
 
-MANAGER_SALARY = 50.0
-WORKER_SALARY = 20.0
-SECURITY_SALARY = 30.0
+EMPLOYEE_SALARY = 15.0
 MANAGER_MULT = 15
 WORKER_MULT = 8
 SECURITY_MULT = 0
 BANKRUPTCY_CYCLES = 3
 EXTORTION_RATE = 0.15
 EXTORTION_REDUCTION = 0.50
+HIRE_TREASURY_MIN = 500.0
+HIRE_REVENUE_MIN = 200.0
+LAYOFF_TREASURY = 200.0
+MASS_LAYOFF_TREASURY = 50.0
 
 
 def sector_multiplier(corp_type: str) -> float:
     return SECTOR_MULTIPLIERS.get(corp_type or "industry", 1.0)
 
 
-def eligible_for_role(agent: dict, role: str) -> bool:
-    path = agent.get("education_path") or ""
+def eligible_worker(agent: dict) -> bool:
     status = agent.get("education_status") or ""
-    if role == "manager":
-        return path == "university" and status == "graduated"
-    if role == "security":
-        return path == "academy" and status == "graduated"
-    if role == "worker":
-        return status in ("graduated", "street", "studying_university", "studying_academy")
-    return False
+    return status in ("graduated", "street", "studying_university", "studying_academy")
 
 
-def hire_for_corp(cur, corp: dict):
-    """Hire unemployed agents meeting education requirements if corp is profitable."""
-    treasury = float(corp["treasury"] or 0)
-    if treasury <= 0:
+def count_employees(cur, corp_id: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM agents
+        WHERE is_alive = true AND employer_corp_id = %s
+        """,
+        (corp_id,),
+    )
+    return int((cur.fetchone() or {}).get("c") or 0)
+
+
+def sync_employee_count(cur, corp_id: int):
+    cur.execute(
+        """
+        UPDATE corporations SET employees = (
+            SELECT COUNT(*) FROM agents
+            WHERE employer_corp_id = %s AND is_alive = true
+        ) WHERE id = %s
+        """,
+        (corp_id, corp_id),
+    )
+
+
+def fire_one_employee(cur, corp_id: int) -> int:
+    cur.execute(
+        """
+        SELECT id FROM agents
+        WHERE is_alive = true AND employer_corp_id = %s
+        ORDER BY balance DESC
+        LIMIT 1
+        """,
+        (corp_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return 0
+    cur.execute(
+        """
+        UPDATE agents SET
+            job_status = 'unemployed',
+            employer_corp_id = NULL,
+            job_role = NULL
+        WHERE id = %s
+        """,
+        (row["id"],),
+    )
+    sync_employee_count(cur, corp_id)
+    return 1
+
+
+def layoff_for_corp(cur, corp: dict) -> int:
+    """Treasury-based layoffs before hiring."""
+    treasury = float(corp.get("treasury") or 0)
+    if treasury < MASS_LAYOFF_TREASURY:
+        fired = fire_all_employees(cur, corp["id"])
+        if fired:
+            print(f"  {corp['name']}: mass layoff ({fired} fired, treasury {treasury:.0f})")
+        return fired
+    if treasury < LAYOFF_TREASURY:
+        if fire_one_employee(cur, corp["id"]):
+            print(f"  {corp['name']}: layoff 1 (treasury {treasury:.0f})")
+            return 1
+    return 0
+
+
+def hire_for_corp(cur, corp: dict) -> int:
+    """Hire workers when treasury and revenue are strong; prioritize poor agents."""
+    treasury = float(corp.get("treasury") or 0)
+    revenue = float(corp.get("last_cycle_revenue") or 0)
+    if treasury <= MASS_LAYOFF_TREASURY or treasury < LAYOFF_TREASURY:
+        return 0
+    if not (treasury > HIRE_TREASURY_MIN and revenue > HIRE_REVENUE_MIN):
+        return 0
+
+    current = count_employees(cur, corp["id"])
+    max_employees = max(0, int(treasury // 100))
+    to_hire = min(5, max_employees - current)
+    if to_hire <= 0:
         return 0
 
     cur.execute(
         """
-        SELECT COUNT(*) FILTER (WHERE job_role = 'manager') AS mgr,
-               COUNT(*) FILTER (WHERE job_role = 'worker') AS wrk,
-               COUNT(*) FILTER (WHERE job_role = 'security') AS sec
+        SELECT id, name, education_path, education_status, balance, class
         FROM agents
-        WHERE is_alive = true AND employer_corp_id = %s
+        WHERE is_alive = true
+          AND COALESCE(job_status, 'unemployed') = 'unemployed'
+          AND employer_corp_id IS NULL
+          AND (class IN ('poor', 'working') OR class IS NULL)
+        ORDER BY balance ASC
+        LIMIT %s
         """,
-        (corp["id"],),
+        (to_hire * 8,),
     )
-    counts = cur.fetchone()
-    slots = {"manager": 2, "worker": 10, "security": 3}
-    role_keys = {"manager": "mgr", "worker": "wrk", "security": "sec"}
     hired = 0
-
-    for role, max_slots in slots.items():
-        current = int(counts[role_keys[role]] or 0)
-        need = max_slots - current
-        if need <= 0:
+    for ag in cur.fetchall():
+        if not eligible_worker(ag):
             continue
-
         cur.execute(
             """
-            SELECT id, name, education_path, education_status, balance
-            FROM agents
-            WHERE is_alive = true
-              AND COALESCE(job_status, 'unemployed') = 'unemployed'
-              AND employer_corp_id IS NULL
-            ORDER BY RANDOM()
-            LIMIT %s
+            UPDATE agents SET
+                job_status = 'employed',
+                employer_corp_id = %s,
+                job_role = 'worker'
+            WHERE id = %s
             """,
-            (need * 5,),
+            (corp["id"], ag["id"]),
         )
-        for ag in cur.fetchall():
-            if not eligible_for_role(ag, role):
-                continue
-            cur.execute(
-                """
-                UPDATE agents SET
-                    job_status = 'employed',
-                    employer_corp_id = %s,
-                    job_role = %s
-                WHERE id = %s
-                """,
-                (corp["id"], role, ag["id"]),
-            )
-            hired += 1
-            need -= 1
-            if need <= 0:
-                break
+        hired += 1
+        if hired >= to_hire:
+            break
 
     if hired:
-        cur.execute(
-            """
-            UPDATE corporations SET employees = (
-                SELECT COUNT(*) FROM agents
-                WHERE employer_corp_id = %s AND is_alive = true
-            ) WHERE id = %s
-            """,
-            (corp["id"], corp["id"]),
-        )
+        sync_employee_count(cur, corp["id"])
     return hired
 
 
@@ -118,29 +158,21 @@ def pay_salaries(cur, corp_id: int) -> float:
     total = 0.0
     cur.execute(
         """
-        SELECT id, job_role FROM agents
+        SELECT id FROM agents
         WHERE is_alive = true AND employer_corp_id = %s
         """,
         (corp_id,),
     )
     for ag in cur.fetchall():
-        role = ag["job_role"] or "worker"
-        salary = {
-            "manager": MANAGER_SALARY,
-            "worker": WORKER_SALARY,
-            "security": SECURITY_SALARY,
-        }.get(role, WORKER_SALARY)
         cur.execute(
-            """
-            UPDATE corporations SET treasury = treasury - %s WHERE id = %s
-            """,
-            (salary, corp_id),
+            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+            (EMPLOYEE_SALARY, corp_id),
         )
         cur.execute(
             "UPDATE agents SET balance = balance + %s WHERE id = %s",
-            (salary, ag["id"]),
+            (EMPLOYEE_SALARY, ag["id"]),
         )
-        total += salary
+        total += EMPLOYEE_SALARY
     return total
 
 
@@ -306,13 +338,11 @@ def run_cycle():
     conn.commit()
 
     print(f"\n🏢 ZION Corporations — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    zrs = get_zrs_state(cur) or {}
-    loans_frozen = bool(zrs.get("loans_frozen"))
-
     cur.execute(
         """
         SELECT id, name, corp_type, employees, treasury,
                COALESCE(negative_cycles, 0) AS negative_cycles,
+               COALESCE(last_cycle_revenue, 0) AS last_cycle_revenue,
                controlled_by_clan_id, is_active
         FROM corporations WHERE is_active = true
         """
@@ -322,6 +352,13 @@ def run_cycle():
     bankrupt_this_cycle = 0
 
     for corp in corps:
+        cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))
+        corp["treasury"] = float((cur.fetchone() or {}).get("treasury") or 0)
+
+        layoff_for_corp(cur, corp)
+        cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))
+        corp["treasury"] = float((cur.fetchone() or {}).get("treasury") or 0)
+
         hired = hire_for_corp(cur, corp)
         if hired:
             print(f"  {corp['name']}: hired {hired}")

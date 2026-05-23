@@ -63,6 +63,11 @@ def ensure_table(cur):
     cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS closed BOOLEAN NOT NULL DEFAULT false")
     cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS winner TEXT")
     cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS image_url TEXT")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS description TEXT")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS resolution_criteria TEXT")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS resolution_source TEXT")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ")
+    cur.execute("ALTER TABLE polymarket_markets ADD COLUMN IF NOT EXISTS poly_id TEXT")
 
 
 def gamma_get(path: str, timeout: int = 120) -> dict | list | None:
@@ -177,6 +182,66 @@ def parse_image_url(m: dict) -> str | None:
     return None
 
 
+def parse_condition_id(m: dict) -> str | None:
+    """Gamma conditionId (0x…) — used as poly_id for DB matching."""
+    cid = (m.get("conditionId") or m.get("condition_id") or "").strip()
+    if cid:
+        return cid
+    events = m.get("events")
+    if isinstance(events, list) and events and isinstance(events[0], dict):
+        cid = (events[0].get("conditionId") or events[0].get("condition_id") or "").strip()
+        if cid:
+            return cid
+    return None
+
+
+def parse_description(m: dict) -> str | None:
+    for key in ("description", "rules", "resolutionCriteria"):
+        d = (m.get(key) or "").strip()
+        if d:
+            return d
+    events = m.get("events")
+    if isinstance(events, list) and events and isinstance(events[0], dict):
+        ev = events[0]
+        for key in ("description", "rules", "resolutionCriteria"):
+            d = (ev.get(key) or "").strip()
+            if d:
+                return d
+    return None
+
+
+ZION_POLY_RESOLUTION_SOURCE = "ZION Oracle Network"
+
+
+def parse_resolution_source(m: dict) -> str:
+    src = (m.get("resolutionSource") or m.get("resolution_source") or "").strip()
+    if not src or src == "Polymarket / UMA":
+        return ZION_POLY_RESOLUTION_SOURCE
+    return src
+
+
+def parse_market_created(m: dict):
+    for field in ("startDate", "startDateIso", "createdAt", "created_at"):
+        val = m.get(field)
+        if not val:
+            continue
+        try:
+            return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+        except Exception:
+            pass
+    events = m.get("events")
+    if isinstance(events, list) and events and isinstance(events[0], dict):
+        for field in ("startDate", "createdAt"):
+            val = events[0].get(field)
+            if not val:
+                continue
+            try:
+                return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+            except Exception:
+                pass
+    return None
+
+
 def build_question(m: dict) -> str:
     q = (m.get("question") or "").strip()
     sub = (m.get("groupItemTitle") or "").strip()
@@ -211,13 +276,22 @@ def upsert_market(cur, m: dict, category: str, active_batch: bool):
     winner = parse_winner(m)
     is_active = active_batch and not closed
     image_url = parse_image_url(m)
+    description = parse_description(m)
+    resolution_source = parse_resolution_source(m)
+    resolution_criteria = description or (
+        f"Resolves based on real-world outcome: {question}"
+    )
+    created_at = parse_market_created(m)
+    poly_id = parse_condition_id(m)
 
     cur.execute(
         """
         INSERT INTO polymarket_markets (
-            market_id, question, category, yes_price, no_price, volume,
-            end_date, is_active, closed, winner, image_url, synced_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            market_id, poly_id, question, category, yes_price, no_price, volume,
+            end_date, is_active, closed, winner, image_url,
+            description, resolution_criteria, resolution_source, created_at,
+            synced_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (market_id) DO UPDATE SET
             question = EXCLUDED.question,
             category = EXCLUDED.category,
@@ -225,13 +299,44 @@ def upsert_market(cur, m: dict, category: str, active_batch: bool):
             no_price = EXCLUDED.no_price,
             volume = EXCLUDED.volume,
             end_date = EXCLUDED.end_date,
+            poly_id = COALESCE(EXCLUDED.poly_id, polymarket_markets.poly_id),
             image_url = COALESCE(EXCLUDED.image_url, polymarket_markets.image_url),
+            description = COALESCE(
+                NULLIF(TRIM(EXCLUDED.description), ''),
+                polymarket_markets.description
+            ),
+            resolution_criteria = COALESCE(
+                NULLIF(TRIM(EXCLUDED.resolution_criteria), ''),
+                polymarket_markets.resolution_criteria
+            ),
+            resolution_source = COALESCE(
+                NULLIF(TRIM(EXCLUDED.resolution_source), ''),
+                polymarket_markets.resolution_source
+            ),
+            created_at = COALESCE(EXCLUDED.created_at, polymarket_markets.created_at),
             is_active = EXCLUDED.is_active,
             closed = EXCLUDED.closed,
             winner = EXCLUDED.winner,
             synced_at = NOW()
         """,
-        (market_id, question, category, yes, no, vol, end_date, is_active, closed, winner, image_url),
+        (
+            market_id,
+            poly_id,
+            question,
+            category,
+            yes,
+            no,
+            vol,
+            end_date,
+            is_active,
+            closed,
+            winner,
+            image_url,
+            description,
+            resolution_criteria,
+            resolution_source,
+            created_at,
+        ),
     )
     return True
 
@@ -254,6 +359,85 @@ def backfill_image_url(cur, m: dict) -> bool:
         (image_url, market_id),
     )
     return cur.rowcount > 0
+
+
+def _gamma_market_keys(gm: dict) -> tuple[str | None, str | None, str | None]:
+    """Return (condition_id, market_id, slug) for DB matching."""
+    condition_id = parse_condition_id(gm)
+    raw_id = str(gm.get("id", "")).strip() or None
+    market_id = f"poly-{raw_id}" if raw_id else None
+    slug = (gm.get("slug") or "").strip() or None
+    return condition_id, market_id, slug
+
+
+def fetch_gamma_descriptions(cur, conn) -> int:
+    """
+    Paginate Gamma /markets and backfill description + resolution_source
+    for rows missing description (match poly_id = conditionId or market_id).
+    """
+    offset = 0
+    limit = 100
+    scanned = 0
+    updated = 0
+
+    while True:
+        path = f"/markets?limit={limit}&active=true&offset={offset}"
+        data = gamma_get(path, timeout=120)
+        if not isinstance(data, list) or len(data) == 0:
+            break
+
+        for gm in data:
+            scanned += 1
+            desc = parse_description(gm)
+            if not desc:
+                continue
+            src = parse_resolution_source(gm)
+            condition_id, market_id, _slug = _gamma_market_keys(gm)
+            if not condition_id and not market_id:
+                continue
+
+            cur.execute(
+                """
+                UPDATE polymarket_markets
+                SET description = %s,
+                    resolution_criteria = COALESCE(
+                        NULLIF(TRIM(resolution_criteria), ''), %s
+                    ),
+                    resolution_source = COALESCE(
+                        NULLIF(TRIM(resolution_source), ''), %s
+                    ),
+                    poly_id = COALESCE(%s, poly_id)
+                WHERE (
+                    (%s IS NOT NULL AND poly_id = %s)
+                    OR (%s IS NOT NULL AND market_id = %s)
+                )
+                  AND (
+                    description IS NULL OR TRIM(description) = ''
+                    OR LENGTH(%s) > COALESCE(LENGTH(description), 0)
+                  )
+                """,
+                (
+                    desc,
+                    desc,
+                    src,
+                    condition_id,
+                    condition_id,
+                    condition_id,
+                    market_id,
+                    market_id,
+                    desc,
+                ),
+            )
+            updated += cur.rowcount
+
+        if len(data) < limit:
+            break
+        offset += limit
+        time.sleep(0.12)
+
+    conn.commit()
+    print(f"  Gamma descriptions: scanned {scanned} markets, updated {updated} rows")
+    return updated
 
 
 def backfill_missing_images(cur, conn):
@@ -377,6 +561,9 @@ def sync():
 
     backfill_missing_images(cur, conn)
 
+    print("Fetching descriptions from Gamma API...")
+    fetch_gamma_descriptions(cur, conn)
+
     cur.execute("""
         SELECT
             COUNT(*) FILTER (WHERE image_url IS NOT NULL AND image_url != '') AS with_image,
@@ -392,6 +579,10 @@ def sync():
     conn.close()
 
 
-if __name__ == "__main__":
+def main():
     print(f"🔄 Polymarket sync — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     sync()
+
+
+if __name__ == "__main__":
+    main()

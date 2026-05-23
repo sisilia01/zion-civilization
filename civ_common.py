@@ -55,7 +55,7 @@ ZRS_RESERVE_FLOOR = 50_000.0  # 5% of 400k ZRS reserve (1M total supply)
 UNIVERSITY_COST = 50
 ACADEMY_COST = 25
 DAILY_FOOD_COST = 1
-OFFICER_SALARY_PER_CYCLE = 5
+OFFICER_SALARY_PER_CYCLE = 8
 CRISIS_ZRS_MODES = frozenset({"RECESSION", "CRISIS", "DEPRESSION"})
 
 
@@ -143,6 +143,9 @@ def ensure_schema(cur):
     )
     cur.execute(
         "ALTER TABLE corporations ADD COLUMN IF NOT EXISTS owner VARCHAR(50) DEFAULT 'private'"
+    )
+    cur.execute(
+        "ALTER TABLE corporations ADD COLUMN IF NOT EXISTS credit_rating INTEGER DEFAULT 100"
     )
     _add_columns(
         cur,

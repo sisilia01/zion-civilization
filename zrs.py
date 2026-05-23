@@ -18,6 +18,11 @@ from civ_common import (
 RESERVE_FLOOR = ZRS_RESERVE_FLOOR
 BOOM_ABSORB_RATE = 0.05
 HYPER_ABSORB_RATE = 0.20
+CORP_LOAN_AMOUNT = 500.0
+CORP_LOAN_INTEREST = 0.05
+CORP_LOAN_DUE_CYCLES = 10
+MAX_LOANS_PER_CORP = 3
+MAX_LOANS_RESERVE_PCT = 0.10
 
 
 def determine_state(econ: dict, consecutive_crisis: int) -> str:
@@ -107,6 +112,171 @@ def record_zrs_policy(
             round((econ or {}).get("total_money", 0), 2),
         ),
     )
+
+
+def economy_cycle_number(cur) -> int:
+    cur.execute("SELECT COUNT(*) AS c FROM economy_snapshots")
+    return int((cur.fetchone() or {}).get("c") or 0) + 1
+
+
+def collect_corp_loan_repayments(cur) -> float:
+    """Collect 5% of principal per cycle; default on missed payment."""
+    cur.execute(
+        """
+        SELECT l.id, l.corp_id, l.corp_name, l.principal, l.amount_owed,
+               l.missed_payments, c.treasury,
+               COALESCE(c.credit_rating, 100) AS credit_rating
+        FROM zrs_loans l
+        JOIN corporations c ON c.id = l.corp_id AND c.is_active = true
+        WHERE l.is_active = true
+        """
+    )
+    collected = 0.0
+    for loan in cur.fetchall():
+        principal = float(loan["principal"] or 0)
+        payment = round(principal * CORP_LOAN_INTEREST, 2)
+        if payment <= 0:
+            continue
+        treasury = float(loan["treasury"] or 0)
+        if treasury >= payment:
+            cur.execute(
+                "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+                (payment, loan["corp_id"]),
+            )
+            zrs_add_reserve(cur, payment)
+            collected += payment
+            new_owed = max(0.0, float(loan["amount_owed"] or 0) - payment)
+            if new_owed <= 0.01:
+                cur.execute(
+                    "UPDATE zrs_loans SET amount_owed = 0, is_active = false WHERE id = %s",
+                    (loan["id"],),
+                )
+                log_event(
+                    cur,
+                    None,
+                    "zrs",
+                    f"ZRS loan repaid: {loan['corp_name']} ({principal:.0f} ZION)",
+                    payment,
+                    priority="normal",
+                )
+            else:
+                cur.execute(
+                    "UPDATE zrs_loans SET amount_owed = %s, missed_payments = 0 WHERE id = %s",
+                    (new_owed, loan["id"]),
+                )
+            continue
+
+        missed = int(loan["missed_payments"] or 0) + 1
+        rating = max(0, int(loan["credit_rating"] or 100) - 15)
+        cur.execute(
+            """
+            UPDATE zrs_loans SET missed_payments = %s, is_active = false
+            WHERE id = %s
+            """,
+            (missed, loan["id"]),
+        )
+        cur.execute(
+            "UPDATE corporations SET credit_rating = %s WHERE id = %s",
+            (rating, loan["corp_id"]),
+        )
+        log_event(
+            cur,
+            None,
+            "zrs",
+            f"ZRS loan DEFAULT: {loan['corp_name']} missed payment ({payment:.0f} ZION due)",
+            payment,
+            priority="urgent",
+        )
+    return collected
+
+
+def lend_to_corporations(cur) -> float:
+    """Lend to cash-poor but revenue-viable corporations (FRS-style)."""
+    cur.execute("SELECT loans_frozen FROM zrs_state WHERE id = 1")
+    zrs_row = cur.fetchone() or {}
+    if bool(zrs_row.get("loans_frozen")):
+        return 0.0
+
+    collected = collect_corp_loan_repayments(cur)
+    if collected > 0:
+        print(f"  💰 Corp loan repayments: +{collected:.0f} ZION to reserve")
+
+    reserve = zrs_reserve(cur)
+    cur.execute(
+        "SELECT COALESCE(SUM(principal), 0) AS s FROM zrs_loans WHERE is_active = true"
+    )
+    outstanding = float((cur.fetchone() or {}).get("s") or 0)
+    max_outstanding = reserve * MAX_LOANS_RESERVE_PCT
+    if outstanding >= max_outstanding:
+        return collected
+
+    cycle = economy_cycle_number(cur)
+    cur.execute(
+        """
+        SELECT id, name, treasury,
+               COALESCE(last_cycle_revenue, 0) AS revenue,
+               COALESCE(credit_rating, 100) AS credit_rating
+        FROM corporations
+        WHERE is_active = true
+          AND treasury < 300
+          AND COALESCE(last_cycle_revenue, 0) > 100
+        ORDER BY treasury ASC
+        """
+    )
+    lent_total = 0.0
+    for corp in cur.fetchall():
+        if outstanding + CORP_LOAN_AMOUNT > max_outstanding:
+            break
+        if int(corp.get("credit_rating") or 100) < 30:
+            continue
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c FROM zrs_loans
+            WHERE corp_id = %s AND is_active = true
+            """,
+            (corp["id"],),
+        )
+        if int((cur.fetchone() or {}).get("c") or 0) >= MAX_LOANS_PER_CORP:
+            continue
+        if not zrs_deduct_reserve(cur, CORP_LOAN_AMOUNT):
+            break
+        cur.execute(
+            "UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
+            (CORP_LOAN_AMOUNT, corp["id"]),
+        )
+        cur.execute(
+            """
+            INSERT INTO zrs_loans (
+                corp_id, corp_name, principal, amount_owed, interest_rate,
+                issued_cycle, due_cycle, is_active
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, true)
+            """,
+            (
+                corp["id"],
+                corp["name"],
+                CORP_LOAN_AMOUNT,
+                CORP_LOAN_AMOUNT,
+                CORP_LOAN_INTEREST,
+                cycle,
+                cycle + CORP_LOAN_DUE_CYCLES,
+            ),
+        )
+        outstanding += CORP_LOAN_AMOUNT
+        lent_total += CORP_LOAN_AMOUNT
+        log_event(
+            cur,
+            None,
+            "zrs",
+            f"ZRS corp loan: {corp['name']} +{CORP_LOAN_AMOUNT:.0f} ZION "
+            f"({CORP_LOAN_INTEREST * 100:.0f}%/cycle, due cycle {cycle + CORP_LOAN_DUE_CYCLES})",
+            CORP_LOAN_AMOUNT,
+            priority="urgent",
+        )
+        print(f"  🏦 Loan to {corp['name']}: {CORP_LOAN_AMOUNT:.0f} ZION")
+
+    if lent_total > 0:
+        print(f"  📋 Corporate lending: {lent_total:.0f} ZION disbursed")
+    return collected + lent_total
 
 
 def absorb_from_agents(cur, rate: float) -> float:
@@ -301,6 +471,7 @@ def main():
 
     record_zrs_policy(cur, state, action, amount, headline, econ, rate)
     record_economy_snapshot(cur, state)
+    lend_to_corporations(cur)
 
     conn.commit()
     print(f"Mode: {state} | Reserve: {reserve_before:,.0f} → {reserve_after:,.0f}")
