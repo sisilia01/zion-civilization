@@ -398,6 +398,8 @@ interface Clan {
 interface Stats {
   alive: number;
   dead: number;
+  /** alive + dead (API returns alive/dead, not total_agents) */
+  total_agents: number;
   total_zion: number;
   active_clans: number;
   deaths_today: number;
@@ -405,6 +407,25 @@ interface Stats {
   middle?: number;
   poor?: number;
   critical?: number;
+}
+
+/** Map /api/stats JSON — API uses alive, dead, total_zion, deaths_today (not alive_agents). */
+function parseApiStatsResponse(raw: unknown): Stats {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const alive = Number(s.alive ?? s.alive_agents ?? 0);
+  const dead = Number(s.dead ?? 0);
+  return {
+    alive,
+    dead,
+    total_agents: alive + dead > 0 ? alive + dead : alive,
+    total_zion: Number(s.total_zion ?? 0),
+    active_clans: Number(s.active_clans ?? 0),
+    deaths_today: Number(s.deaths_today ?? 0),
+    elite: Number(s.elite ?? 0),
+    middle: Number(s.middle ?? 0),
+    poor: Number(s.poor ?? 0),
+    critical: Number(s.critical ?? 0),
+  };
 }
 
 interface ZcoVote {
@@ -2005,11 +2026,14 @@ function ZionBetMarketDetailOverlay({
   );
   const userPosition = useMemo(
     () =>
-      myBets.find(
-        (b) =>
-          (b.status ?? "active") === "active" &&
+      myBets.find((b) => {
+        const s = (b.status ?? "active").toLowerCase();
+        const isOpen = s === "active" || s === "pending";
+        return (
+          isOpen &&
           (b.market_id === detailApiMarket.id || b.question === detailApiMarket.question)
-      ),
+        );
+      }),
     [myBets, detailApiMarket]
   );
 
@@ -3545,8 +3569,23 @@ function ZionBetClosePositionButton({
   const currentCents = isYes ? yesCents : noCents;
   const closeStake = bet.amount_sui * partialPct;
   const closeReturnEstimate = zionbetEarlyCloseReturnSui(closeStake);
+  const onChainIdPending = bet.on_chain_bet_id == null || bet.on_chain_bet_id === undefined;
+  const onChainBetIdForClose = bet.on_chain_bet_id ?? 0;
 
   if (!isActive || !walletAddress.trim()) return null;
+
+  const logCloseBetObject = () => {
+    console.log(
+      "[CLOSE] bet object:",
+      JSON.stringify({
+        id: bet.id,
+        on_chain_bet_id: bet.on_chain_bet_id,
+        market_id: bet.market_id,
+        stake: (bet as ZionBetMyBetRow & { stake?: number }).stake ?? bet.amount_sui,
+        amount_sui: bet.amount_sui,
+      })
+    );
+  };
 
   const closeBtnStyle: CSSProperties = {
     width: "100%",
@@ -3565,10 +3604,9 @@ function ZionBetClosePositionButton({
   };
 
   const runClose = async () => {
-    const onChainBetId = bet.on_chain_bet_id;
-    if (onChainBetId == null || onChainBetId === undefined) {
-      onClosed?.("Cannot close - on-chain ID not found. Contact support.");
-      return;
+    logCloseBetObject();
+    if (onChainIdPending) {
+      console.warn("[CLOSE] on_chain_bet_id missing — attempting close with bet_id=0 (may fail on-chain)");
     }
 
     const marketId = bet.market_id?.trim() || "";
@@ -3583,7 +3621,7 @@ function ZionBetClosePositionButton({
         signAndExecute,
         {
           marketId,
-          onChainBetId,
+          onChainBetId: onChainBetIdForClose,
           walletAddress: walletAddress.trim(),
         },
         {
@@ -3705,8 +3743,18 @@ function ZionBetClosePositionButton({
           </div>
         </div>
       ) : (
-        <button type="button" style={closeBtnStyle} onClick={() => setConfirming(true)}>
-          📤 Close Position · receive ~{zionbetEarlyCloseReturnSui(bet.amount_sui).toFixed(2)} SUI (95% of stake)
+        <button
+          type="button"
+          style={closeBtnStyle}
+          onClick={() => {
+            logCloseBetObject();
+            setConfirming(true);
+          }}
+        >
+          📤{" "}
+          {onChainIdPending
+            ? "Close Position (on-chain ID pending…)"
+            : `Close Position · receive ~${zionbetEarlyCloseReturnSui(bet.amount_sui).toFixed(2)} SUI (95% of stake)`}
         </button>
       )}
     </div>
@@ -4239,6 +4287,15 @@ function ZionBetMyBetsOverlay({
     [myBets]
   );
 
+  const validActiveBets = useMemo(
+    () =>
+      activeBets.filter((b) => {
+        const stake = (b as ZionBetMyBetRow & { stake?: number }).stake;
+        return (stake || b.amount_sui || 0) > 0;
+      }),
+    [activeBets]
+  );
+
   const historyYears = useMemo(() => {
     const years = new Set<number>([now.getFullYear()]);
     myBets.forEach((b) => {
@@ -4290,7 +4347,7 @@ function ZionBetMyBetsOverlay({
     cursor: "pointer",
   });
 
-  const listBets = tab === "positions" ? activeBets : historyBets;
+  const listBets = tab === "positions" ? validActiveBets : historyBets;
 
   return (
     <div
@@ -5394,6 +5451,114 @@ async function resolveMarketIdU64(marketId: string): Promise<bigint | null> {
   return u64;
 }
 
+type ZionBetDbSaveBody = {
+  wallet: string;
+  market_id: string;
+  direction: boolean;
+  amount_sui: number;
+  question?: string;
+  event_type?: string;
+  timeframe?: string;
+  odds_at_bet?: number;
+  /** Chain-first flow already ensured market in Step 0 — skip slow sui CLI in /bet */
+  skip_onchain_ensure?: boolean;
+  bracket_index?: number;
+};
+
+function buildZionBetDbBody(params: {
+  wallet: string;
+  market: {
+    id: string;
+    question?: string;
+    event_type?: string;
+    timeframe?: string;
+    yes_cents?: number;
+    no_cents?: number;
+  };
+  direction: boolean;
+  amountSui: number;
+  bracketIndex?: number;
+}): ZionBetDbSaveBody {
+  const yesCents = Math.round(params.market.yes_cents ?? 50);
+  const noCents = Math.round(params.market.no_cents ?? 100 - yesCents);
+  const oddsAtBet = params.direction ? yesCents : noCents;
+  const body: ZionBetDbSaveBody = {
+    wallet: params.wallet,
+    market_id: params.market.id,
+    direction: params.direction,
+    amount_sui: params.amountSui,
+    question: params.market.question?.trim() || params.market.id,
+    event_type: params.market.event_type?.trim() || "zion_bet",
+    timeframe: params.market.timeframe || "24h",
+    odds_at_bet: oddsAtBet,
+    skip_onchain_ensure: true,
+  };
+  if (typeof params.bracketIndex === "number") {
+    body.bracket_index = params.bracketIndex;
+  }
+  return body;
+}
+
+type ZionBetDbSaveResult = {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  potential_payout?: number;
+  points_earned?: number;
+  bet_id?: number;
+};
+
+async function postZionBetToDb(betBody: ZionBetDbSaveBody): Promise<ZionBetDbSaveResult> {
+  console.log("[BET] Step 3 body:", JSON.stringify(betBody));
+  const betRes = await Promise.race([
+    fetch("/api/bet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(betBody),
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("DB save timeout")), 10000)
+    ),
+  ]);
+  console.log("[BET] Step 3 HTTP status:", betRes.status);
+  const betResult = (await betRes.json()) as ZionBetDbSaveResult;
+  console.log("[BET] Step 3 response:", JSON.stringify(betResult));
+  if (!betRes.ok && !betResult.error) {
+    betResult.error = `HTTP ${betRes.status}`;
+    betResult.success = false;
+  }
+  return betResult;
+}
+
+async function ensureZionBetMarketOnChain(
+  marketId: string,
+  timeframe?: string
+): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch("/api/zionbet/ensure_market", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        market_id: marketId,
+        timeframe: timeframe || "24h",
+      }),
+      signal: controller.signal,
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string; skipped?: boolean };
+    if (data.ok) return { ok: true, skipped: data.skipped };
+    console.warn("[BET] ensure_market failed, continuing anyway:", data.error || res.status);
+    return { ok: true, skipped: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[BET] ensure_market error, continuing anyway:", msg);
+    return { ok: true, skipped: true };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function submitOnChainBet(
   signAndExecute: SignAndExecuteFn,
   params: {
@@ -5406,6 +5571,16 @@ async function submitOnChainBet(
 ) {
   try {
     const marketU64 = await resolveMarketIdU64(params.marketId);
+    console.log("[BET] submitOnChainBet params", {
+      marketId: params.marketId,
+      marketU64: marketU64?.toString(),
+      direction: params.direction,
+      amountSui: params.amountSui,
+      walletAddress: params.walletAddress,
+      ZIONBET_PACKAGE,
+      BET_HOUSE,
+      betAmountMist: Math.floor(params.amountSui * 1_000_000_000),
+    });
     console.log("[ZionBet] submitOnChainBet", {
       marketId: params.marketId,
       marketU64: marketU64?.toString(),
@@ -5460,9 +5635,11 @@ async function confirmZionBetOnChain(
   walletAddress: string
 ): Promise<{ ok?: boolean; on_chain_bet_id?: number; error?: string }> {
   if (!dbBetId || !txDigest?.trim()) {
+    console.warn("[BET] Step confirm: skipped — missing dbBetId or digest");
     return { ok: false, error: "missing_confirm_fields" };
   }
   try {
+    console.log("[BET] Step confirm: calling confirm_bet…", { db_bet_id: dbBetId, tx_digest: txDigest });
     const res = await fetch("/api/zionbet/confirm_bet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -5472,8 +5649,18 @@ async function confirmZionBetOnChain(
         wallet: walletAddress.trim(),
       }),
     });
-    return (await res.json()) as { ok?: boolean; on_chain_bet_id?: number; error?: string };
-  } catch {
+    const result = (await res.json()) as {
+      ok?: boolean;
+      on_chain_bet_id?: number;
+      error?: string;
+    };
+    console.log("[BET] Step confirm response:", JSON.stringify(result));
+    if (!result.ok) {
+      console.warn("[BET] Step confirm failed:", result.error);
+    }
+    return result;
+  } catch (err) {
+    console.error("[BET] Step confirm error:", err);
     return { ok: false, error: "confirm_failed" };
   }
 }
@@ -7795,7 +7982,8 @@ export default function Home() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const s = await fetch("/api/stats").then((r) => r.json());
+      const raw = await fetch("/api/stats").then((r) => r.json());
+      const s = parseApiStatsResponse(raw);
       setStats(s);
       setAgentClasses({
         elite: s.elite || 0,
@@ -8400,10 +8588,11 @@ export default function Home() {
         )
         .slice(0, 8);
 
-      const alive = Number(stats.alive ?? stats.alive_agents ?? 0);
-      const deathsToday = Number(stats.deaths_today ?? 0);
-      const totalZion = typeof stats.total_zion === "number" ? stats.total_zion : Number(stats.total_zion ?? 0);
-      const activeClans = Number(stats.active_clans ?? 0);
+      const parsedStats = parseApiStatsResponse(stats);
+      const alive = parsedStats.alive;
+      const deathsToday = parsedStats.deaths_today;
+      const totalZion = parsedStats.total_zion;
+      const activeClans = parsedStats.active_clans;
 
       const aiRes = await fetch("/api/generate_press", {
         method: "POST",
@@ -9153,7 +9342,11 @@ export default function Home() {
     async (modalMarket: ZionBetMarket, modalDirection: boolean) => {
       if (!account?.address) {
         console.error("[ZionBet] handlePlaceCardBet: wallet UI visible but account.address missing");
-        setZionBetToast("Connect wallet in the app (dapp-kit account not ready).");
+        setZionBetToast("Please connect wallet first");
+        return;
+      }
+      if (!signAndExecute) {
+        setZionBetToast("Please connect wallet first");
         return;
       }
       setBetLoading(true);
@@ -9164,64 +9357,16 @@ export default function Home() {
         marketU64: marketU64?.toString(),
         category: modalMarket.category,
         market_kind: modalMarket.market_kind,
+        ZIONBET_PACKAGE,
+        BET_HOUSE,
       });
       const betAmountZion = Number.isFinite(amount) && amount >= 1 ? amount : 1;
       try {
-        const res = await fetch("/api/bet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wallet: account.address,
-            market_id: modalMarket.id,
-            direction: modalDirection,
-            amount_sui: betAmountZion,
-          }),
-        });
-        const data = (await res.json()) as {
-          success?: boolean;
-          message?: string;
-          error?: string;
-          potential_payout?: number;
-          points_earned?: number;
-          bet_id?: number;
-        };
-        if (!data.success) {
-          setZionBetToast(
-            typeof data.message === "string"
-              ? data.message
-              : typeof data.error === "string"
-                ? data.error
-                : "Could not place bet."
-          );
-          return;
-        }
-
-        const dbBetId = data.bet_id ?? 0;
-        setBetResult(data);
-        setBetModal(null);
-        void loadMyBets();
-        void loadZionBetStats();
-        void loadZionBetMarkets();
-        fetch("/api/zionbet/markets")
-          .then((r) => r.json())
-          .then((d: ZionbetMarketsBundle) => {
-            setZionbetMarkets({
-              crypto: Array.isArray(d.crypto) ? d.crypto : [],
-              sports: Array.isArray(d.sports) ? d.sports : [],
-              civilization: Array.isArray(d.civilization) ? d.civilization : [],
-            });
-          })
-          .catch(() => {});
-        const ur = await fetch(`/api/user/${encodeURIComponent(account.address)}`);
-        const ud = await ur.json();
-        const raw = ud.points ?? ud.total_points ?? 0;
-        const pts = typeof raw === "number" ? raw : Number(raw);
-        if (Number.isFinite(pts)) setUserPoints(pts);
-
-        setZionBetToast("Saved to DB. Approve wallet transaction…");
-        await submitOnChainBet(
-          signAndExecute as SignAndExecuteFn,
-          {
+        console.log("[BET] Step 0: ensure on-chain market…", modalMarket.id);
+        await ensureZionBetMarketOnChain(modalMarket.id, modalMarket.timeframe);
+        console.log("[BET] Step 1: calling submitOnChainBet…");
+        setZionBetToast("Approve wallet transaction…");
+        await submitOnChainBet(signAndExecute as SignAndExecuteFn, {
             marketId: modalMarket.id,
             direction: modalDirection,
             amountSui: betAmountZion,
@@ -9229,16 +9374,71 @@ export default function Home() {
           },
           {
             onSuccess: async (digest) => {
-              if (dbBetId && digest) {
-                await confirmZionBetOnChain(dbBetId, digest, account.address);
+              console.log("[BET] Step 2: chain success, digest:", digest);
+              try {
+                console.log("[BET] Step 3: saving to DB…");
+                const betBody = buildZionBetDbBody({
+                  wallet: account.address,
+                  market: modalMarket,
+                  direction: modalDirection,
+                  amountSui: betAmountZion,
+                });
+                const data = await postZionBetToDb(betBody);
+                if (!data.success) {
+                  setZionBetToast(
+                    `On-chain bet succeeded but save failed: ${
+                      typeof data.error === "string"
+                        ? data.error
+                        : typeof data.message === "string"
+                          ? data.message
+                          : "unknown"
+                    }. Contact support with TX: ${digest?.slice(0, 12) ?? ""}`
+                  );
+                  return;
+                }
+                console.log("[BET] Step 4: DB saved, bet_id:", data.bet_id);
+                const dbBetId = data.bet_id ?? 0;
+                if (dbBetId && digest) {
+                  const confirmResult = await confirmZionBetOnChain(dbBetId, digest, account.address);
+                  if (!confirmResult.ok) {
+                    console.warn(
+                      "[BET] confirm_bet did not set on_chain_bet_id — close may show pending ID"
+                    );
+                  }
+                }
+                setBetResult(data);
+                setBetModal(null);
+                void loadMyBets();
+                void loadZionBetStats();
+                void loadZionBetMarkets();
+                fetch("/api/zionbet/markets")
+                  .then((r) => r.json())
+                  .then((d: ZionbetMarketsBundle) => {
+                    setZionbetMarkets({
+                      crypto: Array.isArray(d.crypto) ? d.crypto : [],
+                      sports: Array.isArray(d.sports) ? d.sports : [],
+                      civilization: Array.isArray(d.civilization) ? d.civilization : [],
+                    });
+                  })
+                  .catch(() => {});
+                const ur = await fetch(`/api/user/${encodeURIComponent(account.address)}`);
+                const ud = await ur.json();
+                const raw = ud.points ?? ud.total_points ?? 0;
+                const pts = typeof raw === "number" ? raw : Number(raw);
+                if (Number.isFinite(pts)) setUserPoints(pts);
+                const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
+                setZionBetToast(`✅ Bet placed! TX: ${txLabel}`);
+              } catch (err) {
+                console.error("[BET] Step 3 failed:", err);
+                setZionBetToast(
+                  err instanceof Error
+                    ? `On-chain bet succeeded but save failed: ${err.message}`
+                    : "On-chain bet succeeded but save failed. Contact support with your transaction digest."
+                );
               }
-              const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
-              setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
-              void loadMyBets();
-              void loadZionBetStats();
             },
             onError: (message) => {
-              setZionBetToast(`On-chain failed (DB bet saved): ${message}`);
+              setZionBetToast(message || "Bet cancelled. Nothing was saved.");
             },
           }
         );
@@ -10147,53 +10347,29 @@ export default function Home() {
     bracketIndex?: number
   ) => {
     const w = walletAddress.trim();
-    if (!w) return;
+    if (!w) {
+      setZionBetToast("Please connect wallet first");
+      return;
+    }
+    if (!signAndExecute) {
+      setZionBetToast("Please connect wallet first");
+      return;
+    }
     const placingId =
       typeof bracketIndex === "number"
         ? `${bet.id}-b${bracketIndex}-${prediction}`
         : `${bet.id}-${prediction}`;
     setZionBetPlacing(placingId);
     try {
-      const body: Record<string, unknown> = {
-        wallet: w,
-        market_id: bet.id,
-        direction: prediction,
-        amount_sui: amount,
-      };
-      if (typeof bracketIndex === "number") body.bracket_index = bracketIndex;
-      const r = await fetch("/api/bet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      console.log("[BET] Step 0: ensure on-chain market…", bet.id);
+      await ensureZionBetMarketOnChain(bet.id, bet.timeframe);
+      console.log("[BET] Step 1: calling submitOnChainBet…", {
+        marketId: bet.id,
+        ZIONBET_PACKAGE,
+        BET_HOUSE,
       });
-      const d = (await r.json()) as {
-        success?: boolean;
-        message?: string;
-        error?: string;
-        potential_payout?: number;
-        points_earned?: number;
-        bet_id?: number;
-      };
-      if (!d.success) {
-        setZionBetToast(
-          typeof d.message === "string" ? d.message : typeof d.error === "string" ? d.error : "Could not place bet."
-        );
-        return;
-      }
-
-      const dbBetId = d.bet_id ?? 0;
-      const ur = await fetch(`/api/user/${encodeURIComponent(w)}`);
-      const ud = await ur.json();
-      const raw = ud.points ?? ud.total_points ?? 0;
-      const pts = typeof raw === "number" ? raw : Number(raw);
-      if (Number.isFinite(pts)) setUserPoints(pts);
-      void loadMyBets();
-      void loadZionBetMarkets();
-
-      setZionBetToast("Saved to DB. Approve wallet transaction…");
-      await submitOnChainBet(
-        signAndExecute as SignAndExecuteFn,
-        {
+      setZionBetToast("Approve wallet transaction…");
+      await submitOnChainBet(signAndExecute as SignAndExecuteFn, {
           marketId: bet.id,
           direction: prediction,
           amountSui: amount,
@@ -10201,15 +10377,59 @@ export default function Home() {
         },
         {
           onSuccess: async (digest) => {
-            if (dbBetId && digest) {
-              await confirmZionBetOnChain(dbBetId, digest, w);
+            console.log("[BET] Step 2: chain success, digest:", digest);
+            try {
+              console.log("[BET] Step 3: saving to DB…");
+              const betBody = buildZionBetDbBody({
+                wallet: w,
+                market: bet,
+                direction: prediction,
+                amountSui: amount,
+                bracketIndex,
+              });
+              const d = await postZionBetToDb(betBody);
+              if (!d.success) {
+                setZionBetToast(
+                  `On-chain bet succeeded but save failed: ${
+                    typeof d.message === "string"
+                      ? d.message
+                      : typeof d.error === "string"
+                        ? d.error
+                        : "unknown"
+                  }. Contact support with TX: ${digest?.slice(0, 12) ?? ""}`
+                );
+                return;
+              }
+              console.log("[BET] Step 4: DB saved, bet_id:", d.bet_id);
+              const dbBetId = d.bet_id ?? 0;
+              if (dbBetId && digest) {
+                const confirmResult = await confirmZionBetOnChain(dbBetId, digest, w);
+                if (!confirmResult.ok) {
+                  console.warn(
+                    "[BET] confirm_bet did not set on_chain_bet_id — close may show pending ID"
+                  );
+                }
+              }
+              const ur = await fetch(`/api/user/${encodeURIComponent(w)}`);
+              const ud = await ur.json();
+              const raw = ud.points ?? ud.total_points ?? 0;
+              const pts = typeof raw === "number" ? raw : Number(raw);
+              if (Number.isFinite(pts)) setUserPoints(pts);
+              void loadMyBets();
+              void loadZionBetMarkets();
+              const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
+              setZionBetToast(`✅ Bet placed! TX: ${txLabel}`);
+            } catch (err) {
+              console.error("[BET] Step 3 failed:", err);
+              setZionBetToast(
+                err instanceof Error
+                  ? `On-chain bet succeeded but save failed: ${err.message}`
+                  : "On-chain bet succeeded but save failed. Contact support with your transaction digest."
+              );
             }
-            const txLabel = digest ? `${digest.slice(0, 8)}…` : "pending";
-            setZionBetToast(`✅ Bet placed on-chain! TX: ${txLabel}`);
-            void loadMyBets();
           },
           onError: (message) => {
-            setZionBetToast(`On-chain failed (DB bet saved): ${message}`);
+            setZionBetToast(message || "Bet cancelled. Nothing was saved.");
           },
         }
       );
