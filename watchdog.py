@@ -22,11 +22,8 @@ log = logging.getLogger(__name__)
 
 BACKEND_DIR = "/root/zion_backend"
 
-# Long-running daemons: only restart when screen session is dead (never log-age restarts)
-DAEMONS = {
-    "settlement": "settlement.py",
-    "zion-api": None,  # started via start_api(); not a python file in BACKEND_DIR
-}
+# Long-running daemons (API + settlement) are managed by systemd — not watchdog/screen
+DAEMONS: dict[str, str | None] = {}
 
 # Scripts that run once and exit: interval + log_stuck restarts
 CRON_SCRIPTS = {
@@ -88,7 +85,7 @@ def is_screen_running(name):
 
 
 def is_api_running():
-    """HTTP health check (logging only; daemons use screen state for restarts)"""
+    """HTTP health check for heartbeat logging only (API managed by systemd)."""
     try:
         result = subprocess.run(
             ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
@@ -98,19 +95,6 @@ def is_api_running():
         return result.stdout.strip() == "200"
     except Exception:
         return False
-
-
-def start_api():
-    """Start zion-api daemon in screen (only called when screen is dead)"""
-    log.info("Starting zion-api daemon...")
-    subprocess.run(["pkill", "-f", "uvicorn"], capture_output=True)
-    time.sleep(2)
-    subprocess.run([
-        "screen", "-dmS", "zion-api",
-        "bash", "-c",
-        f"cd {BACKEND_DIR} && uvicorn api:app --host 0.0.0.0 --port 8000 2>&1 | tee api.log"
-    ])
-    log.info("zion-api daemon started")
 
 
 def run_script(name, script):
@@ -132,16 +116,13 @@ def check_log_stuck(name, max_age_seconds):
 
 
 def ensure_daemons():
-    """Restart daemons only when their screen session is dead."""
+    """Screen daemons only (API/settlement use systemd: zion-api, zion-settlement)."""
     for name, script in DAEMONS.items():
         try:
             if is_screen_running(name):
                 continue
             log.warning(f"Daemon {name} screen not running — starting")
-            if name == "zion-api":
-                start_api()
-            else:
-                run_script(name, script)
+            run_script(name, script)
         except Exception as e:
             log.exception(f"Daemon check failed for {name}: {e}")
 
@@ -213,7 +194,7 @@ def main():
 
     log.info("=== ZION Watchdog started ===")
     log.info(
-        f"Monitoring {len(DAEMONS)} daemons + {len(CRON_SCRIPTS)} cron scripts + "
+        f"API/settlement: systemd | {len(CRON_SCRIPTS)} cron scripts | "
         f"{len(ELECTION_CHECKS)} election checks"
     )
 
@@ -226,11 +207,12 @@ def main():
             check_cron_scripts(now)
 
             if int(now) % 600 < 30:
-                api_status = "✅" if is_api_running() else "❌"
-                log.info(
-                    f"Heartbeat — API:{api_status} | "
-                    f"Daemons:{len(DAEMONS)} Cron:{len(CRON_SCRIPTS)}"
-                )
+                if is_api_running():
+                    log.info(f"Heartbeat — API:✅ | Cron:{len(CRON_SCRIPTS)}")
+                else:
+                    log.warning(
+                        "Heartbeat — API:❌ down — check: systemctl status zion-api"
+                    )
 
             if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
                 subprocess.Popen(

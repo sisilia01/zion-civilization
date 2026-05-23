@@ -1,12 +1,12 @@
 [Unit]
-Description=ZION Watchdog (civilization cron orchestrator)
+Description=ZION Settlement Daemon
 After=network.target postgresql.service zion-api.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/root/zion_backend
-ExecStart=/usr/bin/python3 /root/zion_backend/watchdog.py
+ExecStart=/usr/bin/python3 /root/zion_backend/settlement.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
