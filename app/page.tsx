@@ -1750,6 +1750,57 @@ function ZionBetMarketCardItem({
   );
 }
 
+type ZionBetPositionStats = {
+  side: "YES" | "NO";
+  amount: number;
+  avgCents: number;
+  currentCents: number;
+  potentialPayout: number;
+  potentialWin: number;
+  marketValue: number;
+  inProfit: boolean;
+  profitIfYesWins: number;
+  profitIfNoWins: number;
+};
+
+function zionbetComputePositionStats(
+  position: ZionBetMyBetRow,
+  yesCents: number,
+  noCents: number
+): ZionBetPositionStats {
+  const amount = position.amount_sui;
+  const side = position.direction === "YES" ? "YES" : "NO";
+  const isYes = side === "YES";
+  const avgCents = Math.max(
+    1,
+    Math.min(99, Math.round(Number(position.odds) || (isYes ? yesCents : noCents)))
+  );
+  const currentCents = isYes ? yesCents : noCents;
+  const potentialPayout =
+    position.potential_payout && position.potential_payout > 0
+      ? position.potential_payout
+      : amount * (100 / avgCents);
+  const potentialWin = potentialPayout - amount;
+  const marketValue = (amount * currentCents) / avgCents;
+  return {
+    side,
+    amount,
+    avgCents,
+    currentCents,
+    potentialPayout,
+    potentialWin,
+    marketValue,
+    inProfit: marketValue >= amount,
+    profitIfYesWins: isYes ? potentialWin : -amount,
+    profitIfNoWins: isYes ? -amount : potentialWin,
+  };
+}
+
+function zionbetFormatSuiDelta(n: number): string {
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toFixed(2)} SUI`;
+}
+
 function ZionBetMarketDetailOverlay({
   apiMarket,
   walletConnected,
@@ -1813,6 +1864,9 @@ function ZionBetMarketDetailOverlay({
   }, [apiMarket.id]);
   const { yes, no } = zionBetDisplayOdds(market);
   const [betDirection, setBetDirection] = useState(true);
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [limitPrice, setLimitPrice] = useState("50");
+  const [limitNotice, setLimitNotice] = useState<string | null>(null);
   const [countdown, setCountdown] = useState("—");
   const odds = zionBetDisplayOdds(market);
   const volumeLabel = zionbetMarketVolumeLabel(
@@ -1841,10 +1895,21 @@ function ZionBetMarketDetailOverlay({
   const userPosition = useMemo(
     () =>
       myBets.find(
-        (b) => b.market_id === detailApiMarket.id || b.question === detailApiMarket.question
+        (b) =>
+          (b.status ?? "active") === "active" &&
+          (b.market_id === detailApiMarket.id || b.question === detailApiMarket.question)
       ),
     [myBets, detailApiMarket]
   );
+
+  const positionStats = useMemo(
+    () => (userPosition ? zionbetComputePositionStats(userPosition, yes, no) : null),
+    [userPosition, yes, no]
+  );
+
+  useEffect(() => {
+    setLimitPrice(String(betDirection ? odds.yes : odds.no));
+  }, [betDirection, odds.yes, odds.no]);
 
   useEffect(() => {
     const tick = () => {
@@ -1862,7 +1927,21 @@ function ZionBetMarketDetailOverlay({
 
   const amt = parseFloat(betAmount || "0");
   const oddsCents = betDirection ? odds.yes : odds.no;
-  const payout = oddsCents > 0 ? amt * (100 / oddsCents) : 0;
+  const limitCents = Math.max(1, Math.min(99, Math.round(parseFloat(limitPrice) || oddsCents)));
+  const effectiveOddsCents = orderType === "limit" ? limitCents : oddsCents;
+  const payout = effectiveOddsCents > 0 ? amt * (100 / effectiveOddsCents) : 0;
+
+  const orderTabStyle = (active: boolean): CSSProperties => ({
+    flex: 1,
+    height: "36px",
+    borderRadius: "8px",
+    border: active ? "1px solid rgba(100, 180, 255, 0.45)" : "1px solid rgba(100, 180, 255, 0.15)",
+    background: active ? "rgba(0, 100, 200, 0.35)" : "rgba(10, 30, 60, 0.4)",
+    color: active ? "#ffffff" : ZB_VISTA_TEXT_SEC,
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+  });
 
   const addQuickAmount = (n: number) => {
     const cur = parseFloat(betAmount || "0") || 0;
@@ -2219,6 +2298,14 @@ function ZionBetMarketDetailOverlay({
               >
                 Place Bet
               </h2>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+                <button type="button" onClick={() => { setOrderType("market"); setLimitNotice(null); }} style={orderTabStyle(orderType === "market")}>
+                  Market
+                </button>
+                <button type="button" onClick={() => { setOrderType("limit"); setLimitNotice(null); }} style={orderTabStyle(orderType === "limit")}>
+                  Limit
+                </button>
+              </div>
               <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
                 <button type="button" onClick={() => setBetDirection(true)} style={outcomeBtn(betDirection, "yes")}>
                   YES {odds.yes}¢
@@ -2227,6 +2314,43 @@ function ZionBetMarketDetailOverlay({
                   NO {odds.no}¢
                 </button>
               </div>
+              {orderType === "limit" ? (
+                <div style={{ marginBottom: "14px" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      color: ZB_VISTA_LABEL,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Limit price
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      step={1}
+                      value={limitPrice}
+                      onChange={(e) => setLimitPrice(e.target.value)}
+                      style={{
+                        flex: 1,
+                        height: "40px",
+                        boxSizing: "border-box",
+                        padding: "0 12px",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(100, 180, 255, 0.3)",
+                        background: "rgba(10, 30, 60, 0.6)",
+                        color: "#ffffff",
+                        fontSize: "15px",
+                        outline: "none",
+                      }}
+                    />
+                    <span style={{ color: ZB_VISTA_LABEL, fontSize: "14px", fontWeight: 600 }}>¢</span>
+                  </div>
+                </div>
+              ) : null}
               <label
                 style={{
                   display: "block",
@@ -2291,7 +2415,13 @@ function ZionBetMarketDetailOverlay({
               <button
                 type="button"
                 disabled={betLoading || !walletConnected}
-                onClick={() => onPlaceBet(market, betDirection)}
+                onClick={() => {
+                  if (orderType === "limit") {
+                    setLimitNotice("Limit orders coming soon — use Market to bet at current price.");
+                    return;
+                  }
+                  onPlaceBet(market, betDirection);
+                }}
                 style={{
                   width: "100%",
                   height: "48px",
@@ -2307,8 +2437,25 @@ function ZionBetMarketDetailOverlay({
                   textShadow: "0 1px 2px rgba(0,0,0,0.25)",
                 }}
               >
-                {betLoading ? "Placing…" : "Place Bet"}
+                {betLoading
+                  ? "Placing…"
+                  : orderType === "limit"
+                    ? "Place Limit Order"
+                    : "Place Bet"}
               </button>
+              {limitNotice ? (
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: "11px",
+                    lineHeight: 1.45,
+                    color: "rgba(255, 200, 100, 0.95)",
+                    textAlign: "center",
+                  }}
+                >
+                  {limitNotice}
+                </p>
+              ) : null}
               <p
                 style={{
                   margin: "12px 0 0",
@@ -2322,28 +2469,103 @@ function ZionBetMarketDetailOverlay({
                   : "Connect wallet to bet"}
               </p>
 
-              {userPosition ? (
+              {userPosition && positionStats ? (
                 <div
                   style={{
                     marginTop: "18px",
-                    paddingTop: "18px",
-                    borderTop: "1px solid rgba(100, 180, 255, 0.08)",
-                    fontSize: "12px",
-                    color: ZB_VISTA_TEXT_SEC,
-                    lineHeight: 1.7,
+                    padding: "14px",
+                    borderRadius: "12px",
+                    border: `1px solid ${positionStats.inProfit ? "rgba(0, 212, 170, 0.45)" : "rgba(255, 107, 107, 0.45)"}`,
+                    background: positionStats.inProfit
+                      ? "linear-gradient(145deg, rgba(0, 80, 60, 0.35) 0%, rgba(10, 30, 60, 0.5) 100%)"
+                      : "linear-gradient(145deg, rgba(80, 20, 30, 0.35) 0%, rgba(10, 30, 60, 0.5) 100%)",
+                    boxShadow: positionStats.inProfit
+                      ? "0 0 20px rgba(0, 212, 170, 0.12)"
+                      : "0 0 20px rgba(255, 107, 107, 0.1)",
                   }}
                 >
-                  <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 6 }}>
-                    Your position
-                  </div>
-                  <div>
-                    Side:{" "}
-                    <span style={{ color: userPosition.direction === "YES" ? ZB_VISTA_YES : ZB_VISTA_NO }}>
-                      {userPosition.direction}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: "#ffffff", fontSize: "13px" }}>Your position</span>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: positionStats.inProfit ? ZB_VISTA_YES : ZB_VISTA_NO,
+                      }}
+                    >
+                      {positionStats.inProfit ? "In profit" : "Underwater"}
                     </span>
                   </div>
-                  <div>Amount: {userPosition.amount_sui} SUI</div>
-                  <div>Status: {(userPosition.status ?? "active").toUpperCase()}</div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "12px",
+                      marginBottom: "6px",
+                      color: ZB_VISTA_TEXT_SEC,
+                    }}
+                  >
+                    <span>
+                      Side:{" "}
+                      <strong style={{ color: positionStats.side === "YES" ? ZB_VISTA_YES : ZB_VISTA_NO }}>
+                        {positionStats.side}
+                      </strong>
+                    </span>
+                    <span>Status: {(userPosition.status ?? "active").toUpperCase()}</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: ZB_VISTA_TEXT_SEC, marginBottom: "4px" }}>
+                    Stake: <strong style={{ color: "#fff" }}>{positionStats.amount.toFixed(2)} SUI</strong>
+                  </div>
+                  <div style={{ fontSize: "12px", color: ZB_VISTA_TEXT_SEC, marginBottom: "4px" }}>
+                    Avg price: <strong style={{ color: "#fff" }}>{positionStats.avgCents}¢</strong>
+                    <span style={{ opacity: 0.65 }}> · now {positionStats.currentCents}¢</span>
+                  </div>
+                  <div style={{ fontSize: "12px", color: ZB_VISTA_TEXT_SEC, marginBottom: "10px" }}>
+                    Market value:{" "}
+                    <strong style={{ color: "#fff" }}>{positionStats.marketValue.toFixed(2)} SUI</strong>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      color: ZB_VISTA_YES,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Potential win: {positionStats.potentialWin.toFixed(2)} SUI
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      lineHeight: 1.55,
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      background: "rgba(0, 0, 0, 0.2)",
+                    }}
+                  >
+                    <div style={{ color: positionStats.profitIfYesWins >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
+                      If YES wins → {zionbetFormatSuiDelta(positionStats.profitIfYesWins)}
+                      {positionStats.profitIfYesWins >= 0 ? " profit" : " loss"}
+                    </div>
+                    <div
+                      style={{
+                        color: positionStats.profitIfNoWins >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO,
+                        marginTop: "4px",
+                      }}
+                    >
+                      If NO wins → {zionbetFormatSuiDelta(positionStats.profitIfNoWins)}
+                      {positionStats.profitIfNoWins >= 0 ? " profit" : " loss"}
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </div>
