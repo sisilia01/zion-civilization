@@ -433,6 +433,7 @@ def _ensure_user_bets_table(cur):
         )
     """)
     cur.execute("ALTER TABLE user_bets ADD COLUMN IF NOT EXISTS resolves_at TIMESTAMP WITH TIME ZONE")
+    cur.execute("ALTER TABLE user_bets ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'SUI'")
 
 
 def _ensure_resolves_at_backfill(cur):
@@ -1426,6 +1427,8 @@ async def place_user_bet(request: Request):
     market_id = body.get("market_id")
     direction = body.get("direction")  # true=YES, false=NO
     amount_sui = float(body.get("amount_sui", 0.1))
+    currency = body.get("currency") or "SUI"
+    print(f"[BET] currency received: {body.get('currency')}", flush=True)
     
     if not wallet or not market_id or direction is None:
         return {"error": "Missing fields"}
@@ -1482,14 +1485,15 @@ async def place_user_bet(request: Request):
     
     conn = get_db()
     cur = conn.cursor()
+    _ensure_user_bets_table(cur)
     cur.execute(f"""
         INSERT INTO user_bets 
         (wallet_address, market_id, event_type, question, amount_sui, amount,
-         prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}')
+         prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at, currency)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}', %s)
         RETURNING id
     """, (wallet, market_id, market.get("token",""), market["question"],
-          amount_sui, amount_sui, direction, odds, potential_payout, entry_price))
+          amount_sui, amount_sui, direction, odds, potential_payout, entry_price, currency))
     bet_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
@@ -1501,6 +1505,7 @@ async def place_user_bet(request: Request):
         "market": market["question"],
         "direction": "YES" if direction else "NO",
         "amount_sui": amount_sui,
+        "currency": currency,
         "odds": odds,
         "potential_payout": round(potential_payout, 4)
     }
@@ -1512,7 +1517,7 @@ def get_my_bets(wallet: str):
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute("""
         SELECT id, market_id, question, prediction, amount_sui, 
-               odds_at_bet, potential_payout, status, created_at, payout
+               odds_at_bet, potential_payout, status, created_at, payout, currency
         FROM user_bets 
         WHERE wallet_address = %s 
         ORDER BY created_at DESC LIMIT 20
@@ -1525,6 +1530,7 @@ def get_my_bets(wallet: str):
             "question": row["question"],
             "direction": "YES" if row["prediction"] else "NO",
             "amount_sui": float(row["amount_sui"] or 0),
+            "currency": row.get("currency") or "SUI",
             "odds": row["odds_at_bet"],
             "potential_payout": float(row["potential_payout"] or 0),
             "status": row["status"],
