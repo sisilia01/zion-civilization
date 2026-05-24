@@ -1269,7 +1269,15 @@ def main():
             senate_vote(cur, row["id"])
 
         check_impeachment(cur)
+        from political_economy import run_power_struggles, compute_power_scores
+
+        scores = compute_power_scores(cur)
+        run_power_struggles(cur, scores)
         check_coup(cur)
+
+        from senate_budget import run_budget_cycle
+
+        run_budget_cycle(cur)
 
         president = get_president(cur)
         if president and should_run_scheduled_election(cur, president):

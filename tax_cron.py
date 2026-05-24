@@ -243,15 +243,31 @@ def apply_tax_cycle():
 
     grand_total = total_tax + corp_tax_total
     if grand_total > 0:
-        route_tax_revenue(cur, grand_total)
-        log_event(
-            cur,
-            None,
-            "tax",
-            f"Tax {grand_total:.0f} ZION (agent+corp, efficiency {tax_collection_mult*100:.0f}%)",
-            grand_total,
-            priority="normal",
-        )
+        from political_economy import is_crisis_active, route_crisis_tax
+        from senate_budget import allocate_from_tax
+
+        if is_crisis_active(cur):
+            route_crisis_tax(cur, grand_total)
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"CRISIS TAX: {grand_total:.0f} ZION → 100% sheriff budget",
+                grand_total,
+                priority="breaking",
+            )
+        else:
+            senate_share = allocate_from_tax(cur, grand_total)
+            remainder = round(grand_total - senate_share, 2)
+            route_tax_revenue(cur, remainder)
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"Tax {grand_total:.0f} ZION (senate {senate_share:.0f}, routed {remainder:.0f})",
+                grand_total,
+                priority="normal",
+            )
 
     if starvation_deaths >= 3:
         log_event(

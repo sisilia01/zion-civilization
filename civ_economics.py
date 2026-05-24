@@ -9,8 +9,8 @@ TARGET_POPULATION = 75_000
 BIRTH_HARD_CAP = 100
 CORP_MAX_WORKERS = 50
 CORP_MIN_WORKERS = 5
-CORP_MIN_TREASURY = 500.0
-CORP_MIN_REVENUE = 100.0
+CORP_MIN_TREASURY = 200.0
+CORP_MIN_REVENUE = 50.0
 CORP_TAX_RATE = 0.10
 POLICE_OFFICER_RATIO = 50  # 1 officer per 50 agents (2%)
 POLICE_MIN_OFFICERS = 20
@@ -177,11 +177,10 @@ def pick_birth_class() -> str:
 
 
 def corp_max_workers(treasury: float) -> int:
-    """Scale hiring with treasury; 3 months salary buffer implied."""
-    if treasury < 1000:
+    """Scale hiring with treasury; more aggressive cap for large civ."""
+    if treasury <= CORP_MIN_TREASURY:
         return 0
-    cap = min(int(treasury // 100), CORP_MAX_WORKERS)
-    return max(0, cap)
+    return min(int(treasury // 50), CORP_MAX_WORKERS)
 
 
 def target_police_officers(alive: int) -> int:
@@ -196,46 +195,100 @@ def target_corporation_count(alive: int) -> int:
     return max(10, min(500, alive // 375))
 
 
-def fetch_economic_indicators(cur) -> dict[str, Any]:
-    """Macro snapshot for API / ZRS policy."""
-    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
-    alive = int(cur.fetchone()["c"] or 0)
-    cur.execute(
-        """
-        SELECT balance FROM agents WHERE is_alive = true ORDER BY balance
-        """
+def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
+    """Macro snapshot for API / ZRS policy. Rolls back on query failure if conn given."""
+    def _rollback():
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    def _scalar(sql: str, params=None, default=0):
+        try:
+            cur.execute(sql, params or ())
+            row = cur.fetchone()
+            if row is None:
+                return default
+            if isinstance(row, dict):
+                return next(iter(row.values()))
+            return row[0]
+        except Exception:
+            _rollback()
+            return default
+
+    alive = int(_scalar("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true"))
+
+    gini = 0.0
+    try:
+        cur.execute(
+            "SELECT balance FROM agents WHERE is_alive = true ORDER BY balance"
+        )
+        balances = [float(r["balance"] if isinstance(r, dict) else r[0] or 0) for r in cur.fetchall()]
+        gini = calculate_gini(balances)
+    except Exception:
+        _rollback()
+        gini = 0.0
+
+    agent_wealth = float(
+        _scalar("SELECT COALESCE(SUM(balance), 0) AS s FROM agents WHERE is_alive = true")
     )
-    balances = [float(r["balance"] or 0) for r in cur.fetchall()]
-    gini = calculate_gini(balances)
-    cur.execute("SELECT COALESCE(SUM(balance), 0) AS s FROM agents WHERE is_alive = true")
-    agent_wealth = float(cur.fetchone()["s"] or 0)
-    cur.execute("SELECT COALESCE(SUM(treasury), 0) AS s FROM corporations WHERE is_active = true")
-    corp_wealth = float(cur.fetchone()["s"] or 0)
-    cur.execute("SELECT COALESCE(reserve, 0) AS r FROM zrs_state WHERE id = 1")
-    zrs_reserve = float((cur.fetchone() or {}).get("r") or 0)
+    corp_wealth = float(
+        _scalar(
+            "SELECT COALESCE(SUM(treasury), 0) AS s FROM corporations WHERE is_active = true"
+        )
+    )
+    zrs_reserve = float(
+        _scalar("SELECT COALESCE(reserve, 0) AS r FROM zrs_state WHERE id = 1")
+    )
     total_economy = agent_wealth + corp_wealth + zrs_reserve
-    cur.execute(
-        """
-        SELECT COUNT(*) AS c FROM agents
-        WHERE is_alive = true AND COALESCE(job_status, 'unemployed') = 'unemployed'
-        """
-    )
-    unemployed = int(cur.fetchone()["c"] or 0)
+
+    unemployed = 0
+    try:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c FROM agents
+            WHERE is_alive = true AND COALESCE(job_status, 'unemployed') = 'unemployed'
+            """
+        )
+        unemployed = int((cur.fetchone() or {}).get("c") or 0)
+    except Exception:
+        _rollback()
+        try:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS c FROM agents
+                WHERE is_alive = true AND employer_corp_id IS NULL
+                """
+            )
+            unemployed = int((cur.fetchone() or {}).get("c") or 0)
+        except Exception:
+            _rollback()
+            unemployed = 0
+
     unemployment_rate = round(unemployed / max(alive, 1) * 100, 2)
-    cur.execute(
-        """
-        SELECT avg_balance, inflation_index FROM economy_snapshots
-        ORDER BY created_at DESC LIMIT 2
-        """
-    )
-    snaps = cur.fetchall()
+
     inflation_rate = 0.0
-    if len(snaps) >= 2:
-        prev = float(snaps[1].get("avg_balance") or 1)
-        curr = float(snaps[0].get("avg_balance") or prev)
-        inflation_rate = round((curr - prev) / max(prev, 0.01) * 100, 2)
-    elif snaps:
-        inflation_rate = round(float(snaps[0].get("inflation_index") or 0), 2)
+    try:
+        cur.execute(
+            """
+            SELECT avg_balance FROM economy_snapshots
+            ORDER BY snapshot_at DESC NULLS LAST LIMIT 2
+            """
+        )
+        snaps = cur.fetchall()
+        if len(snaps) >= 2:
+            prev = float(
+                (snaps[1]["avg_balance"] if isinstance(snaps[1], dict) else snaps[1][0]) or 1
+            )
+            curr = float(
+                (snaps[0]["avg_balance"] if isinstance(snaps[0], dict) else snaps[0][0]) or prev
+            )
+            inflation_rate = round((curr - prev) / max(prev, 0.01) * 100, 2)
+    except Exception:
+        _rollback()
+        inflation_rate = 0.0
+
     return {
         "alive": alive,
         "gini_coefficient": gini,

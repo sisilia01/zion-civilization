@@ -404,6 +404,13 @@ def main():
 
         execute_decision(cur, data)
         president = get_president(cur)
+
+        from political_economy import manage_crisis_mode, compute_macro_metrics, update_crisis_metrics
+
+        pe_metrics = compute_macro_metrics(cur)
+        pe_metrics = update_crisis_metrics(cur, pe_metrics)
+        manage_crisis_mode(cur, pe_metrics)
+
         rev_status = {"meter": 0, "active": False}
         if president:
             rev_status = process_revolution_cycle(cur, president)

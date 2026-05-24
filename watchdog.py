@@ -28,12 +28,15 @@ DAEMONS: dict[str, str | None] = {}
 # Scripts that run once and exit: interval + log_stuck restarts
 CRON_SCRIPTS = {
     # CIVILIZATION_LOGIC.md schedule (new architecture)
+    "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
+    "gangs":             ("gangs.py",            1800),   # 30 min — gang territory & crime
+    "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending
     "birth":        ("birth.py",          1800),   # 30 min
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
-    "corporations": ("corporations.py",   3600),   # 1 hour
+    "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
     "clans":        ("clans.py",          3600),   # 1 hour
-    "police":       ("police.py",         3600),   # 1 hour
+    "police":       ("police.py",         1800),   # 30 min — population sync
     "sheriff":      ("sheriff.py",        3600),   # 1 hour
     "president":    ("president.py",      3600),   # 1 hour
     "senate":       ("senate.py",         3600),   # 1 hour — legislature & elections

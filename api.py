@@ -682,50 +682,115 @@ def root():
 
 @app.get("/stats")
 def get_stats():
-    from civ_economics import fetch_economic_indicators
+    from civ_economics import TARGET_POPULATION, fetch_economic_indicators
 
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    try:
-        indicators = fetch_economic_indicators(cur)
-    except Exception:
-        indicators = {}
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = FALSE")
-    dead = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM agents WHERE died_at::date = CURRENT_DATE")
-    deaths_today = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM nft_legends")
-    nft_count = cur.fetchone()[0]
-    cur.execute("SELECT class, COUNT(*) FROM agents WHERE is_alive=true GROUP BY class")
-    classes = {r[0]: r[1] for r in cur.fetchall()}
-    cur.execute("SELECT COUNT(*) FROM clans WHERE members_count > 0")
-    active_clans = cur.fetchone()[0]
-    cur.close()
-    conn.close()
-    alive = int(indicators.get("alive") or 0)
-    return {
-        "alive": alive,
-        "dead": dead,
-        "total_zion": float(indicators.get("total_economy", 0)),
-        "active_clans": active_clans,
-        "deaths_today": deaths_today,
-        "nft_count": nft_count,
-        "elite": classes.get("elite", 0),
-        "middle": classes.get("middle", 0),
-        "poor": classes.get("poor", 0),
-        "critical": classes.get("critical", 0),
-        "rich": classes.get("rich", 0),
-        "working": classes.get("working", 0),
-        "population_pressure": indicators.get("population_pressure", "normal"),
-        "tax_multiplier": indicators.get("tax_multiplier", 1.0),
-        "gini_coefficient": indicators.get("gini_coefficient", 0),
-        "unemployment_rate": indicators.get("unemployment_rate", 0),
-        "inflation_rate": indicators.get("inflation_rate", 0),
-        "target_population": indicators.get("target_population", 75000),
-        "target_police": indicators.get("target_police", 20),
-        "target_corps": indicators.get("target_corps", 10),
-        "zrs_reserve": indicators.get("zrs_reserve", 0),
+    defaults = {
+        "alive": 0,
+        "dead": 0,
+        "total_zion": 0.0,
+        "active_clans": 0,
+        "deaths_today": 0,
+        "nft_count": 0,
+        "elite": 0,
+        "middle": 0,
+        "poor": 0,
+        "critical": 0,
+        "rich": 0,
+        "working": 0,
+        "population_pressure": "normal",
+        "tax_multiplier": 1.0,
+        "gini_coefficient": 0.0,
+        "unemployment_rate": 0.0,
+        "inflation_rate": 0.0,
+        "target_population": TARGET_POPULATION,
+        "target_police": 20,
+        "target_corps": 10,
+        "zrs_reserve": 0.0,
     }
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        conn.rollback()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        indicators = defaults.copy()
+        try:
+            indicators.update(fetch_economic_indicators(cur, conn))
+        except Exception:
+            conn.rollback()
+
+        def _one(sql: str, default=0):
+            try:
+                cur.execute(sql)
+                row = cur.fetchone()
+                return row[0] if row is not None else default
+            except Exception:
+                conn.rollback()
+                return default
+
+        dead = _one("SELECT COUNT(*) FROM agents WHERE is_alive = FALSE")
+        deaths_today = _one(
+            "SELECT COUNT(*) FROM agents WHERE died_at::date = CURRENT_DATE"
+        )
+        nft_count = _one("SELECT COUNT(*) FROM nft_legends")
+        active_clans = _one(
+            "SELECT COUNT(*) FROM clans WHERE members_count > 0"
+        )
+
+        classes: dict[str, int] = {}
+        try:
+            cur.execute(
+                "SELECT class, COUNT(*) AS c FROM agents WHERE is_alive=true GROUP BY class"
+            )
+            for row in cur.fetchall():
+                classes[row["class"] or "unknown"] = int(row["c"] or 0)
+        except Exception:
+            conn.rollback()
+
+        alive = int(indicators.get("alive") or 0)
+        return {
+            "alive": alive,
+            "dead": int(dead),
+            "total_zion": float(indicators.get("total_economy") or 0),
+            "active_clans": int(active_clans),
+            "deaths_today": int(deaths_today),
+            "nft_count": int(nft_count),
+            "elite": classes.get("elite", 0),
+            "middle": classes.get("middle", 0),
+            "poor": classes.get("poor", 0),
+            "critical": classes.get("critical", 0),
+            "rich": classes.get("rich", 0),
+            "working": classes.get("working", 0),
+            "population_pressure": indicators.get("population_pressure", "normal"),
+            "tax_multiplier": float(indicators.get("tax_multiplier") or 1.0),
+            "gini_coefficient": float(indicators.get("gini_coefficient") or 0),
+            "unemployment_rate": float(indicators.get("unemployment_rate") or 0),
+            "inflation_rate": float(indicators.get("inflation_rate") or 0),
+            "target_population": int(indicators.get("target_population") or TARGET_POPULATION),
+            "target_police": int(indicators.get("target_police") or 20),
+            "target_corps": int(indicators.get("target_corps") or 10),
+            "zrs_reserve": float(indicators.get("zrs_reserve") or 0),
+        }
+    except Exception:
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return defaults
+    finally:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 @app.get("/agents")
 def get_agents(
@@ -3181,6 +3246,102 @@ async def get_vip_memory(limit: int = 10):
                 d["created_at"] = d["created_at"].isoformat()
             rows.append(d)
         return rows
+    finally:
+        cur.close()
+        db.close()
+
+
+# ============ POLITICAL ECONOMY ENGINE ============
+@app.get("/power_balance")
+def get_power_balance():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        db.rollback()
+        from political_economy import compute_power_scores
+
+        scores = compute_power_scores(cur)
+        cur.execute(
+            """
+            SELECT event_type, description, president_power, sheriff_power, senate_power, outcome, created_at
+            FROM power_log ORDER BY created_at DESC LIMIT 20
+            """
+        )
+        log_rows = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            log_rows.append(d)
+        return {"scores": scores, "recent_events": log_rows}
+    except Exception:
+        db.rollback()
+        return {"scores": {}, "recent_events": []}
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/gangs")
+def get_gangs():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        db.rollback()
+        cur.execute(
+            """
+            SELECT id, name, members, treasury, territory_control, gang_health, is_active, created_at
+            FROM gangs WHERE is_active = true ORDER BY territory_control DESC, members DESC
+            """
+        )
+        rows = []
+        for row in cur.fetchall():
+            d = dict(row)
+            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            rows.append(d)
+        return {"gangs": rows, "count": len(rows)}
+    except Exception:
+        db.rollback()
+        return {"gangs": [], "count": 0}
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/crisis_state")
+def get_crisis_state_api():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        db.rollback()
+        from political_economy import compute_macro_metrics
+
+        cur.execute("SELECT * FROM crisis_state WHERE id = 1")
+        crisis = cur.fetchone()
+        cur.execute("SELECT * FROM senate_budget WHERE id = 1")
+        senate = cur.fetchone()
+        metrics = {}
+        try:
+            metrics = compute_macro_metrics(cur)
+        except Exception:
+            db.rollback()
+        result = {
+            "crisis": dict(crisis) if crisis else {},
+            "senate_budget": dict(senate) if senate else {},
+            "metrics": metrics,
+        }
+        for key in ("crisis",):
+            if result[key].get("started_at") and hasattr(result[key]["started_at"], "isoformat"):
+                result[key]["started_at"] = result[key]["started_at"].isoformat()
+            if result[key].get("updated_at") and hasattr(result[key]["updated_at"], "isoformat"):
+                result[key]["updated_at"] = result[key]["updated_at"].isoformat()
+        if result["senate_budget"].get("updated_at") and hasattr(result["senate_budget"]["updated_at"], "isoformat"):
+            result["senate_budget"]["updated_at"] = result["senate_budget"]["updated_at"].isoformat()
+        return result
+    except Exception:
+        db.rollback()
+        return {"crisis": {}, "senate_budget": {}, "metrics": {}}
     finally:
         cur.close()
         db.close()

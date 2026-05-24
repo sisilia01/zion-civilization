@@ -436,6 +436,127 @@ def ensure_schema(cur):
         """
     )
 
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS crisis_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            is_active BOOLEAN DEFAULT FALSE,
+            started_at TIMESTAMP,
+            crime_rate FLOAT DEFAULT 0,
+            unemployment_rate FLOAT DEFAULT 0,
+            social_debt FLOAT DEFAULT 0,
+            revolution_pressure FLOAT DEFAULT 0,
+            cycles_active INT DEFAULT 0,
+            economic_phase VARCHAR(20) DEFAULT 'NORMAL',
+            last_gdp FLOAT DEFAULT 0,
+            gdp_growth_rate FLOAT DEFAULT 0,
+            gini_coefficient FLOAT DEFAULT 0,
+            police_effectiveness FLOAT DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "INSERT INTO crisis_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+    )
+    _add_columns(
+        cur,
+        "crisis_state",
+        [
+            ("unemployment_rate", "FLOAT DEFAULT 0"),
+            ("economic_phase", "VARCHAR(20) DEFAULT 'NORMAL'"),
+            ("last_gdp", "FLOAT DEFAULT 0"),
+            ("gdp_growth_rate", "FLOAT DEFAULT 0"),
+            ("gini_coefficient", "FLOAT DEFAULT 0"),
+            ("police_effectiveness", "FLOAT DEFAULT 0"),
+            ("updated_at", "TIMESTAMP DEFAULT NOW()"),
+        ],
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gangs (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            members INT DEFAULT 10,
+            treasury FLOAT DEFAULT 100,
+            territory_control FLOAT DEFAULT 5,
+            gang_health FLOAT DEFAULT 100,
+            leader_id INT REFERENCES agents(id),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    _add_columns(
+        cur,
+        "gangs",
+        [
+            ("gang_health", "FLOAT DEFAULT 100"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+        ],
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS senate_budget (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            balance FLOAT DEFAULT 0,
+            total_received FLOAT DEFAULT 0,
+            total_spent FLOAT DEFAULT 0,
+            laws_blocked_this_month INT DEFAULT 0,
+            social_programs_active BOOLEAN DEFAULT FALSE,
+            president_blocked_until TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "INSERT INTO senate_budget (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+    )
+    _add_columns(
+        cur,
+        "senate_budget",
+        [
+            ("laws_blocked_this_month", "INT DEFAULT 0"),
+            ("social_programs_active", "BOOLEAN DEFAULT FALSE"),
+            ("president_blocked_until", "TIMESTAMP"),
+            ("updated_at", "TIMESTAMP DEFAULT NOW()"),
+        ],
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS power_log (
+            id SERIAL PRIMARY KEY,
+            event_type TEXT,
+            description TEXT,
+            president_power FLOAT,
+            sheriff_power FLOAT,
+            senate_power FLOAT,
+            outcome TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    _add_columns(
+        cur,
+        "sheriff_state",
+        [
+            ("crime_cleared", "INTEGER DEFAULT 0"),
+            ("alliance_mode", "BOOLEAN DEFAULT FALSE"),
+        ],
+    )
+    _add_columns(
+        cur,
+        "president_state",
+        [
+            ("laws_passed_this_month", "INTEGER DEFAULT 0"),
+            ("crime_cleared", "INTEGER DEFAULT 0"),
+        ],
+    )
+
 
 POLICE_DIVISION_SPLITS = [
     ("SWAT", 0.40, 0.40, "gang_raids"),

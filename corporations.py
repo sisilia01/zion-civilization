@@ -39,8 +39,9 @@ def sector_multiplier(corp_type: str) -> float:
 
 
 def eligible_worker(agent: dict) -> bool:
-    status = agent.get("education_status") or ""
-    return status in ("graduated", "street", "studying_university", "studying_academy")
+    """Any unemployed poor/working agent can be hired (education filter was blocking ~99% of pop)."""
+    status = agent.get("education_status") or "child"
+    return status not in ("studying_university", "studying_academy")
 
 
 def count_employees(cur, corp_id: int) -> int:
@@ -109,22 +110,21 @@ def layoff_for_corp(cur, corp: dict) -> int:
 
 
 def hire_for_corp(cur, corp: dict) -> int:
-    """Hire when treasury supports runway; max workers scale with wealth."""
+    """Hire when treasury supports payroll; bootstrap corps with zero staff without revenue."""
     treasury = float(corp.get("treasury") or 0)
     revenue = float(corp.get("last_cycle_revenue") or 0)
-    if treasury < MASS_LAYOFF_TREASURY:
-        return 0
-    runway = EMPLOYEE_SALARY * SALARY_RUNWAY_CYCLES
-    if treasury < CORP_MIN_TREASURY or revenue < CORP_MIN_REVENUE:
-        return 0
-    if treasury < runway * 3:
+    if treasury <= MASS_LAYOFF_TREASURY:
         return 0
 
     current = count_employees(cur, corp["id"])
+    if treasury <= CORP_MIN_TREASURY:
+        return 0
+    # Revenue requires employees — allow first hires on treasury alone
+    if current > 0 and revenue < CORP_MIN_REVENUE:
+        return 0
+
     max_employees = corp_max_workers(treasury)
-    if max_employees < 5 and treasury >= 1000:
-        max_employees = 5
-    to_hire = min(5, max_employees - current)
+    to_hire = min(10, max_employees - current)
     if to_hire <= 0:
         return 0
 
@@ -139,7 +139,7 @@ def hire_for_corp(cur, corp: dict) -> int:
         ORDER BY balance ASC
         LIMIT %s
         """,
-        (to_hire * 8,),
+        (to_hire * 12,),
     )
     hired = 0
     for ag in cur.fetchall():

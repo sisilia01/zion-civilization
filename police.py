@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 
 from civ_economics import OFFICER_SALARY, POLICE_MIN_OFFICERS, target_police_officers
+from political_economy import crisis_police_multiplier, is_crisis_active
 from civ_common import (
     OFFICER_SALARY_PER_CYCLE,
     cleanup_expired_effects,
@@ -33,8 +34,13 @@ def sync_police_force_to_population(cur) -> int:
         return 0
     current = int(sh["police_count"] or 0)
     budget = float(sh["police_budget"] or 0)
-    max_affordable = int(budget // OFFICER_SALARY) if OFFICER_SALARY > 0 else target
-    target = min(target, max(max_affordable, POLICE_MIN_OFFICERS))
+    crisis = is_crisis_active(cur)
+    mult = crisis_police_multiplier(cur)
+    if crisis:
+        target = min(target * mult, max(target, alive // 30))
+    else:
+        max_affordable = int(budget // OFFICER_SALARY) if OFFICER_SALARY > 0 else target
+        target = min(target, max(max_affordable, POLICE_MIN_OFFICERS))
     if target <= current:
         return 0
     need = target - current
@@ -49,7 +55,20 @@ def sync_police_force_to_population(cur) -> int:
         """,
         (need,),
     )
-    hired = len(cur.fetchall())
+    recruits = cur.fetchall()
+    hired = 0
+    for row in recruits:
+        cur.execute(
+            """
+            UPDATE agents SET
+                job_status = 'employed',
+                job_role = 'police',
+                employer_corp_id = NULL
+            WHERE id = %s
+            """,
+            (row["id"],),
+        )
+        hired += 1
     if hired <= 0:
         return 0
     new_count = current + hired
