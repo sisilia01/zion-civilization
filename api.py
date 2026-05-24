@@ -682,6 +682,8 @@ def root():
 
 @app.get("/stats")
 def get_stats():
+    from tax_cron import get_population_tax_multiplier, population_pressure_label
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
@@ -699,10 +701,13 @@ def get_stats():
     cur.execute("SELECT class, COUNT(*) FROM agents WHERE is_alive=true GROUP BY class")
     classes = {r[0]: r[1] for r in cur.fetchall()}
     cur.close(); conn.close()
+    tax_multiplier = get_population_tax_multiplier(alive)
+    population_pressure = population_pressure_label(alive)
     return {"alive": alive, "dead": dead, "total_zion": float(total_zion),
             "active_clans": active_clans, "deaths_today": deaths_today, "nft_count": nft_count,
             "elite": classes.get("elite", 0), "middle": classes.get("middle", 0),
-            "poor": classes.get("poor", 0), "critical": classes.get("critical", 0)}
+            "poor": classes.get("poor", 0), "critical": classes.get("critical", 0),
+            "population_pressure": population_pressure, "tax_multiplier": tax_multiplier}
 
 @app.get("/agents")
 def get_agents(
@@ -3091,6 +3096,8 @@ async def get_senate():
 
 @app.get("/political_parties")
 async def get_political_parties():
+    from political_parties import compute_party_poll_shares
+
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -3128,6 +3135,7 @@ async def get_political_parties():
                     reas = mem.get("reasoning") or ""
                     p["last_action"] = f"{dec}: {reas}".strip(": ")
             parties.append(p)
+        compute_party_poll_shares(parties)
         return parties
     finally:
         cur.close()

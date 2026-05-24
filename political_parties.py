@@ -145,6 +145,25 @@ def update_party_approval(cur):
     pop_approval = min(90, int(10 + poor_pct * 0.7))
     cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='populists'", (pop_approval,))
 
+def compute_party_poll_shares(parties: list) -> None:
+    """Normalize party support into poll_pct shares that sum to 100."""
+    if not parties:
+        return
+    total = sum(max(0, int(p.get("approval_rating") or 0)) for p in parties)
+    vote_field = "approval_rating"
+    if total <= 0:
+        vote_field = "members_count"
+        total = sum(max(0, int(p.get("members_count") or 0)) for p in parties)
+    if total <= 0:
+        even = round(100 / len(parties), 1)
+        for p in parties:
+            p["poll_pct"] = even
+        return
+    for p in parties:
+        votes = max(0, int(p.get(vote_field) or 0))
+        p["poll_pct"] = round(votes / total * 100, 1)
+
+
 def get_parties_summary(cur) -> dict:
     cur.execute("SELECT * FROM political_parties ORDER BY approval_rating DESC")
     parties = cur.fetchall()

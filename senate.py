@@ -35,6 +35,7 @@ COUP_CHANCE = 0.30
 CLASS_TO_PARTY = {
     "elite": "conservatives",
     "middle": "centrists",
+    "working": "centrists",
     "poor": "populists",
     "critical": "populists",
 }

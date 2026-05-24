@@ -27,6 +27,43 @@ CORP_TAX_RATE = 0.08
 ZRS_EMERGENCY_AID = 10.0
 
 
+def get_population_tax_multiplier(pop: int | None = None) -> float:
+    """Returns tax multiplier based on current alive agent count."""
+    if pop is None:
+        from civ_common import get_conn, get_cursor
+
+        conn = get_conn()
+        cur = get_cursor(conn)
+        cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true")
+        pop = int(cur.fetchone()["c"] or 0)
+        conn.close()
+
+    if pop < 50000:
+        return 0.5
+    if pop < 100000:
+        return 1.0
+    if pop < 200000:
+        return 1.5
+    if pop < 400000:
+        return 2.5
+    if pop < 600000:
+        return 4.0
+    if pop < 800000:
+        return 6.0
+    return 10.0
+
+
+def population_pressure_label(pop: int) -> str:
+    """Map alive population to pressure tier for API / UI."""
+    if pop >= 800000:
+        return "famine"
+    if pop >= 400000:
+        return "critical"
+    if pop >= 200000:
+        return "high"
+    return "normal"
+
+
 def hunger_check(cur) -> tuple[int, int, float]:
     """
     Deduct food cost per agent; health -= 10 if cannot pay; death if health < 0.
@@ -128,6 +165,9 @@ def apply_tax_cycle():
     zrs = get_zrs_state(cur) or {}
     tax_modifier_pct = float(zrs.get("tax_modifier") or 0) / 100.0
     tax_collection_mult = get_tax_collection_multiplier(cur)
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+    alive_count = int(cur.fetchone()["c"] or 0)
+    pop_tax_mult = get_population_tax_multiplier(alive_count)
     if tax_collection_mult == 0:
         print("⚡ UPRISING: ANTI-TAX at 0 officers — no tax collection")
 
@@ -158,7 +198,7 @@ def apply_tax_cycle():
     print(f"\n🌍 ZION Tax Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(
         f"Processing {len(agents)} alive agents | Food cost {get_daily_food_cost(cur):.0f} | "
-        f"Tax mult {tax_collection_mult*100:.0f}%\n"
+        f"Tax mult {tax_collection_mult*100:.0f}% | Pop tax x{pop_tax_mult}\n"
     )
 
     total_tax = 0.0
@@ -188,7 +228,8 @@ def apply_tax_cycle():
             debt = float(ag["debt"] or 0)
             base_rate = tax_rate_for_balance(balance)
             rate = max(0.0, base_rate + tax_modifier_pct)
-            tax_amount = round(balance * rate, 4)
+            base_tax = balance * rate
+            tax_amount = round(base_tax * pop_tax_mult, 4)
 
             paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
             unpaid = round(tax_amount - paid, 4)
@@ -241,7 +282,7 @@ def apply_tax_cycle():
             rev = float(corp["rev"] or 0)
             if rev <= 0:
                 continue
-            ctax = round(rev * CORP_TAX_RATE * tax_collection_mult, 2)
+            ctax = round(rev * CORP_TAX_RATE * tax_collection_mult * pop_tax_mult, 2)
             treasury = float(corp["treasury"] or 0)
             paid = min(ctax, max(treasury, 0))
             cur.execute(

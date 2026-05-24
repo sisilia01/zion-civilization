@@ -38,6 +38,19 @@ def birth_rate_for_avg(avg_balance: float) -> float:
     return 0.005
 
 
+def birth_chance_for_population(pop: int) -> float:
+    """Reduce birth probability as population grows."""
+    if pop > 800000:
+        return 0.02
+    if pop > 600000:
+        return 0.05
+    if pop > 400000:
+        return 0.15
+    if pop > 200000:
+        return 0.40
+    return 1.0
+
+
 def run_birth_cycle():
     conn = get_conn()
     cur = get_cursor(conn)
@@ -50,10 +63,14 @@ def run_birth_cycle():
 
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive_total = int(cur.fetchone()["c"] or 0)
+    birth_chance = birth_chance_for_population(alive_total)
     max_births = max(0, int(alive_total * birth_rate))
 
     print(f"\n👶 ZION Birth Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | Cap: {max_births}")
+    print(
+        f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | "
+        f"Cap: {max_births} | Pop birth chance: {birth_chance*100:.0f}%"
+    )
 
     deaths_old = 0
     deaths_starvation = 0
@@ -116,6 +133,9 @@ def run_birth_cycle():
     for parent in parents:
         if births >= max_births:
             break
+
+        if random.random() > birth_chance:
+            continue
 
         gender = random.choice(["male", "female"])
         child_name = birth_name(cur, gender)

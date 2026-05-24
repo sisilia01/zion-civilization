@@ -145,7 +145,7 @@ def update_corruption(cur, data: dict, action: str) -> float:
 
     if action == "POPULISM":
         idx += 3
-    elif action != "ANTI_CORRUPTION_DRIVE" and random.random() < 0.20:
+    elif action and action != "ANTI_CORRUPTION_DRIVE" and random.random() < 0.20:
         idx += 3  # president took a bribe
 
     if action == "ANTI_CORRUPTION_DRIVE":
@@ -300,21 +300,24 @@ def execute_decision(cur, data: dict):
             """,
             (POLICE_TRANSFER, POLICE_TRANSFER),
         )
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_budget = police_budget + %s
-            WHERE is_active = true
-            """,
-            (POLICE_TRANSFER,),
-        )
-        log_event(
-            cur,
-            pid,
-            "president",
-            f"President {pname} transferred {POLICE_TRANSFER:.0f} ZION to police budget",
-            POLICE_TRANSFER,
-            priority="normal",
-        )
+        if cur.rowcount > 0:
+            cur.execute(
+                """
+                UPDATE sheriff_state SET police_budget = police_budget + %s
+                WHERE is_active = true
+                """,
+                (POLICE_TRANSFER,),
+            )
+            log_event(
+                cur,
+                pid,
+                "president",
+                f"President {pname} transferred {POLICE_TRANSFER:.0f} ZION to police budget",
+                POLICE_TRANSFER,
+                priority="normal",
+            )
+        else:
+            action = None
 
     corruption = update_corruption(cur, data, action)
     print(f"📋 Decision: {action} | approval {approval}% | corruption {corruption:.0f}")

@@ -279,6 +279,59 @@ def lend_to_corporations(cur) -> float:
     return collected + lent_total
 
 
+def zrs_population_drain():
+    """ZRS collects emergency levy when population too high."""
+    conn = get_conn()
+    cur = get_cursor(conn)
+    ensure_schema(cur)
+    conn.commit()
+
+    cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true")
+    pop = cur.fetchone()["c"]
+
+    if pop < 200000:
+        conn.close()
+        return
+
+    if pop < 400000:
+        drain_pct = 0.02
+    elif pop < 600000:
+        drain_pct = 0.05
+    elif pop < 800000:
+        drain_pct = 0.10
+    else:
+        drain_pct = 0.20
+
+    cur.execute(
+        "SELECT id, balance FROM agents WHERE is_alive = true AND balance > 0"
+    )
+    rows = cur.fetchall()
+    drained_total = 0.0
+    agents_hit = 0
+    for ag in rows:
+        bal = float(ag["balance"] or 0)
+        take = round(bal * drain_pct, 4)
+        if take <= 0:
+            continue
+        cur.execute(
+            "UPDATE agents SET balance = balance - %s WHERE id = %s",
+            (take, ag["id"]),
+        )
+        drained_total += take
+        agents_hit += 1
+
+    if drained_total > 0:
+        zrs_add_reserve(cur, drained_total)
+
+    conn.commit()
+    print(
+        f"[ZRS DRAIN] pop={pop} drain={drain_pct*100}% "
+        f"agents_hit={agents_hit} drained={drained_total:.2f} ZION"
+    )
+    cur.close()
+    conn.close()
+
+
 def absorb_from_agents(cur, rate: float) -> float:
     cur.execute(
         "SELECT id, balance FROM agents WHERE is_alive = true AND balance > 0"
@@ -484,4 +537,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "drain":
+        zrs_population_drain()
+    else:
+        main()

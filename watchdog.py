@@ -41,6 +41,7 @@ CRON_SCRIPTS = {
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day
     "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
+    "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
     "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
     "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
     # Other civilization modules (unchanged intervals)

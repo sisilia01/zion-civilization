@@ -155,6 +155,9 @@ def hire_for_corp(cur, corp: dict) -> int:
 
 
 def pay_salaries(cur, corp_id: int) -> float:
+    cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp_id,))
+    treasury_row = cur.fetchone()
+    treasury = float((treasury_row or {}).get("treasury") or 0)
     total = 0.0
     cur.execute(
         """
@@ -164,6 +167,8 @@ def pay_salaries(cur, corp_id: int) -> float:
         (corp_id,),
     )
     for ag in cur.fetchall():
+        if treasury < EMPLOYEE_SALARY:
+            break
         cur.execute(
             "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
             (EMPLOYEE_SALARY, corp_id),
@@ -172,6 +177,7 @@ def pay_salaries(cur, corp_id: int) -> float:
             "UPDATE agents SET balance = balance + %s WHERE id = %s",
             (EMPLOYEE_SALARY, ag["id"]),
         )
+        treasury -= EMPLOYEE_SALARY
         total += EMPLOYEE_SALARY
     return total
 
@@ -370,7 +376,7 @@ def run_cycle():
         payroll = pay_salaries(cur, corp["id"])
 
         cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))
-        treasury = float(cur.fetchone()["treasury"] or 0) + revenue - payroll
+        treasury = float(cur.fetchone()["treasury"] or 0) + revenue
 
         if handle_corp_insolvency(cur, corp, treasury):
             bankrupt_this_cycle += 1
