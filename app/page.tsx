@@ -408,6 +408,8 @@ interface Stats {
   middle?: number;
   poor?: number;
   critical?: number;
+  population_pressure?: "normal" | "high" | "critical" | "famine";
+  tax_multiplier?: number;
 }
 
 /** Map /api/stats JSON — API uses alive, dead, total_zion, deaths_today (not alive_agents). */
@@ -426,6 +428,10 @@ function parseApiStatsResponse(raw: unknown): Stats {
     middle: Number(s.middle ?? 0),
     poor: Number(s.poor ?? 0),
     critical: Number(s.critical ?? 0),
+    population_pressure: (["normal", "high", "critical", "famine"].includes(String(s.population_pressure ?? ""))
+      ? String(s.population_pressure)
+      : "normal") as Stats["population_pressure"],
+    tax_multiplier: Number(s.tax_multiplier ?? 1),
   };
 }
 
@@ -9179,6 +9185,7 @@ export default function Home() {
       leader_name: string;
       treasury: number;
       approval_rating: number;
+      poll_pct?: number;
       members_count: number;
       last_action?: string | null;
     }>
@@ -12178,6 +12185,54 @@ export default function Home() {
         <div className="tabPanels">
           {activeTab === "civilization" && (
             <>
+              {stats?.population_pressure === "famine" ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    marginBottom: "16px",
+                    padding: "14px 16px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,68,68,0.55)",
+                    background: "rgba(80,0,0,0.35)",
+                    color: "#ff6868",
+                    fontWeight: 700,
+                    fontSize: "0.95rem",
+                    textAlign: "center",
+                    boxShadow: "0 0 24px rgba(255,68,68,0.2)",
+                  }}
+                >
+                  ⚠️ FAMINE - Population Crisis
+                  {stats.tax_multiplier != null ? (
+                    <span style={{ display: "block", marginTop: "6px", fontSize: "0.8rem", fontWeight: 500, color: "#ffaaaa" }}>
+                      Tax multiplier: {stats.tax_multiplier}x
+                    </span>
+                  ) : null}
+                </motion.div>
+              ) : stats?.population_pressure === "critical" ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    marginBottom: "16px",
+                    padding: "14px 16px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,140,0,0.45)",
+                    background: "rgba(60,30,0,0.35)",
+                    color: "#ffb347",
+                    fontWeight: 700,
+                    fontSize: "0.95rem",
+                    textAlign: "center",
+                  }}
+                >
+                  Population Stress
+                  {stats.tax_multiplier != null ? (
+                    <span style={{ display: "block", marginTop: "6px", fontSize: "0.8rem", fontWeight: 500, color: "#ffd699" }}>
+                      Tax multiplier: {stats.tax_multiplier}x
+                    </span>
+                  ) : null}
+                </motion.div>
+              ) : null}
               <section
                 className="statsGrid"
                 style={
@@ -15610,7 +15665,7 @@ export default function Home() {
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {partiesData.slice(0, 3).map((party) => {
                             const partyUi = presidentPartyDisplay(party.party_id);
-                            const rating = party.approval_rating ?? 0;
+                            const rating = party.poll_pct ?? party.approval_rating ?? 0;
                             const barColor = ecoPollPartyColor(party.party_id);
                             return (
                               <div key={party.party_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
