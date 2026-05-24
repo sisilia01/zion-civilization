@@ -449,6 +449,7 @@ def _ensure_user_bets_zionbet_columns(cur):
         ("entry_price", "DECIMAL(20, 4)"),
         ("on_chain_bet_id", "BIGINT"),
         ("on_chain_market_id", "BIGINT"),
+        ("currency", "TEXT DEFAULT 'SUI'"),
     ]
     for col, typ in alters:
         cur.execute(f"ALTER TABLE user_bets ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -1596,6 +1597,10 @@ async def place_user_bet(request: Request):
         market_id = body.get("market_id")
         direction = body.get("direction")  # true=YES, false=NO
         amount_sui = float(body.get("amount_sui", 0.1))
+        currency = (body.get("currency") or "SUI").strip().upper()
+        if currency not in ("SUI", "USDC"):
+            currency = "SUI"
+        print(f"[BET] currency received: {body.get('currency')}", flush=True)
         skip_ensure = bool(body.get("skip_onchain_ensure"))
 
         if not wallet or not market_id or direction is None:
@@ -1655,12 +1660,14 @@ async def place_user_bet(request: Request):
 
         conn = get_db()
         cur = conn.cursor()
+        _ensure_user_bets_table(cur)
+        conn.commit()
         cur.execute(
             f"""
             INSERT INTO user_bets 
             (wallet_address, market_id, event_type, question, amount_sui, amount,
-             prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}')
+             prediction, odds_at_bet, potential_payout, status, entry_price, resolves_at, currency)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW() + INTERVAL '{interval}', %s)
             RETURNING id
             """,
             (
@@ -1674,6 +1681,7 @@ async def place_user_bet(request: Request):
                 odds,
                 potential_payout,
                 entry_price,
+                currency,
             ),
         )
         bet_id = cur.fetchone()[0]
@@ -1687,6 +1695,7 @@ async def place_user_bet(request: Request):
             "market": market["question"],
             "direction": "YES" if direction else "NO",
             "amount_sui": amount_sui,
+            "currency": currency,
             "odds": odds,
             "potential_payout": round(potential_payout, 4),
         }
@@ -1709,7 +1718,12 @@ def _zionbet_wallet_stats(cur, wallet: str) -> dict:
             COUNT(*) FILTER (
                 WHERE LOWER(COALESCE(status, 'active')) IN ('active', 'pending')
             )::int AS active_bets,
-            COALESCE(SUM(amount_sui), 0) AS total_staked,
+            COALESCE(SUM(amount_sui) FILTER (
+                WHERE UPPER(COALESCE(currency, 'SUI')) != 'USDC'
+            ), 0) AS total_staked_sui,
+            COALESCE(SUM(amount_sui) FILTER (
+                WHERE UPPER(COALESCE(currency, '')) = 'USDC'
+            ), 0) AS total_staked_usdc,
             COALESCE(
                 SUM(
                     CASE WHEN LOWER(COALESCE(status, '')) = 'won'
@@ -1739,7 +1753,8 @@ def _zionbet_wallet_stats(cur, wallet: str) -> dict:
     wins = int(row.get("wins") or 0)
     settled = wins + int(row.get("losses") or 0)
     win_rate = round((wins / settled) * 100, 1) if settled > 0 else 0.0
-    total_staked = float(row.get("total_staked") or 0)
+    total_staked_sui = float(row.get("total_staked_sui") or 0)
+    total_staked_usdc = float(row.get("total_staked_usdc") or 0)
     total_won = float(row.get("total_won") or 0)
     net_pnl = float(row.get("net_pnl") or 0)
     return {
@@ -1747,7 +1762,13 @@ def _zionbet_wallet_stats(cur, wallet: str) -> dict:
         "wins": wins,
         "losses": int(row.get("losses") or 0),
         "active_bets": int(row.get("active_bets") or 0),
-        "total_staked": round(total_staked, 4),
+        "total_staked": round(total_staked_sui + total_staked_usdc, 4),
+        "total_staked_sui": round(total_staked_sui, 4),
+        "total_staked_usdc": round(total_staked_usdc, 4),
+        "currency_breakdown": {
+            "SUI": round(total_staked_sui, 4),
+            "USDC": round(total_staked_usdc, 4),
+        },
         "total_won": round(total_won, 4),
         "net_pnl": round(net_pnl, 4),
         "win_rate": win_rate,
@@ -1789,12 +1810,10 @@ def _zionbet_resolve_current_odds(row: dict, entry_odds: float) -> float:
 
 @app.post("/zionbet/close_position")
 async def close_zionbet_position(request: Request):
-    """Early exit: full or partial mark-to-market close (DB; on-chain transfer pending)."""
+    """Early exit: full close (on-chain closes 100%; DB marks closed_early)."""
     body = await request.json()
     bet_id = int(body.get("bet_id") or 0)
     wallet = (body.get("wallet") or "").strip()
-    partial_pct = float(body.get("partial_pct", 1.0))
-    partial_pct = max(0.01, min(1.0, partial_pct))
 
     if not bet_id or not wallet:
         return {"ok": False, "error": "missing_fields"}
@@ -1807,12 +1826,8 @@ async def close_zionbet_position(request: Request):
 
         cur.execute(
             """
-            SELECT ub.id, ub.wallet_address, ub.prediction, ub.amount_sui, ub.amount,
-                   ub.odds_at_bet, ub.status, ub.market_id, ub.event_type, ub.question,
-                   ub.potential_payout, ub.resolves_at,
-                   pm.yes_price, pm.no_price
+            SELECT ub.id, ub.wallet_address, ub.amount_sui, ub.amount, ub.status
             FROM user_bets ub
-            LEFT JOIN polymarket_markets pm ON pm.market_id = ub.market_id
             WHERE ub.id = %s AND ub.wallet_address = %s
             LIMIT 1
             """,
@@ -1830,81 +1845,36 @@ async def close_zionbet_position(request: Request):
         if stake <= 0:
             return {"ok": False, "error": "invalid_stake"}
 
-        entry_odds = _zionbet_resolve_entry_odds(row)
-        current = _zionbet_resolve_current_odds(row, entry_odds)
-        closed_stake = round(stake * partial_pct, 4)
-        remainder_stake = round(stake - closed_stake, 4)
-        full_close = partial_pct >= 0.999 or remainder_stake < 0.0001
-
-        payout_sui = round(closed_stake * current / entry_odds, 4)
+        closed_stake = stake
+        payout_sui = round(stake * 0.999, 4)
         profit_sui = round(payout_sui - closed_stake, 4)
 
-        if full_close:
-            cur.execute(
-                """
-                UPDATE user_bets
-                SET status = 'closed_early',
-                    payout = %s,
-                    amount_sui = %s,
-                    settled = TRUE,
-                    settled_at = NOW()
-                WHERE id = %s AND wallet_address = %s
-                """,
-                (payout_sui, closed_stake, bet_id, wallet),
-            )
-            if cur.rowcount < 1:
-                conn.rollback()
-                return {"ok": False, "error": "update_failed"}
-        else:
-            new_potential = round(remainder_stake * (100.0 / entry_odds), 4)
-            cur.execute(
-                """
-                INSERT INTO user_bets (
-                    wallet_address, market_id, event_type, question, amount_sui, amount,
-                    prediction, odds_at_bet, potential_payout, status, payout, settled, settled_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'closed_early', %s, TRUE, NOW())
-                """,
-                (
-                    wallet,
-                    row.get("market_id"),
-                    row.get("event_type") or "",
-                    (row.get("question") or "") + " (partial close)",
-                    closed_stake,
-                    closed_stake,
-                    bool(row.get("prediction")),
-                    entry_odds,
-                    payout_sui,
-                    payout_sui,
-                ),
-            )
-            cur.execute(
-                """
-                UPDATE user_bets
-                SET amount_sui = %s,
-                    amount = %s,
-                    potential_payout = %s,
-                    status = 'active'
-                WHERE id = %s AND wallet_address = %s
-                """,
-                (remainder_stake, remainder_stake, new_potential, bet_id, wallet),
-            )
-            if cur.rowcount < 1:
-                conn.rollback()
-                return {"ok": False, "error": "update_failed"}
+        cur.execute(
+            """
+            UPDATE user_bets
+            SET status = 'closed_early',
+                payout = %s,
+                amount_sui = %s,
+                settled = TRUE,
+                settled_at = NOW()
+            WHERE id = %s AND wallet_address = %s
+            """,
+            (payout_sui, closed_stake, bet_id, wallet),
+        )
+        if cur.rowcount < 1:
+            conn.rollback()
+            return {"ok": False, "error": "update_failed"}
 
         conn.commit()
         return {
             "ok": True,
             "payout_sui": payout_sui,
             "profit_sui": profit_sui,
-            "partial_pct": partial_pct,
+            "partial_pct": 1.0,
             "closed_stake_sui": closed_stake,
-            "remainder_stake_sui": 0 if full_close else remainder_stake,
-            "entry_odds_cents": entry_odds,
-            "current_odds_cents": current,
-            "pending_transfer": True,
-            "message": "Position closed; SUI transfer pending on-chain settlement.",
+            "remainder_stake_sui": 0,
+            "pending_transfer": False,
+            "message": "Position closed.",
         }
     except Exception as e:
         conn.rollback()
@@ -1947,7 +1917,7 @@ def get_my_bets(wallet: str):
             """
             SELECT ub.id, ub.market_id, ub.question, ub.prediction, ub.amount_sui,
                    ub.odds_at_bet, ub.potential_payout, ub.status, ub.created_at, ub.payout,
-                   ub.resolves_at, ub.on_chain_bet_id, ub.on_chain_market_id,
+                   ub.resolves_at, ub.on_chain_bet_id, ub.on_chain_market_id, ub.currency,
                    pm.yes_price AS current_yes_price,
                    pm.no_price AS current_no_price,
                    pm.end_date
@@ -1970,6 +1940,7 @@ def get_my_bets(wallet: str):
                 "question": row["question"],
                 "direction": "YES" if row["prediction"] else "NO",
                 "amount_sui": float(row["amount_sui"] or 0),
+                "currency": row.get("currency") or "SUI",
                 "odds": row["odds_at_bet"],
                 "potential_payout": float(row["potential_payout"] or 0),
                 "status": row["status"],
@@ -2018,12 +1989,12 @@ def _parse_bet_placed_from_tx_json(tx_data: dict) -> tuple[int | None, int | Non
     if not events and isinstance(tx_data.get("effects"), dict):
         events = tx_data["effects"].get("events") or []
 
-    bet_placed_suffix = "::zion_bet::BetPlaced"
+    bet_placed_suffixes = ("::zion_bet::BetPlaced", "::zion_bet::UsdcBetPlaced")
     for ev in events:
         if not isinstance(ev, dict):
             continue
         ev_type = str(ev.get("type") or "")
-        if bet_placed_suffix not in ev_type:
+        if not any(suffix in ev_type for suffix in bet_placed_suffixes):
             continue
         parsed = ev.get("parsedJson") or ev.get("parsed_json") or {}
         if not isinstance(parsed, dict):
@@ -2097,6 +2068,7 @@ async def zionbet_ensure_market(request: Request):
         return {"ok": True, "skipped": True, "market_id": market_id}
 
     ok, err = _zionbet_ensure_market_onchain(market_id, market)
+    print(f"[ENSURE] endpoint market_id={market_id} ok={ok} err={err}", flush=True)
     if ok:
         return {"ok": True, "market_id": market_id}
     return {"ok": False, "error": err or "ensure_failed"}
@@ -2387,16 +2359,17 @@ def ensure_onchain_market(
                 deadline_unix(deadline_minutes),
             ],
         )
+        print(f"[ENSURE] ok={ok}, out={out[:200]}", flush=True)
         if ok or is_abort_code(out, 1):
             _onchain_markets_ready.add(market_id)
             if digest:
-                print(f"✅ On-chain market ready: {market_id} digest={digest}")
+                print(f"✅ On-chain market ready: {market_id} digest={digest}", flush=True)
             else:
-                print(f"✅ On-chain market already exists: {market_id}")
+                print(f"✅ On-chain market already exists: {market_id}", flush=True)
             return True
-        print(f"ensure_onchain_market failed {market_id}: {out[:300]}")
+        print(f"ensure_onchain_market failed {market_id}: {out[:300]}", flush=True)
     except Exception as e:
-        print(f"ensure_onchain_market error {market_id}: {e}")
+        print(f"ensure_onchain_market error {market_id}: {e}", flush=True)
     return False
 
 

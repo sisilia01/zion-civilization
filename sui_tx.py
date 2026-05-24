@@ -43,10 +43,19 @@ def is_abort_code(output: str, code: int) -> bool:
     """True if Move aborted with the given code (e.g. E_MARKET_EXISTS = 1)."""
     if not output:
         return False
+    if re.search(rf"MoveAbort\([^)]*,\s*{code}\s*\)", output):
+        return True
     needles = (
         f"abort code: {code}",
         f"Abort code: {code}",
         f", {code})",
         f"sub status {code}",
+        f"E_MARKET_EXISTS",
     )
+    if code == 1:
+        needles = needles + (
+            "MARKET_EXISTS",
+            "market already exists",
+            "Market already exists",
+        )
     return any(n in output for n in needles)
