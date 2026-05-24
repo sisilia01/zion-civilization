@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ZION Birth/Death — unique names, inheritance, natural death at day 100."""
+"""ZION Birth/Death — target population, class demographics, inheritance."""
 import random
 from datetime import datetime
 
@@ -12,43 +12,27 @@ from civ_common import (
     log_event,
     settle_agent_death,
 )
+from civ_economics import (
+    BIRTH_STARTING_BALANCE,
+    TARGET_POPULATION,
+    agent_class_from_balance as genius_class,
+    birth_cap_for_population,
+    dynamic_birth_rate,
+    pick_birth_class,
+)
 from names_pool import generate_unique_name
 
 OLD_AGE_DAYS = 100
 BIRTH_COST = 50.0
+STARVATION_DEBT = 50.0
 
 
 def birth_name(cur, gender: str) -> str:
-    """Unique first+surname only — never numeric suffixes."""
     for _ in range(100):
         name, _ = generate_unique_name(cur, gender)
         if name and not any(ch.isdigit() for ch in name):
             return name
     raise RuntimeError("Could not generate a valid birth name without numbers")
-STARVATION_DEBT = 50.0
-
-
-def birth_rate_for_avg(avg_balance: float) -> float:
-    if avg_balance > 500:
-        return 0.03
-    if avg_balance >= 100:
-        return 0.02
-    if avg_balance >= 50:
-        return 0.01
-    return 0.005
-
-
-def birth_chance_for_population(pop: int) -> float:
-    """Reduce birth probability as population grows."""
-    if pop > 800000:
-        return 0.02
-    if pop > 600000:
-        return 0.05
-    if pop > 400000:
-        return 0.15
-    if pop > 200000:
-        return 0.40
-    return 1.0
 
 
 def run_birth_cycle():
@@ -59,17 +43,16 @@ def run_birth_cycle():
 
     cur.execute("SELECT COALESCE(AVG(balance), 0) AS a FROM agents WHERE is_alive = TRUE")
     avg_balance = float(cur.fetchone()["a"] or 0)
-    birth_rate = birth_rate_for_avg(avg_balance)
 
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive_total = int(cur.fetchone()["c"] or 0)
-    birth_chance = birth_chance_for_population(alive_total)
-    max_births = max(0, int(alive_total * birth_rate))
+    birth_rate = dynamic_birth_rate(alive_total, TARGET_POPULATION)
+    max_births = birth_cap_for_population(alive_total, birth_rate)
 
     print(f"\n👶 ZION Birth Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(
-        f"   Avg balance: {avg_balance:.1f} | Birth rate: {birth_rate*100:.1f}% | "
-        f"Cap: {max_births} | Pop birth chance: {birth_chance*100:.0f}%"
+        f"   Alive: {alive_total:,} | Target: {TARGET_POPULATION:,} | "
+        f"Birth rate: {birth_rate*100:.3f}% | Cap: {max_births}"
     )
 
     deaths_old = 0
@@ -81,16 +64,13 @@ def run_birth_cycle():
         FROM agents WHERE is_alive = TRUE
         """
     )
-    all_agents = cur.fetchall()
-
-    for ag in all_agents:
+    for ag in cur.fetchall():
         age = int(ag["age_days"] or 0)
         if age > OLD_AGE_DAYS:
             settle_agent_death(cur, ag["id"])
             cur.execute(
                 """
-                UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                    death_cause = 'old_age'
+                UPDATE agents SET is_alive = FALSE, died_at = NOW(), death_cause = 'old_age'
                 WHERE id = %s
                 """,
                 (ag["id"],),
@@ -121,9 +101,7 @@ def run_birth_cycle():
 
     cur.execute(
         """
-        SELECT id, name FROM agents
-        WHERE is_alive = TRUE
-        ORDER BY RANDOM()
+        SELECT id, name FROM agents WHERE is_alive = TRUE ORDER BY RANDOM()
         """
     )
     parents = cur.fetchall()
@@ -134,11 +112,10 @@ def run_birth_cycle():
         if births >= max_births:
             break
 
-        if random.random() > birth_chance:
-            continue
-
         gender = random.choice(["male", "female"])
         child_name = birth_name(cur, gender)
+        child_class = pick_birth_class()
+        starting_balance = BIRTH_STARTING_BALANCE.get(child_class, 10.0)
 
         cur.execute(
             """
@@ -147,13 +124,15 @@ def run_birth_cycle():
                 charisma, aggression, faith, intelligence, strength, loyalty,
                 education_status, job_status, age_days
             ) VALUES (
-                %s, 'poor', 0, %s, %s,
+                %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s,
                 'child', 'unemployed', 0
             ) RETURNING id
             """,
             (
                 child_name,
+                child_class,
+                0,
                 parent["id"],
                 gender,
                 random.randint(1, 15),
@@ -169,22 +148,33 @@ def run_birth_cycle():
             cur.execute("DELETE FROM agents WHERE id = %s", (child_id,))
             continue
 
+        cur.execute(
+            """
+            UPDATE agents SET balance = %s, class = %s WHERE id = %s
+            """,
+            (starting_balance, child_class, child_id),
+        )
+
         child_share = round(BIRTH_COST * 0.20, 2)
         log_event(
             cur,
             child_id,
             "birth",
-            f"New citizen {child_name} born to {parent['name']} — ZRS funded {child_share:.0f} ZION",
+            f"New {child_class} citizen {child_name} born to {parent['name']} — "
+            f"ZRS grant {starting_balance:.0f} ZION",
             child_share,
             priority="normal",
         )
-        print(f"👶 {parent['name']} → {child_name} (ZRS birth grant {child_share:.0f} ZION)")
+        print(f"👶 {parent['name']} → {child_name} ({child_class}, {starting_balance:.0f} ZION)")
         births += 1
 
     conn.commit()
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive = cur.fetchone()["c"]
-    print(f"\n📊 Births: {births} | Old age: {deaths_old} | Starvation: {deaths_starvation} | Alive: {alive}")
+    print(
+        f"\n📊 Births: {births} | Old age: {deaths_old} | Starvation: {deaths_starvation} | "
+        f"Alive: {alive:,}"
+    )
     print("✅ Birth cycle complete!\n")
     cur.close()
     conn.close()

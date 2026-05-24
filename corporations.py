@@ -3,6 +3,12 @@
 import random
 from datetime import datetime
 
+from civ_economics import (
+    CORP_MIN_REVENUE,
+    CORP_MIN_TREASURY,
+    CORP_TAX_RATE,
+    corp_max_workers,
+)
 from civ_common import (
     SECTOR_MULTIPLIERS,
     ensure_schema,
@@ -23,10 +29,9 @@ SECURITY_MULT = 0
 BANKRUPTCY_CYCLES = 3
 EXTORTION_RATE = 0.15
 EXTORTION_REDUCTION = 0.50
-HIRE_TREASURY_MIN = 500.0
-HIRE_REVENUE_MIN = 200.0
 LAYOFF_TREASURY = 200.0
 MASS_LAYOFF_TREASURY = 50.0
+SALARY_RUNWAY_CYCLES = 3
 
 
 def sector_multiplier(corp_type: str) -> float:
@@ -104,16 +109,21 @@ def layoff_for_corp(cur, corp: dict) -> int:
 
 
 def hire_for_corp(cur, corp: dict) -> int:
-    """Hire workers when treasury and revenue are strong; prioritize poor agents."""
+    """Hire when treasury supports runway; max workers scale with wealth."""
     treasury = float(corp.get("treasury") or 0)
     revenue = float(corp.get("last_cycle_revenue") or 0)
-    if treasury <= MASS_LAYOFF_TREASURY or treasury < LAYOFF_TREASURY:
+    if treasury < MASS_LAYOFF_TREASURY:
         return 0
-    if not (treasury > HIRE_TREASURY_MIN and revenue > HIRE_REVENUE_MIN):
+    runway = EMPLOYEE_SALARY * SALARY_RUNWAY_CYCLES
+    if treasury < CORP_MIN_TREASURY or revenue < CORP_MIN_REVENUE:
+        return 0
+    if treasury < runway * 3:
         return 0
 
     current = count_employees(cur, corp["id"])
-    max_employees = max(0, int(treasury // 100))
+    max_employees = corp_max_workers(treasury)
+    if max_employees < 5 and treasury >= 1000:
+        max_employees = 5
     to_hire = min(5, max_employees - current)
     if to_hire <= 0:
         return 0
@@ -377,6 +387,17 @@ def run_cycle():
 
         cur.execute("SELECT treasury FROM corporations WHERE id = %s", (corp["id"],))
         treasury = float(cur.fetchone()["treasury"] or 0) + revenue
+
+        if revenue > 0:
+            corp_tax = round(revenue * CORP_TAX_RATE, 2)
+            corp_tax = min(corp_tax, max(treasury, 0))
+            if corp_tax > 0:
+                cur.execute(
+                    "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+                    (corp_tax, corp["id"]),
+                )
+                zrs_add_reserve(cur, corp_tax)
+                treasury -= corp_tax
 
         if handle_corp_insolvency(cur, corp, treasury):
             bankrupt_this_cycle += 1

@@ -289,11 +289,13 @@ def zrs_population_drain():
     cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true")
     pop = cur.fetchone()["c"]
 
-    if pop < 200000:
+    if pop < 100000:
         conn.close()
         return
 
-    if pop < 400000:
+    if pop < 200000:
+        drain_pct = 0.01
+    elif pop < 400000:
         drain_pct = 0.02
     elif pop < 600000:
         drain_pct = 0.05
@@ -332,6 +334,125 @@ def zrs_population_drain():
     conn.close()
 
 
+from civ_economics import calculate_gini, fetch_economic_indicators
+
+RESERVE_TARGET_PCT = 0.10
+GINI_REDISTRIBUTE_THRESHOLD = 0.65
+REDISTRIBUTE_SKIM_PCT = 0.02
+
+
+def zrs_redistribute_wealth(
+    cur,
+    top_pct: float = 0.10,
+    bottom_pct: float = 0.20,
+    skim_pct: float = REDISTRIBUTE_SKIM_PCT,
+) -> float:
+    """Wealth tax on top decile → direct transfer to bottom quintile."""
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
+    n = max(int(cur.fetchone()["c"] or 0), 1)
+    top_n = max(1, int(n * top_pct))
+    bottom_n = max(1, int(n * bottom_pct))
+    cur.execute(
+        """
+        SELECT id, balance FROM agents WHERE is_alive = true
+        ORDER BY balance DESC LIMIT %s
+        """,
+        (top_n,),
+    )
+    collected = 0.0
+    for ag in cur.fetchall():
+        take = round(float(ag["balance"] or 0) * skim_pct, 4)
+        if take <= 0:
+            continue
+        cur.execute(
+            "UPDATE agents SET balance = balance - %s WHERE id = %s",
+            (take, ag["id"]),
+        )
+        collected += take
+    if collected <= 0:
+        return 0.0
+    per = round(collected / bottom_n, 4)
+    cur.execute(
+        """
+        SELECT id FROM agents WHERE is_alive = true
+        ORDER BY balance ASC LIMIT %s
+        """,
+        (bottom_n,),
+    )
+    for ag in cur.fetchall():
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (per, ag["id"]),
+        )
+    log_event(
+        cur,
+        None,
+        "zrs",
+        f"ZRS REDISTRIBUTION: {collected:.0f} ZION from top {top_pct*100:.0f}% → bottom {bottom_pct*100:.0f}%",
+        collected,
+        priority="breaking",
+    )
+    return collected
+
+
+def zrs_stimulus(cur, per_agent: float) -> float:
+    """QE to poor agents when reserves exceed target."""
+    per_agent = round(float(per_agent), 2)
+    if per_agent <= 0:
+        return 0.0
+    n, total = inject_to_agents(
+        cur,
+        per_agent,
+        "is_alive = true AND class IN ('poor', 'critical', 'working')",
+    )
+    if total > 0:
+        log_event(
+            cur,
+            None,
+            "zrs",
+            f"ZRS QE: {total:.0f} ZION stimulus to {n} agents ({per_agent:.0f} each)",
+            total,
+            priority="urgent",
+        )
+    return total
+
+
+def zrs_monetary_policy(cur) -> dict:
+    """Central bank: Gini-based redistribution, reserve ratio, QE/QT."""
+    ind = fetch_economic_indicators(cur)
+    gini = ind["gini_coefficient"]
+    total_economy = ind["total_economy"]
+    reserve = ind["zrs_reserve"]
+    moved = 0.0
+    action = "MONETARY_HOLD"
+
+    if gini > GINI_REDISTRIBUTE_THRESHOLD:
+        moved += zrs_redistribute_wealth(cur)
+        action = "REDISTRIBUTE"
+
+    target_reserve = total_economy * RESERVE_TARGET_PCT
+    if target_reserve > 0 and reserve < target_reserve * 0.5:
+        log_event(
+            cur,
+            None,
+            "zrs",
+            f"ZRS RESERVE LOW: {reserve:,.0f} / target {target_reserve:,.0f} — fiscal tightening signal",
+            reserve,
+            priority="urgent",
+        )
+        action = "TIGHTEN"
+    elif reserve > target_reserve * 2 and target_reserve > 0:
+        stimulus = min(1000.0, reserve * 0.01)
+        moved += zrs_stimulus(cur, stimulus / max(ind["alive"] // 4, 1))
+        action = "QE"
+
+    print(
+        f"  Monetary policy: Gini={gini:.3f} | Economy={total_economy:,.0f} | "
+        f"Reserve={reserve:,.0f} ({reserve/max(target_reserve,1)*100:.0f}% of target) | {action}"
+    )
+    return {**ind, "policy_action": action, "amount_moved": moved}
+
+
 def absorb_from_agents(cur, rate: float) -> float:
     cur.execute(
         "SELECT id, balance FROM agents WHERE is_alive = true AND balance > 0"
@@ -361,6 +482,7 @@ def main():
     print(f"\n🏦 ZION Reserve System — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
 
+    monetary = zrs_monetary_policy(cur)
     econ = economy_snapshot(cur)
     cur.execute("SELECT * FROM zrs_state WHERE id = 1")
     zrs = cur.fetchone() or {}

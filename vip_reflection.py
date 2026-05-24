@@ -157,19 +157,21 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
         if poor_count > 0 and metrics["treasury"] > total_cost:
             cur.execute(
                 """
+                UPDATE president_state
+                SET personal_fund = personal_fund - %s,
+                    approval_rating = LEAST(100, approval_rating + 5)
+                WHERE is_active = true AND personal_fund >= %s
+                """,
+                (total_cost, total_cost),
+            )
+            if cur.rowcount != 1:
+                return
+            cur.execute(
+                """
                 UPDATE agents SET balance = balance + %s
                 WHERE is_alive = true AND class IN ('poor', 'critical')
                 """,
                 (bonus,),
-            )
-            cur.execute(
-                """
-                UPDATE president_state
-                SET personal_fund = personal_fund - %s,
-                    approval_rating = LEAST(100, approval_rating + 5)
-                WHERE is_active = true
-                """,
-                (total_cost,),
             )
             log_event(
                 cur,
@@ -217,9 +219,11 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
             UPDATE president_state
             SET personal_fund = personal_fund - 500,
                 approval_rating = LEAST(100, approval_rating + 8)
-            WHERE is_active = true
+            WHERE is_active = true AND personal_fund >= 500
             """
         )
+        if cur.rowcount != 1:
+            return
         log_event(
             cur,
             pres["agent_id"],

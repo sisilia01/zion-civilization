@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ZION hourly tax cycle — tiered rates, ZRS-modified, hunger/health, starvation."""
+"""ZION hourly tax cycle — genius progressive tax, population pressure, hunger."""
 from datetime import datetime
 
 from civ_common import (
@@ -15,68 +15,32 @@ from civ_common import (
     route_food_spending,
     route_tax_revenue,
     settle_agent_death,
-    tax_rate_for_balance,
     zrs_deduct_reserve,
     zrs_reserve,
     ZRS_RESERVE_FLOOR,
 )
+from civ_economics import (
+    calculate_agent_tax,
+    get_population_food_multiplier,
+    get_population_tax_multiplier,
+    population_pressure_label,
+    CORP_TAX_RATE,
+)
 
 DEBT_DEATH_THRESHOLD = 50.0
 STARVATION_BALANCE_THRESHOLD = 10.0
-CORP_TAX_RATE = 0.08
 ZRS_EMERGENCY_AID = 10.0
 
 
-def get_population_tax_multiplier(pop: int | None = None) -> float:
-    """Returns tax multiplier based on current alive agent count."""
-    if pop is None:
-        from civ_common import get_conn, get_cursor
-
-        conn = get_conn()
-        cur = get_cursor(conn)
-        cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true")
-        pop = int(cur.fetchone()["c"] or 0)
-        conn.close()
-
-    if pop < 50000:
-        return 0.5
-    if pop < 100000:
-        return 1.0
-    if pop < 200000:
-        return 1.5
-    if pop < 400000:
-        return 2.5
-    if pop < 600000:
-        return 4.0
-    if pop < 800000:
-        return 6.0
-    return 10.0
-
-
-def population_pressure_label(pop: int) -> str:
-    """Map alive population to pressure tier for API / UI."""
-    if pop >= 800000:
-        return "famine"
-    if pop >= 400000:
-        return "critical"
-    if pop >= 200000:
-        return "high"
-    return "normal"
-
-
-def hunger_check(cur) -> tuple[int, int, float]:
-    """
-    Deduct food cost per agent; health -= 10 if cannot pay; death if health < 0.
-    Returns (starvation_deaths, hungry_count, food_spent).
-    """
-    food_cost = get_daily_food_cost(cur)
+def hunger_check(cur, pop: int) -> tuple[int, int, float]:
+    food_cost = get_daily_food_cost(cur) * get_population_food_multiplier(pop)
     deaths = 0
     hungry = 0
     food_spent = 0.0
 
     cur.execute(
         """
-        SELECT id, name, balance, COALESCE(health, 100) AS health
+        SELECT id, name, balance, COALESCE(health, 100) AS health, class
         FROM agents WHERE is_alive = TRUE
         """
     )
@@ -88,7 +52,7 @@ def hunger_check(cur) -> tuple[int, int, float]:
         food_spent += paid
 
         if paid < food_cost:
-            health -= 10
+            health -= 15 if pop >= 500_000 else 10
             hungry += 1
             if health <= 0:
                 settle_agent_death(cur, ag["id"])
@@ -144,15 +108,6 @@ def hunger_check(cur) -> tuple[int, int, float]:
                 hungry,
                 priority="breaking",
             )
-        else:
-            log_event(
-                cur,
-                None,
-                "tax",
-                f"NORMAL: Hunger spreading: {pct}% agents skipped meals today",
-                hungry,
-                priority="normal",
-            )
     return deaths, hungry, food_spent
 
 
@@ -167,17 +122,16 @@ def apply_tax_cycle():
     tax_collection_mult = get_tax_collection_multiplier(cur)
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive_count = int(cur.fetchone()["c"] or 0)
-    pop_tax_mult = get_population_tax_multiplier(alive_count)
+    pop_mult = get_population_tax_multiplier(alive_count)
+    reserve = zrs_reserve(cur)
+
     if tax_collection_mult == 0:
         print("⚡ UPRISING: ANTI-TAX at 0 officers — no tax collection")
 
-    starvation_deaths, hungry_count, total_food = hunger_check(cur)
+    starvation_deaths, hungry_count, total_food = hunger_check(cur, alive_count)
 
     cur.execute(
-        """
-        SELECT tax_relief_until FROM president_state
-        WHERE is_active = true LIMIT 1
-        """
+        "SELECT tax_relief_until FROM president_state WHERE is_active = true LIMIT 1"
     )
     relief_row = cur.fetchone()
     tax_relief_active = False
@@ -197,8 +151,8 @@ def apply_tax_cycle():
 
     print(f"\n🌍 ZION Tax Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(
-        f"Processing {len(agents)} alive agents | Food cost {get_daily_food_cost(cur):.0f} | "
-        f"Tax mult {tax_collection_mult*100:.0f}% | Pop tax x{pop_tax_mult}\n"
+        f"Processing {len(agents)} alive | Food×{get_population_food_multiplier(alive_count):.1f} | "
+        f"Pop tax×{pop_mult} | Gini policy reserve {reserve:,.0f}\n"
     )
 
     total_tax = 0.0
@@ -213,23 +167,16 @@ def apply_tax_cycle():
             0,
             priority="urgent",
         )
-        print("Tax relief active — skipping agent and corporate tax collection")
         for ag in agents:
             cur.execute(
-                """
-                UPDATE agents SET age_days = COALESCE(age_days, 0) + 1
-                WHERE id = %s
-                """,
+                "UPDATE agents SET age_days = COALESCE(age_days, 0) + 1 WHERE id = %s",
                 (ag["id"],),
             )
     else:
         for ag in agents:
             balance = float(ag["balance"] or 0)
             debt = float(ag["debt"] or 0)
-            base_rate = tax_rate_for_balance(balance)
-            rate = max(0.0, base_rate + tax_modifier_pct)
-            base_tax = balance * rate
-            tax_amount = round(base_tax * pop_tax_mult, 4)
+            tax_amount = calculate_agent_tax(ag, alive_count, reserve, tax_modifier_pct)
 
             paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
             unpaid = round(tax_amount - paid, 4)
@@ -244,7 +191,7 @@ def apply_tax_cycle():
                         cur,
                         ag["id"],
                         "zrs",
-                        f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION before starvation",
+                        f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION",
                         ZRS_EMERGENCY_AID,
                         priority="urgent",
                     )
@@ -282,7 +229,7 @@ def apply_tax_cycle():
             rev = float(corp["rev"] or 0)
             if rev <= 0:
                 continue
-            ctax = round(rev * CORP_TAX_RATE * tax_collection_mult * pop_tax_mult, 2)
+            ctax = round(rev * CORP_TAX_RATE * tax_collection_mult * pop_mult, 2)
             treasury = float(corp["treasury"] or 0)
             paid = min(ctax, max(treasury, 0))
             cur.execute(
@@ -301,7 +248,7 @@ def apply_tax_cycle():
             cur,
             None,
             "tax",
-            f"Tax {grand_total:.0f} ZION collected (efficiency {tax_collection_mult*100:.0f}%)",
+            f"Tax {grand_total:.0f} ZION (agent+corp, efficiency {tax_collection_mult*100:.0f}%)",
             grand_total,
             priority="normal",
         )
@@ -321,12 +268,16 @@ def apply_tax_cycle():
     alive = cur.fetchone()["c"]
     print(
         f"\n📊 Tax: {grand_total:.0f} | Food: {total_food:.0f} | Hungry: {hungry_count} | "
-        f"Starvation deaths: {starvation_deaths} | Alive: {alive} | "
-        f"Hunger index: {hungry_agent_pct(cur):.1f}%"
+        f"Deaths: {starvation_deaths} | Alive: {alive} | Pressure: {population_pressure_label(alive)}"
     )
     print("✅ Tax cycle complete!\n")
     cur.close()
     conn.close()
+
+
+# Re-export for API compatibility
+def get_population_tax_multiplier_reexport(pop=None):
+    return get_population_tax_multiplier(pop)
 
 
 if __name__ == "__main__":

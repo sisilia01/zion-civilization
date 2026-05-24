@@ -3,6 +3,7 @@
 import random
 from datetime import datetime
 
+from civ_economics import OFFICER_SALARY, POLICE_MIN_OFFICERS, target_police_officers
 from civ_common import (
     OFFICER_SALARY_PER_CYCLE,
     cleanup_expired_effects,
@@ -17,6 +18,55 @@ from civ_common import (
     restore_after_martial_law,
     sync_police_divisions,
 )
+
+
+def sync_police_force_to_population(cur) -> int:
+    """Scale police_count to ~2% of alive population; hire from unemployed."""
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
+    alive = int(cur.fetchone()["c"] or 0)
+    target = target_police_officers(alive)
+    cur.execute(
+        "SELECT police_count, police_budget FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    sh = cur.fetchone()
+    if not sh:
+        return 0
+    current = int(sh["police_count"] or 0)
+    budget = float(sh["police_budget"] or 0)
+    max_affordable = int(budget // OFFICER_SALARY) if OFFICER_SALARY > 0 else target
+    target = min(target, max(max_affordable, POLICE_MIN_OFFICERS))
+    if target <= current:
+        return 0
+    need = target - current
+    cur.execute(
+        """
+        SELECT id FROM agents
+        WHERE is_alive = true
+          AND COALESCE(job_status, 'unemployed') = 'unemployed'
+          AND employer_corp_id IS NULL
+        ORDER BY RANDOM()
+        LIMIT %s
+        """,
+        (need,),
+    )
+    hired = len(cur.fetchall())
+    if hired <= 0:
+        return 0
+    new_count = current + hired
+    cur.execute(
+        "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
+        (new_count,),
+    )
+    sync_police_divisions(cur)
+    log_event(
+        cur,
+        None,
+        "police_action",
+        f"POLICE RECRUITMENT: Force scaled to {new_count} officers ({new_count/max(alive,1)*100:.2f}% of pop)",
+        hired,
+        priority="normal",
+    )
+    return hired
 
 
 def get_sheriff(cur):
@@ -172,6 +222,10 @@ def main():
         print("No sheriff — skipping police cycle")
         conn.close()
         return
+
+    recruited = sync_police_force_to_population(cur)
+    if recruited:
+        print(f"  Population scaling: +{recruited} officers hired")
 
     police_salary_check(cur)
 

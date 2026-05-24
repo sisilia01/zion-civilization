@@ -682,32 +682,50 @@ def root():
 
 @app.get("/stats")
 def get_stats():
-    from tax_cron import get_population_tax_multiplier, population_pressure_label
+    from civ_economics import fetch_economic_indicators
 
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = TRUE")
-    alive = cur.fetchone()[0]
+    try:
+        indicators = fetch_economic_indicators(cur)
+    except Exception:
+        indicators = {}
     cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive = FALSE")
     dead = cur.fetchone()[0]
-    cur.execute("SELECT SUM(balance) FROM agents WHERE is_alive = TRUE")
-    total_zion = cur.fetchone()[0] or 0
-    cur.execute("SELECT COUNT(*) FROM clans WHERE members_count > 0")
-    active_clans = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM agents WHERE died_at::date = CURRENT_DATE")
     deaths_today = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM nft_legends")
     nft_count = cur.fetchone()[0]
     cur.execute("SELECT class, COUNT(*) FROM agents WHERE is_alive=true GROUP BY class")
     classes = {r[0]: r[1] for r in cur.fetchall()}
-    cur.close(); conn.close()
-    tax_multiplier = get_population_tax_multiplier(alive)
-    population_pressure = population_pressure_label(alive)
-    return {"alive": alive, "dead": dead, "total_zion": float(total_zion),
-            "active_clans": active_clans, "deaths_today": deaths_today, "nft_count": nft_count,
-            "elite": classes.get("elite", 0), "middle": classes.get("middle", 0),
-            "poor": classes.get("poor", 0), "critical": classes.get("critical", 0),
-            "population_pressure": population_pressure, "tax_multiplier": tax_multiplier}
+    cur.execute("SELECT COUNT(*) FROM clans WHERE members_count > 0")
+    active_clans = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    alive = int(indicators.get("alive") or 0)
+    return {
+        "alive": alive,
+        "dead": dead,
+        "total_zion": float(indicators.get("total_economy", 0)),
+        "active_clans": active_clans,
+        "deaths_today": deaths_today,
+        "nft_count": nft_count,
+        "elite": classes.get("elite", 0),
+        "middle": classes.get("middle", 0),
+        "poor": classes.get("poor", 0),
+        "critical": classes.get("critical", 0),
+        "rich": classes.get("rich", 0),
+        "working": classes.get("working", 0),
+        "population_pressure": indicators.get("population_pressure", "normal"),
+        "tax_multiplier": indicators.get("tax_multiplier", 1.0),
+        "gini_coefficient": indicators.get("gini_coefficient", 0),
+        "unemployment_rate": indicators.get("unemployment_rate", 0),
+        "inflation_rate": indicators.get("inflation_rate", 0),
+        "target_population": indicators.get("target_population", 75000),
+        "target_police": indicators.get("target_police", 20),
+        "target_corps": indicators.get("target_corps", 10),
+        "zrs_reserve": indicators.get("zrs_reserve", 0),
+    }
 
 @app.get("/agents")
 def get_agents(

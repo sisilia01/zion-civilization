@@ -60,35 +60,30 @@ CRISIS_ZRS_MODES = frozenset({"RECESSION", "CRISIS", "DEPRESSION"})
 
 
 def agent_class_from_balance(balance: float) -> str:
-    """1M supply tiers (~130 avg per agent): poor / working / middle / elite."""
-    if balance > 500:
-        return "elite"
-    if balance >= 100:
-        return "middle"
-    if balance >= 10:
-        return "working"
-    return "poor"
+    """Six-tier ladder — delegates to civ_economics genius model."""
+    from civ_economics import agent_class_from_balance as _genius_class
+
+    return _genius_class(balance)
 
 
 def tax_rate_for_balance(balance: float) -> float:
-    """Base rates before ZRS modifier (0/5/10/20% by class tier)."""
-    if balance > 500:
-        return 0.20
-    if balance >= 100:
-        return 0.10
-    if balance >= 10:
-        return 0.05
-    return 0.0  # poor exempt
+    """Legacy flat rate; genius tax uses civ_economics.calculate_agent_tax."""
+    cls = agent_class_from_balance(balance)
+    from civ_economics import BASE_TAX_RATES
+
+    return BASE_TAX_RATES.get(cls, 0.02)
 
 
 def reclassify_all_agents(cur):
-    """Apply class tiers from balance for all alive agents."""
+    """Apply six-tier classes from balance for all alive agents."""
     cur.execute(
         """
         UPDATE agents SET class = CASE
+            WHEN balance < 1 THEN 'critical'
             WHEN balance < 10 THEN 'poor'
             WHEN balance < 100 THEN 'working'
-            WHEN balance < 500 THEN 'middle'
+            WHEN balance < 1000 THEN 'middle'
+            WHEN balance < 5000 THEN 'rich'
             ELSE 'elite'
         END
         WHERE is_alive = true
@@ -1125,6 +1120,12 @@ def transfer_agent_balance(cur, from_id: int, to_id: int, amount: float) -> bool
         "UPDATE agents SET balance = balance + %s WHERE id = %s AND is_alive = true",
         (amount, to_id),
     )
+    if cur.rowcount != 1:
+        cur.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s AND is_alive = true",
+            (amount, from_id),
+        )
+        return False
     return True
 
 
@@ -1293,7 +1294,7 @@ def zrs_reserve(cur) -> float:
 
 
 def zrs_deduct_reserve(cur, amount: float) -> bool:
-    """Deduct from ZRS reserve; returns False if below safety floor (50M)."""
+    """Deduct from ZRS reserve; returns False if below safety floor (50k ZION)."""
     reserve = zrs_reserve(cur)
     floor = ZRS_RESERVE_FLOOR
     if reserve - amount < floor:
