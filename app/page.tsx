@@ -975,9 +975,21 @@ function DistrictMapPanel() {
       <div style={{ width: "100%", height: 400, minHeight: 400, flexShrink: 0, position: "relative" }}>
         <LivingPlanet
           prosperity={prosperity}
+          revolution={80}
           civilizationData={civilizationData}
           height={400}
         />
+      </div>
+      <div
+        style={{
+          padding: "2px 12px 6px",
+          fontFamily: "monospace",
+          fontSize: "9px",
+          color: "rgba(255,255,255,0.28)",
+          letterSpacing: "0.5px",
+        }}
+      >
+        Earth imagery: NASA Visible Earth / Blue Marble
       </div>
       <div
         style={{
