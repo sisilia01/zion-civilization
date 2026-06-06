@@ -883,17 +883,73 @@ const DistrictMap = ({ districts: districts_data }: { districts: District[] }) =
   );
 };
 
+interface CrisisStatePayload {
+  crisis?: {
+    is_active?: boolean;
+    economic_phase?: string;
+  };
+  metrics?: {
+    economic_phase?: string;
+  };
+}
+
+function mapCrisisToStorms(crisisState: CrisisStatePayload | null): {
+  stormCount: number;
+  stormIntensity: number;
+} {
+  if (!crisisState) return { stormCount: 0, stormIntensity: 0 };
+
+  const phase =
+    crisisState.metrics?.economic_phase ??
+    crisisState.crisis?.economic_phase ??
+    "NORMAL";
+  const isActive = Boolean(crisisState.crisis?.is_active);
+
+  let stormCount = 0;
+  let stormIntensity = 0;
+
+  if (phase === "RECESSION") {
+    stormCount = 1;
+    stormIntensity = 0.55;
+  } else if (phase === "DEPRESSION") {
+    stormCount = 2;
+    stormIntensity = 1.0;
+  }
+
+  if (isActive) {
+    stormCount += 1;
+    stormIntensity = Math.max(stormIntensity, 1.0) + 0.25;
+  }
+
+  return {
+    stormCount: Math.max(0, stormCount),
+    stormIntensity: Math.max(0, Math.min(stormIntensity, 1.5)),
+  };
+}
+
 function DistrictMapPanel() {
   const [mapStats, setMapStats] = useState<Stats | null>(null);
+  const [crisisState, setCrisisState] = useState<CrisisStatePayload | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch("/api/stats");
-        if (!res.ok) return;
-        setMapStats(parseApiStatsResponse(await res.json()));
+        if (res.ok) {
+          setMapStats(parseApiStatsResponse(await res.json()));
+        }
       } catch {
-        /* ignore */
+        /* ignore — keep last stats snapshot */
+      }
+      try {
+        const res = await fetch(`/api/crisis_state?t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          setCrisisState((await res.json()) as CrisisStatePayload);
+        } else {
+          setCrisisState(null);
+        }
+      } catch {
+        setCrisisState(null);
       }
     };
     void load();
@@ -927,6 +983,11 @@ function DistrictMapPanel() {
   );
 
   const totalAlive = mapStats?.alive_agents ?? mapStats?.alive;
+
+  const { stormCount, stormIntensity } = useMemo(
+    () => mapCrisisToStorms(crisisState),
+    [crisisState]
+  );
 
   return (
     <div className="districtMapWrap">
@@ -975,7 +1036,9 @@ function DistrictMapPanel() {
       <div style={{ width: "100%", height: 400, minHeight: 400, flexShrink: 0, position: "relative" }}>
         <LivingPlanet
           prosperity={prosperity}
-          revolution={80}
+          revolution={civilizationData.revolution ?? 0}
+          stormCount={stormCount}
+          stormIntensity={stormIntensity}
           civilizationData={civilizationData}
           height={400}
         />
