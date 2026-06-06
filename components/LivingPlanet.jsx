@@ -9,11 +9,7 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
 import { createCometVfx } from "./vfx/cometVfx";
 import { TEXTURED_CLOUD_VERT, TEXTURED_CLOUD_FRAG } from "./vfx/stormCloudShader";
-import {
-  TEST_STORM_SPRITE_COUNT,
-  TEST_STORM_SPRITE_INTENSITY,
-  createStormSpriteVfx,
-} from "./vfx/stormSpriteVfx";
+import { createStormSpriteVfx } from "./vfx/stormSpriteVfx";
 
 export function computeProsperity({
   unemployment = 0,
@@ -1019,10 +1015,12 @@ function createNoiseCloudLayers(scene, lightDir, prosperity) {
  * @property {number} [population]
  */
 
-/** @param {{ prosperity?: number, revolution?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
+/** @param {{ prosperity?: number, revolution?: number, stormCount?: number, stormIntensity?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
 export function LivingPlanet({
   prosperity = 0.5,
   revolution = 0,
+  stormCount = 0,
+  stormIntensity = 0,
   civilizationData,
   height = 400,
   showHud = false,
@@ -1032,6 +1030,8 @@ export function LivingPlanet({
   const currentProsperityRef = useRef(Math.max(0, Math.min(1, prosperity)));
   const targetRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
   const currentRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
+  const targetStormCountRef = useRef(Math.max(0, stormCount));
+  const targetStormIntensityRef = useRef(Math.max(0, stormIntensity));
 
   useEffect(() => {
     targetProsperityRef.current = Math.max(0, Math.min(1, prosperity));
@@ -1040,6 +1040,14 @@ export function LivingPlanet({
   useEffect(() => {
     targetRevolutionRef.current = Math.max(0, Math.min(100, revolution));
   }, [revolution]);
+
+  useEffect(() => {
+    targetStormCountRef.current = Math.max(0, stormCount);
+  }, [stormCount]);
+
+  useEffect(() => {
+    targetStormIntensityRef.current = Math.max(0, stormIntensity);
+  }, [stormIntensity]);
 
   const initDoneRef = useRef(false);
 
@@ -1436,7 +1444,13 @@ export function LivingPlanet({
 
         spaceFx.update(t, delta, camera);
         cometVfx.update(t, delta);
-        stormSpriteVfx.update(t, delta, TEST_STORM_SPRITE_INTENSITY, TEST_STORM_SPRITE_COUNT, frameScale);
+        stormSpriteVfx.update(
+          t,
+          delta,
+          targetStormIntensityRef.current,
+          targetStormCountRef.current,
+          frameScale
+        );
         if (useBloom && composer) {
           try {
             composer.render();
