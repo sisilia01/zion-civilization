@@ -1,305 +1,261 @@
-import Link from "next/link";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 const WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
-const ZCO_ACCENT = "#a78bfa";
-const ZCO_GREEN = "#00ff41";
-const SUI_BLUE = "#4DA2FF";
 
-type ZcoVote = {
-  judge: string;
-  decision: string;
-  confidence?: number;
-  status: string;
-};
-
-type ZcoConsensus = {
-  decision?: string;
-  method?: string;
-  agreement?: number;
-  avg_confidence?: number;
-  votes_for?: number;
-  total_votes?: number;
-};
-
-type ZcoProof = {
-  type?: string;
-  agent?: string;
-  agent_class?: string;
-  decision?: string;
-  consensus?: ZcoConsensus;
-  votes?: ZcoVote[];
-  timestamp?: string;
-  consensus_hash?: string;
-  sui_url?: string;
-  blob_id?: string;
-};
-
-async function fetchProof(blobId: string): Promise<ZcoProof | null> {
-  try {
-    const res = await fetch(`${WALRUS_AGGREGATOR}/v1/blobs/${encodeURIComponent(blobId)}`, {
-      next: { revalidate: 120 },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as ZcoProof;
-  } catch {
-    return null;
-  }
-}
-
-function formatTimestamp(ts?: string): string {
-  if (!ts) return "—";
-  try {
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return ts;
-    return d.toLocaleString("en-GB", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).replace(",", "");
-  } catch {
-    return ts;
-  }
-}
-
-function judgeLabel(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("deepseek")) return "DeepSeek";
-  if (n.includes("gemini")) return "Gemini";
-  if (n.includes("gpt")) return "GPT";
-  return name;
-}
-
-export default async function ZcoProofPage({
-  params,
-}: {
-  params: Promise<{ blob_id: string }>;
-}) {
-  const { blob_id: blobId } = await params;
-  const proof = await fetchProof(blobId);
-  const walrusUrl = `${WALRUS_AGGREGATOR}/v1/blobs/${blobId}`;
-
-  const consensus = proof?.consensus;
-  const finalDecision = (consensus?.decision || proof?.decision || "—").toUpperCase();
-  const method = consensus?.method || "—";
-  const votesFor = consensus?.votes_for ?? 0;
-  const totalVotes = consensus?.total_votes ?? proof?.votes?.length ?? 0;
-  const agreementPct = Math.round(
-    (consensus?.agreement ?? (totalVotes ? votesFor / totalVotes : 0)) * 100
+export default function ZCOProofPage() {
+  const params = useParams();
+  const blobId = params?.blob_id as string;
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [rawWalrusUrl, setRawWalrusUrl] = useState(
+    () => `${WALRUS_AGGREGATOR}/v1/blobs/${blobId ?? ""}`,
   );
-  const consensusLine =
-    method === "consensus" && totalVotes > 0
-      ? `CONSENSUS ${votesFor}/${totalVotes} — ${agreementPct}%`
-      : "DEADLOCK";
+
+  useEffect(() => {
+    if (!blobId) return;
+    const urls = [
+      `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`,
+      `https://wal-aggregator-testnet.staketab.org/v1/blobs/${blobId}`,
+    ];
+
+    const tryFetch = async () => {
+      setLoading(true);
+      setError("");
+      for (const url of urls) {
+        try {
+          const r = await fetch(url);
+          if (r.ok) {
+            const d = await r.json();
+            setData(d);
+            setRawWalrusUrl(url);
+            setLoading(false);
+            return;
+          }
+        } catch {
+          /* try next URL */
+        }
+      }
+      setError("Proof not found on Walrus");
+      setLoading(false);
+    };
+
+    tryFetch();
+  }, [blobId]);
+
+  const tradeProof = data?.type === "TRADE_PROOF" ? data : null;
 
   return (
-    <main
+    <div
       style={{
+        background: "#050505",
         minHeight: "100vh",
-        background: "#050508",
-        color: "#e5e5e5",
-        fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-        padding: "32px 16px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
+        padding: "40px 20px",
+        fontFamily: "monospace",
+        color: "#fff",
       }}
     >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "520px",
-          border: `1px solid ${ZCO_ACCENT}44`,
-          borderRadius: "12px",
-          background: "rgba(167,139,250,0.04)",
-          boxShadow: `0 0 40px ${ZCO_ACCENT}18`,
-          overflow: "hidden",
-        }}
-      >
-        <header
+      <div style={{ maxWidth: "700px", margin: "0 auto" }}>
+        <div
           style={{
-            padding: "20px 24px",
-            borderBottom: `1px solid ${ZCO_ACCENT}33`,
-            background: `linear-gradient(135deg, ${ZCO_ACCENT}12 0%, transparent 60%)`,
+            color: "#00ff41",
+            fontSize: "1.1rem",
+            fontWeight: "bold",
+            letterSpacing: "2px",
+            marginBottom: "4px",
           }}
         >
-          <div style={{ fontSize: "1.35rem", fontWeight: 800, color: ZCO_ACCENT, letterSpacing: "0.04em" }}>
-            🔮 ZCO CONSENSUS PROOF
-          </div>
-          <div style={{ fontSize: "0.75rem", color: "#888", marginTop: "6px", letterSpacing: "0.08em" }}>
-            ZION Consensus Oracle v1.0
-          </div>
-        </header>
+          ⚡ ZCO PROOF
+        </div>
+        <div style={{ color: "#444", fontSize: "0.7rem", marginBottom: "24px" }}>
+          ZION Consensus Oracle — Verified on Walrus
+        </div>
 
-        {!proof ? (
-          <section style={{ padding: "24px" }}>
-            <p style={{ color: "#ff6464", margin: "0 0 16px" }}>Could not load proof from Walrus.</p>
-            <a
-              href={walrusUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: ZCO_GREEN, fontSize: "0.8rem" }}
-            >
-              View raw blob on Walrus ↗
-            </a>
-          </section>
-        ) : (
-          <>
-            <section
-              style={{
-                padding: "18px 24px",
-                borderBottom: `1px solid ${ZCO_ACCENT}22`,
-              }}
-            >
-              <Row label="Agent" value={`${proof.agent || "—"} (${proof.agent_class || "—"})`} />
-              <Row label="Decision" value={finalDecision} highlight />
-              <Row label="Timestamp" value={formatTimestamp(proof.timestamp)} />
-            </section>
+        <div
+          style={{
+            background: "#0a0a0a",
+            border: "1px solid #1a3a1a",
+            borderRadius: "12px",
+            padding: "16px",
+            marginBottom: "16px",
+          }}
+        >
+          <div style={{ color: "#555", fontSize: "0.6rem", letterSpacing: "1px", marginBottom: "8px" }}>
+            BLOB ID
+          </div>
+          <div style={{ color: "#00ff41", fontSize: "0.72rem", wordBreak: "break-all" }}>{blobId}</div>
+        </div>
 
-            <section
-              style={{
-                padding: "18px 24px",
-                borderBottom: `1px solid ${ZCO_ACCENT}22`,
-              }}
-            >
-              <div
+        {loading && (
+          <div style={{ color: "#444", textAlign: "center", padding: "40px" }}>Loading proof from Walrus...</div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              color: "#ff4444",
+              background: "#1a0a0a",
+              border: "1px solid #3a1a1a",
+              borderRadius: "8px",
+              padding: "16px",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {data && !loading && (
+          <div
+            style={{
+              background: "#0a0a0a",
+              border: "1px solid #1a1a1a",
+              borderRadius: "12px",
+              padding: "16px",
+            }}
+          >
+            <div style={{ color: "#555", fontSize: "0.6rem", letterSpacing: "1px", marginBottom: "12px" }}>
+              PROOF DATA
+            </div>
+
+            {tradeProof && (
+              <div>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" }}>
+                  {[
+                    { label: "AGENT", value: String(tradeProof.agent_id ?? "—") },
+                    { label: "PAIR", value: String(tradeProof.pair ?? "—") },
+                    { label: "DIRECTION", value: String(tradeProof.direction ?? "—") },
+                    {
+                      label: "PnL",
+                      value: `+$${parseFloat(String(tradeProof.pnl ?? 0)).toFixed(4)}`,
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      role={item.label === "AGENT" && tradeProof.agent_id ? "button" : undefined}
+                      tabIndex={item.label === "AGENT" && tradeProof.agent_id ? 0 : undefined}
+                      onClick={
+                        item.label === "AGENT" && tradeProof.agent_id
+                          ? () => {
+                              window.location.href = `/agent/${tradeProof.agent_id}`;
+                            }
+                          : undefined
+                      }
+                      onKeyDown={
+                        item.label === "AGENT" && tradeProof.agent_id
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                window.location.href = `/agent/${tradeProof.agent_id}`;
+                              }
+                            }
+                          : undefined
+                      }
+                      style={{
+                        background: "#111",
+                        borderRadius: "8px",
+                        padding: "10px 14px",
+                        cursor: item.label === "AGENT" && tradeProof.agent_id ? "pointer" : undefined,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#444",
+                          fontSize: "0.58rem",
+                          letterSpacing: "1px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                      <div style={{ color: "#00ff41", fontSize: "0.82rem", fontWeight: "bold" }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  {[
+                    {
+                      label: "ENTRY PRICE",
+                      value: `$${parseFloat(String(tradeProof.entry_price ?? 0)).toLocaleString()}`,
+                    },
+                    {
+                      label: "EXIT PRICE",
+                      value: `$${parseFloat(String(tradeProof.exit_price ?? 0)).toLocaleString()}`,
+                    },
+                    {
+                      label: "PnL %",
+                      value: `+${parseFloat(String(tradeProof.pnl_percent ?? 0)).toFixed(4)}%`,
+                    },
+                    {
+                      label: "TIMESTAMP",
+                      value: tradeProof.timestamp
+                        ? new Date(String(tradeProof.timestamp)).toLocaleString()
+                        : "—",
+                    },
+                  ].map((item) => (
+                    <div key={item.label} style={{ background: "#111", borderRadius: "8px", padding: "10px 14px" }}>
+                      <div
+                        style={{
+                          color: "#444",
+                          fontSize: "0.58rem",
+                          letterSpacing: "1px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                      <div style={{ color: "#fff", fontSize: "0.75rem" }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!tradeProof && (
+              <pre
                 style={{
-                  fontSize: "0.65rem",
-                  color: ZCO_ACCENT,
-                  letterSpacing: "0.12em",
-                  marginBottom: "12px",
-                  fontWeight: 700,
+                  color: "#00ff41",
+                  fontSize: "0.7rem",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
                 }}
               >
-                JUDGE VOTES
-              </div>
-              {(proof.votes || []).map((vote) => {
-                const ok = vote.status === "voted";
-                const pct = Math.round((vote.confidence ?? 0) * 100);
-                const pad = judgeLabel(vote.judge).padEnd(8, " ");
-                return (
-                  <div
-                    key={vote.judge}
-                    style={{
-                      fontSize: "0.82rem",
-                      color: ok ? ZCO_GREEN : "#666",
-                      marginBottom: "8px",
-                      whiteSpace: "pre",
-                    }}
-                  >
-                    🤖 {pad} {vote.decision.toUpperCase()} {ok ? "✓" : "✗"} ({pct}%)
-                  </div>
-                );
-              })}
-            </section>
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            )}
 
-            <section
+            <div
               style={{
-                padding: "18px 24px",
-                borderBottom: `1px solid ${ZCO_ACCENT}22`,
+                marginTop: "16px",
+                padding: "12px",
+                background: "#050f05",
+                border: "1px solid #1a3a1a",
+                borderRadius: "8px",
               }}
             >
-              <div style={{ fontSize: "0.9rem", fontWeight: 800, color: ZCO_GREEN, marginBottom: "6px" }}>
-                {consensusLine}
+              <div style={{ color: "#00ff41", fontSize: "0.65rem", marginBottom: "4px" }}>
+                ✅ VERIFIED ON WALRUS
               </div>
-              <div style={{ fontSize: "0.75rem", color: "#888" }}>Method: {method}</div>
-            </section>
-
-            <section style={{ padding: "18px 24px" }}>
-              <Row label="ZCO Hash" value={proof.consensus_hash || "—"} mono />
-              <Row label="Walrus Blob" value={blobId} mono small />
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "14px" }}>
-                <a
-                  href={walrusUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    color: ZCO_GREEN,
-                    fontSize: "0.75rem",
-                    textDecoration: "none",
-                    border: `1px solid ${ZCO_GREEN}44`,
-                    padding: "6px 12px",
-                    borderRadius: "6px",
-                    background: "rgba(0,255,65,0.06)",
-                  }}
-                >
-                  🔗 View raw on Walrus ↗
-                </a>
-                {proof.sui_url ? (
-                  <a
-                    href={proof.sui_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      color: SUI_BLUE,
-                      fontSize: "0.75rem",
-                      textDecoration: "none",
-                      border: `1px solid ${SUI_BLUE}44`,
-                      padding: "6px 12px",
-                      borderRadius: "6px",
-                      background: "rgba(77,162,255,0.1)",
-                    }}
-                  >
-                    🔗 View Sui TX on Suiscan ↗
-                  </a>
-                ) : null}
-              </div>
-            </section>
-          </>
+              <a
+                href={rawWalrusUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#555", fontSize: "0.6rem", textDecoration: "none" }}
+              >
+                View raw data ↗
+              </a>
+            </div>
+          </div>
         )}
-      </div>
 
-      <Link
-        href="/"
-        style={{
-          marginTop: "24px",
-          color: "#666",
-          fontSize: "0.75rem",
-          textDecoration: "none",
-        }}
-      >
-        ← Back to ZION Civilization
-      </Link>
-    </main>
-  );
-}
-
-function Row({
-  label,
-  value,
-  highlight,
-  mono,
-  small,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  mono?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div style={{ marginBottom: "10px" }}>
-      <div style={{ fontSize: "0.65rem", color: "#666", letterSpacing: "0.08em", marginBottom: "4px" }}>
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: small ? "0.7rem" : "0.88rem",
-          fontWeight: highlight ? 800 : 500,
-          color: highlight ? "#00ff41" : "#fff",
-          fontFamily: mono ? "ui-monospace, monospace" : undefined,
-          wordBreak: "break-all",
-        }}
-      >
-        {value}
+        <div style={{ marginTop: "24px", textAlign: "center" }}>
+          <a href="/" style={{ color: "#333", fontSize: "0.65rem", textDecoration: "none" }}>
+            ← Back to ZION
+          </a>
+        </div>
       </div>
     </div>
   );
