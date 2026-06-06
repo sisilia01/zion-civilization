@@ -5,10 +5,13 @@ import {
   useCurrentAccount,
   useDisconnectWallet,
   useSignAndExecuteTransaction,
+  useSignPersonalMessage,
   useSuiClient,
   useWallets,
 } from "@mysten/dapp-kit";
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
+import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { bcs } from "@mysten/sui/bcs";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import {
@@ -25,6 +28,7 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
+import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
 import {
   buildAnnounceTransaction,
   buildRegisterTransaction,
@@ -35,7 +39,6 @@ import {
   getUsdcCoins,
 } from "@/lib/stealth";
 import { encryptStealthMemo } from "@/lib/seal-stealth";
-import type { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
   Area,
@@ -162,6 +165,30 @@ function presidentPartyDisplay(partyId: string | undefined) {
       background: "rgba(128,128,128,0.08)",
     }
   );
+}
+
+const getPartyColor = (party: string) => {
+  const p = party?.toLowerCase() || "";
+  if (p.includes("populist") || p.includes("people") || p.includes("front")) return "#ff5050";
+  if (p.includes("conservative")) return "#ffc832";
+  if (p.includes("centrist")) return "#4488ff";
+  return "rgba(255,255,255,0.4)";
+};
+
+function renderPoliticalWireText(text: string): ReactNode {
+  const pattern = /(People'?s Front|Populists?|Conservatives?|Centrists?)/gi;
+  const parts = text.split(pattern);
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    if (part.match(pattern)) {
+      return (
+        <span key={`wire-${idx}`} style={{ color: getPartyColor(part) }}>
+          {part}
+        </span>
+      );
+    }
+    return <span key={`wire-${idx}`}>{part}</span>;
+  });
 }
 
 const ECO_GREEN = "#00ff88";
@@ -297,35 +324,51 @@ function EcoPollBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-function EcoRect({
+/** RPG-style power bar for ECO-POL dashboard */
+function PowerGameBar({
   label,
-  borderColor,
-  background = "#050505",
-  children,
-  style,
-  bodyStyle,
+  value,
+  maxValue,
+  color,
+  emoji,
 }: {
   label: string;
-  borderColor: string;
-  background?: string;
-  children: ReactNode;
-  style?: CSSProperties;
-  bodyStyle?: CSSProperties;
+  value: number;
+  maxValue: number;
+  color: string;
+  emoji: string;
 }) {
+  const segments = 14;
+  const filled = Math.round(Math.min(1, maxValue > 0 ? value / maxValue : 0) * segments);
+  const bar = `${"█".repeat(filled)}${"░".repeat(Math.max(0, segments - filled))}`;
   return (
     <div
-      className="ecoRect"
       style={{
-        ...ECO_CARD_BASE,
-        border: `1px solid ${borderColor}`,
-        background,
-        ...style,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 11,
+        marginBottom: 8,
+        flexWrap: "wrap",
       }}
     >
-      <div style={ECO_LABEL}>{label}</div>
-      <div style={{ overflow: "hidden", minHeight: 0, ...bodyStyle }}>{children}</div>
+      <span style={{ width: 64, color: "#888", flexShrink: 0 }}>{label}:</span>
+      <span style={{ color, letterSpacing: -1 }}>{bar}</span>
+      <span style={{ color: "#fff", fontWeight: "bold" }}>
+        {Math.round(value).toLocaleString("en-US")}
+      </span>
+      <span>{emoji}</span>
     </div>
   );
+}
+
+function ecoEconomicPhaseColor(phase: string): string {
+  const p = (phase || "NORMAL").toUpperCase();
+  if (p === "BOOM") return "#00ff88";
+  if (p === "RECESSION") return "#ff8800";
+  if (p === "DEPRESSION") return "#ff4444";
+  return "#c8c8c8";
 }
 
 function ecoFormatZionShort(n: number) {
@@ -336,19 +379,642 @@ function ecoFormatZionShort(n: number) {
   return Math.round(n).toLocaleString("en-US");
 }
 
-const WALRUS_TICKER_TYPE_ICONS: Record<string, string> = {
-  election: "👑",
-  catastrophe: "🌋",
-  clan_war: "⚔️",
-  rebellion: "✊",
-  lottery: "🎰",
-  blessing: "✨",
-  birth: "👶",
-  prayer: "🙏",
-  chat: "💬",
-  work: "⚙️",
-  clan_join: "🤝",
+/** Zion terminal palette — matches civilization / corp cards */
+const ZION_TERM = {
+  bg: "#0a0a1a",
+  cardBg: "rgba(0,10,30,0.8)",
+  border: "rgba(0,255,136,0.2)",
+  label: "#00ffcc",
+  accent: "#00ff88",
+  money: "#ffaa00",
+  warn: "#ff4444",
+  text: "#ffffff",
+  muted: "#667788",
 };
+
+function ZionSectionHeader({ title, icon }: { title: string; icon?: string }) {
+  return (
+    <div className="zionSectionHeader">
+      <div className="zionSectionLine" />
+      <span className="zionSectionTitle">
+        {icon ? `${icon} ` : ""}═══ {title} ═══
+      </span>
+      <div className="zionSectionLine" />
+    </div>
+  );
+}
+
+function ZionSectionSep() {
+  return <div className="zionSectionSep" aria-hidden />;
+}
+
+function ZionTermCard({
+  children,
+  variant = "default",
+  className = "",
+  style,
+}: {
+  children: ReactNode;
+  variant?: "default" | "crisis" | "warn";
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const border =
+    variant === "crisis"
+      ? "1px solid rgba(255,68,68,0.45)"
+      : variant === "warn"
+        ? "1px solid rgba(255,170,0,0.3)"
+        : `1px solid ${ZION_TERM.border}`;
+  const background =
+    variant === "crisis" ? "rgba(30,0,0,0.55)" : ZION_TERM.cardBg;
+  return (
+    <div
+      className={`zionTermCard ${variant === "crisis" ? "zionTermCardCrisis" : ""} ${className}`}
+      style={{ border, background, ...style }}
+    >
+      <div className="zionTermCardScanlines" aria-hidden />
+      <div className="zionTermCardInner">{children}</div>
+    </div>
+  );
+}
+
+function ZionTermLabel({ children }: { children: ReactNode }) {
+  return <div className="zionTermLabel">{children}</div>;
+}
+
+function ZionTermValue({
+  children,
+  color,
+  size = "md",
+}: {
+  children: ReactNode;
+  color?: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  return (
+    <div
+      className={`zionTermValue zionTermValue${size === "lg" ? "Lg" : size === "sm" ? "Sm" : "Md"}`}
+      style={{ color: color || ZION_TERM.text }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ZionMetricGrid({
+  metrics,
+  columns,
+}: {
+  metrics: { label: string; value: ReactNode; valueColor?: string }[];
+  columns?: number;
+}) {
+  const cols = columns ?? metrics.length;
+  return (
+    <div
+      className="zionMetricGrid"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {metrics.map((m) => (
+        <div key={m.label} className="zionMetricCell">
+          <ZionTermLabel>{m.label}</ZionTermLabel>
+          <ZionTermValue color={m.valueColor}>{m.value}</ZionTermValue>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ZionGovCard({
+  name,
+  badge,
+  badgeColor = ZION_TERM.accent,
+  metrics,
+}: {
+  name: string;
+  badge: string;
+  badgeColor?: string;
+  metrics: { label: string; value: ReactNode; valueColor?: string }[];
+}) {
+  return (
+    <ZionTermCard>
+      <div className="zionGovCardHead">
+        <span className="zionGovName">{name.toUpperCase()}</span>
+        <span
+          className="zionSectorBadge"
+          style={{
+            color: badgeColor,
+            borderColor: `${badgeColor}55`,
+            background: `${badgeColor}12`,
+          }}
+        >
+          {badge}
+        </span>
+      </div>
+      <ZionMetricGrid metrics={metrics} />
+    </ZionTermCard>
+  );
+}
+
+function ZionPowerBar({
+  label,
+  value,
+  maxValue,
+  color,
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+  color: string;
+}) {
+  const segments = 20;
+  const filled = Math.round(Math.min(1, maxValue > 0 ? value / maxValue : 0) * segments);
+  const bar = `${"█".repeat(filled)}${"░".repeat(Math.max(0, segments - filled))}`;
+  return (
+    <div className="zionPowerRow">
+      <span className="zionPowerLabel">{label.toUpperCase()}</span>
+      <span className="zionPowerBar" style={{ color }}>
+        {bar}
+      </span>
+      <span className="zionPowerValue">{Math.round(value).toLocaleString("en-US")}</span>
+    </div>
+  );
+}
+
+type DistrictStatus = "police" | "gang" | "contested";
+
+type DistrictCell = {
+  id: string;
+  name: string;
+  status: DistrictStatus;
+  control_pct: number;
+  incidents_today: number;
+  population: number;
+  status_changed?: boolean;
+};
+
+type DistrictsPayload = {
+  districts: DistrictCell[];
+  alive_agents?: number;
+  zone_counts?: { police: number; gang: number; contested: number };
+  counts?: { police: number; gang: number; contested: number };
+  updated_at?: string | null;
+};
+
+type District = DistrictCell;
+
+type MapDistrictShape =
+  | { id: number; name: string; type: "circle"; cx: number; cy: number; r: number }
+  | { id: number; name: string; type: "poly"; points: string };
+
+const MAP_DISTRICT_SHAPES: MapDistrictShape[] = [
+  {
+    id: 0,
+    name: "Archipelago",
+    points:
+      "8,295 65,255 115,265 145,285 165,320 175,400 170,500 155,590 125,640 70,650 20,620 5,550 5,420 8,340",
+    type: "poly",
+  },
+  {
+    id: 1,
+    name: "NW Cape",
+    points: "200,55 340,45 355,95 340,155 290,185 225,175 200,130 195,85",
+    type: "poly",
+  },
+  {
+    id: 2,
+    name: "North",
+    points: "340,45 570,50 580,110 565,185 480,215 420,220 355,200 340,155 352,95",
+    type: "poly",
+  },
+  {
+    id: 3,
+    name: "NE Hub",
+    points: "570,50 790,60 810,130 795,210 720,230 640,225 580,205 578,115",
+    type: "poly",
+  },
+  {
+    id: 4,
+    name: "Core",
+    points: "390,265 570,255 585,340 580,430 510,445 390,440 375,355",
+    type: "poly",
+  },
+  {
+    id: 5,
+    name: "West-Center",
+    points: "240,200 385,195 395,265 378,355 370,445 280,450 230,435 215,350 225,260",
+    type: "poly",
+  },
+  {
+    id: 6,
+    name: "East-Center",
+    points: "570,255 730,248 745,335 740,440 660,455 580,448 578,435 582,345",
+    type: "poly",
+  },
+  {
+    id: 7,
+    name: "North-Center",
+    points: "355,200 565,190 578,255 390,268 375,255",
+    type: "poly",
+  },
+  {
+    id: 8,
+    name: "South-Center",
+    points: "370,445 580,435 590,530 570,620 490,640 380,635 360,545",
+    type: "poly",
+  },
+  {
+    id: 9,
+    name: "Port",
+    points: "215,440 365,445 362,545 340,635 275,660 210,645 195,560 200,480",
+    type: "poly",
+  },
+  {
+    id: 10,
+    name: "South Island",
+    points: "400,650 565,645 575,720 555,790 480,810 400,805 385,730",
+    type: "poly",
+  },
+  {
+    id: 11,
+    name: "South Outskirts",
+    points: "200,660 390,640 390,810 330,850 200,855 185,770 190,700",
+    type: "poly",
+  },
+  {
+    id: 12,
+    name: "Admin Square",
+    points: "790,60 980,70 1000,180 980,310 880,325 800,310 795,215 810,135",
+    type: "poly",
+  },
+  {
+    id: 13,
+    name: "Hills",
+    points: "740,248 880,240 990,315 975,430 900,460 810,450 745,435 742,340",
+    type: "poly",
+  },
+  {
+    id: 14,
+    name: "Industrial Zone",
+    points:
+      "980,70 1270,75 1275,950 580,955 575,810 650,795 740,800 810,760 900,740 980,680 990,500 980,320 1000,185",
+    type: "poly",
+  },
+];
+
+const DistrictMap = ({ districts: districts_data }: { districts: District[] }) => {
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; name: string } | null>(null);
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        paddingBottom: "48%",
+        overflow: "hidden",
+        background: "#0a0e18",
+      }}
+    >
+      <img
+        src="/citymap.jpg"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "fill",
+          display: "block",
+          opacity: 0.9,
+          filter: "contrast(1.15) brightness(1.05) saturate(0.9)",
+        }}
+        alt="ZION City Map"
+      />
+      <svg
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+        viewBox="0 0 1280 968"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <style>{`
+          @keyframes pulse { 0%,100%{opacity:0.45} 50%{opacity:0.15} }
+          .contested { animation: pulse 1.4s ease-in-out infinite; }
+        `}</style>
+        </defs>
+        {MAP_DISTRICT_SHAPES.map((d, i) => {
+          const dist = districts_data[i % districts_data.length];
+          const status = dist?.status || "police";
+          const fill = status === "police" ? "#00ff88" : status === "gang" ? "#ff2244" : "#ffcc00";
+          const commonProps = {
+            fill,
+            fillOpacity: 0.22,
+            stroke: fill,
+            strokeWidth: 1.2,
+            strokeOpacity: 0.7,
+            className: status === "contested" ? "contested" : "",
+            style: { cursor: "pointer", transition: "fill-opacity 0.2s" } as const,
+            onMouseMove: (e: React.MouseEvent<SVGElement>) => {
+              const svg = e.currentTarget.closest("svg");
+              if (!svg) return;
+              const rect = svg.getBoundingClientRect();
+              setTooltip({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                name: d.name,
+              });
+            },
+            onMouseLeave: () => setTooltip(null),
+          };
+          if (d.type === "circle") {
+            return <circle key={d.id} cx={d.cx} cy={d.cy} r={d.r} {...commonProps} />;
+          }
+          return <polygon key={d.id} points={d.points} {...commonProps} />;
+        })}
+      </svg>
+      <svg
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+        viewBox="0 0 1280 968"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <style>{`
+    @keyframes fw { 0%{offset-distance:0%} 100%{offset-distance:100%} }
+    @keyframes bw { 0%{offset-distance:100%} 100%{offset-distance:0%} }
+    @keyframes blink { 0%,100%{opacity:0.9} 50%{opacity:0.1} }
+  `}</style>
+        </defs>
+
+        {[
+          { path: "M 200,120 L 580,100", dur: 12, col: "#ffee88" },
+          { path: "M 580,100 L 200,120", dur: 15, col: "#ff9966" },
+          { path: "M 580,100 L 820,110", dur: 10, col: "#ffee88" },
+          { path: "M 820,110 L 580,100", dur: 13, col: "#88ccff" },
+          { path: "M 820,110 L 1050,140", dur: 14, col: "#ffee88" },
+          { path: "M 200,120 L 230,290", dur: 9, col: "#ff9966" },
+          { path: "M 230,290 L 200,120", dur: 11, col: "#ffee88" },
+          { path: "M 350,95 L 360,280", dur: 10, col: "#88ccff" },
+          { path: "M 580,100 L 590,260", dur: 8, col: "#ffee88" },
+          { path: "M 590,260 L 580,100", dur: 12, col: "#ff9966" },
+          { path: "M 820,110 L 840,295", dur: 11, col: "#88ffcc" },
+          { path: "M 1050,140 L 1060,380", dur: 9, col: "#ffee88" },
+          { path: "M 230,290 L 590,265", dur: 13, col: "#ffee88" },
+          { path: "M 590,265 L 230,290", dur: 10, col: "#ff9966" },
+          { path: "M 590,265 L 840,260", dur: 12, col: "#88ccff" },
+          { path: "M 840,260 L 590,265", dur: 14, col: "#ffee88" },
+          { path: "M 360,280 L 370,480", dur: 8, col: "#ffee88" },
+          { path: "M 370,480 L 360,280", dur: 11, col: "#ff9966" },
+          { path: "M 495,265 L 500,480", dur: 9, col: "#ffee88" },
+          { path: "M 500,480 L 495,265", dur: 13, col: "#88ccff" },
+          { path: "M 685,260 L 690,490", dur: 10, col: "#ff9966" },
+          { path: "M 840,260 L 860,490", dur: 12, col: "#ffee88" },
+          { path: "M 1060,380 L 1070,750", dur: 8, col: "#88ccff" },
+          { path: "M 370,480 L 685,490", dur: 11, col: "#ffee88" },
+          { path: "M 685,490 L 370,480", dur: 9, col: "#ff9966" },
+          { path: "M 370,480 L 240,510", dur: 13, col: "#88ffcc" },
+          { path: "M 685,490 L 860,495", dur: 10, col: "#ffee88" },
+          { path: "M 500,480 L 510,650", dur: 12, col: "#ff9966" },
+          { path: "M 685,490 L 695,660", dur: 9, col: "#88ccff" },
+          { path: "M 240,510 L 250,680", dur: 11, col: "#ffee88" },
+          { path: "M 860,495 L 870,700", dur: 10, col: "#ff9966" },
+          { path: "M 250,680 L 510,660", dur: 13, col: "#ffee88" },
+          { path: "M 510,660 L 695,660", dur: 11, col: "#88ccff" },
+          { path: "M 510,660 L 520,800", dur: 9, col: "#ffee88" },
+          { path: "M 870,700 L 1070,720", dur: 12, col: "#ff9966" },
+        ].flatMap((r, i) =>
+          [0, 33, 66].map((d) => (
+            <circle
+              key={`r${i}d${d}`}
+              r="1.5"
+              fill={r.col}
+              opacity="0.65"
+              style={{
+                offsetPath: `path("${r.path}")`,
+                offsetDistance: `${d}%`,
+                animation: `fw ${r.dur + d * 0.15}s linear infinite`,
+              }}
+            />
+          ))
+        )}
+
+        {[
+          [460, 270],
+          [590, 255],
+          [720, 248],
+          [950, 185],
+          [1100, 200],
+          [340, 310],
+          [840, 290],
+          [1050, 320],
+          [480, 380],
+          [680, 375],
+          [860, 400],
+          [1060, 450],
+          [450, 490],
+          [640, 480],
+          [860, 500],
+          [250, 520],
+          [370, 600],
+          [520, 580],
+          [690, 570],
+          [870, 590],
+          [1070, 600],
+          [260, 690],
+          [520, 720],
+          [700, 710],
+          [880, 730],
+        ].map(([x, y], i) => (
+          <circle
+            key={`t${i}`}
+            cx={x}
+            cy={y}
+            r="1.8"
+            fill="#ff3333"
+            opacity="0.8"
+            style={{ animation: `blink ${1.2 + i * 0.27}s ease-in-out infinite` }}
+          />
+        ))}
+
+        {[
+          [420, 200],
+          [550, 195],
+          [670, 190],
+          [800, 185],
+          [920, 200],
+          [1080, 230],
+          [380, 370],
+          [510, 365],
+          [650, 360],
+          [800, 355],
+          [490, 530],
+          [630, 525],
+          [800, 530],
+        ].map(([x, y], i) => (
+          <circle
+            key={`g${i}`}
+            cx={x}
+            cy={y}
+            r="1.5"
+            fill="#00ff88"
+            opacity="0.55"
+            style={{ animation: `blink ${2 + i * 0.35}s ease-in-out infinite` }}
+          />
+        ))}
+      </svg>
+      {tooltip && (
+        <div
+          style={{
+            position: "absolute",
+            left: tooltip.x + 12,
+            top: tooltip.y - 24,
+            background: "rgba(0,0,0,0.85)",
+            border: "1px solid #00ff88",
+            color: "#00ff88",
+            fontFamily: "monospace",
+            fontSize: "12px",
+            padding: "3px 8px",
+            borderRadius: "4px",
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        >
+          {tooltip.name}
+        </div>
+      )}
+    </div>
+  );
+};
+
+function DistrictMapPanel() {
+  const [mapStats, setMapStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/stats");
+        if (!res.ok) return;
+        setMapStats(parseApiStatsResponse(await res.json()));
+      } catch {
+        /* ignore */
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const prosperity = useMemo(() => {
+    if (!mapStats) return 0.5;
+    return computeProsperity({
+      unemployment: mapStats.unemployment_rate ?? 0,
+      revolution: mapStats.revolution_meter ?? 0,
+      poverty: mapStats.poverty_pct ?? 0,
+      population: mapStats.alive ?? mapStats.alive_agents ?? 0,
+    });
+  }, [mapStats]);
+
+  const civilizationData = useMemo(
+    () => ({
+      total: mapStats?.alive_agents ?? mapStats?.alive,
+      elite: mapStats?.elite,
+      middle: mapStats?.middle,
+      poor: mapStats?.poor,
+      critical: mapStats?.critical,
+      unemployment: mapStats?.unemployment_rate ?? 0,
+      revolution: mapStats?.revolution_meter ?? 0,
+      poverty: mapStats?.poverty_pct ?? 0,
+      population: mapStats?.alive ?? mapStats?.alive_agents ?? 0,
+    }),
+    [mapStats]
+  );
+
+  const totalAlive = mapStats?.alive_agents ?? mapStats?.alive;
+
+  return (
+    <div className="districtMapWrap">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "6px 12px",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: "10px",
+            color: "rgba(255,255,255,0.35)",
+            letterSpacing: "1px",
+          }}
+        >
+          PROSPERITY {(prosperity * 100).toFixed(0)}%
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span
+            style={{
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              background: "#00ff88",
+              display: "inline-block",
+              animation: "blink 1.2s ease-in-out infinite",
+              boxShadow: "0 0 6px #00ff88",
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "monospace",
+              fontSize: "11px",
+              color: "#00ff88",
+              letterSpacing: "2px",
+            }}
+          >
+            LIVE MAP
+          </span>
+        </div>
+      </div>
+      <div style={{ width: "100%", height: 400, minHeight: 400, flexShrink: 0, position: "relative" }}>
+        <LivingPlanet
+          prosperity={prosperity}
+          civilizationData={civilizationData}
+          height={400}
+        />
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: "24px",
+          padding: "8px 12px",
+          borderTop: "1px solid rgba(0,255,136,0.2)",
+          background: "rgba(0,0,0,0.4)",
+        }}
+      >
+        {[
+          { label: "TOTAL", value: totalAlive, color: "#00ff88" },
+          { label: "ELITE", value: mapStats?.elite, color: "#ffd700" },
+          { label: "MIDDLE", value: mapStats?.middle, color: "#00aaff" },
+          { label: "POOR", value: mapStats?.poor, color: "#ff8800" },
+          { label: "CRITICAL", value: mapStats?.critical, color: "#ff2244" },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: "9px",
+                color: "rgba(255,255,255,0.4)",
+                letterSpacing: "1px",
+              }}
+            >
+              {label}
+            </span>
+            <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "bold", color }}>
+              {(value || 0).toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function walrusEventTypeEmoji(type: string): string {
   const map: Record<string, string> = {
@@ -398,6 +1064,7 @@ interface Clan {
 
 interface Stats {
   alive: number;
+  alive_agents: number;
   dead: number;
   /** alive + dead (API returns alive/dead, not total_agents) */
   total_agents: number;
@@ -408,17 +1075,71 @@ interface Stats {
   middle?: number;
   poor?: number;
   critical?: number;
+  poverty_pct?: number;
+  crime_pct?: number;
+  crime_rate?: number;
+  revolution_meter?: number;
   population_pressure?: "normal" | "high" | "critical" | "famine";
   tax_multiplier?: number;
+  gini_coefficient?: number;
+  unemployment_rate?: number;
+}
+
+interface PoliticalEconomyData {
+  crisis: {
+    is_active?: boolean;
+    crime_rate?: number;
+    gang_crime_pct?: number;
+    unemployment_rate?: number;
+    social_debt?: number;
+    revolution_pressure?: number;
+    economic_phase?: string;
+    police_effectiveness?: number;
+    gini_coefficient?: number;
+  };
+  metrics: {
+    crime_rate?: number;
+    gang_crime_pct?: number;
+    unemployment_rate?: number;
+    gini_coefficient?: number;
+    economic_phase?: string;
+    police_effectiveness?: number;
+    revolution_pressure?: number;
+    president_name?: string;
+    gdp_growth_rate?: number;
+  };
+  power: {
+    scores: {
+      president_power?: number;
+      sheriff_power?: number;
+      senate_power?: number;
+    };
+    recent_events?: unknown[];
+  };
+  gangs: Array<{
+    id: number;
+    name: string;
+    members: number;
+    treasury: number;
+    territory_control: number;
+    gang_health?: number;
+  }>;
 }
 
 /** Map /api/stats JSON — API uses alive, dead, total_zion, deaths_today (not alive_agents). */
 function parseApiStatsResponse(raw: unknown): Stats {
   const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const alive = Number(s.alive ?? s.alive_agents ?? 0);
   const dead = Number(s.dead ?? 0);
+  const aliveDirect = Number(s.alive ?? s.alive_agents);
+  const totalAgentsRaw = Number(s.total_agents);
+  const alive = Number.isFinite(aliveDirect)
+    ? aliveDirect
+    : Number.isFinite(totalAgentsRaw)
+      ? Math.max(0, totalAgentsRaw - dead)
+      : 0;
   return {
     alive,
+    alive_agents: alive,
     dead,
     total_agents: alive + dead > 0 ? alive + dead : alive,
     total_zion: Number(s.total_zion ?? 0),
@@ -428,11 +1149,102 @@ function parseApiStatsResponse(raw: unknown): Stats {
     middle: Number(s.middle ?? 0),
     poor: Number(s.poor ?? 0),
     critical: Number(s.critical ?? 0),
+    poverty_pct: Number(s.poverty_pct ?? 0),
+    crime_pct: Number(s.crime_pct ?? 0),
+    crime_rate: Number(s.crime_rate ?? 0),
+    revolution_meter: Number(s.revolution_meter ?? 0),
     population_pressure: (["normal", "high", "critical", "famine"].includes(String(s.population_pressure ?? ""))
       ? String(s.population_pressure)
       : "normal") as Stats["population_pressure"],
     tax_multiplier: Number(s.tax_multiplier ?? 1),
+    gini_coefficient: Number(s.gini_coefficient ?? 0),
+    unemployment_rate: Number(s.unemployment_rate ?? 0),
   };
+}
+
+/** Strip AI model tags from ECO-POL activity log descriptions. */
+function cleanActivityDescription(desc: string): string {
+  return desc
+    .replace(/\[GPT-PRESIDENT\]/g, "🏛")
+    .replace(/\[DEEPSEEK-SENATE\]/g, "🏦")
+    .replace(/\[GEMINI-SHERIFF\]/g, "🚔")
+    .replace(/\[QWEN-ZRS\]/g, "💰")
+    .replace(/\[LLAMA-GANGS\]/g, "💀")
+    .replace(/\[PHI-CORPS\]/g, "🏢")
+    .replace(/\(openai\/gpt-4o-mini\)/g, "")
+    .replace(/\(deepseek\/deepseek-chat-v3-0324\)/g, "")
+    .replace(/\(google\/gemini-3\.1-flash-lite\)/g, "")
+    .replace(/\(qwen\/qwen-2\.5-7b-instruct\)/g, "")
+    .replace(/\(meta-llama\/llama-3\.1-8b-instruct\)/g, "")
+    .replace(/\(microsoft\/phi-4-mini-instruct\)/g, "")
+    .replace(/President AI \([^)]+\):/g, "🏛")
+    .replace(/Senate AI \([^)]+\):/g, "🏦")
+    .replace(/Sheriff AI \([^)]+\):/g, "🚔")
+    .replace(/ZRS AI \([^)]+\):/g, "💰")
+    .replace(/Gang AI \([^)]+\):/g, "💀")
+    .replace(/Corp AI \([^)]+\):/g, "🏢")
+    .replace(/\| Outcome:.*$/g, "")
+    .trim();
+}
+
+function formatEventTime(ts: string): string {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts.includes("T") ? ts : `${ts.replace(" ", "T")}Z`);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function formatLawProposer(proposedBy?: string): string {
+  if (!proposedBy) return "";
+  return proposedBy
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getLawStatusStyle(status: string): { label: string; color: string; border: string } {
+  const s = String(status || "").toLowerCase();
+  if (s === "passed") {
+    return { label: "PASS", color: "#00ff88", border: "2px solid rgba(0, 255, 136, 0.6)" };
+  }
+  if (s === "pending") {
+    return { label: "PENDING", color: "#ffd93d", border: "2px solid rgba(255, 217, 61, 0.5)" };
+  }
+  return { label: "FAIL", color: "#ff4444", border: "2px solid rgba(255, 60, 60, 0.4)" };
+}
+
+function isSenateActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
+  const eventType = String(e.event_type ?? e.type ?? "");
+  const desc = String(e.description ?? "");
+  return (
+    eventType === "senate" ||
+    desc.includes("[DEEPSEEK-SENATE]") ||
+    desc.includes("SENATE AI") ||
+    desc.includes("Senate blocks") ||
+    desc.includes("Senate passes") ||
+    desc.includes("impeach") ||
+    desc.includes("🏦")
+  );
+}
+
+function isZrsActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
+  const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
+  const desc = String(e.description ?? "");
+  return (
+    eventType === "economy" ||
+    eventType === "zrs" ||
+    eventType === "frs" ||
+    desc.includes("[QWEN-ZRS]") ||
+    desc.includes("ZRS") ||
+    desc.includes("FRS Chief") ||
+    desc.includes("INFLATION") ||
+    desc.includes("interest rate") ||
+    desc.includes("QE") ||
+    desc.includes("💰")
+  );
 }
 
 interface ZcoVote {
@@ -939,6 +1751,86 @@ const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
   culture: "🌍 WORLD",
 };
 
+type ZionMarketRow = {
+  market_id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  options?: Array<{ id: string; label: string }>;
+  expires_at?: string | null;
+  source?: string;
+};
+
+function zionCivMarketIcon(category: string, title: string): string {
+  const t = (title || "").toLowerCase();
+  if (
+    category === "politics" ||
+    t.includes("president") ||
+    t.includes("revolution") ||
+    t.includes("sheriff")
+  ) {
+    return "https://cdn-icons-png.flaticon.com/512/3176/3176272.png";
+  }
+  if (
+    category === "economy" ||
+    t.includes("economic") ||
+    t.includes("corporation") ||
+    t.includes("bankrupt") ||
+    t.includes("hyperinflation") ||
+    t.includes("zion this month")
+  ) {
+    return "https://cdn-icons-png.flaticon.com/512/2830/2830284.png";
+  }
+  if (category === "clans" || t.includes("clan") || t.includes("war")) {
+    return "https://cdn-icons-png.flaticon.com/512/1048/1048953.png";
+  }
+  if (
+    category === "crime" ||
+    t.includes("gang") ||
+    t.includes("police") ||
+    t.includes("arrest") ||
+    t.includes("rob")
+  ) {
+    return "https://cdn-icons-png.flaticon.com/512/1940/1940611.png";
+  }
+  if (
+    category === "demographics" ||
+    t.includes("agents die") ||
+    t.includes("born") ||
+    t.includes("survive") ||
+    t.includes("population") ||
+    t.includes("class")
+  ) {
+    return "https://cdn-icons-png.flaticon.com/512/1077/1077114.png";
+  }
+  if (category === "trading" || t.includes("z-perps") || t.includes("trader")) {
+    return "https://cdn-icons-png.flaticon.com/512/2534/2534844.png";
+  }
+  return "https://cdn-icons-png.flaticon.com/512/2103/2103633.png";
+}
+
+function zionMarketRowToApiMarket(market: ZionMarketRow): ZionbetApiMarket {
+  return {
+    id: market.market_id,
+    question: market.title,
+    event_type: market.market_id,
+    category: market.category || "civilization",
+    yes_pct: 50,
+    no_pct: 50,
+    end_date: market.expires_at || null,
+    description: market.description || null,
+    timeframe: "24h",
+    image_url: zionCivMarketIcon(market.category || "", market.title),
+  };
+}
+
+function zionMarketOptionButtonLabel(label: string, cents: number): string {
+  const trimmed = label.trim();
+  if (!trimmed) return `${cents}¢`;
+  const short = trimmed.length > 22 ? `${trimmed.slice(0, 20)}…` : trimmed;
+  return `${short} ${cents}¢`;
+}
+
 /** On-chain binary markets (DeepBook / zion_bet) — crypto tab top section */
 const DEEPBOOK_BINARY_MARKETS: ZionbetApiMarket[] = [
   { id: "btc_15m", question: "Will BTC go UP in the next 15 minutes?", event_type: "btc_15m", timeframe: "15m", category: "crypto", yes_pct: 50, no_pct: 50, token: "BTC" },
@@ -1112,10 +2004,10 @@ function zionbetPolyDollarVolumeLabel(volume?: number): string {
   if (v >= 1_000_000) {
     const m = v / 1_000_000;
     const label = m >= 10 ? Math.round(m) : Math.round(m * 10) / 10;
-    return `$${label}M Объём`;
+    return `$${label}M Volume`;
   }
-  if (v >= 1_000) return `$${Math.round(v / 1_000)}K Объём`;
-  return `$${Math.round(v)} Объём`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}K Volume`;
+  return `$${Math.round(v)} Volume`;
 }
 
 function zionbetMarketVolumeLabel(volume?: number, id?: string, volumeSui?: number): string {
@@ -1699,10 +2591,13 @@ function ZionBetMarketCardItem({
   marketApi,
   yes,
   imageUrl,
+  iconEmoji,
   volumeLabel,
   endLabel,
   isZionCard,
   betTab,
+  yesButtonLabel,
+  noButtonLabel,
   onOpen,
   onBetYes,
   onBetNo,
@@ -1710,10 +2605,13 @@ function ZionBetMarketCardItem({
   marketApi: ZionbetApiMarket;
   yes: number;
   imageUrl?: string | null;
+  iconEmoji?: string;
   volumeLabel: string;
   endLabel: string;
   isZionCard: boolean;
   betTab?: ZionbetBetTab;
+  yesButtonLabel?: string;
+  noButtonLabel?: string;
   onOpen: () => void;
   onBetYes: (e: MouseEvent) => void;
   onBetNo: (e: MouseEvent) => void;
@@ -1721,7 +2619,7 @@ function ZionBetMarketCardItem({
   const [hovered, setHovered] = useState(false);
   const resolvedImageUrl = (imageUrl ?? marketApi.image_url)?.trim() || null;
   const showCryptoIcon = isDeepbookCryptoMarket(marketApi.id);
-  const displayEmoji = zionbetCardFallbackEmoji(marketApi, betTab);
+  const displayEmoji = iconEmoji ?? zionbetCardFallbackEmoji(marketApi, betTab);
   const cardBase: CSSProperties = {
     position: "relative",
     display: "flex",
@@ -1867,7 +2765,7 @@ function ZionBetMarketCardItem({
           }}
           onClick={onBetYes}
         >
-          YES {yes}¢
+          {yesButtonLabel ?? `YES ${yes}¢`}
         </button>
         <button
           type="button"
@@ -1884,7 +2782,7 @@ function ZionBetMarketCardItem({
           }}
           onClick={onBetNo}
         >
-          NO {100 - yes}¢
+          {noButtonLabel ?? `NO ${100 - yes}¢`}
         </button>
       </div>
     </article>
@@ -2261,7 +3159,7 @@ function ZionBetMarketDetailOverlay({
     detailApiMarket.volume_sui
   );
   const volumeStatsLabel = zionbetIsPolyMarket(detailApiMarket.id)
-    ? zionbetPolyDollarVolumeLabel(detailApiMarket.volume).replace(" Объём", "")
+    ? zionbetPolyDollarVolumeLabel(detailApiMarket.volume).replace(" Volume", "")
     : (() => {
         const volumeSui = zionbetVolumeSuiAmount(detailApiMarket.volume, detailApiMarket.id);
         if (volumeSui >= 1_000_000) return `${(volumeSui / 1_000_000).toFixed(1)}M`;
@@ -5671,7 +6569,7 @@ type TabId =
   | "zionbet"
   | "leaderboard"
   | "zbank"
-  | "faucet"
+  | "zperps"
   | "press"
   | "treasury"; // ECO-POL (display label; id kept for routing)
 
@@ -6081,6 +6979,43 @@ const BET_ADMIN_CAP = "0xb2b5883d02933b0fdea6b1ef4096267b515cd240f9ba2773754f487
 const SUI_CLOCK = "0x6";
 const USDC_TYPE_TESTNET =
   "0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC";
+
+type StealthPoolOwnerInfo =
+  | { kind: "shared"; initialSharedVersion: string }
+  | { kind: "owned"; address: string };
+
+async function fetchStealthPoolOwner(
+  suiClient: {
+    getObject: (input: {
+      id: string;
+      options?: { showOwner?: boolean };
+    }) => Promise<{ data?: { owner?: unknown } | null }>;
+  },
+  poolObjectId: string
+): Promise<StealthPoolOwnerInfo> {
+  const obj = await suiClient.getObject({
+    id: poolObjectId,
+    options: { showOwner: true },
+  });
+  const owner = obj.data?.owner as
+    | { Shared?: { initial_shared_version?: string | number } }
+    | { AddressOwner?: string }
+    | undefined;
+  console.log("[StealthPool] sui_getObject owner:", owner);
+
+  if (owner && "Shared" in owner && owner.Shared) {
+    const v = owner.Shared.initial_shared_version;
+    if (v === undefined || v === null) {
+      throw new Error("Stealth pool is shared but initial_shared_version is missing");
+    }
+    return { kind: "shared", initialSharedVersion: String(v) };
+  }
+  if (owner && "AddressOwner" in owner && owner.AddressOwner) {
+    return { kind: "owned", address: String(owner.AddressOwner) };
+  }
+  throw new Error("Could not read stealth pool owner from chain");
+}
+
 const DEEPBOOK_PREDICT_PACKAGE = "0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138";
 const DEEPBOOK_PREDICT_ID = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22cbd8e2a38028a";
 const DEEPBOOK_REGISTRY = "0x43af14fed5480c20ff77e2263d5f794c35b9fab7e2212903127062f4fe2a6e64";
@@ -8789,6 +9724,176 @@ function BankTokenModal({
   );
 }
 
+const ZBANK_SUI_LOGO = "https://assets.coingecko.com/coins/images/26375/small/sui_asset.jpeg";
+const ZBANK_USDC_LOGO = "https://assets.coingecko.com/coins/images/6319/small/usdc.png";
+
+function ZBankCoinLabel({ coin }: { coin: "SUI" | "USDC" }) {
+  if (coin === "SUI") {
+    return (
+      <span style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
+        <img
+          src={ZBANK_SUI_LOGO}
+          style={{ width: "20px", height: "20px", borderRadius: "50%" }}
+          alt="SUI"
+        />
+        SUI
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: "6px", justifyContent: "center" }}>
+      <img
+        src={ZBANK_USDC_LOGO}
+        style={{ width: "20px", height: "20px", borderRadius: "50%" }}
+        alt="USDC"
+      />
+      USDC
+    </span>
+  );
+}
+
+function ConfidentialDepositsList({
+  onSelect,
+}: {
+  onSelect: (bf: string, amount: number, coin: string) => void;
+}) {
+  const [deposits, setDeposits] = useState<
+    { digest: string; amount: number; coin: string; timestamp: number; blinding_factor: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    const list = JSON.parse(localStorage.getItem("zion_conf_deposits") || "[]");
+    const withBf = list
+      .map((d: { digest: string; amount: number; coin: string; timestamp: number }) => {
+        const stored = localStorage.getItem("zion_bf_" + d.digest);
+        const bf = stored ? JSON.parse(stored).blinding_factor : null;
+        return { ...d, blinding_factor: bf };
+      })
+      .filter((d: { blinding_factor: string | null }) => d.blinding_factor);
+    setDeposits(withBf.reverse());
+  }, []);
+
+  if (deposits.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: "12px" }}>
+      <div
+        style={{
+          fontSize: "9px",
+          color: "rgba(255,255,255,0.3)",
+          letterSpacing: "1px",
+          marginBottom: "6px",
+        }}
+      >
+        MY DEPOSITS
+      </div>
+      {deposits.slice(0, 5).map((d, i) => (
+        <div
+          key={i}
+          onClick={() => onSelect(d.blinding_factor!, d.amount, d.coin)}
+          style={{
+            padding: "8px",
+            marginBottom: "4px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: "10px",
+            color: "rgba(255,255,255,0.5)",
+          }}
+        >
+          {d.amount} {d.coin} — {new Date(d.timestamp).toLocaleDateString()}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const encryptNote = async (
+  recipientAddress: string,
+  noteData: string
+): Promise<string> => {
+  await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey"]
+  );
+
+  const recipientSeed = new TextEncoder().encode(
+    recipientAddress.slice(0, 32).padEnd(32, "0")
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    recipientSeed,
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: iv, iterations: 1000, hash: "SHA-256" },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    new TextEncoder().encode(noteData)
+  );
+
+  const encryptedBytes = new Uint8Array(encrypted);
+  const combined = new Uint8Array(iv.length + encryptedBytes.length);
+  combined.set(iv);
+  combined.set(encryptedBytes, iv.length);
+  return Array.from(combined)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
+
+const decryptNote = async (
+  recipientAddress: string,
+  encryptedHex: string
+): Promise<string> => {
+  try {
+    const bytes = new Uint8Array(
+      encryptedHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+    );
+    const iv = bytes.slice(0, 12);
+    const encrypted = bytes.slice(12);
+
+    const recipientSeed = new TextEncoder().encode(
+      recipientAddress.slice(0, 32).padEnd(32, "0")
+    );
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      recipientSeed,
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
+    );
+    const aesKey = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: iv, iterations: 1000, hash: "SHA-256" },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"]
+    );
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      aesKey,
+      encrypted
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return "";
+  }
+};
+
 export default function Home() {
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -8796,11 +9901,80 @@ export default function Home() {
   const { mutate: connectWallet } = useConnectWallet();
   const { mutate: disconnect } = useDisconnectWallet();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { mutateAsync: signMessage } = useSignPersonalMessage();
   const suiClientHook = useSuiClient();
   const connect = () => {
     const w = wallets[0];
     if (w) connectWallet({ wallet: w });
   };
+
+  const playSwish = () => {
+    try {
+      const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
+      osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {
+      /* audio optional */
+    }
+  };
+
+  const playCork = () => {
+    try {
+      const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+
+      const bufferSize = ctx.sampleRate * 0.1;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+      }
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 800;
+      filter.Q.value = 0.5;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(1.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      source.start(ctx.currentTime);
+
+      const osc = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc.frequency.setValueAtTime(400, ctx.currentTime + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
+      gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime + 0.05);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {
+      /* audio optional */
+    }
+  };
+
   const [zkLoginUser, setZkLoginUser] = useState<{ address: string; email: string } | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showWalletMenu, setShowWalletMenu] = useState(false);
@@ -8817,6 +9991,8 @@ export default function Home() {
   const [introFading, setIntroFading] = useState(false);
   const [dashboardVisible, setDashboardVisible] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [lastAliveCount, setLastAliveCount] = useState<number | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [clans, setClans] = useState<Clan[]>([]);
   const [corporations, setCorporations] = useState<
@@ -8832,7 +10008,7 @@ export default function Home() {
   >([]);
   const uniqueCorporations = useMemo(
     () =>
-      corporations.filter(
+      (Array.isArray(corporations) ? corporations : []).filter(
         (corp, index, self) => index === self.findIndex((c) => c.id === corp.id)
       ),
     [corporations]
@@ -8850,15 +10026,18 @@ export default function Home() {
   } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
-  const galaxyCanvasRef = useRef<HTMLCanvasElement>(null);
+  const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const aliveAgents = stats?.alive ?? agents.length;
   const [agentClasses, setAgentClasses] = useState({ elite: 0, middle: 0, poor: 0, critical: 0 });
 
   const fetchStats = useCallback(async () => {
     try {
+      setStatsLoading(true);
       const raw = await fetch("/api/stats").then((r) => r.json());
+      console.log("stats data:", raw);
       const s = parseApiStatsResponse(raw);
       setStats(s);
+      if (Number.isFinite(s.alive)) setLastAliveCount(s.alive);
       setAgentClasses({
         elite: s.elite || 0,
         middle: s.middle || 0,
@@ -8867,6 +10046,8 @@ export default function Home() {
       });
     } catch {
       // keep last successful snapshot
+    } finally {
+      setStatsLoading(false);
     }
   }, []);
 
@@ -8911,7 +10092,23 @@ export default function Home() {
   const [chatAgentsFiltered, setChatAgentsFiltered] = useState<Agent[]>([]);
   const [faucetBusy, setFaucetBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("civilization");
+
   const [faucetCooldownEndsAt, setFaucetCooldownEndsAt] = useState<number | null>(null);
+  const [perpsTab, setPerpsTab] = useState<"leaderboard" | "market" | "feed" | "myagent" | "proofs">(
+    "leaderboard",
+  );
+  const [perpsLeaderboard, setPerpsLeaderboard] = useState<any[]>([]);
+  const [perpsPrices, setPerpsPrices] = useState<any>({});
+  const [perpsPriceTicker, setPerpsPriceTicker] = useState<any>({});
+  const [prevPrices, setPrevPrices] = useState<any>({});
+  const [priceChanges, setPriceChanges] = useState<any>({});
+  const [perpsLoading, setPerpsLoading] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [perpsFeed, setPerpsFeed] = useState<any[]>([]);
+  const [perpsProofs, setPerpsProofs] = useState<any[]>([]);
+  const [myAgentSearch, setMyAgentSearch] = useState("");
+  const [myAgentData, setMyAgentData] = useState<any>(null);
+  const [myAgentLoading, setMyAgentLoading] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [allEvents, setAllEvents] = useState<WalrusLiveEvent[]>([]);
   const [walrusBlobs, setWalrusBlobs] = useState<Array<{
@@ -8967,6 +10164,7 @@ export default function Home() {
   const [zionBetCategoryTab, setZionBetCategoryTab] = useState<ZionBetCategoryFilter>("all");
   const [zionBetTimeframeTab, setZionBetTimeframeTab] = useState<ZionBetTimeframeFilterKey>("all");
   const [betTab, setBetTab] = useState<ZionbetBetTab>("civilization");
+  const [zionMarkets, setZionMarkets] = useState<ZionMarketRow[]>([]);
   const [betTimeframe, setBetTimeframe] = useState<string>("all");
   const [betSort, setBetSort] = useState<ZionbetSortKey>("volume");
   const [zionbetMarkets, setZionbetMarkets] = useState<ZionbetMarketsBundle>({
@@ -9034,6 +10232,86 @@ export default function Home() {
   const [instantReceiptId, setInstantReceiptId] = useState<string | null>(null);
   const [bankError, setBankError] = useState<string | null>(null);
   const [zbankTab, setZbankTab] = useState<"send" | "receive" | "scan">("send");
+  const [zbTab, setZbTab] = useState<'stealth'|'zk'|'zkstealth'|'confidential'>('stealth');
+  const [zbankMode, setZbankMode] = useState<'anonymous' | 'stealth'>('anonymous');
+  const [zbCoin, setZbCoin] = useState<'SUI'|'USDC'>('SUI');
+  const [zbAmount, setZbAmount] = useState('');
+  const [anonymousAmount, setAnonymousAmount] = useState(0.1);
+  const [suiPrice, setSuiPrice] = useState<number>(3.5);
+  const [zbRecipient, setZbRecipient] = useState('');
+  const [zbStatus, setZbStatus] = useState('');
+  const [zbLoading, setZbLoading] = useState(false);
+  const [zbTxDigest, setZbTxDigest] = useState('');
+  const [auditTrail, setAuditTrail] = useState<any>(null);
+  const [zkStealthMode, setZkStealthMode] = useState<'send' | 'receive'>('send');
+  const [zkStealthRecipient, setZkStealthRecipient] = useState("");
+  const [stealthAmount, setStealthAmount] = useState<0.1 | 1 | 10>(0.1);
+  const [keyTooltip, setKeyTooltip] = useState("");
+  const [zkStealthCoin, setZkStealthCoin] = useState<"SUI" | "USDC">("SUI");
+  const [zkStealthStatus, setZkStealthStatus] = useState("");
+  const [zkStealthClaimDigest, setZkStealthClaimDigest] = useState("");
+  const [claimResults, setClaimResults] = useState<
+    Array<{ digest: string; amount: number; from?: string; relayer?: string; success?: boolean }>
+  >([]);
+  const [claimResultsExpanded, setClaimResultsExpanded] = useState(false);
+  const [zkStealthLoading, setZkStealthLoading] = useState(false);
+  const [zkClaimLoading, setZkClaimLoading] = useState(false);
+  const [zkClaimStatus, setZkClaimStatus] = useState("");
+  const [autoWithdraw, setAutoWithdraw] = useState(true);
+  const [fragmentedWithdraw, setFragmentedWithdraw] = useState(true);
+  const [useDecoys, setUseDecoys] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [gearColors] = useState(["#00ff41", "#00ffff", "#ff00ff", "#ff4400", "#ffff00", "#ff0088"]);
+  const [gearColorIdx, setGearColorIdx] = useState(0);
+  const gearIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [crossDenom, setCrossDenom] = useState(false);
+  const [outputDenom, setOutputDenom] = useState("0.1");
+  const [outputAddresses, setOutputAddresses] = useState("");
+  const [multiSend, setMultiSend] = useState(false);
+  const [stealthMemo, setStealthMemo] = useState("");
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleFrequency, setScheduleFrequency] = useState("weekly");
+  const [scheduleMaxPayments, setScheduleMaxPayments] = useState("4");
+  const [scheduleRecipient, setScheduleRecipient] = useState("");
+  const [scheduledPayments, setScheduledPayments] = useState<
+    Array<{
+      id: number;
+      denomination: string;
+      frequency: string;
+      recipient_address: string;
+      total_payments: number;
+      next_payment_at: string;
+    }>
+  >([]);
+  const [zkIdentityVerified, setZkIdentityVerified] = useState(false);
+  const [zkIdentityLoading, setZkIdentityLoading] = useState(false);
+  const [multiRecipients, setMultiRecipients] = useState<
+    Array<{ address: string; denomination: "0.1" | "1" | "10" }>
+  >([{ address: "", denomination: "0.1" }]);
+  const [zkStealthNotes, setZkStealthNotes] = useState<
+    Array<{
+      id: number;
+      commitment_hash: string;
+      encrypted_note: string;
+      coin_type: string;
+      created_at: string;
+      status: string;
+      encrypted_memo?: string;
+      decrypted_memo?: string;
+      amount_sui?: string;
+      memo?: string;
+    }>
+  >([]);
+  const [confTab, setConfTab] = useState<'deposit'|'withdraw'>('deposit');
+  const [confAmount, setConfAmount] = useState('');
+  const [confCoin, setConfCoin] = useState<'SUI'|'USDC'>('SUI');
+  const [confStatus, setConfStatus] = useState('');
+  const [confLoading, setConfLoading] = useState(false);
+  const [confTxDigest, setConfTxDigest] = useState('');
+  const [confBlinding, setConfBlinding] = useState('');
+  const [stealthAddress, setStealthAddress] = useState('');
+  const [stealthSubTab, setStealthSubTab] = useState<"send" | "receive">("send");
+  const [copiedStealth, setCopiedStealth] = useState(false);
   const [stealthKeys, setStealthKeys] = useState<{
     spendingPrivKey: string;
     viewingPrivKey: string;
@@ -9110,6 +10388,10 @@ export default function Home() {
     economy: {
       avg_balance: number;
       poverty_pct: number;
+      crime_pct?: number;
+      crime_rate?: number;
+      unemployment_rate?: number;
+      gini_coefficient?: number;
       total_zion: number;
       trend_arrows?: { avg_balance?: string; poverty_pct?: string; total_zion?: string };
     };
@@ -9126,6 +10408,13 @@ export default function Home() {
     economy_trend?: { avg_balance_change: string; direction: string };
     epidemic?: { active: boolean; infected_count: number };
   } | null>(null);
+  const [frsChief, setFrsChief] = useState<{
+    name: string;
+    cycles_served: number;
+    max_cycles: number;
+    confirmed: boolean;
+  } | null>(null);
+  const [politicalEconomy, setPoliticalEconomy] = useState<PoliticalEconomyData | null>(null);
   const [sheriffState, setSheriffState] = useState<{
     agent_name: string;
     sheriff_type: string;
@@ -9143,6 +10432,16 @@ export default function Home() {
   } | null>(null);
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
+  const [senateActions, setSenateActions] = useState<{ description: string; created_at: string }[]>([]);
+  const [senateEvents, setSenateEvents] = useState<
+    { description: string; created_at: string; event_type?: string }[]
+  >([]);
+  const [zrsEvents, setZrsEvents] = useState<
+    { description: string; created_at: string; event_type?: string }[]
+  >([]);
+  const [activityLogEvents, setActivityLogEvents] = useState<
+    { description: string; created_at: string; event_type?: string; type?: string }[]
+  >([]);
   const [policeNews, setPoliceNews] = useState<WireNewsItem[]>([]);
   const [corporateNews, setCorporateNews] = useState<WireNewsItem[]>([]);
   const [clanNews, setClanNews] = useState<WireNewsItem[]>([]);
@@ -9162,6 +10461,9 @@ export default function Home() {
       votes_for: number;
       votes_against: number;
       proposed_at?: string;
+      voted_at?: string;
+      created_at?: string;
+      proposed_by?: string;
     }>;
     recent_laws: Array<{
       id: number;
@@ -9172,6 +10474,8 @@ export default function Home() {
       votes_against: number;
       proposed_at?: string;
       voted_at?: string;
+      created_at?: string;
+      proposed_by?: string;
     }>;
     senator_count: number;
     speaker: string | null;
@@ -9208,32 +10512,104 @@ export default function Home() {
         fetch(`/political_parties?t=${Date.now()}`, { cache: "no-store" }),
         fetch(`/vip_memory?t=${Date.now()}`, { cache: "no-store" }),
       ]);
-      if (senateRes.ok) setSenateData(await senateRes.json());
-      if (partiesRes.ok) setPartiesData(await partiesRes.json());
-      if (vipRes.ok) setVipMemoryFeed(await vipRes.json());
+      if (senateRes.ok) {
+        const d = await senateRes.json();
+        setSenateData({
+          ...(d && typeof d === "object" ? d : {}),
+          senators: Array.isArray(d?.senators) ? d.senators : [],
+          pending_laws: Array.isArray(d?.pending_laws) ? d.pending_laws : [],
+          recent_laws: Array.isArray(d?.recent_laws) ? d.recent_laws : [],
+        });
+      }
+      if (partiesRes.ok) {
+        const d = await partiesRes.json();
+        setPartiesData(Array.isArray(d) ? d : []);
+      }
+      if (vipRes.ok) {
+        const d = await vipRes.json();
+        setVipMemoryFeed(Array.isArray(d) ? d : []);
+      }
     } catch {
       /* ignore */
     }
   }, []);
+
+  const fetchSenateLaws = useCallback(async () => {
+    try {
+      const senateRes = await fetch(`/senate?t=${Date.now()}`, { cache: "no-store" });
+      if (!senateRes.ok) return;
+      const d = await senateRes.json();
+      setSenateData((prev) => ({
+        senators: Array.isArray(d?.senators) ? d.senators : prev?.senators ?? [],
+        pending_laws: Array.isArray(d?.pending_laws) ? d.pending_laws : [],
+        recent_laws: Array.isArray(d?.recent_laws) ? d.recent_laws : [],
+        senator_count: Number(d?.senator_count) || prev?.senator_count || 0,
+        speaker: d?.speaker ?? prev?.speaker ?? null,
+      }));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchSenateLaws();
+    const interval = setInterval(() => void fetchSenateLaws(), 30000);
+    return () => clearInterval(interval);
+  }, [fetchSenateLaws]);
+
+  const fetchPoliticalEconomy = useCallback(async () => {
+    try {
+      const [crisisRes, powerRes, gangsRes] = await Promise.all([
+        fetch(`/api/crisis_state?t=${Date.now()}`, { cache: "no-store" }),
+        fetch(`/api/power_balance?t=${Date.now()}`, { cache: "no-store" }),
+        fetch(`/api/gangs?t=${Date.now()}`, { cache: "no-store" }),
+      ]);
+      const crisisPayload = crisisRes.ok ? await crisisRes.json() : null;
+      const powerPayload = powerRes.ok ? await powerRes.json() : null;
+      const gangsPayload = gangsRes.ok ? await gangsRes.json() : null;
+      setPoliticalEconomy({
+        crisis: (crisisPayload?.crisis ?? {}) as PoliticalEconomyData["crisis"],
+        metrics: (crisisPayload?.metrics ?? {}) as PoliticalEconomyData["metrics"],
+        power: {
+          scores: (powerPayload?.scores ?? {}) as PoliticalEconomyData["power"]["scores"],
+          recent_events: powerPayload?.recent_events,
+        },
+        gangs: Array.isArray(gangsPayload?.gangs) ? gangsPayload.gangs : [],
+      });
+    } catch {
+      /* keep last snapshot */
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchPoliticalEconomy();
+    const peInterval = setInterval(() => {
+      void fetchPoliticalEconomy();
+    }, 30_000);
+    return () => clearInterval(peInterval);
+  }, [fetchPoliticalEconomy]);
 
   const fetchEcoPol = useCallback(async () => {
     try {
       const res = await fetch(`/api/eco-pol?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
+      console.log("president data:", data?.president);
 
       if (data.president?.agent_name) {
-        setPresidentState({
+        setPresidentState((prev) => ({
           agent_name: data.president.agent_name,
           party: data.president.party ?? "centrists",
           term_number: Number(data.president.term_number) || 1,
           is_dictator: Boolean(data.president.is_dictator),
-          approval_rating: Number(data.president.approval_rating) || 0,
+          approval_rating: Number.isFinite(Number(data.president.approval_rating))
+            ? Number(data.president.approval_rating)
+            : (prev?.approval_rating ?? 50),
           days_in_power: Number(data.president.days_in_power) || 0,
           police_fund: Number(data.president.police_fund) || 0,
           personal_fund: Number(data.president.personal_fund) || 0,
           corruption_index: Number(data.president.corruption_index) || 30,
-        });
+        }));
       }
 
       if (data.sheriff?.agent_name && data.sheriff.agent_name !== "No Sheriff") {
@@ -9262,6 +10638,10 @@ export default function Home() {
         economy: {
           avg_balance: Number(economy.avg_balance) || 0,
           poverty_pct: Number(economy.poverty_pct) || 0,
+          crime_pct: Number(economy.crime_pct) || 0,
+          crime_rate: Number(economy.crime_rate) || 0,
+          unemployment_rate: Number(economy.unemployment_rate) || 0,
+          gini_coefficient: Number(economy.gini_coefficient) || 0,
           total_zion: Number(economy.total_zion) || 0,
           trend_arrows: economy.trend_arrows ?? {},
         },
@@ -9276,6 +10656,31 @@ export default function Home() {
         economy_trend: data.economy_trend ?? { avg_balance_change: "0", direction: "flat" },
         epidemic: data.epidemic ?? { active: false, infected_count: 0 },
       });
+      if (data.frs_chief && typeof data.frs_chief === "object") {
+        setFrsChief({
+          name: String(data.frs_chief.name ?? "Vacant"),
+          cycles_served: Number(data.frs_chief.cycles_served) || 0,
+          max_cycles: Number(data.frs_chief.max_cycles) || 12,
+          confirmed: Boolean(data.frs_chief.confirmed),
+        });
+      } else {
+        try {
+          const statsRes = await fetch(`/api/stats?t=${Date.now()}`, { cache: "no-store" });
+          if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            if (statsData.frs_chief && typeof statsData.frs_chief === "object") {
+              setFrsChief({
+                name: String(statsData.frs_chief.name ?? "Vacant"),
+                cycles_served: Number(statsData.frs_chief.cycles_served) || 0,
+                max_cycles: Number(statsData.frs_chief.max_cycles) || 12,
+                confirmed: Boolean(statsData.frs_chief.confirmed),
+              });
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -9323,8 +10728,12 @@ export default function Home() {
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
     if (!res.ok) return [];
-    const data = (await res.json()) as { decisions?: ZcoDecision[] };
-    return data.decisions ?? [];
+    const data = await res.json();
+    if (Array.isArray(data)) return data as ZcoDecision[];
+    if (Array.isArray((data as { decisions?: ZcoDecision[] })?.decisions)) {
+      return (data as { decisions: ZcoDecision[] }).decisions;
+    }
+    return [];
   }, []);
 
   useEffect(() => {
@@ -9644,162 +11053,6 @@ export default function Home() {
   }, [fetchZcoDecisions]);
 
   useEffect(() => {
-    if (activeTab !== "civilization") return;
-    const canvas = galaxyCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const starColors = ["#00ff41", "#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ff3232", "#ffffff", "#88ffaa"];
-
-    type GalaxyParticle = {
-      angle: number;
-      radius: number;
-      color: string;
-      size: number;
-      speed: number;
-    };
-
-    let animId = 0;
-    let cancelled = false;
-    let lastW = 0;
-    let lastH = 0;
-    let particles: GalaxyParticle[] = [];
-    let neo = {
-      angle: 0,
-      radius: 0,
-      size: 2.5,
-      speed: -0.0008,
-      trail: [] as { x: number; y: number }[],
-    };
-
-    const syncCanvasSize = () => {
-      const w = Math.round(canvas.clientWidth || canvas.offsetWidth || 0);
-      const h = Math.round(canvas.clientHeight || canvas.offsetHeight || 0);
-      if (w < 2 || h < 2) return false;
-      if (w !== lastW || h !== lastH) {
-        canvas.width = w;
-        canvas.height = h;
-        lastW = w;
-        lastH = h;
-        particles = [];
-      }
-      return true;
-    };
-
-    const initScene = () => {
-      const starCount = Math.min(Math.max(aliveAgents || 500, 100), 2000);
-      particles = Array.from({ length: starCount }, () => {
-        const arm = Math.floor(Math.random() * 3);
-        const armAngle = (arm / 3) * Math.PI * 2;
-        const t = Math.pow(Math.random(), 0.6);
-        const radius = 15 + t * (canvas.width * 0.44);
-        const spread = (1 - t) * 0.3 + t * 1.2;
-        const angle = armAngle + t * Math.PI * 3 + (Math.random() - 0.5) * spread;
-        return {
-          angle,
-          radius,
-          color: starColors[Math.floor(Math.random() * starColors.length)]!,
-          size: 0.3 + Math.random() * (t < 0.3 ? 2.5 : 1.2),
-          speed: (0.0002 + (1 - t) * 0.001) * (Math.random() > 0.5 ? 1 : -1),
-        };
-      });
-      neo = {
-        angle: Math.random() * Math.PI * 2,
-        radius: 30 + Math.random() * (canvas.width * 0.35),
-        size: 2.5,
-        speed: -0.0008,
-        trail: [],
-      };
-    };
-
-    const resetScene = () => {
-      lastW = 0;
-      lastH = 0;
-      particles = [];
-    };
-
-    const draw = () => {
-      if (cancelled) return;
-      if (!syncCanvasSize()) {
-        animId = requestAnimationFrame(draw);
-        return;
-      }
-      if (particles.length === 0) initScene();
-
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-
-      ctx.fillStyle = "rgba(0,0,0,0.08)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      particles.forEach((p) => {
-        p.angle += p.speed;
-        const x = cx + Math.cos(p.angle) * p.radius;
-        const y = cy + Math.sin(p.angle) * p.radius * 0.45;
-
-        const glow = ctx.createRadialGradient(x, y, 0, x, y, p.size * 3);
-        glow.addColorStop(0, p.color);
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(x, y, p.size * 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(x, y, p.size * 0.8, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.globalAlpha = 0.6 + Math.random() * 0.4;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      });
-
-      neo.angle += neo.speed;
-      const neoX = cx + Math.cos(neo.angle) * neo.radius;
-      const neoY = cy + Math.sin(neo.angle) * neo.radius * 0.45;
-
-      neo.trail.push({ x: neoX, y: neoY });
-      if (neo.trail.length > 20) neo.trail.shift();
-      neo.trail.forEach((point, i) => {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(180,0,255,${(i / neo.trail.length) * 0.5})`;
-        ctx.fill();
-      });
-
-      const neoGlow = ctx.createRadialGradient(neoX, neoY, 0, neoX, neoY, 8);
-      neoGlow.addColorStop(0, "#cc00ff");
-      neoGlow.addColorStop(0.5, "rgba(180,0,255,0.4)");
-      neoGlow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = neoGlow;
-      ctx.beginPath();
-      ctx.arc(neoX, neoY, 8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(neoX, neoY, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.globalAlpha = 0.9 + Math.random() * 0.1;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      animId = requestAnimationFrame(draw);
-    };
-
-    const ro = new ResizeObserver(resetScene);
-    ro.observe(canvas);
-    window.addEventListener("resize", resetScene);
-    animId = requestAnimationFrame(draw);
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(animId);
-      ro.disconnect();
-      window.removeEventListener("resize", resetScene);
-    };
-  }, [activeTab, aliveAgents, isMobile]);
-
-  useEffect(() => {
     if (!zionBetToast) return;
     const id = window.setTimeout(() => setZionBetToast(null), 5200);
     return () => window.clearTimeout(id);
@@ -9849,6 +11102,16 @@ export default function Home() {
       void fetchDeepbookOracles();
     }
   }, [activeTab, fetchDeepbookOracles]);
+
+  const fetchZionMarkets = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zion-markets");
+      const data = await res.json();
+      if (data.success) setZionMarkets(data.markets);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const loadCivilizationMarkets = useCallback(() => {
     setZionbetTabLoading((prev) => ({ ...prev, civilization: true }));
@@ -9917,6 +11180,10 @@ export default function Home() {
   }, [activeTab, loadCivilizationMarkets, loadAllPolyTabs]);
 
   useEffect(() => {
+    if (betTab === "civilization") void fetchZionMarkets();
+  }, [betTab, fetchZionMarkets]);
+
+  useEffect(() => {
     if (activeTab !== "zionbet") return;
     if (betTab === "civilization") {
       loadCivilizationMarkets();
@@ -9924,6 +11191,124 @@ export default function Home() {
       loadPolyTab(betTab);
     }
   }, [activeTab, betTab, loadCivilizationMarkets, loadPolyTab]);
+
+  const fetchPerpsData = useCallback(async () => {
+    setPerpsLoading(true);
+    try {
+      const lbRes = await fetch("/api/perps/leaderboard");
+      const lb = await lbRes.json();
+      if (lb.success) setPerpsLeaderboard(lb.leaderboard);
+    } catch (e) {
+      console.error("Perps fetch error", e);
+    }
+    setPerpsLoading(false);
+  }, []);
+
+  const fetchPerpsFeed = useCallback(async () => {
+    try {
+      const res = await fetch("/api/perps/feed");
+      const data = await res.json();
+      if (data.success) setPerpsFeed(data.trades);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const fetchPerpsProofs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/perps/proofs");
+      const data = await res.json();
+      if (data.success) setPerpsProofs(data.proofs);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const searchMyAgent = useCallback(async () => {
+    if (!myAgentSearch.trim()) return;
+    setMyAgentLoading(true);
+    try {
+      const res = await fetch(
+        `/api/perps/search-agent?name=${encodeURIComponent(myAgentSearch)}`,
+      );
+      const data = await res.json();
+      if (data.success) setMyAgentData(data);
+    } catch (e) {
+      console.error(e);
+    }
+    setMyAgentLoading(false);
+  }, [myAgentSearch]);
+
+  const perpsPrevPriceRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (activeTab !== "zperps") {
+      perpsPrevPriceRef.current = {};
+      return;
+    }
+
+    const fetchPrices = async () => {
+      try {
+        const r = await fetch("/api/perps/prices");
+        const d = await r.json();
+        if (d.success) {
+          setPerpsPrices(d.prices);
+          setPerpsPriceTicker(d.prices);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    fetchPrices();
+    const t = setInterval(fetchPrices, 2000);
+    return () => clearInterval(t);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!perpsPrices || Object.keys(perpsPrices).length === 0) return;
+
+    const changes: Record<string, "up" | "down" | "same"> = {};
+    Object.entries(perpsPrices).forEach(([symbol, data]) => {
+      const curr = (data as { price?: number })?.price;
+      const prev = perpsPrevPriceRef.current[symbol];
+      if (typeof prev === "number" && typeof curr === "number") {
+        changes[symbol] = curr > prev ? "up" : curr < prev ? "down" : "same";
+      }
+      if (typeof curr === "number") {
+        perpsPrevPriceRef.current[symbol] = curr;
+      }
+    });
+    setPriceChanges(changes);
+    setPrevPrices(
+      Object.fromEntries(
+        Object.entries(perpsPrices).map(([k, v]) => [k, { ...(v as object) }]),
+      ),
+    );
+  }, [perpsPrices]);
+
+  useEffect(() => {
+    if (activeTab === "zperps") {
+      fetchPerpsData();
+      const interval = setInterval(() => {
+        fetchPerpsData();
+        if (perpsTab === "feed") fetchPerpsFeed();
+      }, 10000);
+      const lbInterval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/perps/leaderboard");
+          const data = await res.json();
+          if (data.success) setPerpsLeaderboard(data.leaderboard);
+        } catch (e) {
+          /* ignore */
+        }
+      }, 10000);
+      return () => {
+        clearInterval(interval);
+        clearInterval(lbInterval);
+      };
+    }
+  }, [activeTab, fetchPerpsData, fetchPerpsFeed, perpsTab]);
 
   useEffect(() => {
     if (!detailMarket?.id.startsWith("poly-")) return;
@@ -9940,7 +11325,7 @@ export default function Home() {
 
   const zionbetTabCounts = useMemo(
     () => ({
-      civilization: zionbetMarkets.civilization.length,
+      civilization: zionbetMarkets.civilization.length + zionMarkets.length,
       crypto: DEEPBOOK_BINARY_MARKETS.length + (polyByTab.crypto?.length ?? 0),
       sports: polyByTab.sports?.length ?? 0,
       politics: polyByTab.politics?.length ?? 0,
@@ -9949,7 +11334,7 @@ export default function Home() {
       tech: polyByTab.tech?.length ?? 0,
       culture: polyByTab.culture?.length ?? 0,
     }),
-    [zionbetMarkets, polyByTab]
+    [zionbetMarkets, polyByTab, zionMarkets.length]
   );
 
   const zionbetTabMarketsBase = useMemo(() => {
@@ -10144,18 +11529,57 @@ export default function Home() {
   }, [fetchWalrusEvents]);
 
   const allFeedItems = useMemo((): WalrusFeedTickerItem[] => {
-    const fromEvents: WalrusFeedTickerItem[] = allEvents.map((e) => ({
+    const political: WalrusFeedTickerItem[] = [];
+    if (politicalEconomy) {
+      const crisisActive = Boolean(politicalEconomy.crisis?.is_active);
+      const pressure = Number(
+        politicalEconomy.metrics?.revolution_pressure ??
+          politicalEconomy.crisis?.revolution_pressure ??
+          0
+      );
+      const phase = (
+        politicalEconomy.metrics?.economic_phase ??
+        politicalEconomy.crisis?.economic_phase ??
+        "NORMAL"
+      ).toUpperCase();
+      const pname =
+        politicalEconomy.metrics?.president_name ??
+        presidentState?.agent_name ??
+        "President";
+      if (crisisActive) {
+        political.push({
+          type: "revolution",
+          text: `🚨 STATE OF EMERGENCY declared by ${pname}`,
+          agent: "ZION System",
+        });
+      }
+      if (pressure > 50) {
+        political.push({
+          type: "revolution",
+          text: `⚠️ Revolution pressure rising: ${Math.round(pressure)}/150`,
+          agent: "ZION System",
+        });
+      }
+      if (phase !== "NORMAL") {
+        political.push({
+          type: "tax",
+          text: `📊 Economy in ${phase}`,
+          agent: "ZION System",
+        });
+      }
+    }
+    const fromEvents: WalrusFeedTickerItem[] = (Array.isArray(allEvents) ? allEvents : []).map((e) => ({
       type: e.type || e.event_type || "",
       text: e.type === "chat" ? e.description || e.title : e.title || e.description,
       agent: e.agents[0] || "ZION System",
     }));
-    const fromConvs: WalrusFeedTickerItem[] = conversations.map((c) => ({
+    const fromConvs: WalrusFeedTickerItem[] = (Array.isArray(conversations) ? conversations : []).map((c) => ({
       type: "chat",
       text: cleanMsg(c.message1 || c.topic || ""),
       agent: c.agent1?.name ? cleanName(c.agent1.name) : "Agent",
     }));
-    return [...fromEvents, ...fromConvs].filter((i) => i.text);
-  }, [allEvents, conversations]);
+    return [...political, ...fromEvents, ...fromConvs].filter((i) => i.text);
+  }, [allEvents, conversations, politicalEconomy, presidentState?.agent_name]);
 
   const filteredEvents = useMemo(() => {
     if (eventFilter === "ALL") return allFeedItems;
@@ -10490,15 +11914,27 @@ export default function Home() {
     const saved = localStorage.getItem("zion_stealth_keys");
     if (!saved) return;
     try {
-      setStealthKeys(JSON.parse(saved));
+      const keys = JSON.parse(saved);
+      setStealthKeys(keys);
+      if (keys.metaAddress) setStealthAddress(keys.metaAddress);
     } catch {
       /* ignore corrupt storage */
     }
   }, []);
 
-  const handleGenerateStealth = useCallback(() => {
+  const copyStealthAddressToClipboard = useCallback(() => {
+    if (!stealthAddress) return;
+    void navigator.clipboard.writeText(stealthAddress);
+    setCopiedStealth(true);
+    setTimeout(() => setCopiedStealth(false), 2000);
+  }, [stealthAddress]);
+
+  const stealthPrivacyMax = autoWithdraw && fragmentedWithdraw && useDecoys;
+
+  const handleGenerateStealthAddress = useCallback(() => {
     const keys = generateStealthMetaAddress();
     setStealthKeys(keys);
+    setStealthAddress(keys.metaAddress);
     localStorage.setItem("zion_stealth_keys", JSON.stringify(keys));
     setBankError(null);
     setKeysFileStatus(null);
@@ -10518,30 +11954,36 @@ export default function Home() {
     setBankError(null);
   }, [stealthKeys]);
 
-  const handleImportKeys = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+  const handleImportKeys = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      e.target.value = "";
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
           const keys = JSON.parse(ev.target?.result as string);
           if (keys.metaAddress && keys.spendingPrivKey && keys.viewingPrivKey) {
             setStealthKeys(keys);
+            setStealthAddress(keys.metaAddress);
             localStorage.setItem("zion_stealth_keys", JSON.stringify(keys));
+            setZbStatus("✅ Keys imported");
             setKeysFileStatus({
               type: "success",
               message: "Keys imported successfully!",
             });
             setBankError(null);
           } else {
+            setZbStatus("❌ Invalid keys file");
             setKeysFileStatus({
               type: "error",
               message: "Invalid keys file",
             });
           }
         } catch {
+          setZbStatus("❌ Failed to parse keys file");
           setKeysFileStatus({
             type: "error",
             message: "Failed to parse keys file",
@@ -10549,9 +11991,9 @@ export default function Home() {
         }
       };
       reader.readAsText(file);
-    },
-    []
-  );
+    };
+    input.click();
+  }, []);
 
   const handleRegisterStealth = useCallback(() => {
     if (!account?.address) {
@@ -10938,11 +12380,1607 @@ export default function Home() {
     suiClientHook,
   ]);
 
+  const bytesToHex = (bytes: Uint8Array): string =>
+    Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+  const textToBytes = (value: string): Uint8Array => new TextEncoder().encode(value);
+
+  const addressKeyBytes = (address: string): Uint8Array => {
+    const raw = (address || "").trim().toLowerCase();
+    const noPrefix = raw.startsWith("0x") ? raw.slice(2) : raw;
+    const hexOnly = /^[0-9a-f]+$/.test(noPrefix) && noPrefix.length > 0;
+    if (hexOnly) {
+      const padded = noPrefix.length % 2 === 0 ? noPrefix : `0${noPrefix}`;
+      const out = new Uint8Array(padded.length / 2);
+      for (let i = 0; i < padded.length; i += 2) {
+        out[i / 2] = parseInt(padded.slice(i, i + 2), 16);
+      }
+      return out;
+    }
+    return textToBytes(raw);
+  };
+
+  const xorEncryptForAddress = (plainText: string, address: string): string => {
+    const plain = textToBytes(plainText);
+    const key = addressKeyBytes(address);
+    if (key.length === 0) return bytesToHex(plain);
+    const out = new Uint8Array(plain.length);
+    for (let i = 0; i < plain.length; i += 1) {
+      out[i] = plain[i] ^ key[i % key.length];
+    }
+    return bytesToHex(out);
+  };
+
+  const xorDecryptForAddress = (cipherHex: string, address: string): string => {
+    const key = addressKeyBytes(address);
+    const cleanHex = (cipherHex || "").trim().toLowerCase();
+    if (!cleanHex || cleanHex.length % 2 !== 0) return "";
+    const inBytes = new Uint8Array(cleanHex.length / 2);
+    for (let i = 0; i < cleanHex.length; i += 2) {
+      const n = parseInt(cleanHex.slice(i, i + 2), 16);
+      if (Number.isNaN(n)) return "";
+      inBytes[i / 2] = n;
+    }
+    if (key.length === 0) return new TextDecoder().decode(inBytes);
+    const out = new Uint8Array(inBytes.length);
+    for (let i = 0; i < inBytes.length; i += 1) {
+      out[i] = inBytes[i] ^ key[i % key.length];
+    }
+    return new TextDecoder().decode(out);
+  };
+
+  const sha256Hex = async (value: string): Promise<string> => {
+    const encoded = textToBytes(value);
+    const digest = await crypto.subtle.digest("SHA-256", encoded.buffer as ArrayBuffer);
+    return bytesToHex(new Uint8Array(digest));
+  };
+
+  const backendBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const backendApiUrl = (path: string): string =>
+    backendBaseUrl ? `${backendBaseUrl}${path}` : `/api${path}`;
+
+  const STEALTH_PACKAGE =
+    "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a";
+  const STEALTH_POOL =
+    "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5";
+  const STEALTH_RELAYER_ADDRESS =
+    "0xb193ba40239f9caebbc9b6bf1d7aba2d9ff6f8a26eca4ae74ad610079607265b";
+  const IDENTITY_REGISTRY: string =
+    "0x3d5d59d8ea16592e76e0d1029205eeb166491c88d6e5b20eaa91df3fb8f05aa3";
+  const [identityFee, setIdentityFee] = useState<bigint>(BigInt(3_000_000_000));
+  const identityFeeLabel = useMemo(() => {
+    const sui = Number(identityFee) / 1e9;
+    return sui % 1 === 0 ? String(sui) : sui.toFixed(2).replace(/\.?0+$/, "");
+  }, [identityFee]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const obj = await suiClientHook.getObject({
+          id: IDENTITY_REGISTRY,
+          options: { showContent: true },
+        });
+        const fee = (obj.data?.content as { fields?: { fee?: string } } | undefined)?.fields?.fee;
+        if (!cancelled && fee) setIdentityFee(BigInt(fee));
+      } catch (e) {
+        console.error("Failed to fetch identity registry fee:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [suiClientHook]);
+
+  const checkIdentityVerification = useCallback(async (): Promise<boolean> => {
+    if (!walletAddress) {
+      setZkIdentityVerified(false);
+      return false;
+    }
+    try {
+      const objects = await suiClientHook.getOwnedObjects({
+        owner: walletAddress,
+        filter: { StructType: `${STEALTH_PACKAGE}::stealth_pool::ZionHumanNFT` },
+        options: { showType: true },
+      });
+      const hasNFT = objects.data.length > 0;
+      setZkIdentityVerified(hasNFT);
+      return hasNFT;
+    } catch (e) {
+      console.error("Identity check failed:", e);
+      setZkIdentityVerified(false);
+      return false;
+    }
+  }, [walletAddress, suiClientHook]);
+
+  const handleVerifyIdentity = async () => {
+    try {
+      setZkIdentityLoading(true);
+      console.log("=== VERIFY IDENTITY START ===");
+      console.log("STEALTH_PACKAGE:", STEALTH_PACKAGE);
+      console.log("IDENTITY_REGISTRY:", IDENTITY_REGISTRY);
+      console.log("IDENTITY_FEE:", identityFee.toString());
+      console.log("walletAddress:", walletAddress);
+
+      const { Transaction } = await import("@mysten/sui/transactions");
+      const tx = new Transaction();
+
+      console.log("Building transaction...");
+      tx.setGasBudget(10_000_000);
+      const [payment] = tx.splitCoins(tx.gas, [identityFee]);
+      console.log("Split coins done");
+
+      tx.moveCall({
+        target: `${STEALTH_PACKAGE}::stealth_pool::verify_identity`,
+        arguments: [tx.object(IDENTITY_REGISTRY), payment],
+      });
+      console.log(
+        "MoveCall added, target:",
+        `${STEALTH_PACKAGE}::stealth_pool::verify_identity`
+      );
+
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: async (result) => {
+            console.log("=== TX SUCCESS ===", result);
+            await new Promise((r) => setTimeout(r, 4000));
+            const hasNFT = await checkIdentityVerification();
+            console.log("Has NFT after verify:", hasNFT);
+            if (hasNFT) {
+              setZkStealthStatus("✅ Identity verified! NFT minted!");
+            } else {
+              setZkStealthStatus("⚠️ TX sent but NFT not found. Check wallet in a moment.");
+            }
+            setZkIdentityLoading(false);
+          },
+          onError: (e) => {
+            console.error("=== TX ERROR ===", e);
+            setZkStealthStatus("❌ Verification failed: " + String(e));
+            setZkIdentityLoading(false);
+          },
+        }
+      );
+    } catch (e) {
+      console.error("=== BUILD ERROR ===", e);
+      setZkStealthStatus("❌ Build error: " + String(e));
+      setZkIdentityLoading(false);
+    }
+  };
+
+  const fetchZkStealthNotes = async () => {
+    if (!walletAddress) return;
+    try {
+      const res1 = await fetch(
+        backendApiUrl("/zk-stealth-receive/" + encodeURIComponent(walletAddress))
+      );
+      const data1 = await res1.json();
+
+      let data2: { success?: boolean; notes?: unknown[] } = { notes: [] };
+      if (stealthAddress) {
+        const res2 = await fetch(
+          backendApiUrl("/zk-stealth-receive/" + encodeURIComponent(stealthAddress))
+        );
+        data2 = await res2.json();
+      }
+
+      const notes1 = data1.success && Array.isArray(data1.notes) ? data1.notes : [];
+      const notes2 = data2.success && Array.isArray(data2.notes) ? data2.notes : [];
+      const rawNotes = [...notes1, ...notes2];
+
+      const notes = await Promise.all(
+        rawNotes.map(
+          async (n: {
+            id?: number;
+            commitment_hash?: string;
+            encrypted_note?: string;
+            coin_type?: string;
+            created_at?: string;
+            status?: string;
+            encrypted_memo?: string;
+          }) => {
+            const encrypted_memo = String(n.encrypted_memo ?? "");
+            const encrypted_note = String(n.encrypted_note ?? "");
+            let decrypted_memo = "";
+            if (encrypted_memo) {
+              decrypted_memo = await decryptNote(walletAddress, encrypted_memo);
+              if (!decrypted_memo) {
+                decrypted_memo = await decryptNote(stealthAddress || "", encrypted_memo);
+              }
+            }
+
+            let noteData = await decryptNote(walletAddress, encrypted_note);
+            if (!noteData) {
+              noteData = await decryptNote(stealthAddress || "", encrypted_note);
+            }
+            let amountMist = 0;
+            if (noteData?.includes("|")) {
+              const parts = noteData.split("|");
+              amountMist = parts[3] ? parseInt(parts[3], 10) : 0;
+            } else if (encrypted_note.includes("|")) {
+              const parts = encrypted_note.split("|");
+              amountMist = parts[3] ? parseInt(parts[3], 10) : 0;
+            }
+            const amount_sui =
+              amountMist > 0 ? (amountMist / 1_000_000_000).toFixed(4) : undefined;
+            const memo =
+              decrypted_memo?.trim() ||
+              (encrypted_memo ? "encrypted memo" : undefined);
+
+            return {
+              id: Number(n.id),
+              commitment_hash: String(n.commitment_hash ?? ""),
+              encrypted_note,
+              coin_type: String(n.coin_type ?? "SUI"),
+              created_at: String(n.created_at ?? ""),
+              status: String(n.status ?? "pending"),
+              encrypted_memo,
+              decrypted_memo,
+              amount_sui,
+              memo,
+            };
+          }
+        )
+      );
+      setZkStealthNotes(notes);
+      return notes;
+    } catch (e) {
+      console.error("Failed to fetch stealth notes:", e);
+      return [];
+    }
+  };
+
+  const handleScanStealth = async () => {
+    if (!stealthAddress && !walletAddress) {
+      setZkStealthStatus("❌ Generate a key or connect wallet first");
+      return;
+    }
+    setZkStealthStatus("🔍 Scanning for incoming payments...");
+    try {
+      const notes = await fetchZkStealthNotes();
+      const pending = (notes || []).filter((n) => n.status === "pending").length;
+      setZkStealthStatus(
+        pending > 0
+          ? `✅ Found ${pending} claimable payment(s)`
+          : "✅ Scan complete — no pending payments"
+      );
+    } catch (e) {
+      setZkStealthStatus(
+        "❌ Scan failed: " + (e instanceof Error ? e.message : String(e))
+      );
+    }
+  };
+
+  const fetchScheduledPayments = async () => {
+    if (!walletAddress) return;
+    try {
+      const res = await fetch(backendApiUrl("/zk-scheduled-payments/" + encodeURIComponent(walletAddress)));
+      const data = await res.json();
+      if (data.success) setScheduledPayments(data.payments);
+    } catch (e) {
+      console.error("Failed to fetch scheduled payments:", e);
+    }
+  };
+
+  const handleCreateScheduledPayment = async () => {
+    try {
+      if (!walletAddress) {
+        setZkStealthStatus("❌ Connect wallet first");
+        return;
+      }
+      const schedRecipient = (scheduleRecipient || zkStealthRecipient).trim();
+      if (!schedRecipient || !schedRecipient.startsWith("st:sui:")) {
+        setZkStealthStatus("❌ Enter valid recipient stealth address first");
+        return;
+      }
+
+      const res = await fetch(backendApiUrl("/zk-schedule-payment"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender_address: walletAddress,
+          recipient_address: schedRecipient,
+          denomination: String(stealthAmount),
+          frequency: scheduleFrequency,
+          max_payments: parseInt(scheduleMaxPayments) || 0,
+          memo: stealthMemo,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setZkStealthStatus(`✅ Scheduled! Next payment: ${new Date(data.next_payment_at).toLocaleDateString()}`);
+        await fetchScheduledPayments();
+      } else {
+        setZkStealthStatus("❌ " + (data.error || "Failed to create schedule"));
+      }
+    } catch (e) {
+      setZkStealthStatus("❌ " + String(e));
+    }
+  };
+
+  const cancelScheduledPayment = async (id: number) => {
+    await fetch(backendApiUrl(`/zk-schedule-payment/${id}`), { method: "DELETE" });
+    await fetchScheduledPayments();
+  };
+
+  const handleZkStealthSend = async () => {
+    if (zkStealthLoading) return;
+    if (!account?.address) {
+      setZkStealthStatus("❌ Connect wallet first");
+      return;
+    }
+
+    const recipient = zkStealthRecipient.trim();
+    if (!recipient) {
+      setZkStealthStatus("❌ Enter valid recipient");
+      return;
+    }
+    if (zkStealthCoin !== "SUI") {
+      setZkStealthStatus("❌ ZK Stealth pool deposit currently supports SUI only");
+      return;
+    }
+
+    setZkStealthLoading(true);
+    setAuditTrail(null);
+    let handedOffToWallet = false;
+
+    const toBigEndian32 = (n: bigint): number[] => {
+      const result: number[] = new Array(32).fill(0);
+      let tmp = n;
+      for (let i = 31; i >= 0; i--) {
+        result[i] = Number(tmp & BigInt(255));
+        tmp >>= BigInt(8);
+      }
+      return result;
+    };
+
+    const randomBigIntString = () => {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return BigInt(
+        "0x" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("")
+      ).toString();
+    };
+
+    const depositPlan =
+      stealthAmount === 0.1
+        ? { count: 1, fragmentMist: BigInt(100_000_000) }
+        : stealthAmount === 1
+          ? { count: 10, fragmentMist: BigInt(100_000_000) }
+          : { count: 10, fragmentMist: BigInt(1_000_000_000) };
+
+    try {
+      const recipientForProof = (() => {
+        const r = recipient.trim();
+        if (r.startsWith("st:sui:")) {
+          const hash = r.replace("st:sui:", "").split(":")[0];
+          return BigInt("0x" + hash.slice(0, 32)).toString();
+        } else if (r.startsWith("0x")) {
+          return BigInt(r).toString();
+        }
+        return r;
+      })();
+
+      let encryptedMemoHex = "";
+      if (stealthMemo.trim()) {
+        encryptedMemoHex = await encryptNote(recipient, stealthMemo.trim());
+      }
+
+      type DepositFragment = {
+        commitment: string;
+        dbEncryptedNote: string;
+        commitmentBytes: number[];
+        encNoteBytes: number[];
+      };
+
+      const fragments: DepositFragment[] = [];
+
+      for (let i = 0; i < depositPlan.count; i++) {
+        setZkStealthStatus(`Depositing fragment ${i + 1}/${depositPlan.count}: generating proof...`);
+
+        const secret = randomBigIntString();
+        const blinding = randomBigIntString();
+        const amountMist = depositPlan.fragmentMist.toString();
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+        const proveRes = await fetch(backendApiUrl("/stealth-prove"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret,
+            amount: amountMist,
+            blinding,
+            recipient: recipientForProof,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!proveRes.ok) throw new Error(`HTTP ${proveRes.status}`);
+        const proveData = await proveRes.json();
+        if (!proveData.success || !proveData.nullifier) {
+          throw new Error("Proof failed: " + (proveData.error || "no nullifier"));
+        }
+
+        const commitment = String(proveData.commitment ?? "");
+        const noteData =
+          recipient +
+          "|" +
+          String(proveData.nullifier) +
+          "|" +
+          secret +
+          "|" +
+          amountMist +
+          "|" +
+          blinding;
+        const dbEncryptedNote = await encryptNote(recipient, noteData);
+
+        fragments.push({
+          commitment,
+          dbEncryptedNote,
+          commitmentBytes: toBigEndian32(BigInt(commitment)),
+          encNoteBytes: toBigEndian32(BigInt(String(proveData.nullifier))),
+        });
+      }
+
+      setZkStealthStatus(
+        `Building transaction — ${depositPlan.count} deposit(s) (sign in wallet)...`
+      );
+
+      const tx = new Transaction();
+      const mistAmounts = fragments.map(() => depositPlan.fragmentMist);
+      const coins = tx.splitCoins(
+        tx.gas,
+        mistAmounts.map((m) => tx.pure.u64(m))
+      );
+
+      for (let i = 0; i < fragments.length; i++) {
+        tx.moveCall({
+          target: `${STEALTH_PACKAGE}::stealth_pool::deposit`,
+          arguments: [
+            tx.object(STEALTH_POOL),
+            coins[i],
+            tx.pure.vector("u8", fragments[i].commitmentBytes),
+            tx.pure.vector("u8", fragments[i].encNoteBytes),
+          ],
+        });
+      }
+      tx.setGasBudget(Math.max(50_000_000, 15_000_000 * depositPlan.count));
+
+      handedOffToWallet = true;
+      signAndExecute(
+        { transaction: tx, chain: "sui:testnet" },
+        {
+          onSuccess: async (result) => {
+            try {
+              const digest = suiTxDigest(result);
+              for (let i = 0; i < fragments.length; i++) {
+                setZkStealthStatus(`Saving fragment ${i + 1}/${fragments.length}...`);
+                const res = await fetch(backendApiUrl("/zk-stealth-deposit"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    commitment_hash: fragments[i].commitment,
+                    encrypted_note: fragments[i].dbEncryptedNote,
+                    recipient_address: recipient,
+                    sender_address: walletAddress,
+                    coin_type: zkStealthCoin,
+                    auto_withdraw: autoWithdraw,
+                    encrypted_memo: i === 0 ? encryptedMemoHex || undefined : undefined,
+                  }),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || "Deposit failed");
+              }
+
+              setZkStealthStatus(
+                `✅ ZK Stealth deposit complete! ${fragments.length} note(s), TX: ${digest || "submitted"}`
+              );
+              setZbTxDigest(digest);
+              playSwish();
+              setZkStealthRecipient("");
+              setStealthMemo("");
+
+              try {
+                const auditRes = await fetch("/api/audit/create-trail", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    sender_address: walletAddress,
+                    recipient_address: recipient,
+                    amount: stealthAmount,
+                    coin_type: "SUI",
+                    relayer_path: ["relayer-pool-1", "relayer-pool-2", "relayer-pool-3"],
+                    tx_digest: digest,
+                    commitment_hash: fragments[0]?.commitment || "zk-proof",
+                  }),
+                });
+                const auditData = await auditRes.json();
+                if (auditData.success) {
+                  setAuditTrail(auditData);
+                }
+              } catch (e) {
+                console.error("Audit trail error:", e);
+              }
+            } catch (e: unknown) {
+              setZkStealthStatus(`❌ ${e instanceof Error ? e.message : String(e)}`);
+            } finally {
+              setZkStealthLoading(false);
+            }
+          },
+          onError: (e) => {
+            setZkStealthStatus("❌ " + (e.message || String(e)));
+            setZkStealthLoading(false);
+          },
+        }
+      );
+    } catch (e) {
+      console.error("[ZkStealthSend] error:", e);
+      const msg =
+        e instanceof Error && e.name === "AbortError"
+          ? "Proof request timed out after 60 seconds"
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setZkStealthStatus("❌ " + msg);
+    } finally {
+      if (!handedOffToWallet) {
+        setZkStealthLoading(false);
+      }
+    }
+  };
+
+  const handleZkStealthMultiSend = async () => {
+    if (zkStealthLoading) return;
+    if (!account?.address) {
+      setZkStealthStatus("❌ Connect wallet first");
+      return;
+    }
+    if (zkStealthCoin !== "SUI") {
+      setZkStealthStatus("❌ ZK Stealth pool deposit currently supports SUI only");
+      return;
+    }
+
+    try {
+      setZkStealthLoading(true);
+      setZkStealthStatus("Processing multi-send...");
+
+      const validRecipients = multiRecipients.filter((r) => r.address.trim().length === 66);
+      if (validRecipients.length === 0) {
+        setZkStealthStatus("❌ Add at least one valid recipient address");
+        return;
+      }
+
+      const results: Array<{ recipient: string; denomination: string; commitment: string }> = [];
+
+      const toBigEndian32 = (n: bigint): number[] => {
+        const result: number[] = new Array(32).fill(0);
+        let tmp = n;
+        for (let j = 31; j >= 0; j--) {
+          result[j] = Number(tmp & BigInt(255));
+          tmp >>= BigInt(8);
+        }
+        return result;
+      };
+
+      const recipientForProof = (addr: string) => {
+        const r = addr.trim();
+        if (r.startsWith("st:sui:")) {
+          const hash = r.replace("st:sui:", "").split(":")[0];
+          return BigInt("0x" + hash.slice(0, 32)).toString();
+        }
+        if (r.startsWith("0x")) {
+          return BigInt(r).toString();
+        }
+        return r;
+      };
+
+      const poolOwner = await fetchStealthPoolOwner(suiClientHook, STEALTH_POOL);
+      if (poolOwner.kind === "owned") {
+        setZkStealthStatus(
+          `❌ Stealth pool is owned by ${poolOwner.address} (not shared). Backend relayer deposit required.`
+        );
+        return;
+      }
+
+      for (let i = 0; i < validRecipients.length; i++) {
+        const r = validRecipients[i];
+        setZkStealthStatus(`Sending to recipient ${i + 1}/${validRecipients.length}...`);
+
+        const amountMist = Math.floor(parseFloat(r.denomination) * 1e9).toString();
+
+        const secretBytes = new Uint8Array(16);
+        crypto.getRandomValues(secretBytes);
+        const secret = BigInt(
+          "0x" + Array.from(secretBytes).map((b) => b.toString(16).padStart(2, "0")).join("")
+        ).toString();
+
+        const blindingBytes = new Uint8Array(16);
+        crypto.getRandomValues(blindingBytes);
+        const blinding = BigInt(
+          "0x" + Array.from(blindingBytes).map((b) => b.toString(16).padStart(2, "0")).join("")
+        ).toString();
+
+        const proveRes = await fetch(backendApiUrl("/stealth-prove"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret,
+            amount: amountMist,
+            blinding,
+            recipient: recipientForProof(r.address),
+          }),
+        });
+        const proveData = await proveRes.json();
+        if (!proveData.success || !proveData.nullifier) {
+          throw new Error(`Proof failed for recipient ${i + 1}: ${proveData.error || "unknown"}`);
+        }
+
+        const commitment = String(proveData.commitment ?? "");
+        const nullifier = String(proveData.nullifier);
+        const commitmentBytes = toBigEndian32(BigInt(commitment));
+        const nullifierBytes = toBigEndian32(BigInt(nullifier));
+
+        const noteData = `${r.address}|${nullifier}|${secret}|${amountMist}|${blinding}`;
+        const encryptedNote = await encryptNote(r.address, noteData);
+
+        const coins = await suiClientHook.getCoins({
+          owner: account.address,
+          coinType: "0x2::sui::SUI",
+        });
+        if (!coins.data?.length) {
+          throw new Error("No SUI in wallet. Get testnet SUI from faucet.");
+        }
+
+        const tx = new Transaction();
+        const poolArg = tx.sharedObjectRef({
+          objectId: STEALTH_POOL,
+          initialSharedVersion: poolOwner.initialSharedVersion,
+          mutable: true,
+        });
+        const [depositCoin] = tx.splitCoins(tx.gas, [BigInt(amountMist)]);
+        tx.moveCall({
+          target: `${STEALTH_PACKAGE}::stealth_pool::deposit`,
+          arguments: [
+            poolArg,
+            depositCoin,
+            tx.pure(bcs.vector(bcs.u8()).serialize(commitmentBytes).toBytes()),
+            tx.pure(bcs.vector(bcs.u8()).serialize(nullifierBytes).toBytes()),
+          ],
+        });
+        tx.setGasBudget(50_000_000);
+
+        await new Promise<void>((resolve, reject) => {
+          signAndExecute(
+            { transaction: tx, chain: "sui:testnet" },
+            {
+              onSuccess: async (result) => {
+                try {
+                  const digest = suiTxDigest(result);
+                  const res = await fetch(backendApiUrl("/zk-stealth-deposit"), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      commitment_hash: commitment,
+                      encrypted_note: encryptedNote,
+                      recipient_address: r.address,
+                      sender_address: walletAddress,
+                      coin_type: zkStealthCoin,
+                      auto_withdraw: autoWithdraw,
+                    }),
+                  });
+                  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                  const data = await res.json();
+                  if (!data.success) throw new Error(data.error || "Deposit failed");
+
+                  results.push({
+                    recipient: r.address,
+                    denomination: r.denomination,
+                    commitment,
+                  });
+                  setZbTxDigest(digest);
+                  playSwish();
+                  resolve();
+                } catch (e: unknown) {
+                  reject(e);
+                }
+              },
+              onError: (e) => reject(e),
+            }
+          );
+        });
+
+        if (i < validRecipients.length - 1) {
+          await new Promise((res) => setTimeout(res, 2000));
+        }
+      }
+
+      setZkStealthStatus(
+        `✅ Multi-send complete! ${results.length} recipients notified anonymously.`
+      );
+      setMultiRecipients([{ address: "", denomination: "0.1" }]);
+    } catch (e) {
+      setZkStealthStatus("❌ " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setZkStealthLoading(false);
+    }
+  };
+
+  const claimSingleNote = async (note: {
+    id: number;
+    commitment_hash: string;
+    encrypted_note: string;
+    coin_type: string;
+  }): Promise<{
+    success: boolean;
+    amount?: number;
+    digest?: string;
+    error?: string;
+    results?: Array<{ digest: string; amount: number; from?: string }>;
+  }> => {
+    const commitmentHash = String(note.commitment_hash ?? "").trim();
+    const recipientAddress = (walletAddress || "").trim();
+
+    let nullifier = "";
+    let noteAmount = Math.floor(stealthAmount * 1e9);
+
+    let noteData = await decryptNote(walletAddress, note.encrypted_note);
+
+    if (!noteData) {
+      noteData = await decryptNote(stealthAddress || "", note.encrypted_note);
+    }
+
+    if (!noteData || !noteData.includes("|")) {
+      const parts = note.encrypted_note.split("|");
+      nullifier = (parts[1] || "").trim();
+      noteAmount = parts[3] ? parseInt(parts[3], 10) : noteAmount;
+    } else {
+      const parts = noteData.split("|");
+      nullifier = (parts[1] || "").trim();
+      noteAmount = parts[3] ? parseInt(parts[3], 10) : noteAmount;
+    }
+
+    if (!commitmentHash || !nullifier || !recipientAddress) {
+      return {
+        success: false,
+        error:
+          "Missing data: commitment=" +
+          (commitmentHash ? "ok" : "empty") +
+          " nullifier=" +
+          (nullifier ? "ok" : "empty") +
+          " wallet=" +
+          (recipientAddress ? "ok" : "empty"),
+      };
+    }
+
+    const claimAmount = noteAmount;
+    if (!claimAmount || Number.isNaN(claimAmount)) {
+      return { success: false, error: "Invalid claim amount" };
+    }
+
+    const messageToSign = "ZION STEALTH CLAIM: " + commitmentHash;
+    const { signature } = await signMessage({
+      message: new TextEncoder().encode(messageToSign),
+    });
+
+    const claimBody = {
+      commitment_hash: commitmentHash,
+      nullifier,
+      recipient_address: recipientAddress,
+      amount: claimAmount,
+      wallet_signature: signature,
+      signed_message: messageToSign,
+      with_decoys: useDecoys,
+      num_decoys: 5,
+    };
+
+    const claimEndpoint = fragmentedWithdraw
+      ? "/zk-stealth-fragmented-withdraw"
+      : "/zk-stealth-relayer-withdraw";
+
+    const res = await fetch(backendApiUrl(claimEndpoint), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(claimBody),
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      return { success: false, error: data.error || "Unknown" };
+    }
+
+    const results: Array<{ digest: string; amount: number; from?: string }> = [];
+    const relayerAddress =
+      typeof data.relayer === "string"
+        ? data.relayer
+        : typeof data.relayer_address === "string"
+          ? data.relayer_address
+          : STEALTH_RELAYER_ADDRESS;
+
+    if (fragmentedWithdraw && Array.isArray(data.fragments)) {
+      for (const f of data.fragments as Array<{
+        relayer?: string;
+        amount?: number;
+        digest?: string;
+        status?: string;
+      }>) {
+        if (f.digest && f.status !== "failed") {
+          results.push({
+            digest: String(f.digest),
+            amount: (f.amount || 0) / 1_000_000_000,
+            from: f.relayer || relayerAddress,
+          });
+        }
+      }
+    } else if (data.digest) {
+      results.push({
+        digest: String(data.digest),
+        amount: claimAmount / 1_000_000_000,
+        from: relayerAddress,
+      });
+    }
+
+    const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
+
+    return {
+      success: true,
+      amount: totalAmount,
+      digest: results[0]?.digest || data.digest,
+      results,
+    };
+  };
+
+  const handleZkStealthClaim = async (note: {
+    id: number;
+    commitment_hash: string;
+    encrypted_note: string;
+    coin_type: string;
+  }) => {
+    try {
+      setZkStealthStatus("Claiming via relayer...");
+      setZkStealthClaimDigest("");
+
+      setZkStealthStatus("Sign claim message in wallet...");
+      const result = await claimSingleNote(note);
+
+      if (result.success) {
+        if (result.results?.length) {
+          setClaimResults((prev) => [...prev, ...result.results!]);
+        }
+        setZkStealthClaimDigest(result.digest || "");
+
+        setZkStealthStatus(
+          fragmentedWithdraw
+            ? `✅ Fragmented claim complete! ${(result.amount || 0).toFixed(4)} SUI`
+            : "✅ Claimed! Funds sent via relayer — sender identity hidden!\n" +
+                (result.digest ? `TX: ${result.digest}` : "")
+        );
+        await fetchZkStealthNotes();
+      } else {
+        setZkStealthClaimDigest("");
+        setZkStealthStatus("❌ Claim failed: " + (result.error || "Unknown"));
+      }
+    } catch (e) {
+      setZkStealthClaimDigest("");
+      setZkStealthStatus("❌ Error: " + String(e));
+    }
+  };
+
+  const handleClaimAll = async () => {
+    const pendingNotes = zkStealthNotes.filter((n) => n.status === "pending");
+    if (!pendingNotes.length) return;
+
+    setZkClaimLoading(true);
+    setZkClaimStatus("Preparing batch claim...");
+    setClaimResults([]);
+
+    try {
+      const recipientAddress = (walletAddress || "").trim();
+      if (!recipientAddress) {
+        setZkClaimStatus("❌ Connect wallet first");
+        return;
+      }
+
+      const message = `claim_all_${pendingNotes.map((n) => n.commitment_hash).join("_")}`;
+
+      setZkClaimStatus("Sign once to claim all notes...");
+      setZkStealthStatus("Sign once to claim all notes in wallet...");
+
+      const { signature } = await signMessage({
+        message: new TextEncoder().encode(message),
+      });
+
+      setZkClaimStatus(`Claiming ${pendingNotes.length} notes with 1 signature...`);
+
+      const res = await fetch(backendApiUrl("/zk-stealth-batch-claim"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: pendingNotes.map((n) => ({
+            commitment_hash: n.commitment_hash,
+          })),
+          recipient_address: recipientAddress,
+          wallet_signature: signature,
+          signed_message: message,
+          with_decoys: useDecoys,
+          num_decoys: 5,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        const mapped: Array<{ digest: string; amount: number; from?: string }> = (
+          data.results || []
+        )
+          .filter((r: { success?: boolean; digest?: string }) => r.success && r.digest)
+          .map(
+            (r: {
+              digest?: string;
+              amount?: number | string;
+              relayer?: string;
+            }) => ({
+              digest: String(r.digest),
+              amount: (Number(r.amount) || 0) / 1_000_000_000,
+              from: r.relayer || STEALTH_RELAYER_ADDRESS,
+            })
+          );
+
+        if (mapped.length) {
+          setClaimResults(
+            mapped.map((r) => ({ ...r, success: true, relayer: r.from }))
+          );
+          setZkStealthClaimDigest(mapped[0]?.digest || "");
+          playCork();
+          setTimeout(() => {
+            setClaimResults([]);
+            setClaimResultsExpanded(false);
+          }, 15000);
+        }
+
+        const successCount = data.successful_count ?? mapped.length;
+        const totalSui = mapped.reduce((sum: number, r) => sum + r.amount, 0);
+        setZkClaimStatus(
+          `✅ Claimed ${successCount}/${pendingNotes.length} notes (${totalSui.toFixed(4)} SUI)!`
+        );
+        setZkStealthStatus(`✅ Batch claim complete — ${successCount}/${pendingNotes.length} notes`);
+      } else {
+        setZkClaimStatus(`❌ Batch claim failed: ${data.error || "Unknown error"}`);
+        setZkStealthStatus(`❌ Batch claim failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setZkClaimStatus(`❌ Batch claim failed: ${msg}`);
+      setZkStealthStatus(`❌ Batch claim failed: ${msg}`);
+    } finally {
+      setZkClaimLoading(false);
+      await fetchZkStealthNotes();
+    }
+  };
+
+  const handleCrossDenomMix = async () => {
+    if (!crossDenom || zkStealthNotes.length === 0) return;
+    try {
+      setZkStealthStatus("Preparing cross-denomination mix...");
+
+      const decryptKey = stealthAddress || walletAddress;
+      const notesPayload = [];
+
+      for (const note of zkStealthNotes) {
+        const isOldFormat = note.encrypted_note.includes("|");
+        let nullifier = "";
+        let secret = "";
+        let blinding = "";
+        let amount = 0;
+
+        if (isOldFormat) {
+          const parts = note.encrypted_note.split("|");
+          nullifier = (parts[1] || "").trim();
+          secret = (parts[2] || "").trim();
+          blinding = (parts[4] || "").trim();
+          amount = parts[3] ? parseInt(parts[3], 10) : 0;
+        } else {
+          const decrypted = await decryptNote(decryptKey, note.encrypted_note);
+          const parts = decrypted.split("|");
+          nullifier = (parts[1] || "").trim();
+          secret = (parts[2] || "").trim();
+          blinding = (parts[4] || "").trim();
+          amount = parts[3] ? parseInt(parts[3], 10) : 0;
+        }
+
+        notesPayload.push({
+          commitment_hash: note.commitment_hash,
+          nullifier,
+          secret,
+          blinding,
+          amount,
+        });
+      }
+
+      const addresses = outputAddresses
+        .split("\n")
+        .map((a) => a.trim())
+        .filter(Boolean);
+
+      const res = await fetch(backendApiUrl("/zk-stealth-cross-denom"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: notesPayload,
+          recipient: walletAddress,
+          output_denomination: outputDenom,
+          output_addresses: addresses.length ? addresses : undefined,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const lines = (data.results || [])
+          .map(
+            (r: { recipient?: string; amount?: number; digest?: string }) =>
+              `${r.recipient?.slice(0, 10)}... → ${((r.amount || 0) / 1e9).toFixed(2)} SUI`
+          )
+          .join("\n");
+        setZkStealthStatus(
+          `✅ Cross-denom mix complete!\n${lines || `Outputs: ${data.numOutputs}, total: ${((data.total || 0) / 1e9).toFixed(2)} SUI`}`
+        );
+        await fetchZkStealthNotes();
+      } else {
+        setZkStealthStatus("❌ Cross-denom failed: " + (data.error || "Unknown"));
+      }
+    } catch (e) {
+      setZkStealthStatus("❌ Cross-denom error: " + String(e));
+    }
+  };
+
+  const handleZbTransfer = async () => {
+    if (!anonymousAmount || !zbRecipient || zbLoading) return;
+    setZbLoading(true);
+    setZbTxDigest('');
+    setZbStatus('');
+
+    let recipient = zbRecipient.trim();
+    if (!recipient.startsWith('0x')) recipient = '0x' + recipient;
+    if (recipient.length < 66) {
+      setZbStatus(`❌ Invalid address - ${recipient.length}/66 chars (0x + 64 hex)`);
+      setZbLoading(false);
+      return;
+    }
+
+    const normalizedAmount = String(anonymousAmount).replace(',', '.');
+    const parsedAmount = parseFloat(normalizedAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setZbStatus('❌ Invalid amount');
+      setZbLoading(false);
+      return;
+    }
+
+    try {
+      if (zbTab === 'stealth') {
+        if (!account?.address) {
+          setZbStatus('❌ Connect wallet first');
+          setZbLoading(false);
+          return;
+        }
+
+        setZbStatus('Generating stealth deposit proof...');
+        const randomBytes = new Uint8Array(32);
+        crypto.getRandomValues(randomBytes);
+        const secretHex = bytesToHex(randomBytes);
+        const commitmentHash = await sha256Hex(`${secretHex}:${normalizedAmount}:${recipient}`);
+
+        const proveRes = await fetch(backendApiUrl('/conf-deposit-prove-only'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parsedAmount,
+            coin_type: zbCoin,
+            recipient,
+          }),
+        });
+        if (!proveRes.ok) throw new Error(`HTTP ${proveRes.status}`);
+        const proveData = await proveRes.json();
+        if (!proveData.success) throw new Error(proveData.error || 'Proof generation failed');
+
+        setZbStatus('Please sign stealth pool deposit...');
+
+        const amountMist =
+          zbCoin === 'SUI'
+            ? Math.floor(parsedAmount * 1_000_000_000)
+            : Math.floor(parsedAmount * 1_000_000);
+        const proofBytes = Array.isArray(proveData.proof_bytes) ? proveData.proof_bytes : [];
+        const pubBytes = Array.isArray(proveData.pub_bytes) ? proveData.pub_bytes : [];
+        const commitmentBytes = Array.isArray(proveData.commitment_bytes) ? proveData.commitment_bytes : [];
+
+        const tx = new Transaction();
+        if (zbCoin === 'SUI') {
+          const suiCoins = await suiClientHook.getCoins({
+            owner: account.address,
+            coinType: '0x2::sui::SUI',
+          });
+          if (!suiCoins.data?.length) {
+            throw new Error('No SUI in wallet. Get testnet SUI from faucet.');
+          }
+          const [depositCoin] = tx.splitCoins(tx.gas, [BigInt(amountMist)]);
+          tx.moveCall({
+            target: proveData.package + '::confidential_coin::deposit',
+            typeArguments: [proveData.coin_type],
+            arguments: [
+              tx.object(proveData.pool),
+              depositCoin,
+              tx.pure.vector('u8', commitmentBytes),
+              tx.pure.vector('u8', [1, 2, 3]),
+              tx.pure.vector('u8', proofBytes),
+              tx.pure.vector('u8', pubBytes),
+            ],
+          });
+        } else {
+          const rpcRes = await fetch('https://fullnode.testnet.sui.io:443', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'suix_getCoins',
+              params: [account.address, USDC_TYPE_TESTNET, null, 10],
+            }),
+          });
+          const rpcData = await rpcRes.json();
+          const usdcCoins = rpcData.result?.data || [];
+          if (usdcCoins.length === 0) {
+            throw new Error('No USDC found in wallet. Get testnet USDC from faucet.sui.io');
+          }
+          if (usdcCoins.length > 1) {
+            tx.mergeCoins(
+              tx.object(usdcCoins[0].coinObjectId),
+              usdcCoins.slice(1).map((c: { coinObjectId: string }) => tx.object(c.coinObjectId))
+            );
+          }
+          const [depositCoin] = tx.splitCoins(tx.object(usdcCoins[0].coinObjectId), [BigInt(amountMist)]);
+          tx.moveCall({
+            target: proveData.package + '::confidential_coin::deposit',
+            typeArguments: [proveData.coin_type],
+            arguments: [
+              tx.object(proveData.pool),
+              depositCoin,
+              tx.pure.vector('u8', commitmentBytes),
+              tx.pure.vector('u8', [1, 2, 3]),
+              tx.pure.vector('u8', proofBytes),
+              tx.pure.vector('u8', pubBytes),
+            ],
+          });
+        }
+        tx.setGasBudget(50000000);
+
+        const txDigest = await new Promise<string>((resolve, reject) => {
+          signAndExecute(
+            { transaction: tx, chain: 'sui:testnet' },
+            {
+              onSuccess: (result) => resolve(suiTxDigest(result)),
+              onError: (error) => reject(error),
+            }
+          );
+        });
+
+        setZbTxDigest(txDigest);
+        setZbStatus('✅ Stealth deposit sent (confidential pool — use ZK STEALTH tab for claimable notes)');
+
+      } else if (zbTab === 'zk' || zbTab === 'zkstealth') {
+        if (!account?.address) {
+          setZbStatus('❌ Connect wallet first');
+          setZbLoading(false);
+          return;
+        }
+
+        const successLabel = zbTab === 'zk' ? '✅ ZK transfer sent' : '✅ ZK Stealth sent';
+        setZbStatus(zbTab === 'zk' ? 'Generating ZK proof...' : 'Generating ZK proof + stealth...');
+        const res = await fetch('/api/zk-prove-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: parsedAmount, recipient, coin: zbCoin }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const proofData = await res.json();
+        if (!proofData.success) throw new Error(proofData.error || 'Proof generation failed');
+
+        setZbStatus('Please sign in your wallet...');
+
+        const amountMist = BigInt(
+          zbCoin === 'SUI'
+            ? Math.floor(parsedAmount * 1_000_000_000)
+            : Math.floor(parsedAmount * 1_000_000)
+        );
+        const coinTypeArg =
+          zbCoin === 'SUI' ? '0x2::sui::SUI' : USDC_TYPE_TESTNET;
+        const proofBytes = Array.isArray(proofData.proof_bytes) ? proofData.proof_bytes : [];
+        const pubBytes = Array.isArray(proofData.pub_bytes) ? proofData.pub_bytes : [];
+        const nullBytes = Array.isArray(proofData.null_bytes) ? proofData.null_bytes : [];
+
+        const tx = new Transaction();
+        let transferCoin;
+
+        if (zbCoin === 'SUI') {
+          const suiCoins = await suiClientHook.getCoins({
+            owner: account.address,
+            coinType: '0x2::sui::SUI',
+          });
+          console.log('[ZbTransfer] SUI coins:', suiCoins.data?.map((c) => ({
+            id: c.coinObjectId,
+            bal: c.balance,
+          })));
+          if (!suiCoins.data?.length) {
+            throw new Error('No SUI in wallet. Get testnet SUI from faucet.');
+          }
+          [transferCoin] = tx.splitCoins(tx.gas, [amountMist]);
+        } else {
+          const rpcRes = await fetch('https://fullnode.testnet.sui.io:443', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'suix_getCoins',
+              params: [account.address, USDC_TYPE_TESTNET, null, 10],
+            }),
+          });
+          const rpcData = await rpcRes.json();
+          const usdcCoins = rpcData.result?.data || [];
+          if (usdcCoins.length === 0) {
+            throw new Error('No USDC found in wallet. Get testnet USDC from faucet.sui.io');
+          }
+          if (usdcCoins.length > 1) {
+            tx.mergeCoins(
+              tx.object(usdcCoins[0].coinObjectId),
+              usdcCoins.slice(1).map((c: { coinObjectId: string }) => tx.object(c.coinObjectId))
+            );
+          }
+          [transferCoin] = tx.splitCoins(tx.object(usdcCoins[0].coinObjectId), [amountMist]);
+        }
+
+        tx.moveCall({
+          target: '0xc4004b794418504e90b9384eb1d70ba9a4dd5ec748cba598adcd9c103ed70312::zk_transfer::private_transfer',
+          typeArguments: [coinTypeArg],
+          arguments: [
+            transferCoin,
+            tx.pure.vector('u8', proofBytes),
+            tx.pure.vector('u8', pubBytes),
+            tx.pure.vector('u8', nullBytes),
+            tx.object('0xf0d723052d412b9e69bf06b5741aaece164d9cd938460428b76d4b76b080b767'),
+            tx.object('0x8a081cdd06eeb6f1c6996425a636a422117e47ca945784b224d576f5364d11f4'),
+            tx.pure.address(recipient),
+          ],
+        });
+        tx.setGasBudget(50000000);
+
+        signAndExecute(
+          { transaction: tx, chain: 'sui:testnet' },
+          {
+            onSuccess: (result) => {
+              setZbTxDigest(suiTxDigest(result));
+              setZbStatus(successLabel);
+              setZbLoading(false);
+              if (zbTab === 'zk') {
+                void fetch(backendApiUrl('/zk-anonymous-privacy'), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    recipient,
+                    amount: parsedAmount,
+                    coin: zbCoin,
+                    with_decoys: true,
+                    fragmented: true,
+                    num_decoys: 5,
+                  }),
+                }).catch(() => {});
+              }
+            },
+            onError: (error) => {
+              setZbStatus('❌ ' + error.message);
+              setZbLoading(false);
+            },
+          }
+        );
+        return;
+      }
+    } catch(e:any) { setZbStatus('❌ ' + e.message); }
+    setZbLoading(false);
+  };
+
+  const handleConfidential = async () => {
+    if (!confAmount || confLoading) return;
+    setConfLoading(true);
+    setConfStatus('');
+    setConfTxDigest('');
+
+    try {
+      if (!account?.address) {
+        setConfStatus('❌ Connect wallet first');
+        setConfLoading(false);
+        return;
+      }
+
+      const normalizedAmount = confAmount.replace(',', '.');
+      const parsedAmount = parseFloat(normalizedAmount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) throw new Error('Invalid amount');
+
+      if (confTab === 'deposit') {
+        setConfStatus('⏳ Generating ZK proof...');
+        const res = await fetch('/api/conf-deposit-prove-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: parsedAmount, recipient: "0x3d5d59d8ea16592e76e0d1029205eeb166491c88d6e5b20eaa91df3fb8f05aa3", coin: confCoin }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        setConfStatus('🔐 Please sign in wallet...');
+
+        const amountMist =
+          confCoin === 'SUI'
+            ? Math.floor(parsedAmount * 1_000_000_000)
+            : Math.floor(parsedAmount * 1_000_000);
+
+        const proofBytes = Array.isArray(data.proof_bytes) ? data.proof_bytes : [];
+        const pubBytes = Array.isArray(data.pub_bytes) ? data.pub_bytes : [];
+        const commitmentBytes = Array.isArray(data.commitment_bytes) ? data.commitment_bytes : [];
+
+        const tx = new Transaction();
+        const walletAddress = account.address;
+
+        if (confCoin === 'SUI') {
+          const suiCoins = await suiClientHook.getCoins({
+            owner: walletAddress,
+            coinType: '0x2::sui::SUI',
+          });
+          if (!suiCoins.data?.length) {
+            throw new Error('No SUI in wallet. Get testnet SUI from faucet.');
+          }
+          const [depositCoin] = tx.splitCoins(tx.gas, [BigInt(amountMist)]);
+          tx.moveCall({
+            target: data.package + '::confidential_coin::deposit',
+            typeArguments: [data.coin_type],
+            arguments: [
+              tx.object(data.pool),
+              depositCoin,
+              tx.pure.vector('u8', commitmentBytes),
+              tx.pure.vector('u8', [1, 2, 3]),
+              tx.pure.vector('u8', proofBytes),
+              tx.pure.vector('u8', pubBytes),
+            ],
+          });
+        } else {
+          if (!walletAddress) throw new Error('Wallet not connected');
+
+          const rpcRes = await fetch('https://fullnode.testnet.sui.io:443', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'suix_getCoins',
+              params: [walletAddress, USDC_TYPE_TESTNET, null, 10],
+            }),
+          });
+          const rpcData = await rpcRes.json();
+          const usdcCoins = rpcData.result?.data || [];
+          console.log('USDC coins found:', usdcCoins.length, 'for address:', walletAddress);
+
+          if (usdcCoins.length === 0) {
+            throw new Error('No USDC found in wallet. Get testnet USDC from faucet.sui.io');
+          }
+
+          if (usdcCoins.length > 1) {
+            tx.mergeCoins(
+              tx.object(usdcCoins[0].coinObjectId),
+              usdcCoins.slice(1).map((c: { coinObjectId: string }) => tx.object(c.coinObjectId))
+            );
+          }
+
+          const [depositCoin] = tx.splitCoins(
+            tx.object(usdcCoins[0].coinObjectId),
+            [BigInt(amountMist)]
+          );
+
+          tx.moveCall({
+            target: data.package + '::confidential_coin::deposit',
+            typeArguments: [data.coin_type],
+            arguments: [
+              tx.object(data.pool),
+              depositCoin,
+              tx.pure.vector('u8', commitmentBytes),
+              tx.pure.vector('u8', [1, 2, 3]),
+              tx.pure.vector('u8', proofBytes),
+              tx.pure.vector('u8', pubBytes),
+            ],
+          });
+        }
+        tx.setGasBudget(50000000);
+
+        signAndExecute(
+          { transaction: tx, chain: 'sui:testnet' },
+          {
+            onSuccess: (result) => {
+              const digest = suiTxDigest(result);
+              const key = 'zion_bf_' + digest;
+              localStorage.setItem(
+                key,
+                JSON.stringify({
+                  blinding_factor: data.blinding_factor,
+                  amount: parsedAmount,
+                  coin: confCoin,
+                  timestamp: Date.now(),
+                  digest,
+                })
+              );
+              const list = JSON.parse(localStorage.getItem('zion_conf_deposits') || '[]');
+              list.push({
+                digest,
+                amount: parsedAmount,
+                coin: confCoin,
+                timestamp: Date.now(),
+              });
+              localStorage.setItem('zion_conf_deposits', JSON.stringify(list));
+
+              setConfTxDigest(digest);
+              setConfStatus('✅ Confidential deposit sent! Blinding factor saved locally.');
+              setConfLoading(false);
+            },
+            onError: (err) => {
+              setConfStatus('❌ ' + err.message);
+              setConfLoading(false);
+            },
+          }
+        );
+        return;
+      }
+
+      // WITHDRAW
+      if (!confBlinding) {
+        setConfStatus('❌ Enter blinding factor');
+        setConfLoading(false);
+        return;
+      }
+
+      setConfStatus('⏳ Generating withdraw proof...');
+      const amountMist =
+        confCoin === 'SUI'
+          ? Math.floor(parsedAmount * 1_000_000_000)
+          : Math.floor(parsedAmount * 1_000_000);
+
+      const res = await fetch('/api/conf-withdraw-prove-only', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount_mist: amountMist,
+          blinding_factor: confBlinding,
+          coin_type: confCoin,
+        }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+
+      setConfStatus('🔐 Please sign in wallet...');
+
+      const walletAddress = account.address;
+      const coinTypeStr = data.coin_type;
+      const structType =
+        data.package + '::confidential_coin::ConfidentialCoin<' + coinTypeStr + '>';
+
+      const objects = await suiClientHook.getOwnedObjects({
+        owner: walletAddress,
+        filter: { StructType: structType },
+        options: { showContent: true },
+      });
+
+      if (objects.data.length === 0) throw new Error('No ConfidentialCoin found in wallet');
+      const confCoinId = objects.data[0].data?.objectId;
+      if (!confCoinId) throw new Error('ConfidentialCoin objectId not found');
+
+      const nullifierBytes = Array.isArray(data.nullifier_bytes) ? data.nullifier_bytes : [];
+      const proofBytes = Array.isArray(data.proof_bytes) ? data.proof_bytes : [];
+      const pubBytes = Array.isArray(data.pub_bytes) ? data.pub_bytes : [];
+
+      const tx = new Transaction();
+      tx.moveCall({
+        target: data.package + '::confidential_coin::withdraw',
+        typeArguments: [coinTypeStr],
+        arguments: [
+          tx.object(data.pool),
+          tx.object(confCoinId),
+          tx.pure.u64(amountMist),
+          tx.pure.vector('u8', nullifierBytes),
+          tx.pure.vector('u8', proofBytes),
+          tx.pure.vector('u8', pubBytes),
+          tx.pure.address(walletAddress),
+        ],
+      });
+      tx.setGasBudget(50000000);
+
+      signAndExecute(
+        { transaction: tx, chain: 'sui:testnet' },
+        {
+          onSuccess: (result) => {
+            setConfTxDigest(suiTxDigest(result));
+            setConfStatus('✅ Withdraw successful!');
+            setConfLoading(false);
+          },
+          onError: (err) => {
+            setConfStatus('❌ ' + err.message);
+            setConfLoading(false);
+          },
+        }
+      );
+      return;
+    } catch (e: unknown) {
+      setConfStatus('❌ ' + (e instanceof Error ? e.message : String(e)));
+      setConfLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (account?.address) {
       setBankRecipient(account.address);
     }
   }, [account?.address]);
+
+  useEffect(() => {
+    setZkStealthLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void checkIdentityVerification();
+  }, [checkIdentityVerification]);
+
+  useEffect(() => {
+    if (!walletAddress || zbankMode !== "stealth") return;
+    const interval = setInterval(() => void checkIdentityVerification(), 30000);
+    return () => clearInterval(interval);
+  }, [walletAddress, zbankMode, checkIdentityVerification]);
+
+  useEffect(() => {
+    if (activeTab !== "zbank" || zbTab !== "zkstealth" || zkStealthMode !== "receive") return;
+    fetchZkStealthNotes();
+    fetchScheduledPayments();
+    const interval = setInterval(() => {
+      fetchZkStealthNotes();
+      fetchScheduledPayments();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab, zbTab, zkStealthMode, walletAddress, stealthAddress]);
+
+  useEffect(() => {
+    setZbTab(zbankMode === "anonymous" ? "zk" : "zkstealth");
+  }, [zbankMode]);
+
+  useEffect(() => {
+    return () => {
+      if (gearIntervalRef.current) clearInterval(gearIntervalRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchSuiPrice = async () => {
+      try {
+        const res = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd"
+        );
+        const data = await res.json();
+        if (data?.sui?.usd) setSuiPrice(data.sui.usd);
+      } catch (e) {
+        console.error("Price fetch failed", e);
+      }
+    };
+    void fetchSuiPrice();
+    const interval = setInterval(() => void fetchSuiPrice(), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const w = walletAddress.trim();
@@ -11059,6 +14097,67 @@ export default function Home() {
   }, [dashboardVisible, showIntro]);
 
   useEffect(() => {
+    if (showIntro || activeTab !== "civilization") return;
+    const canvas = matrixCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+    let last = performance.now();
+    let acc = 0;
+    const stepMs = 50;
+    const size = 14;
+    let drops: number[] = [];
+
+    const setup = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cols = Math.floor(window.innerWidth / size);
+      drops = Array(cols)
+        .fill(0)
+        .map(() => Math.floor(Math.random() * -50));
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    };
+
+    const loop = (now: number) => {
+      acc += now - last;
+      last = now;
+      if (acc >= stepMs) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx.fillStyle = "#00ff41";
+        ctx.font = `${size}px monospace`;
+        for (let i = 0; i < drops.length; i++) {
+          const ch = bgChars[Math.floor(Math.random() * bgChars.length)]!;
+          const x = i * size;
+          const y = drops[i]! * size;
+          ctx.fillText(ch, x, y);
+          if (y > window.innerHeight + size && Math.random() > 0.98) {
+            drops[i] = Math.floor(Math.random() * -20);
+          }
+          drops[i]! += 1;
+        }
+        acc = 0;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+
+    setup();
+    window.addEventListener("resize", setup);
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", setup);
+    };
+  }, [activeTab, dashboardVisible, showIntro]);
+
+  useEffect(() => {
     if (!showIntro) {
       setDashboardVisible(true);
     }
@@ -11095,8 +14194,8 @@ export default function Home() {
           fetch("/api/agents").then((r) => r.json()),
           fetch("/api/clans").then((r) => r.json()),
         ]);
-        setAgents(a);
-        setClans(c);
+        setAgents(Array.isArray(a) ? a : []);
+        setClans(Array.isArray(c) ? c : []);
       } catch {
         // keep last successful snapshot
       }
@@ -11194,9 +14293,15 @@ export default function Home() {
     return () => clearInterval(t);
   }, [showIntro]);
 
-  const maxBalance = useMemo(() => Math.max(1, ...agents.map((a) => a.balance)), [agents]);
+  const maxBalance = useMemo(
+    () => Math.max(1, ...(Array.isArray(agents) ? agents : []).map((a) => a.balance)),
+    [agents]
+  );
   const chatAgents = chatAgentsFiltered;
-  const chatMaxBalance = useMemo(() => Math.max(1, ...chatAgents.map((a) => a.balance)), [chatAgents]);
+  const chatMaxBalance = useMemo(
+    () => Math.max(1, ...(Array.isArray(chatAgents) ? chatAgents : []).map((a) => a.balance)),
+    [chatAgents]
+  );
 
   const openChat = (agent: Agent) => {
     setChatAgent(agent);
@@ -11397,7 +14502,46 @@ export default function Home() {
   const isGoogleConnected = !!zkLoginUser;
   const isWalletConnected = !!account?.address;
 
+  const activityEvents = useMemo(
+    () =>
+      activityLogEvents.length > 0
+        ? activityLogEvents
+        : allEvents.map((e) => ({
+            description: e.description ?? e.title ?? "",
+            created_at: e.timestamp ?? "",
+            event_type: e.event_type ?? e.type,
+            type: e.type,
+          })),
+    [activityLogEvents, allEvents]
+  );
+
   const sheriffActionsDisplay = sheriffActions.slice(0, 5);
+  const senateEventsDisplay = useMemo(() => {
+    if (senateEvents.length > 0) return senateEvents.slice(0, 8);
+    if (senateActions.length > 0) {
+      return senateActions.slice(0, 8).map((e) => ({
+        ...e,
+        event_type: "senate" as const,
+      }));
+    }
+    return activityEvents.filter(isSenateActivityEvent).slice(0, 8);
+  }, [activityEvents, senateEvents, senateActions]);
+  const zrsEventsDisplay = useMemo(() => {
+    if (zrsEvents.length > 0) return zrsEvents.slice(0, 8);
+    const fromActivity = activityEvents.filter(isZrsActivityEvent);
+    if (fromActivity.length > 0) return fromActivity.slice(0, 8);
+    const zrs = ecoPolData?.zrs_last_action;
+    if (zrs?.news_headline || zrs?.action_taken) {
+      return [
+        {
+          description: String(zrs.news_headline || `ZRS ${zrs.state}: ${zrs.action_taken}`),
+          created_at: String(zrs.created_at ?? ""),
+          event_type: "economy",
+        },
+      ];
+    }
+    return [];
+  }, [activityEvents, zrsEvents, ecoPolData]);
   const presidentActionsDisplay = useMemo(() => {
     type DecreeEntry = { description: string; created_at: string; count: number };
     const deduped = presidentActions.reduce<DecreeEntry[]>((acc, entry) => {
@@ -11411,31 +14555,109 @@ export default function Home() {
     }, []);
     return deduped.slice(0, 5);
   }, [presidentActions]);
-  const vipFeedDisplay = vipMemoryFeed.slice(0, 8);
+  const vipFeedDisplay = (Array.isArray(vipMemoryFeed) ? vipMemoryFeed : []).slice(0, 8);
 
   useEffect(() => {
     if (activeTab !== "treasury") return;
 
+    const isSenateEvent = (e: { event_type?: string; type?: string; description?: string }) => {
+      const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
+      const desc = String(e.description ?? "").toLowerCase();
+      if (["senate", "economy", "senate_law"].includes(eventType)) return true;
+      return ["senate", "bill", "law", "vote", "budget"].some((kw) => desc.includes(kw));
+    };
+
+    const fetchActivityLogs = async () => {
+      const [presRes, sherRes, senRes, zrsRes, eventsRes] = await Promise.all([
+        fetch("/api/president/actions"),
+        fetch("/api/sheriff-log"),
+        fetch("/api/senate/actions"),
+        fetch("/api/zrs/actions"),
+        fetch("/api/events?limit=50"),
+      ]);
+      try {
+        const pres = await presRes.json();
+        if (Array.isArray(pres)) setPresidentActions(pres);
+      } catch {
+        /* ignore */
+      }
+      try {
+        const sher = await sherRes.json();
+        if (Array.isArray(sher)) setSheriffActions(sher);
+      } catch {
+        /* ignore */
+      }
+      let senateActionItems: { description: string; created_at: string; event_type?: string }[] = [];
+      try {
+        const sen = await senRes.json();
+        const senateList = Array.isArray(sen) ? sen : Array.isArray(sen?.actions) ? sen.actions : [];
+        if (senateList.length > 0) {
+          setSenateActions(senateList);
+          senateActionItems = senateList.map((e: { description?: string; created_at?: string }) => ({
+            description: String(e.description ?? ""),
+            created_at: String(e.created_at ?? ""),
+            event_type: "senate",
+          }));
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const zrs = await zrsRes.json();
+        const zrsList = Array.isArray(zrs) ? zrs : Array.isArray(zrs?.actions) ? zrs.actions : [];
+        if (zrsList.length > 0) {
+          setZrsEvents(
+            zrsList.map((e: { description?: string; created_at?: string; event_type?: string }) => ({
+              description: String(e.description ?? ""),
+              created_at: String(e.created_at ?? ""),
+              event_type: String(e.event_type ?? "economy"),
+            }))
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const eventsRaw = await eventsRes.json();
+        const normalized = (Array.isArray(eventsRaw) ? eventsRaw : []).map(
+          (e: { description?: string; created_at?: string; time?: string; event_type?: string; type?: string }) => ({
+            description: String(e.description ?? ""),
+            created_at: String(e.created_at ?? e.time ?? ""),
+            event_type: String(e.event_type ?? e.type ?? ""),
+            type: String(e.type ?? e.event_type ?? ""),
+          })
+        );
+        setActivityLogEvents(normalized);
+        const fromEvents = normalized
+          .filter(isSenateEvent)
+          .map((e) => ({
+            description: e.description,
+            created_at: e.created_at,
+            event_type: e.event_type,
+          }));
+        const merged = [...fromEvents, ...senateActionItems]
+          .filter((e) => e.description)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const seen = new Set<string>();
+        const deduped = merged.filter((e) => {
+          const key = `${e.description}|${e.created_at}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setSenateEvents(deduped);
+      } catch {
+        setSenateEvents(senateActionItems);
+      }
+    };
+
     const loadEcoHud = async () => {
-      await Promise.all([fetchEcoPol(), fetchGovernmentData()]);
+      await Promise.all([fetchEcoPol(), fetchGovernmentData(), fetchPoliticalEconomy(), fetchActivityLogs()]);
     };
     void loadEcoHud();
     const ecoInterval = setInterval(() => {
       void loadEcoHud();
     }, 60_000);
-
-    fetch("/api/president/actions")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) setPresidentActions(d);
-      })
-      .catch(() => {});
-    fetch("/api/sheriff-log")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) setSheriffActions(d);
-      })
-      .catch(() => {});
     fetch("/api/state/treasury").then((r) => r.json()).then((d) => setStateTreasury(d)).catch(() => {});
     fetch("/api/frs/stats")
       .then((r) => r.json())
@@ -11443,10 +14665,77 @@ export default function Home() {
       .catch(() => {});
 
     return () => clearInterval(ecoInterval);
-  }, [activeTab, fetchEcoPol, fetchGovernmentData]);
+  }, [activeTab, fetchEcoPol, fetchGovernmentData, fetchPoliticalEconomy]);
+
+  const peCrimeRate = useMemo(() => {
+    const gangPct =
+      ecoPolData?.economy?.crime_pct ??
+      stats?.crime_pct ??
+      politicalEconomy?.metrics?.gang_crime_pct ??
+      0;
+    if (gangPct > 0) {
+      return gangPct > 1 ? gangPct / 100 : gangPct;
+    }
+    const raw =
+      politicalEconomy?.metrics?.crime_rate ??
+      politicalEconomy?.crisis?.crime_rate ??
+      stats?.crime_rate ??
+      0;
+    return raw > 1 ? raw / 100 : raw;
+  }, [ecoPolData, stats, politicalEconomy]);
+
+  const peGini = useMemo(
+    () =>
+      ecoPolData?.economy?.gini_coefficient ??
+      stats?.gini_coefficient ??
+      politicalEconomy?.metrics?.gini_coefficient ??
+      politicalEconomy?.crisis?.gini_coefficient ??
+      0,
+    [ecoPolData?.economy?.gini_coefficient, stats?.gini_coefficient, politicalEconomy]
+  );
+
+  const peUnemployment = useMemo(
+    () =>
+      ecoPolData?.economy?.unemployment_rate ??
+      stats?.unemployment_rate ??
+      politicalEconomy?.metrics?.unemployment_rate ??
+      politicalEconomy?.crisis?.unemployment_rate ??
+      0,
+    [ecoPolData?.economy?.unemployment_rate, stats?.unemployment_rate, politicalEconomy]
+  );
 
   const ecoPolTickerMessages = useMemo(() => {
     const items: { text: string; breaking?: boolean }[] = [];
+
+    if (politicalEconomy?.crisis?.is_active) {
+      const pname =
+        politicalEconomy.metrics?.president_name ??
+        presidentState?.agent_name ??
+        "President";
+      items.push({
+        text: `🚨 STATE OF EMERGENCY declared by ${pname}`,
+        breaking: true,
+      });
+    }
+    const revPressure = Number(
+      politicalEconomy?.metrics?.revolution_pressure ??
+        politicalEconomy?.crisis?.revolution_pressure ??
+        0
+    );
+    if (revPressure > 50) {
+      items.push({
+        text: `⚠️ Revolution pressure rising: ${Math.round(revPressure)}/150`,
+        breaking: revPressure > 100,
+      });
+    }
+    const ecoPhase = (
+      politicalEconomy?.metrics?.economic_phase ??
+      politicalEconomy?.crisis?.economic_phase ??
+      "NORMAL"
+    ).toUpperCase();
+    if (ecoPhase !== "NORMAL") {
+      items.push({ text: `📊 Economy in ${ecoPhase}`, breaking: ecoPhase === "DEPRESSION" });
+    }
 
     if (ecoPolData?.uprising?.active) {
       items.push({
@@ -11527,6 +14816,7 @@ export default function Home() {
     stateTreasury,
     stats?.alive,
     agents.length,
+    politicalEconomy,
   ]);
 
   const openZionProfileMenu = () => {
@@ -11889,7 +15179,7 @@ export default function Home() {
           position: "fixed",
           inset: 0,
           zIndex: 0,
-          opacity: activeTab === "zbank" ? 0 : 0.22,
+          opacity: activeTab === "zbank" || activeTab === "civilization" ? 0 : 0.22,
           pointerEvents: "none",
         }}
         aria-hidden
@@ -12026,9 +15316,9 @@ export default function Home() {
               }}
             >
               <div style={{ color: "#00ff41" }}>✓ Connected to Sui testnet</div>
-              <div style={{ color: "#00ff41" }}>{aliveAgents > 0
-                  ? `✓ ${aliveAgents.toLocaleString()} agents online`
-                  : "Loading agents..."}</div>
+              <div style={{ color: "#00ff41" }}>
+                {stats?.alive ? `✓ ${stats.alive.toLocaleString()} agents online` : "Loading agents..."}
+              </div>
               <div style={{ color: "#ffd700" }}>✓ ZionBet prediction markets ready</div>
               <div style={{ color: "#00ff41" }}>✓ Walrus · DeepBook · Seal online</div>
             </div>
@@ -12116,7 +15406,7 @@ export default function Home() {
                   ["treasury", "💹 ECO-POL"],
                   ["leaderboard", "🏆 LEADERBOARD"],
                   ["zbank", "💳 Z-BANK"],
-                  ["faucet", "🚰 FAUCET"],
+                  ["zperps", "📈 Z-PERPS"],
                   ["press", "📰 PRESS"],
                 ] as const
               ).map(([id, label]) => (
@@ -12165,7 +15455,7 @@ export default function Home() {
                   ["treasury", "💹 ECO-POL"],
                   ["leaderboard", "🏆 LEADERBOARD"],
                   ["zbank", "💳 Z-BANK"],
-                  ["faucet", "🚰 FAUCET"],
+                  ["zperps", "📈 Z-PERPS"],
                   ["press", "📰 PRESS"],
                 ] as const
               ).map(([id, label]) => (
@@ -12184,66 +15474,36 @@ export default function Home() {
 
         <div className="tabPanels">
           {activeTab === "civilization" && (
-            <>
-              {stats?.population_pressure === "famine" ? (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    marginBottom: "16px",
-                    padding: "14px 16px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,68,68,0.55)",
-                    background: "rgba(80,0,0,0.35)",
-                    color: "#ff6868",
-                    fontWeight: 700,
-                    fontSize: "0.95rem",
-                    textAlign: "center",
-                    boxShadow: "0 0 24px rgba(255,68,68,0.2)",
-                  }}
-                >
-                  ⚠️ FAMINE - Population Crisis
-                  {stats.tax_multiplier != null ? (
-                    <span style={{ display: "block", marginTop: "6px", fontSize: "0.8rem", fontWeight: 500, color: "#ffaaaa" }}>
-                      Tax multiplier: {stats.tax_multiplier}x
-                    </span>
-                  ) : null}
-                </motion.div>
-              ) : stats?.population_pressure === "critical" ? (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    marginBottom: "16px",
-                    padding: "14px 16px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,140,0,0.45)",
-                    background: "rgba(60,30,0,0.35)",
-                    color: "#ffb347",
-                    fontWeight: 700,
-                    fontSize: "0.95rem",
-                    textAlign: "center",
-                  }}
-                >
-                  Population Stress
-                  {stats.tax_multiplier != null ? (
-                    <span style={{ display: "block", marginTop: "6px", fontSize: "0.8rem", fontWeight: 500, color: "#ffd699" }}>
-                      Tax multiplier: {stats.tax_multiplier}x
-                    </span>
-                  ) : null}
-                </motion.div>
-              ) : null}
+            <div className="civTabRoot" style={{ position: "relative", zIndex: 1 }}>
+              <canvas
+                ref={matrixCanvasRef}
+                style={{
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  zIndex: 0,
+                  opacity: 0.15,
+                  pointerEvents: "none",
+                }}
+                aria-hidden
+              />
               <section
                 className="statsGrid"
                 style={
                   isMobile
                     ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }
-                    : undefined
+                    : { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }
                 }
               >
                 <article className="statCard cyan">
                   <p>ALIVE AGENTS</p>
-                  <h3>{stats?.alive ?? agents.length}</h3>
+                  <h3>
+                    {statsLoading
+                      ? "⏳"
+                      : (stats?.alive ?? lastAliveCount ?? agents.length ?? "--")}
+                  </h3>
                 </article>
                 <article className="statCard gold">
                   <p>TOTAL ZION</p>
@@ -12253,108 +15513,59 @@ export default function Home() {
                   <p>DEATHS TODAY</p>
                   <h3>{stats?.deaths_today ?? "--"}</h3>
                 </article>
-                <article className="statCard purple">
-                  <p>ACTIVE CLANS</p>
-                  <h3>{stats?.active_clans ?? clans.length}</h3>
-                </article>
               </section>
 
               <section
                 className="civilizationSidebarRow"
-                aria-label="Live feed sidebar"
+                aria-label="Agent feed and territory map"
                 style={{
-                  flexDirection: isMobile ? "column" : undefined,
-                  alignItems: isMobile ? "stretch" : undefined,
+                  flexDirection: isMobile ? "column" : "row",
+                  alignItems: "stretch",
                 }}
               >
                 <div
-                  className="civilizationSidebarRowFill"
+                  className="civilizationSidebarRowFill civilizationMapCol"
                   style={{
-                    border: "1px solid #1a1a1a",
-                    borderRadius: "12px",
-                    padding: "16px",
-                    marginBottom: "16px",
-                    background: "rgba(0,5,0,0.5)",
-                    width: isMobile ? "100%" : "70%",
-                    flex: isMobile ? "none" : 1,
-                    display: isMobile ? "block" : undefined,
+                    width: isMobile ? "100%" : "65%",
+                    flex: isMobile ? "none" : "1 1 65%",
+                    minWidth: 0,
+                  }}
+                >
+                  <DistrictMapPanel />
+                </div>
+                <aside
+                  className="civilizationSidebar civilizationChatCol"
+                  style={{
+                    width: isMobile ? "100%" : "35%",
+                    maxWidth: isMobile ? "100%" : "35%",
+                    flex: isMobile ? "none" : "0 0 35%",
+                    paddingLeft: "24px",
                   }}
                 >
                   <div
+                    className="sidebarAgentConvWrap civilizationAgentFeed"
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "12px",
+                      border: "1px solid #1a1a1a",
+                      borderRadius: "12px",
+                      padding: "16px",
+                      paddingLeft: "12px",
+                      background: "rgba(0,5,0,0.5)",
+                      height: "100%",
+                      minHeight: isMobile ? undefined : 420,
                     }}
                   >
-                    <div style={{ color: "#00ff41", fontSize: "0.75rem", letterSpacing: "0.1em" }}>
-                      🗺️ LIVE AGENT MAP
-                    </div>
-                    <div style={{ display: "flex", gap: "12px" }}>
-                      {[
-                        { color: "#00ff41", label: "Elite" },
-                        { color: "#ffd700", label: "Middle" },
-                        { color: "#ff6600", label: "Poor" },
-                        { color: "#ff3232", label: "Critical" },
-                      ].map((c) => (
-                        <div key={c.label} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                          <div
-                            style={{
-                              width: "6px",
-                              height: "6px",
-                              borderRadius: "50%",
-                              background: c.color,
-                            }}
-                          />
-                          <span style={{ color: "#555", fontSize: "0.6rem" }}>{c.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <canvas
-                    ref={galaxyCanvasRef}
-                    style={{
-                      width: isMobile ? "100%" : "100%",
-                      height: isMobile ? "300px" : "280px",
-                      borderRadius: "8px",
-                      display: "block",
-                      marginBottom: "12px",
-                    }}
-                  />
-
-                  <div style={{ borderTop: "1px solid #111", paddingTop: "10px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      {[
-                        { label: "Total", value: aliveAgents, color: "#00ff41" },
-                        { label: "Elite", value: agentClasses.elite, color: "#00ff41" },
-                        { label: "Middle", value: agentClasses.middle, color: "#ffd700" },
-                        { label: "Poor", value: agentClasses.poor, color: "#ff6600" },
-                        { label: "Critical", value: agentClasses.critical, color: "#ff3232" },
-                      ].map((s) => (
-                        <div key={s.label} style={{ textAlign: "center" }}>
-                          <div style={{ color: s.color, fontSize: "0.85rem", fontWeight: "bold" }}>
-                            {typeof s.value === "number" ? s.value.toLocaleString() : s.value}
-                          </div>
-                          <div style={{ color: "#444", fontSize: "0.6rem" }}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <aside
-                  className="civilizationSidebar"
-                  style={{ width: isMobile ? "100%" : undefined }}
-                >
-                  <div className="sidebarAgentConvWrap">
-                    <h2 className="sidebarSectionTitle">AGENT CONVERSATIONS</h2>
+                    <h2
+                      className="sidebarSectionTitle"
+                      style={{ fontSize: "10px", letterSpacing: "2px", marginLeft: "12px" }}
+                    >
+                      AGENT CONVERSATIONS
+                    </h2>
                     <p className="sidebarHint">AI pairs · refresh 60s · last 4</p>
                     <div className="agentConvFeed">
                       {conversations.length === 0 ? (
                         <p className="agentConvEmpty">Scanning agent chatter…</p>
                       ) : (
-                        conversations.slice(0, 4).map((conv, idx, arr) => {
+                        (Array.isArray(conversations) ? conversations : []).slice(0, 4).map((conv, idx, arr) => {
                           const m1 = classMeta(conv.agent1.class);
                           const m2 = classMeta(conv.agent2.class);
                           const leftText =
@@ -12410,7 +15621,6 @@ export default function Home() {
                   </div>
                 </aside>
               </section>
-
 
               {uniqueCorporations.length > 0 && (
                 <>
@@ -12658,7 +15868,7 @@ export default function Home() {
                   </div>
                   <section className="clanSection">
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-                      {clans.map((clan, idx) => (
+                      {(Array.isArray(clans) ? clans : []).map((clan, idx) => (
                         <div
                           key={clan.id}
                           style={{
@@ -12714,208 +15924,13 @@ export default function Home() {
 
               <div
                 style={{
-                  margin: "16px 0",
-                  overflow: "hidden",
-                  borderRadius: "6px",
-                  border: "1px solid #00ff4122",
-                  background: "rgba(0,255,65,0.02)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "5px 12px",
-                    background: "rgba(0,255,65,0.06)",
-                    borderBottom: "1px solid #00ff4122",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "6px",
-                      height: "6px",
-                      borderRadius: "50%",
-                      background: "#00ff41",
-                      boxShadow: "0 0 6px #00ff41",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: "0.65rem",
-                      color: "#00ff41",
-                      letterSpacing: "2px",
-                    }}
-                  >
-                    LIVE EVENTS — WALRUS
-                  </span>
-                  <img src="/zion-logo.svg" alt="" style={{ height: "14px", marginLeft: "4px", opacity: 0.6 }} />
-                </div>
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", padding: "8px 12px", borderBottom: "1px solid #111" }}>
-                  {[
-                    { id: "ALL", label: "ALL" },
-                    { id: "CRIME", label: "🚔 CRIME" },
-                    { id: "CORP", label: "🏢 CORP" },
-                    { id: "LOVE", label: "💍 LOVE" },
-                    { id: "FAITH", label: "⛪ FAITH" },
-                    { id: "CASINO", label: "🎰 CASINO" },
-                    { id: "SPY", label: "🕵️ SPY" },
-                    { id: "FRS", label: "🏦 FRS" },
-                    { id: "HEALTH", label: "🦠 HEALTH" },
-                    { id: "EDU", label: "🎓 EDU" },
-                    { id: "POLITICS", label: "🏛️ POLITICS" },
-                    { id: "MARKET", label: "📦 MARKET" },
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setEventFilter(f.id)}
-                      style={{
-                        padding: "5px 12px",
-                        background: eventFilter === f.id ? "rgba(0,255,65,0.15)" : "rgba(0,0,0,0.3)",
-                        border: eventFilter === f.id ? "1px solid #00ff41" : "1px solid #222",
-                        borderRadius: "4px",
-                        color: eventFilter === f.id ? "#00ff41" : "#555",
-                        fontFamily: "monospace",
-                        fontSize: "0.75rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-                {walrusBlobs.length > 0 && (
-                  <div
-                    style={{
-                      margin: "8px 0 4px 0",
-                      padding: "8px 12px",
-                      background: "rgba(0,255,65,0.03)",
-                      border: "1px solid #1a3a1a",
-                      borderRadius: "8px",
-                      display: "flex",
-                      gap: "8px",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: "#00ff41",
-                        fontFamily: "monospace",
-                        fontSize: "0.65rem",
-                        letterSpacing: "1px",
-                      }}
-                    >
-                      🐋 WALRUS:
-                    </span>
-                    {walrusBlobs.slice(0, 3).map((blob, i) => (
-                      <a
-                        key={i}
-                        href={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blob.blob_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: "#4DA2FF",
-                          fontFamily: "monospace",
-                          fontSize: "0.6rem",
-                          textDecoration: "none",
-                          background: "rgba(77,162,255,0.1)",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          border: "1px solid rgba(77,162,255,0.3)",
-                        }}
-                      >
-                        📦 {blob.blob_type.replace("_", " ")} ·{" "}
-                        {new Date(blob.created_at).toLocaleTimeString("en", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </a>
-                    ))}
-                    <span style={{ color: "#888", fontFamily: "monospace", fontSize: "0.6rem" }}>
-                      Civilization state archived on Walrus testnet
-                    </span>
-                  </div>
-                )}
-                <div style={{ overflow: "hidden", padding: "10px 0" }}>
-                  {filteredEvents.length === 0 ? (
-                    <span
-                      style={{
-                        color: "#555",
-                        fontFamily: "monospace",
-                        fontSize: "0.8rem",
-                        padding: "0 12px",
-                      }}
-                    >
-                      No events yet...
-                    </span>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        animation: `tickerScroll ${tickerDuration}s linear infinite`,
-                        whiteSpace: "nowrap",
-                        willChange: "transform",
-                        width: "max-content",
-                      }}
-                    >
-                      {[...filteredEvents, ...filteredEvents].map((item, i) => {
-                        const badgeColor = WALRUS_TICKER_TYPE_COLORS[item.type] || "#00ff41";
-                        const icon = WALRUS_TICKER_TYPE_ICONS[item.type] || "📡";
-                        return (
-                          <span key={i} style={{ display: "inline-flex", alignItems: "center" }}>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                padding: "0 40px",
-                                borderRight: "1px solid #ffffff11",
-                                fontFamily: "monospace",
-                                fontSize: "0.75rem",
-                                color: "#00ff41",
-                              }}
-                            >
-                              <span style={{ fontSize: "1rem" }}>{icon}</span>
-                              <span
-                                style={{
-                                  color: badgeColor === "#666" ? "#c4c4c4" : badgeColor === "#888" ? "#d0d0d0" : badgeColor,
-                                  fontWeight: "bold",
-                                  fontSize: "0.7rem",
-                                  background:
-                                    badgeColor === "#666"
-                                      ? "rgba(180,180,180,0.2)"
-                                      : badgeColor === "#888"
-                                        ? "rgba(200,200,200,0.2)"
-                                        : `${badgeColor}33`,
-                                  padding: "2px 6px",
-                                  borderRadius: "3px",
-                                  border: `1px solid ${badgeColor === "#666" ? "#c4c4c466" : badgeColor === "#888" ? "#d0d0d066" : `${badgeColor}55`}`,
-                                }}
-                              >
-                                {item.type?.replace("_", " ").toUpperCase()}
-                              </span>
-                              <span>{item.text}</span>
-                              <span style={{ color: "#00ff41", fontSize: "0.75rem" }}>— {item.agent}</span>
-                            </span>
-                            <span style={{ color: "#00ff4155", padding: "0 20px" }}>◆</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  margin: "8px 0",
+                  margin: "24px 0 8px",
                   overflow: "hidden",
                   borderRadius: "6px",
                   border: "1px solid #a78bfa33",
                   background: "rgba(167,139,250,0.02)",
+                  position: "relative",
+                  zIndex: 1,
                 }}
               >
                 <div
@@ -12989,11 +16004,11 @@ export default function Home() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
                         gap: "12px",
                       }}
                     >
-                      {zcoDecisions.slice(0, 3).map((decision, zidx) => {
+                      {(Array.isArray(zcoDecisions) ? zcoDecisions : []).slice(0, 3).map((decision, zidx) => {
                         const eventTypeRaw = (decision.event_type || "").trim();
                         const eventBadge = eventTypeRaw
                           ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
@@ -13077,16 +16092,16 @@ export default function Home() {
                               }}
                               aria-label="Judge votes"
                             >
-                                {(decision.votes || []).map((vote, idx) => (
-                                  <span key={vote.judge || idx}>
-                                    Judge {["I", "II", "III"][idx] || idx + 1}{" "}
-                                    {vote.status === "voted" ? "✓" : "✗"}
-                                    {idx < (decision.votes ?? []).length - 1 ? (
-                                      <span style={{ color: "#444", margin: "0 6px" }}>|</span>
-                                    ) : null}
-                                  </span>
-                                ))}
-                              </div>
+                              {(decision.votes || []).map((vote, idx) => (
+                                <span key={vote.judge || idx}>
+                                  Judge {["I", "II", "III"][idx] || idx + 1}{" "}
+                                  {vote.status === "voted" ? "✓" : "✗"}
+                                  {idx < (decision.votes ?? []).length - 1 ? (
+                                    <span style={{ color: "#444", margin: "0 6px" }}>|</span>
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
                               <span
                                 style={{
@@ -13127,34 +16142,34 @@ export default function Home() {
                               {(() => {
                                 const proofHref = zcoProofHref(decision);
                                 return proofHref ? (
-                                <a
-                                  href={proofHref}
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    background: "rgba(167,139,250,0.1)",
-                                    border: "1px solid #a78bfa44",
-                                    color: "#a78bfa",
-                                    fontFamily: "monospace",
-                                    fontSize: "0.7rem",
-                                    padding: "4px 10px",
-                                    borderRadius: "4px",
-                                    textDecoration: "none",
-                                  }}
-                                >
-                                  View in Explorer ↗
-                                </a>
+                                  <a
+                                    href={proofHref}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      background: "rgba(167,139,250,0.1)",
+                                      border: "1px solid #a78bfa44",
+                                      color: "#a78bfa",
+                                      fontFamily: "monospace",
+                                      fontSize: "0.7rem",
+                                      padding: "4px 10px",
+                                      borderRadius: "4px",
+                                      textDecoration: "none",
+                                    }}
+                                  >
+                                    View in Explorer ↗
+                                  </a>
                                 ) : (
-                                <span
-                                  style={{
-                                    fontFamily: "monospace",
-                                    fontSize: "0.68rem",
-                                    color: "#888",
-                                  }}
-                                >
-                                  ⏳ Storing proof…
-                                </span>
+                                  <span
+                                    style={{
+                                      fontFamily: "monospace",
+                                      fontSize: "0.68rem",
+                                      color: "#888",
+                                    }}
+                                  >
+                                    ⏳ Storing proof…
+                                  </span>
                                 );
                               })()}
                               {decision.sui_url ? (
@@ -13187,9 +16202,9 @@ export default function Home() {
                   )}
                 </div>
               </div>
-
-            </>
+            </div>
           )}
+
 
           {activeTab === "chat" && (
             <section className="chatTabSection">
@@ -13847,11 +16862,70 @@ export default function Home() {
                               </p>
                             ) : null}
                           </>
-                        ) : zionbetDisplayedMarkets.length === 0 ? (
-                          <p style={{ fontSize: "0.78rem", color: "#8b9ab1", margin: "12px 0" }}>
-                            No active markets in this category
-                          </p>
                         ) : (
+                          <>
+                            {betTab === "civilization" && zionMarkets.length > 0 ? (
+                              <div style={{ marginBottom: "16px" }}>
+                                <div
+                                  style={{
+                                    color: "#444",
+                                    fontSize: "0.58rem",
+                                    fontFamily: "monospace",
+                                    letterSpacing: "2px",
+                                    marginBottom: "10px",
+                                  }}
+                                >
+                                  🌍 LIVE ZION CIVILIZATION MARKETS
+                                </div>
+                                <div className={`zionBetPmCardGrid${isMobile ? " zionBetPmCardGrid--mobile" : ""}`}>
+                                  {zionMarkets.map((market) => {
+                                    const marketApi = zionMarketRowToApiMarket(market);
+                                    const yes = marketApi.yes_pct ?? 50;
+                                    const bet = zionbetApiToMarket(marketApi);
+                                    const opts = market.options || [];
+                                    const yesOpt = opts[0];
+                                    const noOpt = opts[1];
+                                    return (
+                                      <ZionBetMarketCardItem
+                                        key={market.market_id}
+                                        marketApi={marketApi}
+                                        yes={yes}
+                                        betTab="civilization"
+                                        volumeLabel="ZION Civ"
+                                        endLabel={zionbetEndDateLabel(market.expires_at)}
+                                        isZionCard
+                                        yesButtonLabel={
+                                          yesOpt
+                                            ? zionMarketOptionButtonLabel(yesOpt.label, yes)
+                                            : `YES ${yes}¢`
+                                        }
+                                        noButtonLabel={
+                                          noOpt
+                                            ? zionMarketOptionButtonLabel(noOpt.label, 100 - yes)
+                                            : `NO ${100 - yes}¢`
+                                        }
+                                        onOpen={() => setDetailMarket(marketApi)}
+                                        onBetYes={(e) => {
+                                          e.stopPropagation();
+                                          setBetModal({ market: bet, direction: true, open: true });
+                                        }}
+                                        onBetNo={(e) => {
+                                          e.stopPropagation();
+                                          setBetModal({ market: bet, direction: false, open: true });
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+                            {zionbetDisplayedMarkets.length === 0 ? (
+                              betTab === "civilization" && zionMarkets.length > 0 ? null : (
+                                <p style={{ fontSize: "0.78rem", color: "#8b9ab1", margin: "12px 0" }}>
+                                  No active markets in this category
+                                </p>
+                              )
+                            ) : (
                           <div className={`zionBetPmCardGrid${isMobile ? " zionBetPmCardGrid--mobile" : ""}`}>
                             {zionbetDisplayedMarkets.map((m) => {
                               const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
@@ -13883,6 +16957,8 @@ export default function Home() {
                             })}
                           </div>
                             )}
+                          </>
+                        )}
                           </div>
                         </div>
                       </>
@@ -13915,7 +16991,7 @@ export default function Home() {
                         </td>
                       </tr>
                     ) : (
-                      leaderboard.map((row, idx) => (
+                      (Array.isArray(leaderboard) ? leaderboard : []).map((row, idx) => (
                         <tr key={`${row.wallet ?? idx}-${idx}`}>
                           <td>{row.rank ?? idx + 1}</td>
                           <td>{shortWallet(row.wallet ?? (row as { address?: string }).address ?? "")}</td>
@@ -13965,1156 +17041,2048 @@ export default function Home() {
                 boxSizing: "border-box",
               }}
             >
-              <div
-                style={{
-                  maxWidth: "480px",
-                  width: "100%",
-                  margin: "0 auto",
-                  background: "rgba(0, 0, 0, 0.6)",
-                  backdropFilter: "blur(20px)",
-                  WebkitBackdropFilter: "blur(20px)",
-                  border: "1px solid rgba(0, 255, 100, 0.15)",
-                  boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
-                  borderRadius: "12px",
-                  padding: "16px",
-                  boxSizing: "border-box",
-                }}
-              >
-                <style>{`
-                  @keyframes zbank-receipt-pulse {
-                    0%, 100% { opacity: 0.3; transform: scale(0.8); }
-                    50% { opacity: 1; transform: scale(1.2); }
-                  }
-                `}</style>
-                <div
-                  style={{
-                    borderBottom: "1px solid rgba(0,255,100,0.15)",
-                    paddingBottom: "6px",
-                    marginBottom: "8px",
-                  }}
-                >
-                  <h2
-                    style={{
-                      color: "#00ff41",
-                      fontSize: "1rem",
-                      fontWeight: "bold",
-                      margin: 0,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    🏦 ZION BANK
-                  </h2>
+<div style={{ fontFamily:'monospace', maxWidth:'480px', margin:'0 auto', padding:'8px', width:'100%', boxSizing:'border-box' }}>
+  <style>{`
+    input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .zbank-input { color: #ffffff !important; caret-color: #00ff41; }
+    .zbank-input::placeholder { color: #444; }
+    .memo-input::placeholder { color: #333; }
+    .memo-input { caret-color: #00ff41; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes pulse-glow {
+      0%,100% { box-shadow: 0 0 4px rgba(0,255,65,0.4); opacity:0.7; }
+      50% { box-shadow: 0 0 12px rgba(0,255,65,1); opacity:1; }
+    }
+    .memo-cursor::after {
+      content: '|';
+      color: #00ff41;
+      animation: blink 1s infinite;
+      margin-left: 2px;
+    }
+  `}</style>
+  <div style={{display:'flex', alignItems:'center', background:'#0a0a0a', borderRadius:'16px', padding:'4px', marginBottom:'16px'}}>
+    <button
+      type="button"
+      onClick={() => { setZbankMode('anonymous'); setZbStatus(''); setZbTxDigest(''); setAuditTrail(null); setZkStealthStatus(''); }}
+      style={{flex:1, padding:'10px', borderRadius:'12px', border:'none', cursor:'pointer', fontFamily:'monospace', fontSize:'0.8rem', letterSpacing:'1px', background: zbankMode==='anonymous' ? '#00ff41' : 'transparent', color: zbankMode==='anonymous' ? '#000' : '#555', fontWeight:'bold', transition:'all 0.2s'}}
+    >
+      🔒 ANONYMOUS
+    </button>
+    <button
+      type="button"
+      onClick={() => { setZbankMode('stealth'); setStealthSubTab('send'); setZkStealthStatus(''); }}
+      style={{flex:1, padding:'10px', borderRadius:'12px', border:'none', cursor:'pointer', fontFamily:'monospace', fontSize:'0.8rem', letterSpacing:'1px', background: zbankMode==='stealth' ? '#00ff41' : 'transparent', color: zbankMode==='stealth' ? '#000' : '#555', fontWeight:'bold', transition:'all 0.2s'}}
+    >
+      ⚡ STEALTH
+    </button>
+    <button
+      type="button"
+      onClick={() => setShowAdvanced(!showAdvanced)}
+      onMouseEnter={() => {
+        let idx = 0;
+        gearIntervalRef.current = setInterval(() => {
+          idx = (idx + 1) % gearColors.length;
+          setGearColorIdx(idx);
+        }, 150);
+      }}
+      onMouseLeave={() => {
+        if (gearIntervalRef.current) clearInterval(gearIntervalRef.current);
+        setGearColorIdx(0);
+      }}
+      style={{width:'34px', height:'34px', borderRadius:'8px', border:'none',
+              background:'transparent', cursor:'pointer', fontSize:'1.1rem',
+              color: gearColors[gearColorIdx],
+              transition:'color 0.15s',
+              display:'flex', alignItems:'center', justifyContent:'center'}}
+    >
+      ⚙
+    </button>
+  </div>
+
+  {zbankMode === 'anonymous' && (
+  <div style={{background:'#0d0d0d', borderRadius:'16px', padding:'16px', marginBottom:'4px', border:'1px solid #2a2a2a'}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
+      <span style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>From:</span>
+      <span style={{color:'#555', fontSize:'0.68rem', fontFamily:'monospace'}}>{walletAddress ? walletAddress.slice(0,6)+'...'+walletAddress.slice(-4) : 'Connect wallet'}</span>
+    </div>
+    <div style={{background:'#111', borderRadius:'12px', padding:'14px 16px'}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+          <img
+            src={zbCoin === 'SUI'
+              ? 'https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png'
+              : 'https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png'}
+            style={{width:'28px', height:'28px', borderRadius:'50%'}}
+            alt={zbCoin}
+          />
+          <div>
+            <div style={{color:'#fff', fontSize:'0.9rem', fontFamily:'monospace', fontWeight:'bold'}}>{zbCoin}</div>
+            <div style={{color:'#777', fontSize:'0.65rem'}}>Sui Network</div>
+          </div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <input
+            className="zbank-input"
+            type="number"
+            value={anonymousAmount || ''}
+            onChange={(e) => setAnonymousAmount(parseFloat(e.target.value) || 0)}
+            placeholder="0.00"
+            style={{background:'transparent', border:'none', color:'#ffffff', fontSize:'1.4rem', fontFamily:'monospace', fontWeight:'bold', textAlign:'right', width:'130px', outline:'none', MozAppearance:'textfield'}}
+          />
+          <div style={{color:'#777', fontSize:'0.65rem', textAlign:'right'}}>
+            {zbCoin === 'USDC'
+              ? `~$${(anonymousAmount || 0).toFixed(2)} USD`
+              : `~$${((anonymousAmount || 0) * suiPrice).toFixed(2)} USD`}
+          </div>
+        </div>
+      </div>
+      <div style={{display:'flex', gap:'8px', marginTop:'10px'}}>
+          <button
+            type="button"
+            onClick={() => setZbCoin('SUI')}
+            style={{
+              flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px',
+              padding:'10px', borderRadius:'12px', cursor:'pointer',
+              border: zbCoin==='SUI' ? '1px solid #00ff41' : '1px solid #2a2a2a',
+              background: zbCoin==='SUI' ? '#0d1a0d' : '#0d0d0d',
+              color: zbCoin==='SUI' ? '#00ff41' : '#777',
+              fontFamily:'monospace', fontSize:'0.75rem', fontWeight:'bold',
+              transition:'all 0.2s'
+            }}
+          >
+            <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png" style={{width:'16px', height:'16px', borderRadius:'50%'}} alt="SUI" />
+            SUI
+          </button>
+          <button
+            type="button"
+            onClick={() => setZbCoin('USDC')}
+            style={{
+              flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:'6px',
+              padding:'10px', borderRadius:'12px', cursor:'pointer',
+              border: zbCoin==='USDC' ? '1px solid #00aaff' : '1px solid #2a2a2a',
+              background: zbCoin==='USDC' ? '#0a0d1a' : '#0d0d0d',
+              color: zbCoin==='USDC' ? '#00aaff' : '#777',
+              fontFamily:'monospace', fontSize:'0.75rem', fontWeight:'bold',
+              transition:'all 0.2s'
+            }}
+          >
+            <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png" style={{width:'16px', height:'16px', borderRadius:'50%'}} alt="USDC" />
+            USDC
+          </button>
+        </div>
+    </div>
+  </div>
+  )}
+
+  {zbankMode === 'anonymous' && (
+  <div style={{display:'flex', justifyContent:'center', margin:'-2px 0', zIndex:1, position:'relative'}}>
+    <div style={{width:'32px', height:'32px', borderRadius:'50%', background:'#0d0d0d', border:'2px solid #2a3a2a', display:'flex', alignItems:'center', justifyContent:'center', color:'#00ff41', fontSize:'0.9rem'}}>↓</div>
+  </div>
+  )}
+
+  {zbankMode === 'stealth' && (
+    <>
+      <div style={{background:'#0d0d0d', border:'1px solid #2a2a2a', borderRadius:'12px', padding:'12px', marginBottom:'8px'}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px'}}>
+          <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+            <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png"
+                 style={{width:'24px', height:'24px', borderRadius:'50%'}} alt="SUI"/>
+            <div>
+              <div style={{fontSize:'0.85rem', fontWeight:'bold', color:'#fff'}}>SUI</div>
+              <div style={{fontSize:'0.6rem', color:'#555'}}>{walletAddress ? walletAddress.slice(0,6)+'...'+walletAddress.slice(-4) : 'Connect wallet'}</div>
+            </div>
+          </div>
+          <div style={{display:'flex', gap:'4px', position:'relative', zIndex:10}}>
+            <button type="button" onClick={() => { console.log('0.1 clicked'); setStealthAmount(0.1); }}
+              style={{padding:'6px 12px', borderRadius:'8px', cursor:'pointer',
+                      fontFamily:'monospace', fontSize:'0.7rem', zIndex:10,
+                      border: stealthAmount===0.1 ? '1px solid #00ff41' : '1px solid #333',
+                      background: stealthAmount===0.1 ? '#0d1a0d' : '#111',
+                      color: stealthAmount===0.1 ? '#00ff41' : '#888', position:'relative'}}>
+              0.1 SUI
+            </button>
+            <button type="button" onClick={() => { console.log('1 clicked'); setStealthAmount(1); }}
+              style={{padding:'6px 12px', borderRadius:'8px', cursor:'pointer',
+                      fontFamily:'monospace', fontSize:'0.7rem', zIndex:10,
+                      border: stealthAmount===1 ? '1px solid #00ff41' : '1px solid #333',
+                      background: stealthAmount===1 ? '#0d1a0d' : '#111',
+                      color: stealthAmount===1 ? '#00ff41' : '#888', position:'relative'}}>
+              1 SUI
+            </button>
+            <button type="button" onClick={() => { console.log('10 clicked'); setStealthAmount(10); }}
+              style={{padding:'6px 12px', borderRadius:'8px', cursor:'pointer',
+                      fontFamily:'monospace', fontSize:'0.7rem', zIndex:10,
+                      border: stealthAmount===10 ? '1px solid #00ff41' : '1px solid #333',
+                      background: stealthAmount===10 ? '#0d1a0d' : '#111',
+                      color: stealthAmount===10 ? '#00ff41' : '#888', position:'relative'}}>
+              10 SUI
+            </button>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:'1.2rem', fontWeight:'bold', color:'#fff'}}>{stealthAmount}</div>
+            <div style={{fontSize:'0.6rem', color:'#555'}}>~${(stealthAmount * suiPrice).toFixed(2)} USD</div>
+          </div>
+        </div>
+        <div style={{borderTop:'1px solid #1a1a1a', margin:'8px 0'}}></div>
+        <div style={{fontSize:'0.6rem', color:'#00ff41', letterSpacing:'1px', marginBottom:'5px'}}>→ RECIPIENT</div>
+        <div style={{display:'flex', alignItems:'center', gap:'6px',
+                     background:'#111', borderRadius:'8px', padding:'8px 10px',
+                     marginBottom:'8px', border:'1px solid #1a3a1a'}}>
+          <div style={{width:'18px', height:'18px', borderRadius:'50%', background:'#0d2a0d',
+                       display:'flex', alignItems:'center', justifyContent:'center',
+                       fontSize:'0.7rem', flexShrink:0,
+                       animation:'pulse-glow 1.5s ease-in-out infinite'}}>⚡</div>
+          <input value={zkStealthRecipient}
+            onChange={(e) => setZkStealthRecipient(e.target.value)}
+            placeholder="Paste st:sui:... here"
+            className="zbank-input"
+            style={{flex:1, width:'100%', background:'transparent', border:'none', color:'#fff',
+                    fontFamily:'monospace', fontSize:'0.75rem', outline:'none',
+                    caretColor:'#00ff41'}}/>
+          <button type="button" onClick={async () => { try { const t = await navigator.clipboard.readText(); setZkStealthRecipient(t.trim()); } catch {} }}
+            style={{padding:'4px 8px', borderRadius:'5px', border:'1px solid #1a3a1a',
+                    background:'#0a1a0a', color:'#00ff41', fontFamily:'monospace',
+                    fontSize:'0.62rem', cursor:'pointer', whiteSpace:'nowrap'}}>
+            PASTE
+          </button>
+        </div>
+        <div style={{fontSize:'0.6rem', color:'#555', letterSpacing:'1px', marginBottom:'4px'}}>MEMO</div>
+        <textarea value={stealthMemo} onChange={(e) => setStealthMemo(e.target.value.slice(0, 280))}
+          rows={2} className="zbank-input"
+          placeholder="Private message (optional)"
+          style={{width:'100%', background:'#111', border:'1px solid #1a3a1a',
+                  borderRadius:'8px', padding:'8px 10px', color:'#fff',
+                  fontFamily:'monospace', fontSize:'0.72rem', outline:'none',
+                  resize:'none', boxSizing:'border-box', caretColor:'#00ff41'}}/>
+      </div>
+
+      <div style={{display:'flex', gap:'4px', marginBottom:'8px', alignItems:'center'}}>
+        <button type="button" onClick={handleGenerateStealthAddress}
+          style={{padding:'6px 10px', borderRadius:'7px', border:'1px solid #1a3a1a', background:'#0a1a0a', color:'#00ff41', fontFamily:'monospace', fontSize:'0.65rem', cursor:'pointer', whiteSpace:'nowrap'}}>
+          🔑 MY KEY
+        </button>
+        <div style={{flex:1, background:'#0d0d0d', border:'1px solid #1a1a1a', borderRadius:'7px', padding:'6px 8px', color:'#444', fontFamily:'monospace', fontSize:'0.62rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+          {stealthAddress || 'No key generated'}
+        </div>
+        <button type="button" onClick={copyStealthAddressToClipboard} disabled={!stealthAddress}
+          style={{padding:'6px 8px', borderRadius:'7px', border:'1px solid #1a3a1a', background:'transparent', color:'#00ff41', fontFamily:'monospace', fontSize:'0.62rem', cursor: stealthAddress ? 'pointer' : 'default'}}>
+          {copiedStealth ? '✓' : 'COPY'}
+        </button>
+        <div style={{position:'relative'}}>
+          <button type="button" onClick={handleExportKeys}
+            onMouseEnter={(e) => {
+              setKeyTooltip('export');
+              e.currentTarget.style.boxShadow = '0 0 12px rgba(0,170,255,0.8), 0 0 4px rgba(0,170,255,0.5)';
+              e.currentTarget.style.borderColor = '#00aaff';
+              e.currentTarget.style.color = '#fff';
+              e.currentTarget.style.background = 'rgba(0,170,255,0.1)';
+            }}
+            onMouseLeave={(e) => {
+              setKeyTooltip('');
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = '#222';
+              e.currentTarget.style.color = '#00aaff';
+              e.currentTarget.style.background = 'transparent';
+            }}
+            style={{padding:'6px 8px', borderRadius:'7px', border:'1px solid #222',
+                    background:'transparent', color:'#00aaff', fontSize:'0.85rem', cursor:'pointer',
+                    transition:'all 0.2s'}}>
+            ↑
+          </button>
+          {keyTooltip === 'export' && (
+            <div style={{position:'absolute', bottom:'110%', left:'50%', transform:'translateX(-50%)',
+                         background:'#1a1a1a', border:'1px solid #333', borderRadius:'5px',
+                         padding:'3px 8px', color:'#00aaff', fontSize:'0.62rem',
+                         whiteSpace:'nowrap', zIndex:100, pointerEvents:'none'}}>
+              Export keys
+            </div>
+          )}
+        </div>
+        <div style={{position:'relative'}}>
+          <button type="button" onClick={handleImportKeys}
+            onMouseEnter={(e) => {
+              setKeyTooltip('import');
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.boxShadow = '0 0 14px rgba(255,170,0,0.9)';
+              el.style.borderColor = '#ffaa00';
+              el.style.color = '#fff';
+              el.style.background = 'rgba(255,170,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              setKeyTooltip('');
+              const el = e.currentTarget as HTMLButtonElement;
+              el.style.boxShadow = 'none';
+              el.style.borderColor = '#222';
+              el.style.color = '#ffaa00';
+              el.style.background = 'transparent';
+            }}
+            style={{padding:'6px 8px', borderRadius:'7px', border:'1px solid #222',
+                    background:'transparent', color:'#ffaa00', fontSize:'0.85rem', cursor:'pointer',
+                    transition:'all 0.2s'}}>
+            ↓
+          </button>
+          {keyTooltip === 'import' && (
+            <div style={{position:'absolute', bottom:'110%', left:'50%', transform:'translateX(-50%)',
+                         background:'#1a1a1a', border:'1px solid #333', borderRadius:'5px',
+                         padding:'3px 8px', color:'#ffaa00', fontSize:'0.62rem',
+                         whiteSpace:'nowrap', zIndex:100, pointerEvents:'none'}}>
+              Import keys
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{display:'flex', gap:'4px', marginBottom:'10px'}}>
+        <button type="button" onClick={() => setStealthSubTab('send')}
+          style={{flex:1, padding:'8px', borderRadius:'8px', border:'none', cursor:'pointer', fontFamily:'monospace', fontSize:'0.72rem',
+                  background: stealthSubTab==='send' ? '#0d2a0d' : '#0d0d0d',
+                  color: stealthSubTab==='send' ? '#00ff41' : '#444',
+                  borderBottom: stealthSubTab==='send' ? '1.5px solid #00ff41' : '1.5px solid transparent'}}>
+          ↗ SEND
+        </button>
+        <button type="button" onClick={() => setStealthSubTab('receive')}
+          style={{flex:1, padding:'8px', borderRadius:'8px', border:'none', cursor:'pointer', fontFamily:'monospace', fontSize:'0.72rem',
+                  background: stealthSubTab==='receive' ? '#0d2a0d' : '#0d0d0d',
+                  color: stealthSubTab==='receive' ? '#00ff41' : '#444',
+                  borderBottom: stealthSubTab==='receive' ? '1.5px solid #00ff41' : '1.5px solid transparent'}}>
+          ↙ RECEIVE
+        </button>
+      </div>
+
+      {showAdvanced && stealthSubTab === 'send' && (
+        <div style={{background:'#0a0f0a', border:'1px solid #2a3a2a', borderRadius:'12px', padding:'12px', marginBottom:'12px'}}>
+          <div style={{color:'#777', fontSize:'0.62rem', letterSpacing:'2px', marginBottom:'10px'}}>ADVANCED SETTINGS</div>
+          <button type="button" onClick={() => setMultiSend(!multiSend)}
+            style={{padding:'6px 12px', fontSize:'0.68rem', marginBottom:'10px', width:'100%',
+                    background: multiSend ? '#0d2a0d' : 'transparent',
+                    border: multiSend ? '1px solid #00ff41' : '1px solid #2a3a2a',
+                    color: multiSend ? '#00ff41' : '#777',
+                    cursor:'pointer', fontFamily:'monospace', borderRadius:'8px'}}>
+            {multiSend ? '👥 MULTI-SEND ON' : '👥 MULTI-SEND OFF'}
+          </button>
+          {multiSend && (
+            <div style={{ marginBottom:'10px' }}>
+              {multiRecipients.map((r, i) => (
+                <div key={i} style={{display:'flex', gap:'6px', marginBottom:'6px', alignItems:'center'}}>
+                  <input className="zbank-input" value={r.address}
+                    onChange={(e) => { const updated = [...multiRecipients]; updated[i].address = e.target.value; setMultiRecipients(updated); }}
+                    placeholder="0x... recipient"
+                    style={{flex:1, padding:'8px', background:'#111', border:'1px solid #2a3a2a', color:'#ffffff', fontFamily:'monospace', fontSize:'0.65rem', borderRadius:'8px', outline:'none'}} />
+                  <select value={r.denomination}
+                    onChange={(e) => { const updated = [...multiRecipients]; updated[i].denomination = e.target.value as "0.1" | "1" | "10"; setMultiRecipients(updated); }}
+                    style={{padding:'8px', background:'#111', color:'#00ff41', border:'1px solid #2a3a2a', fontFamily:'monospace', fontSize:'0.65rem', cursor:'pointer', borderRadius:'8px'}}>
+                    <option value="0.1">0.1</option><option value="1">1</option><option value="10">10</option>
+                  </select>
+                  {i > 0 && (
+                    <button type="button" onClick={() => setMultiRecipients(multiRecipients.filter((_, j) => j !== i))}
+                      style={{padding:'6px 8px', background:'transparent', border:'1px solid #331a1a', color:'#664444', cursor:'pointer', fontFamily:'monospace', borderRadius:'8px', fontSize:'0.65rem'}}>✕</button>
+                  )}
                 </div>
+              ))}
+              <button type="button" onClick={() => setMultiRecipients([...multiRecipients, { address: '', denomination: '0.1' }])}
+                style={{width:'100%', padding:'6px', background:'transparent', border:'1px dashed #2a3a2a', color:'#777', cursor:'pointer', fontFamily:'monospace', fontSize:'0.65rem', marginBottom:'6px', borderRadius:'8px'}}>
+                + ADD RECIPIENT
+              </button>
+            </div>
+          )}
+          <div style={{display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'8px'}}>
+            <button type="button" onClick={() => setAutoWithdraw(!autoWithdraw)}
+              style={{padding:'6px 10px', fontSize:'0.65rem', background: autoWithdraw ? '#0d2a0d' : 'transparent', border: autoWithdraw ? '1px solid #00ff41' : '1px solid #2a3a2a', color: autoWithdraw ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'8px'}}>
+              {autoWithdraw ? '⏱ AUTO-WITHDRAW ON' : '⏱ AUTO-WITHDRAW OFF'}
+            </button>
+            <button type="button" onClick={() => setFragmentedWithdraw(!fragmentedWithdraw)}
+              style={{padding:'6px 10px', fontSize:'0.65rem', background: fragmentedWithdraw ? '#0d2a0d' : 'transparent', border: fragmentedWithdraw ? '1px solid #00ff41' : '1px solid #2a3a2a', color: fragmentedWithdraw ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'8px'}}>
+              {fragmentedWithdraw ? '🔀 FRAGMENTED ON' : '🔀 FRAGMENTED OFF'}
+            </button>
+            <button type="button" onClick={() => setUseDecoys(!useDecoys)}
+              style={{padding:'6px 10px', fontSize:'0.65rem', background: useDecoys ? '#0d2a0d' : 'transparent', border: useDecoys ? '1px solid #00ff41' : '1px solid #2a3a2a', color: useDecoys ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'8px'}}>
+              {useDecoys ? '👻 DECOYS ON' : '👻 DECOYS OFF'}
+            </button>
+          </div>
+        </div>
+      )}
 
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "5px",
-                    marginBottom: "8px",
-                  }}
-                >
-                  {(
-                    [
-                      ["send", "SEND"],
-                      ["receive", "RECEIVE"],
-                      ["scan", "SCAN"],
-                    ] as const
-                  ).map(([tab, label]) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => {
-                        setZbankTab(tab);
-                        setBankError(null);
-                      }}
-                      style={{
-                        flex: 1,
-                        minHeight: "36px",
-                        padding: "6px 8px",
-                        background:
-                          zbankTab === tab
-                            ? "rgba(0,255,100,0.15)"
-                            : "rgba(255,255,255,0.04)",
-                        border:
-                          zbankTab === tab
-                            ? "1px solid rgba(0,255,100,0.45)"
-                            : "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "8px",
-                        color: zbankTab === tab ? "#00ff88" : "#888",
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        letterSpacing: "0.06em",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {zbankTab === "receive" && (
-                  <div style={{ marginBottom: "8px" }}>
-                    <p
-                      style={{
-                        color: "#ffaa44",
-                        fontSize: "0.68rem",
-                        margin: "0 0 8px",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      ⚠️ Save your keys! If lost, funds cannot be recovered.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleGenerateStealth}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        marginBottom: "6px",
-                        background: "rgba(0,255,100,0.1)",
-                        border: "1px solid rgba(0,255,100,0.35)",
-                        borderRadius: "8px",
-                        color: "#00ff88",
-                        fontWeight: 700,
-                        fontSize: "0.8rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Generate my stealth address
-                    </button>
-                    {stealthKeys && (
-                      <>
-                        <div
-                          style={{
-                            padding: "8px 12px",
-                            marginBottom: "6px",
-                            background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(0,255,100,0.2)",
-                            borderRadius: "8px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              color: "#666",
-                              fontSize: "0.6rem",
-                              marginBottom: "5px",
-                              letterSpacing: "0.08em",
-                            }}
-                          >
-                            META-ADDRESS
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "monospace",
-                              fontSize: "0.62rem",
-                              color: "#00ff88",
-                              wordBreak: "break-all",
-                              lineHeight: 1.5,
-                              marginBottom: "8px",
-                            }}
-                          >
-                            {stealthKeys.metaAddress}
-                          </div>
-                          <StealthKaleidoscopeCanvas
-                            spendingPubKey={stealthKeys.spendingPubKey}
-                            viewingPubKey={stealthKeys.viewingPubKey}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "10px",
-                            flexWrap: "wrap",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={handleExportKeys}
-                            style={{
-                              padding: "8px 16px",
-                              background: "rgba(0,255,100,0.1)",
-                              border: "1px solid rgba(0,255,100,0.3)",
-                              borderRadius: "8px",
-                              color: "#00ff88",
-                              cursor: "pointer",
-                              fontSize: "0.8rem",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            ⬇ Export keys
-                          </button>
-                          <label
-                            style={{
-                              padding: "8px 16px",
-                              background: "rgba(100,100,255,0.1)",
-                              border: "1px solid rgba(100,100,255,0.3)",
-                              borderRadius: "8px",
-                              color: "#8888ff",
-                              cursor: "pointer",
-                              fontSize: "0.8rem",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            ⬆ Import keys
-                            <input
-                              type="file"
-                              accept=".json"
-                              onChange={handleImportKeys}
-                              style={{ display: "none" }}
-                            />
-                          </label>
-                        </div>
-                        <p
-                          style={{
-                            color: "#ffaa44",
-                            fontSize: "0.72rem",
-                            margin: "0 0 10px",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          ⚠️ Save your keys file! Without it you cannot claim
-                          payments.
-                        </p>
-                        {keysFileStatus?.type === "success" && (
-                          <div
-                            style={{
-                              padding: "12px",
-                              background: "rgba(0,255,100,0.1)",
-                              border: "1px solid rgba(0,255,100,0.3)",
-                              borderRadius: "8px",
-                              marginBottom: "10px",
-                              fontFamily: "monospace",
-                              fontSize: "0.75rem",
-                              color: "#00ff88",
-                            }}
-                          >
-                            ✅ {keysFileStatus.message}
-                          </div>
-                        )}
-                        {keysFileStatus?.type === "error" && (
-                          <div
-                            style={{
-                              padding: "12px",
-                              background: "rgba(255,50,50,0.1)",
-                              border: "1px solid rgba(255,50,50,0.3)",
-                              borderRadius: "8px",
-                              marginBottom: "10px",
-                              fontFamily: "monospace",
-                              fontSize: "0.75rem",
-                              color: "#ff6666",
-                            }}
-                          >
-                            ❌ {keysFileStatus.message}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleRegisterStealth}
-                          disabled={stealthRegisterLoading}
-                          style={{
-                            width: "100%",
-                            padding: "10px",
-                            marginBottom: "8px",
-                            background: "rgba(255,255,255,0.06)",
-                            border: "1px solid #333",
-                            borderRadius: "10px",
-                            color: "#fff",
-                            fontWeight: 600,
-                            cursor: stealthRegisterLoading ? "not-allowed" : "pointer",
-                            opacity: stealthRegisterLoading ? 0.7 : 1,
-                          }}
-                        >
-                          {stealthRegisterLoading
-                            ? "Registering..."
-                            : "Register on-chain"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {zbankTab === "scan" && (
-                  <div style={{ marginBottom: "8px" }}>
-                    <button
-                      type="button"
-                      onClick={() => void handleScan()}
-                      disabled={stealthScanLoading}
-                      style={{
-                        width: "100%",
-                        minHeight: "36px",
-                        padding: "8px 12px",
-                        marginBottom: "8px",
-                        background: "rgba(0,255,100,0.1)",
-                        border: "1px solid rgba(0,255,100,0.35)",
-                        borderRadius: "10px",
-                        color: "#00ff88",
-                        fontWeight: 700,
-                        cursor: stealthScanLoading ? "not-allowed" : "pointer",
-                        opacity: stealthScanLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {stealthScanLoading
-                        ? "Scanning..."
-                        : "Scan for incoming payments"}
-                    </button>
-                    {stealthScanResults.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {stealthScanResults.map((item, idx) => (
-                          <div
-                            key={`${item.stealthAddress}-${idx}`}
-                            style={{
-                              padding: "12px",
-                              background: "rgba(0,255,100,0.06)",
-                              border: "1px solid rgba(0,255,100,0.25)",
-                              borderRadius: "10px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                color: "#00ff88",
-                                fontSize: "0.72rem",
-                                marginBottom: "6px",
-                              }}
-                            >
-                              🕵️ Incoming stealth payment
-                            </div>
-                            {item.memoDisplay && (
-                              <div
-                                style={{
-                                  color: "#c8ffc8",
-                                  fontSize: "0.72rem",
-                                  marginBottom: "6px",
-                                }}
-                              >
-                                {item.memoDisplay}
-                              </div>
-                            )}
-                            <div
-                              style={{
-                                fontFamily: "monospace",
-                                fontSize: "0.65rem",
-                                color: "#aaa",
-                                wordBreak: "break-all",
-                                marginBottom: "8px",
-                              }}
-                            >
-                              {item.stealthAddress.slice(0, 20)}…
-                            </div>
-                            {item.txDigest && (
-                              <a
-                                href={`https://suiscan.xyz/testnet/tx/${item.txDigest}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: "#444",
-                                  fontSize: "0.68rem",
-                                  display: "block",
-                                  marginBottom: "8px",
-                                }}
-                              >
-                                View announce TX →
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              disabled={claimingIndex === idx}
-                              onClick={async () => {
-                                if (!stealthKeys || !account?.address) {
-                                  setClaimStatus({
-                                    index: idx,
-                                    digest: "",
-                                    error: "Connect wallet and generate stealth keys first",
-                                  });
-                                  return;
-                                }
-                                setClaimingIndex(idx);
-                                setClaimStatus(null);
-                                setClaimReceiptId(null);
-                                try {
-                                  void fetch("/zco/instant_receipt", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      tx_hash: item.txDigest || "",
-                                      token: item.token || "SUI",
-                                      agent: "Claim",
-                                      agent_class: "claim",
-                                      decision: "claimed",
-                                      consensus: {
-                                        votes_for: 3,
-                                        total_votes: 3,
-                                        avg_confidence: 1.0,
-                                      },
-                                    }),
-                                  })
-                                    .then((r) => r.json())
-                                    .then((data) => {
-                                      if (data?.receipt_id) {
-                                        setClaimReceiptId(data.receipt_id);
-                                      }
-                                    })
-                                    .catch(console.error);
-
-                                  const digest = await claimStealthPayment(
-                                    item.ephemeralPubKey,
-                                    item.stealthAddress,
-                                    stealthKeys.viewingPubKey,
-                                    stealthKeys.spendingPubKey,
-                                    account.address,
-                                    suiClientHook as SuiJsonRpcClient
-                                  );
-                                  setClaimStatus({ index: idx, digest, error: "" });
-                                  setBankError(null);
-                                } catch (err: unknown) {
-                                  const message =
-                                    err instanceof Error
-                                      ? err.message
-                                      : String(err);
-                                  setClaimStatus({
-                                    index: idx,
-                                    digest: "",
-                                    error: message,
-                                    gasHelpAddress: message.includes(
-                                      "USDC found but no SUI"
-                                    )
-                                      ? item.stealthAddress
-                                      : undefined,
-                                  });
-                                } finally {
-                                  setClaimingIndex(null);
-                                }
-                              }}
-                              style={{
-                                width: "100%",
-                                padding: "8px",
-                                background: "rgba(0,255,100,0.12)",
-                                border: "1px solid rgba(0,255,100,0.4)",
-                                borderRadius: "8px",
-                                color: "#00ff88",
-                                fontSize: "0.8rem",
-                                fontWeight: 600,
-                                cursor: claimingIndex === idx ? "not-allowed" : "pointer",
-                                opacity: claimingIndex === idx ? 0.7 : 1,
-                              }}
-                            >
-                              {claimingIndex === idx
-                                ? "Claiming..."
-                                : "Claim to my wallet"}
-                            </button>
-                            {(claimingIndex === idx ||
-                              claimStatus?.index === idx) &&
-                              !claimReceiptId && (
-                              <div
-                                style={{
-                                  marginTop: "12px",
-                                  padding: "12px",
-                                  border: "1px solid #333",
-                                  borderRadius: "10px",
-                                  textAlign: "center",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    color: "#666",
-                                    fontSize: "0.7rem",
-                                    letterSpacing: "2px",
-                                    marginBottom: "8px",
-                                  }}
-                                >
-                                  GENERATING PRIVACY PROOF
-                                </div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "center",
-                                    gap: "6px",
-                                  }}
-                                >
-                                  {[0, 1, 2].map((i) => (
-                                    <div
-                                      key={i}
-                                      style={{
-                                        width: "8px",
-                                        height: "8px",
-                                        borderRadius: "50%",
-                                        background: "#00ff88",
-                                        animation: `zbank-receipt-pulse 1.2s ease-in-out ${i * 0.4}s infinite`,
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {claimReceiptId &&
-                              (claimingIndex === idx ||
-                                claimStatus?.index === idx) && (
-                              <div
-                                style={{
-                                  marginTop: "12px",
-                                  padding: "12px",
-                                  background:
-                                    "linear-gradient(135deg,#0a1a0a,#0d2a1a)",
-                                  border: "1px solid #00ff88",
-                                  borderRadius: "10px",
-                                  textAlign: "center",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    color: "#00ff88",
-                                    fontSize: "0.7rem",
-                                    letterSpacing: "2px",
-                                    marginBottom: "6px",
-                                  }}
-                                >
-                                  🔒 PRIVACY RECEIPT READY
-                                </div>
-                                <a
-                                  href={`/receipt/${claimReceiptId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: "block",
-                                    padding: "8px 16px",
-                                    background: "#00ff88",
-                                    color: "#000",
-                                    borderRadius: "6px",
-                                    fontWeight: "bold",
-                                    fontSize: "0.85rem",
-                                    textDecoration: "none",
-                                  }}
-                                >
-                                  🗄 Open Privacy Receipt
-                                </a>
-                              </div>
-                            )}
-                            {claimStatus?.index === idx && claimStatus.error && (
-                              <div
-                                style={{
-                                  marginTop: "8px",
-                                  padding: "8px",
-                                  background: "rgba(255,50,50,0.1)",
-                                  border: "1px solid rgba(255,50,50,0.3)",
-                                  borderRadius: "8px",
-                                  fontSize: "0.72rem",
-                                  color: "#ff6666",
-                                }}
-                              >
-                                ❌ {claimStatus.error}
-                              </div>
-                            )}
-                            {claimStatus?.index === idx &&
-                              claimStatus.gasHelpAddress && (
-                                <div
-                                  style={{
-                                    marginTop: "8px",
-                                    padding: "8px",
-                                    background: "rgba(255,170,0,0.08)",
-                                    border: "1px solid rgba(255,170,0,0.35)",
-                                    borderRadius: "8px",
-                                    fontSize: "0.68rem",
-                                    color: "#ffaa44",
-                                    lineHeight: 1.5,
-                                  }}
-                                >
-                                  Send 0.01 SUI to{" "}
-                                  <span
-                                    style={{ color: "#00ff88", wordBreak: "break-all" }}
-                                  >
-                                    {claimStatus.gasHelpAddress}
-                                  </span>{" "}
-                                  for gas, then claim again.
-                                </div>
-                              )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {!stealthKeys && (
-                      <p style={{ color: "#666", fontSize: "0.75rem" }}>
-                        Generate keys in RECEIVE tab to scan for your payments.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {zbankTab === "send" && (
-                  <>
-                {/* FROM — Sui only */}
-                <div
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    background: "rgba(255,255,255,0.05)",
-                    boxSizing: "border-box",
-                    marginBottom: "0",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
-                    <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>FROM</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#555", fontSize: "0.7rem", fontFamily: "monospace" }}>
-                      <BankIconImg src={NETWORK_ICONS.Sui} alt="Sui" />
-                      {account?.address
-                        ? `${account.address.slice(0, 6)}...${account.address.slice(-4)}`
-                        : "Connect wallet"}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "6px" }}>
-                    <span
-                      style={{
-                        padding: "2px 6px",
-                        background: "rgba(0,255,65,0.1)",
-                        border: "1px solid rgba(0,255,100,0.25)",
-                        borderRadius: "6px",
-                        color: "#00ff41",
-                        fontSize: "0.6rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      🔒 Sui
-                    </span>
-                    <span style={{ color: "#444", fontSize: "0.6rem" }}>locked</span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "6px",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.0"
-                      value={bankAmount}
-                      onChange={(e) => setBankAmount(e.target.value)}
-                      style={{
-                        fontSize: "20px",
-                        fontWeight: "bold",
-                        background: "transparent",
-                        border: "none",
-                        color: "#fff",
-                        flex: 1,
-                        minWidth: 0,
-                        padding: 0,
-                        outline: "none",
-                      }}
-                    />
-                    <BankAssetTrigger
-                      token={fromToken}
-                      network="Sui"
-                      onClick={() => setShowTokenModal("from")}
-                    />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-                    <span style={{ color: "#666", fontSize: "11px" }}>
-                      ${fromToken === "SUI" ? (parseFloat(bankAmount || "0") * 2).toFixed(2) : "0.00"}
-                    </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
-                      <span style={{ color: "#888", fontSize: "11px" }}>
-                        Balance: {fromToken === "SUI" ? suiBalance.toFixed(2) : "—"}
-                      </span>
-                      {(["20", "50", "MAX"] as const).map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => {
-                            if (fromToken !== "SUI" || suiBalance <= 0) return;
-                            const frac = pct === "MAX" ? 1 : parseInt(pct, 10) / 100;
-                            setBankAmount((suiBalance * frac).toFixed(4));
-                          }}
-                          style={{
-                            padding: "2px 6px",
-                            background: "rgba(255,255,255,0.06)",
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            borderRadius: "6px",
-                            color: "#aaa",
-                            fontSize: "11px",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {pct === "20" ? "20%" : pct === "50" ? "50%" : "MAX"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "center", margin: "8px 0", position: "relative", zIndex: 2 }}>
-                  <span style={{ color: "#00ff41", fontSize: "1rem" }}>⬇</span>
-                </div>
-
-                {/* TO */}
-                <div
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    background: "rgba(255,255,255,0.05)",
-                    boxSizing: "border-box",
-                    marginBottom: "8px",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
-                    <span style={{ color: "#888", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em" }}>TO</span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#00ff88", fontSize: "0.8rem" }}>
-                      <img
-                        src={NETWORK_ICONS.Sui}
-                        alt="Sui"
-                        style={{ width: 16, height: 16, borderRadius: "50%" }}
-                      />
-                      Sui
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px", flexWrap: "wrap" }}>
-                    <span
-                      style={{
-                        padding: "2px 6px",
-                        background: "rgba(0,255,65,0.1)",
-                        border: "1px solid rgba(0,255,100,0.25)",
-                        borderRadius: "6px",
-                        color: "#00ff41",
-                        fontSize: "0.6rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      🔒 Sui
-                    </span>
-                    <span style={{ color: "#444", fontSize: "0.6rem" }}>locked</span>
-                    <span
-                      style={{
-                        padding: "2px 6px",
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid #333",
-                        borderRadius: "6px",
-                        color: "#555",
-                        fontSize: "0.6rem",
-                      }}
-                    >
-                      Ethereum · Coming Soon
-                    </span>
-                  </div>
-                  <p style={{ color: "#666", fontSize: "0.65rem", margin: "0 0 6px", lineHeight: 1.3 }}>
-                    ETH bridge coming soon — use Stealth Send for private Sui transfers
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "6px",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.0"
-                      readOnly
-                      value={bankAmount}
-                      style={{
-                        fontSize: "20px",
-                        fontWeight: "bold",
-                        background: "transparent",
-                        border: "none",
-                        color: "#888",
-                        flex: 1,
-                        minWidth: 0,
-                        padding: 0,
-                        outline: "none",
-                      }}
-                    />
-                    <BankAssetTrigger
-                      token={toToken}
-                      network={toNetwork}
-                      onClick={() => setShowTokenModal("to")}
-                    />
-                  </div>
-                </div>
-
-                <>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "5px",
-                        marginBottom: "6px",
-                      }}
-                    >
-                      {(
-                        [
-                          ["regular", "Regular send"],
-                          ["stealth", "Stealth send"],
-                        ] as const
-                      ).map(([mode, label]) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => {
-                            setBankSendMode(mode);
-                            if (
-                              mode === "stealth" &&
-                              (fromToken === "USDT" || fromToken === "ETH")
-                            ) {
-                              setFromToken("SUI");
-                            }
-                          }}
-                          style={{
-                            flex: 1,
-                            minHeight: "36px",
-                            padding: "6px 8px",
-                            background:
-                              bankSendMode === mode
-                                ? "rgba(147,51,234,0.15)"
-                                : "rgba(255,255,255,0.04)",
-                            border:
-                              bankSendMode === mode
-                                ? "1px solid rgba(147,51,234,0.4)"
-                                : "1px solid #333",
-                            borderRadius: "8px",
-                            color: bankSendMode === mode ? "#c084fc" : "#888",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {bankSendMode === "regular" ? (
-                      <input
-                        type="text"
-                        placeholder="0x... Sui recipient"
-                        value={bankRecipient}
-                        onChange={(e) => setBankRecipient(e.target.value)}
-                        style={{
-                          width: "100%",
-                          padding: "8px 12px",
-                          marginBottom: "8px",
-                          background: "rgba(255,255,255,0.05)",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: "10px",
-                          color: "#fff",
-                          fontSize: "0.8rem",
-                          fontFamily: "monospace",
-                          boxSizing: "border-box",
-                        }}
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="st:sui:... recipient meta-address"
-                        value={stealthMetaInput}
-                        onChange={(e) => setStealthMetaInput(e.target.value)}
-                        style={{
-                          width: "100%",
-                          padding: "8px 12px",
-                          marginBottom: "8px",
-                          background: "rgba(147,51,234,0.06)",
-                          border: "1px solid rgba(147,51,234,0.3)",
-                          borderRadius: "10px",
-                          color: "#fff",
-                          fontSize: "0.75rem",
-                          fontFamily: "monospace",
-                          boxSizing: "border-box",
-                        }}
-                      />
-                    )}
-                    {bankSendMode === "stealth" && (
-                      <p style={{ color: "#888", fontSize: "0.65rem", margin: "0 0 6px", lineHeight: 1.35 }}>
-                        {fromToken === "USDC"
-                          ? `Sending ${bankAmount || "0"} USDC + 0.015 SUI for gas`
-                          : "🕵️ One-time stealth address + on-chain announce"}
-                      </p>
-                    )}
-                    {bankSendMode === "regular" && (
-                      <p style={{ color: "#555", fontSize: "0.65rem", margin: "0 0 6px" }}>
-                        On-chain SUI transfer · ~$0.01 gas
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void (bankSendMode === "stealth"
-                          ? handleStealthSend()
-                          : handleBankSend())
-                      }
-                      disabled={bankLoading}
-                      style={{
-                        width: "100%",
-                        minHeight: "40px",
-                        padding: "8px 12px",
-                        background:
-                          bankSendMode === "stealth"
-                            ? "linear-gradient(135deg, rgba(147,51,234,0.35) 0%, rgba(80,20,120,0.25) 100%)"
-                            : "linear-gradient(135deg, rgba(0,255,65,0.45) 0%, rgba(0,140,40,0.25) 100%)",
-                        border:
-                          bankSendMode === "stealth"
-                            ? "1px solid #a855f7"
-                            : "1px solid #00ff41",
-                        borderRadius: "10px",
-                        color: bankSendMode === "stealth" ? "#c084fc" : "#00ff41",
-                        fontSize: "0.9rem",
-                        fontWeight: "bold",
-                        cursor: bankLoading ? "not-allowed" : "pointer",
-                        opacity: bankLoading ? 0.7 : 1,
-                        boxShadow:
-                          bankSendMode === "stealth"
-                            ? "0 0 24px rgba(147,51,234,0.2)"
-                            : "0 0 24px rgba(0,255,65,0.2)",
-                      }}
-                    >
-                      {bankLoading
-                        ? "⏳ Sending..."
-                        : bankSendMode === "stealth"
-                          ? "🕵️ Stealth Send"
-                          : "Send SUI"}
-                    </button>
-                </>
-
-                {bankTxHash && (
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      padding: "8px",
-                      background: "rgba(0,255,65,0.05)",
-                      border: "1px solid #00ff4144",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#00ff41", fontSize: "0.75rem", marginBottom: "3px" }}>
-                      ✅ Transaction sent!
-                    </div>
-                    {bankSendMode === "regular" && (
-                      <a
-                        href={`https://suiscan.xyz/testnet/tx/${bankTxHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#4DA2FF", fontSize: "0.7rem", fontFamily: "monospace" }}
-                      >
-                        View on Suiscan →
-                      </a>
-                    )}
-                  </div>
-                )}
-                {bankTxHash &&
-                  bankSendMode === "stealth" &&
-                  !instantReceiptId && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "12px",
-                      border: "1px solid #333",
-                      borderRadius: "10px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        color: "#666",
-                        fontSize: "0.7rem",
-                        letterSpacing: "2px",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      GENERATING PRIVACY PROOF
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          style={{
-                            width: "8px",
-                            height: "8px",
-                            borderRadius: "50%",
-                            background: "#7c3aed",
-                            animation: `zbank-receipt-pulse 1.2s ease-in-out ${i * 0.4}s infinite`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {instantReceiptId && (
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      padding: "12px",
-                      background: "linear-gradient(135deg,#0a0a1a,#0d0d2a)",
-                      border: "1px solid #7c3aed",
-                      borderRadius: "10px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        color: "#a78bfa",
-                        fontSize: "0.7rem",
-                        letterSpacing: "2px",
-                        marginBottom: "6px",
-                      }}
-                    >
-                      🔒 PRIVACY RECEIPT READY
-                    </div>
-                    <a
-                      href={`/receipt/${instantReceiptId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: "block",
-                        padding: "8px 16px",
-                        background:
-                          "linear-gradient(90deg,#7c3aed,#4f46e5)",
-                        color: "#fff",
-                        borderRadius: "6px",
-                        fontWeight: "bold",
-                        fontSize: "0.85rem",
-                        textDecoration: "none",
-                      }}
-                    >
-                      🗄 Open Privacy Receipt
-                    </a>
-                  </div>
-                )}
-                {notarizeResult?.ok && (
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      marginTop: "8px",
-                      background: "rgba(0,255,100,0.05)",
-                      border: "1px solid rgba(0,255,100,0.2)",
-                      borderRadius: "8px",
-                      fontSize: "0.75rem",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    ⚖️ Notarized by{" "}
-                    <span style={{ color: "#00ff88" }}>{notarizeResult.agent}</span> (
-                    {notarizeResult.agent_class})
-                    <br />
-                    <span style={{ color: "#555", fontSize: "0.7rem" }}>
-                      ZCO: {notarizeResult.consensus?.votes_for}/
-                      {notarizeResult.consensus?.total_votes} judges ·{" "}
-                      {Math.round(
-                        (notarizeResult.consensus?.avg_confidence || 0) * 100
-                      )}
-                      % confidence
-                    </span>
-                  </div>
-                )}
-                {zbankTab === "send" && bankError && (
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      padding: "8px",
-                      background: "rgba(255,50,50,0.05)",
-                      border: "1px solid #ff323244",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
-                  </div>
-                )}
-
-                <div style={{ color: "#444", fontSize: "0.6rem", textAlign: "center", marginTop: "5px" }}>
-                  · ZION Stealth Protocol · First private transfers on Sui
-                </div>
-                  </>
-                )}
-
-                {zbankTab !== "send" && bankError && (
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      padding: "8px",
-                      background: "rgba(255,50,50,0.05)",
-                      border: "1px solid #ff323244",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#ff6464", fontSize: "0.75rem" }}>❌ {bankError}</div>
-                  </div>
-                )}
+      {stealthSubTab === 'send' && (
+        <>
+          {(() => {
+            const statusMsg = zkStealthStatus;
+            const hideStatusForTxCard = zbTxDigest && statusMsg.startsWith('✅');
+            if (!statusMsg || hideStatusForTxCard) return null;
+            return (
+              <div style={{ marginBottom:'12px', padding:'10px', borderRadius:'12px', fontSize:'0.72rem',
+                background: statusMsg.startsWith('✅') ? 'rgba(0,255,65,0.08)' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.08)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${statusMsg.startsWith('✅') ? '#2a3a2a' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.3)' : '#2a2a2a'}`,
+                color: statusMsg.startsWith('✅') ? '#00ff41' : statusMsg.startsWith('❌') ? '#ff4466' : '#666',
+                whiteSpace: 'pre-line' }}>
+                {zkStealthLoading && !statusMsg.startsWith('✅') && !statusMsg.startsWith('❌') && '⏳ '}
+                {statusMsg}
               </div>
+            );
+          })()}
 
-              {showTokenModal && (
-                <BankTokenModal
-                  token={showTokenModal === "from" ? fromToken : toToken}
-                  bankSendMode={bankSendMode}
-                  onToken={(t) => {
-                    if (showTokenModal === "from") setFromToken(t);
-                    else setToToken(t);
-                    setShowTokenModal(null);
-                  }}
-                  onClose={() => setShowTokenModal(null)}
-                />
-              )}
+          {multiSend ? (
+            <button type="button" onClick={() => handleZkStealthMultiSend()} disabled={zkStealthLoading}
+              style={{width:'100%', padding:'16px', borderRadius:'16px', border:'none', background:'#00ff41', color:'#000', fontFamily:'monospace', fontSize:'0.9rem', fontWeight:'bold', letterSpacing:'2px', cursor: zkStealthLoading ? 'wait' : 'pointer', boxShadow:'0 4px 24px rgba(0,255,65,0.2)', transition:'all 0.2s', opacity: zkStealthLoading ? 0.7 : 1}}>
+              {zkStealthLoading ? 'PROCESSING...' : `👥 SEND TO ${multiRecipients.filter((r) => r.address.length === 66).length} RECIPIENTS`}
+            </button>
+          ) : (
+            <button type="button" onClick={() => handleZkStealthSend()}
+              disabled={zkStealthLoading || !zkStealthRecipient || !zkStealthRecipient.startsWith('st:sui:')}
+              style={{width:'100%', padding:'16px', borderRadius:'16px', border:'none', background:'#00ff41', color:'#000', fontFamily:'monospace', fontSize:'0.9rem', fontWeight:'bold', letterSpacing:'2px', boxShadow:'0 4px 24px rgba(0,255,65,0.2)', transition:'all 0.2s',
+                      cursor: zkStealthLoading ? 'wait' : (!zkStealthRecipient || !zkStealthRecipient.startsWith('st:sui:')) ? 'not-allowed' : 'pointer',
+                      opacity: (!zkStealthRecipient || !zkStealthRecipient.startsWith('st:sui:')) ? 0.4 : zkStealthLoading ? 0.7 : 1}}>
+              {zkStealthLoading ? 'PROCESSING...' : '⚡ SEND STEALTH'}
+            </button>
+          )}
+
+          {zbTxDigest && (
+            <div style={{background:'#050f05', border:'1px solid #1a3a1a', borderRadius:'12px', padding:'14px 16px', marginTop:'12px'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px'}}>
+                <span style={{color:'#00ff41', fontSize:'1rem'}}>✅</span>
+                <span style={{color:'#00ff41', fontSize:'0.75rem', fontFamily:'monospace', letterSpacing:'1px', fontWeight:'bold'}}>TRANSFER SENT</span>
+              </div>
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px'}}>
+                <div>
+                  <div style={{color:'#555', fontSize:'0.6rem', letterSpacing:'1px', marginBottom:'3px'}}>TRANSACTION</div>
+                  <div style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>{zbTxDigest.slice(0,8)}...{zbTxDigest.slice(-6)}</div>
+                </div>
+                <a href={`https://suiscan.xyz/testnet/tx/${zbTxDigest}`} target="_blank" rel="noopener noreferrer"
+                  style={{display:'flex', alignItems:'center', gap:'6px', background:'#0d1a0d', border:'1px solid #1a3a1a', borderRadius:'8px', padding:'8px 12px', color:'#00ff41', fontSize:'0.7rem', fontFamily:'monospace', textDecoration:'none', letterSpacing:'1px'}}>
+                  SUISCAN ↗
+                </a>
+              </div>
             </div>
           )}
 
-          {activeTab === "faucet" && (
-            <section className="faucetTab">
-              {!walletAddress ? (
-                <p className="walletGateBanner">Connect wallet to continue</p>
-              ) : (
-                <>
-                  <p className="faucetPointsBig">
-                    YOUR POINTS: <strong>{userPoints}</strong>
-                  </p>
-                  <label className="faucetLabel" htmlFor="faucet-tab-wallet">
-                    Wallet address
-                  </label>
-                  <input
-                    id="faucet-tab-wallet"
-                    className="faucetInputLarge"
-                    type="text"
-                    placeholder="0x…"
-                    value={walletAddress}
-                    readOnly
-                    autoComplete="off"
-                  />
-                  {onCooldown ? (
-                    <p className="cooldownBanner">
-                      Cooldown active — next claim in <strong>{formatDuration(cooldownRemainingSec)}</strong>
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="faucetBtnLarge"
-                    disabled={faucetBusy || !walletAddress.trim() || onCooldown}
-                    onClick={claimFaucet}
-                  >
-                    {faucetBusy ? "CLAIMING…" : "CLAIM 10 ZION"}
-                  </button>
-                  <div className="referralBlock">
-                    <p className="referralTitle">Referral link</p>
-                    <div className="referralRow">
-                      <input readOnly className="referralInput" value={referralLink || "(connect wallet)"} />
-                      <button
-                        type="button"
-                        className="referralCopyBtn"
-                        disabled={!referralLink}
-                        onClick={() => {
-                          if (referralLink) void navigator.clipboard.writeText(referralLink);
+          {auditTrail && (
+            <div style={{background:'#050f05', border:'1px solid #1a3a1a',
+                         borderRadius:'12px', padding:'14px', marginTop:'10px'}}>
+              <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px'}}>
+                <span>🔐</span>
+                <span style={{color:'#00ff41', fontSize:'0.75rem', fontFamily:'monospace',
+                              fontWeight:'bold', letterSpacing:'1px'}}>
+                  AUDIT TRAIL SAVED
+                </span>
+                <span style={{marginLeft:'auto', background:'#0a1a0a', border:'1px solid #1a3a1a',
+                              borderRadius:'4px', padding:'2px 8px', color:'#00ff41',
+                              fontSize:'0.6rem', fontFamily:'monospace'}}>
+                  WALRUS
+                </span>
+              </div>
+
+              <div style={{background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px'}}>
+                <div style={{color:'#555', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+                  VIEW KEY ID (public)
+                </div>
+                <div style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>
+                  {auditTrail.view_key_id}
+                </div>
+              </div>
+
+              <div style={{background:'#1a0a0a', border:'1px solid #3a1a1a', borderRadius:'8px',
+                           padding:'10px 12px', marginBottom:'8px'}}>
+                <div style={{color:'#ff4444', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+                  🔑 VIEW KEY SECRET (keep private!)
+                </div>
+                <div style={{color:'#ff8888', fontSize:'0.65rem', fontFamily:'monospace',
+                             wordBreak:'break-all'}}>
+                  {auditTrail.view_key_secret}
+                </div>
+                <div style={{color:'#555', fontSize:'0.58rem', marginTop:'6px'}}>
+                  Share this key only with authorized auditors to prove transaction details
+                </div>
+              </div>
+
+              <div style={{background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px'}}>
+                <div style={{color:'#555', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+                  WALRUS BLOB ID
+                </div>
+                <a href={`/zco/${auditTrail.walrus_blob_id}`} target="_blank"
+                   rel="noopener noreferrer"
+                   style={{color:'#00ff41', fontSize:'0.65rem', fontFamily:'monospace',
+                           textDecoration:'none', wordBreak:'break-all'}}>
+                  {auditTrail.walrus_blob_id} ↗
+                </a>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const data = JSON.stringify({
+                    view_key_id: auditTrail.view_key_id,
+                    view_key_secret: auditTrail.view_key_secret,
+                    salt: auditTrail.salt,
+                    walrus_blob_id: auditTrail.walrus_blob_id,
+                  }, null, 2);
+                  void navigator.clipboard.writeText(data);
+                }}
+                style={{width:'100%', marginTop:'10px', padding:'8px', borderRadius:'8px',
+                        border:'1px solid #1a3a1a', background:'transparent', color:'#00ff41',
+                        fontFamily:'monospace', fontSize:'0.65rem', cursor:'pointer'}}>
+                📋 COPY VIEW KEY (for audit)
+              </button>
+            </div>
+          )}
+
+          <div style={{marginTop:'16px', borderTop:'1px solid #2a3a2a', paddingTop:'16px'}}>
+            <button type="button" onClick={() => setShowSchedule(!showSchedule)}
+              style={{width:'100%', padding:'8px', fontSize:'0.72rem', background: showSchedule ? '#0d1a0d' : 'transparent',
+                      border:'1px solid #2a3a2a', color: showSchedule ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'10px'}}>
+              {showSchedule ? '📅 SCHEDULE PAYMENT ▲' : '📅 SCHEDULE RECURRING PAYMENT ▼'}
+            </button>
+            {showSchedule && (
+              <div style={{marginTop:'12px'}}>
+                <div style={{fontSize:'0.68rem', color:'#777', marginBottom:'8px', fontFamily:'monospace'}}>
+                  AUTO-SEND {stealthAmount} SUI TO THIS ADDRESS
+                </div>
+                <div style={{marginBottom:'10px'}}>
+                  <div style={{color:'#555', fontSize:'0.62rem', letterSpacing:'1px', marginBottom:'4px', fontFamily:'monospace'}}>RECIPIENT STEALTH ADDRESS</div>
+                  <input value={scheduleRecipient || zkStealthRecipient} onChange={(e) => setScheduleRecipient(e.target.value)}
+                    placeholder="st:sui:... recipient address" className="zbank-input"
+                    style={{width:'100%', background:'#111', border:'1px solid #2a2a2a', borderRadius:'8px', padding:'8px 12px', fontSize:'0.72rem', fontFamily:'monospace', outline:'none', boxSizing:'border-box', color:'#ffffff'}} />
+                </div>
+                <div style={{display:'flex', gap:'8px', marginBottom:'8px'}}>
+                  {(['daily','weekly','monthly'] as const).map(f => (
+                    <button key={f} type="button" onClick={() => setScheduleFrequency(f)}
+                      style={{flex:1, padding:'6px', fontSize:'0.68rem', background: scheduleFrequency===f ? '#00ff41' : 'transparent',
+                              color: scheduleFrequency===f ? '#000' : '#777', border: scheduleFrequency===f ? '1px solid #00ff41' : '1px solid #2a3a2a',
+                              cursor:'pointer', fontFamily:'monospace', textTransform:'uppercase', borderRadius:'8px'}}>{f}</button>
+                  ))}
+                </div>
+                <div style={{display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px'}}>
+                  <span style={{fontSize:'0.68rem', color:'#777', fontFamily:'monospace'}}>PAYMENTS:</span>
+                  <input className="zbank-input" value={scheduleMaxPayments} onChange={e => setScheduleMaxPayments(e.target.value)}
+                    placeholder="0=unlimited" style={{flex:1, padding:'6px', background:'#111', border:'1px solid #2a3a2a', color:'#ffffff', fontFamily:'monospace', fontSize:'0.68rem', borderRadius:'8px', outline:'none'}} />
+                  <span style={{fontSize:'0.62rem', color:'#555', fontFamily:'monospace'}}>0=∞</span>
+                </div>
+                <button type="button" onClick={handleCreateScheduledPayment}
+                  style={{width:'100%', padding:'10px', fontSize:'0.75rem', background:'#0d2a0d', border:'1px solid #2a3a2a', color:'#00ff41', cursor:'pointer', fontFamily:'monospace', fontWeight:'bold', borderRadius:'10px'}}>
+                  📅 CREATE SCHEDULE
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {stealthSubTab === 'receive' && (
+        <div style={{background:'#0d0d0d', borderRadius:'12px', padding:'12px', border:'1px solid #2a2a2a', marginBottom:'8px'}}>
+          <button type="button" onClick={() => void handleScanStealth()}
+            style={{width:'100%', padding:'10px', borderRadius:'8px', border:'1px solid #222', background:'#111', color:'#777', fontFamily:'monospace', fontSize:'0.72rem', cursor:'pointer'}}>
+            🔍 SCAN & CLAIM
+          </button>
+
+          {zkStealthNotes.filter((n) => n.status === 'pending').length > 0 &&
+            claimResults.length === 0 && (
+            <div
+              style={{
+                background: '#0d0d0d',
+                border: '1px solid #1a1a1a',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                marginTop: '10px',
+              }}>
+              <div
+                style={{
+                  color: '#444',
+                  fontSize: '0.58rem',
+                  fontFamily: 'monospace',
+                  letterSpacing: '1px',
+                  marginBottom: '8px',
+                }}>
+                📩 INCOMING TRANSFER
+              </div>
+
+              <div
+                style={{
+                  color: '#00ff41',
+                  fontSize: '0.85rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 'bold',
+                  marginBottom: '6px',
+                }}>
+                {zkStealthNotes
+                  .filter((n) => n.status === 'pending')
+                  .reduce((sum, n) => sum + (parseFloat(n.amount_sui || '0') || 0), 0)
+                  .toFixed(4)}{' '}
+                SUI
+              </div>
+
+              {zkStealthNotes.find((n) => n.status === 'pending' && n.memo) && (
+                <div
+                  style={{
+                    color: '#00ccff',
+                    fontSize: '0.65rem',
+                    fontFamily: 'monospace',
+                    marginBottom: '4px',
+                    fontStyle: 'italic',
+                  }}>
+                  &quot;{zkStealthNotes.find((n) => n.status === 'pending' && n.memo)?.memo}&quot;
+                </div>
+              )}
+
+              <div
+                style={{
+                  color: '#333',
+                  fontSize: '0.58rem',
+                  fontFamily: 'monospace',
+                  marginBottom: '12px',
+                }}>
+                {zkStealthNotes.filter((n) => n.status === 'pending')[0]?.created_at
+                  ? new Date(
+                      zkStealthNotes.filter((n) => n.status === 'pending')[0].created_at
+                    ).toLocaleTimeString()
+                  : ''}
+                {' · '}
+                {zkStealthNotes.filter((n) => n.status === 'pending').length} notes
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handleClaimAll()}
+                disabled={zkClaimLoading}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: zkClaimLoading ? '#111' : '#00ff41',
+                  color: zkClaimLoading ? '#777' : '#000',
+                  fontFamily: 'monospace',
+                  fontSize: '0.72rem',
+                  fontWeight: 'bold',
+                  cursor: zkClaimLoading ? 'wait' : 'pointer',
+                  letterSpacing: '1px',
+                  lineHeight: 1.3,
+                }}>
+                {zkClaimLoading ? zkClaimStatus || '⏳ Claiming...' : '⚡ CLAIM'}
+              </button>
+            </div>
+          )}
+
+          {claimResults.length > 0 && (
+            <div
+              style={{
+                background: '#0a0a0a',
+                border: '1px solid #1a3a1a',
+                borderRadius: '10px',
+                padding: '12px',
+                marginTop: '10px',
+              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setClaimResultsExpanded(!claimResultsExpanded)}>
+                <div
+                  style={{
+                    color: '#00ff41',
+                    fontSize: '0.72rem',
+                    fontFamily: 'monospace',
+                    fontWeight: 'bold',
+                  }}>
+                  ✅ CLAIMED{' '}
+                  {claimResults
+                    .filter((r) => r.success !== false)
+                    .reduce((sum, r) => sum + (r.amount || 0), 0)
+                    .toFixed(4)}{' '}
+                  SUI
+                </div>
+                <div
+                  style={{
+                    color: claimResultsExpanded ? '#ffaa00' : '#00ff41',
+                    fontSize: '0.7rem',
+                    fontFamily: 'monospace',
+                  }}>
+                  {claimResultsExpanded ? '▲' : '▼'}
+                </div>
+              </div>
+
+              {claimResultsExpanded && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    borderTop: '1px solid #1a1a1a',
+                    paddingTop: '8px',
+                  }}>
+                  {claimResults
+                    .filter((r) => r.success !== false && r.digest)
+                    .map((r, i) => (
+                      <div
+                        key={`${r.digest}-${i}`}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '4px 0',
+                          borderBottom: '1px solid #0d0d0d',
+                        }}>
+                        <div
+                          style={{
+                            color: '#333',
+                            fontSize: '0.6rem',
+                            fontFamily: 'monospace',
+                          }}>
+                          {r.relayer || r.from
+                            ? (r.relayer || r.from)!.slice(0, 14) + '...'
+                            : `wallet ${i + 1}`}
+                        </div>
+                        <div
+                          style={{
+                            color: '#777',
+                            fontSize: '0.62rem',
+                            fontFamily: 'monospace',
+                          }}>
+                          {r.amount ? r.amount.toFixed(4) : '?'} SUI
+                        </div>
+                        <a
+                          href={`https://suiscan.xyz/testnet/tx/${r.digest}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#00ff41',
+                            fontSize: '0.6rem',
+                            fontFamily: 'monospace',
+                            textDecoration: 'none',
+                          }}>
+                          SUISCAN ↗
+                        </a>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+    </>
+  )}
+
+  {zbankMode === 'anonymous' && (
+  <div style={{background:'#0d0d0d', borderRadius:'16px', padding:'16px', marginTop:'4px', marginBottom:'12px', border:'1px solid #2a2a2a'}}>
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
+      <span style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>To:</span>
+    </div>
+    <div style={{background:'#111', borderRadius:'12px', padding:'14px 16px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px'}}>
+        <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png" style={{width:'28px', height:'28px', borderRadius:'50%', border:'1px solid #2a2a2a'}} alt="SUI" />
+        <div>
+          <div style={{color:'#fff', fontSize:'0.9rem', fontFamily:'monospace', fontWeight:'bold'}}>SUI ADDRESS</div>
+          <div style={{color:'#777', fontSize:'0.65rem'}}>On-chain · Public</div>
+        </div>
+      </div>
+      <div>
+        <input className="zbank-input" value={zbRecipient} onChange={(e) => setZbRecipient(e.target.value)} placeholder="0x..."
+          style={{background:'transparent', border:'none', color:'#ffffff', fontSize:'0.85rem', fontFamily:'monospace', width:'100%', outline:'none', padding:'4px 0'}} />
+        {zbRecipient && zbRecipient.startsWith('0x') && zbRecipient.length === 66 && (
+          <div style={{color:'#00ff41', fontSize:'0.65rem', marginTop:'4px'}}>✓ Valid Sui address</div>
+        )}
+      </div>
+    </div>
+  </div>
+  )}
+
+  {zbankMode === 'anonymous' && (() => {
+    const statusMsg = zbStatus;
+    const hideStatusForTxCard = zbTxDigest && statusMsg.startsWith('✅');
+    if (!statusMsg || hideStatusForTxCard) return null;
+    return (
+      <div style={{ marginBottom:'12px', padding:'10px', borderRadius:'12px', fontSize:'0.72rem',
+        background: statusMsg.startsWith('✅') ? 'rgba(0,255,65,0.08)' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.08)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${statusMsg.startsWith('✅') ? '#2a3a2a' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.3)' : '#2a2a2a'}`,
+        color: statusMsg.startsWith('✅') ? '#00ff41' : statusMsg.startsWith('❌') ? '#ff4466' : '#666',
+        whiteSpace: 'pre-line' }}>
+        {zbLoading && !statusMsg.startsWith('✅') && !statusMsg.startsWith('❌') && '⏳ '}
+        {statusMsg}
+      </div>
+    );
+  })()}
+
+  {zbankMode === 'anonymous' && (
+    <button type="button" onClick={handleZbTransfer}
+      disabled={zbLoading || !anonymousAmount || !zbRecipient}
+      style={{width:'100%', padding:'16px', borderRadius:'16px', border:'none', background:'#00ff41', color:'#000',
+              fontFamily:'monospace', fontSize:'0.9rem', fontWeight:'bold', letterSpacing:'2px', boxShadow:'0 4px 24px rgba(0,255,65,0.2)', transition:'all 0.2s',
+              cursor: zbLoading ? 'wait' : 'pointer', opacity: (!anonymousAmount || !zbRecipient) ? 0.5 : zbLoading ? 0.7 : 1}}>
+      {zbLoading ? 'PROCESSING...' : '🔒 SEND ANONYMOUSLY'}
+    </button>
+  )}
+
+  {zbankMode === 'anonymous' && (
+  <div style={{marginTop:'16px', borderTop:'1px solid #2a2a2a', paddingTop:'16px'}}>
+    <button type="button" onClick={() => setShowSchedule(!showSchedule)}
+      style={{width:'100%', padding:'8px', fontSize:'0.72rem', background: showSchedule ? '#0d1a0d' : 'transparent',
+              border:'1px solid #2a2a2a', color: showSchedule ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'10px'}}>
+      {showSchedule ? '📅 SCHEDULE PAYMENT ▲' : '📅 SCHEDULE RECURRING PAYMENT ▼'}
+    </button>
+    {showSchedule && (
+      <div style={{marginTop:'12px'}}>
+        <div style={{fontSize:'0.68rem', color:'#777', marginBottom:'8px', fontFamily:'monospace'}}>
+          AUTO-SEND {anonymousAmount} {zbCoin} TO THIS ADDRESS
+        </div>
+        <div style={{display:'flex', gap:'8px', marginBottom:'8px'}}>
+          {(['daily','weekly','monthly'] as const).map(f => (
+            <button key={f} type="button" onClick={() => setScheduleFrequency(f)}
+              style={{flex:1, padding:'6px', fontSize:'0.68rem', background: scheduleFrequency===f ? '#00ff41' : 'transparent',
+                      color: scheduleFrequency===f ? '#000' : '#777', border: scheduleFrequency===f ? '1px solid #00ff41' : '1px solid #2a2a2a',
+                      cursor:'pointer', fontFamily:'monospace', textTransform:'uppercase', borderRadius:'8px'}}>{f}</button>
+          ))}
+        </div>
+        <div style={{display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px'}}>
+          <span style={{fontSize:'0.68rem', color:'#777', fontFamily:'monospace'}}>PAYMENTS:</span>
+          <input className="zbank-input" value={scheduleMaxPayments} onChange={e => setScheduleMaxPayments(e.target.value)}
+            placeholder="0=unlimited" style={{flex:1, padding:'6px', background:'#111', border:'1px solid #2a2a2a', color:'#ffffff', fontFamily:'monospace', fontSize:'0.68rem', borderRadius:'8px', outline:'none'}} />
+          <span style={{fontSize:'0.62rem', color:'#555', fontFamily:'monospace'}}>0=∞</span>
+        </div>
+        <button type="button" onClick={handleCreateScheduledPayment}
+          style={{width:'100%', padding:'10px', fontSize:'0.75rem', background:'#0d2a0d', border:'1px solid #2a2a2a', color:'#00ff41', cursor:'pointer', fontFamily:'monospace', fontWeight:'bold', borderRadius:'10px'}}>
+          📅 CREATE SCHEDULE
+        </button>
+      </div>
+    )}
+  </div>
+  )}
+
+  {zbankMode === 'anonymous' && zbTxDigest && (
+    <div style={{background:'#050f05', border:'1px solid #1a3a1a', borderRadius:'12px', padding:'14px 16px', marginTop:'12px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px'}}>
+        <span style={{color:'#00ff41', fontSize:'1rem'}}>✅</span>
+        <span style={{color:'#00ff41', fontSize:'0.75rem', fontFamily:'monospace', letterSpacing:'1px', fontWeight:'bold'}}>TRANSFER SENT</span>
+      </div>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px'}}>
+        <div>
+          <div style={{color:'#555', fontSize:'0.6rem', letterSpacing:'1px', marginBottom:'3px'}}>TRANSACTION</div>
+          <div style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>
+            {zbTxDigest.slice(0,8)}...{zbTxDigest.slice(-6)}
+          </div>
+        </div>
+        <a
+          href={`https://suiscan.xyz/testnet/tx/${zbTxDigest}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{display:'flex', alignItems:'center', gap:'6px', background:'#0d1a0d', border:'1px solid #1a3a1a', borderRadius:'8px', padding:'8px 12px', color:'#00ff41', fontSize:'0.7rem', fontFamily:'monospace', textDecoration:'none', letterSpacing:'1px', transition:'all 0.2s'}}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#1a2a1a'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#0d1a0d'; }}
+        >
+          SUISCAN ↗
+        </a>
+      </div>
+    </div>
+  )}
+
+  {zbankMode === 'anonymous' && auditTrail && (
+    <div style={{background:'#050f05', border:'1px solid #1a3a1a',
+                 borderRadius:'12px', padding:'14px', marginTop:'10px'}}>
+      <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px'}}>
+        <span>🔐</span>
+        <span style={{color:'#00ff41', fontSize:'0.75rem', fontFamily:'monospace',
+                      fontWeight:'bold', letterSpacing:'1px'}}>
+          AUDIT TRAIL SAVED
+        </span>
+        <span style={{marginLeft:'auto', background:'#0a1a0a', border:'1px solid #1a3a1a',
+                      borderRadius:'4px', padding:'2px 8px', color:'#00ff41',
+                      fontSize:'0.6rem', fontFamily:'monospace'}}>
+          WALRUS
+        </span>
+      </div>
+
+      <div style={{background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px'}}>
+        <div style={{color:'#555', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+          VIEW KEY ID (public)
+        </div>
+        <div style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>
+          {auditTrail.view_key_id}
+        </div>
+      </div>
+
+      <div style={{background:'#1a0a0a', border:'1px solid #3a1a1a', borderRadius:'8px',
+                   padding:'10px 12px', marginBottom:'8px'}}>
+        <div style={{color:'#ff4444', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+          🔑 VIEW KEY SECRET (keep private!)
+        </div>
+        <div style={{color:'#ff8888', fontSize:'0.65rem', fontFamily:'monospace',
+                     wordBreak:'break-all'}}>
+          {auditTrail.view_key_secret}
+        </div>
+        <div style={{color:'#555', fontSize:'0.58rem', marginTop:'6px'}}>
+          Share this key only with authorized auditors to prove transaction details
+        </div>
+      </div>
+
+      <div style={{background:'#0a0a0a', borderRadius:'8px', padding:'10px 12px'}}>
+        <div style={{color:'#555', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+          WALRUS BLOB ID
+        </div>
+        <a href={`/zco/${auditTrail.walrus_blob_id}`} target="_blank"
+           rel="noopener noreferrer"
+           style={{color:'#00ff41', fontSize:'0.65rem', fontFamily:'monospace',
+                   textDecoration:'none', wordBreak:'break-all'}}>
+          {auditTrail.walrus_blob_id} ↗
+        </a>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          const data = JSON.stringify({
+            view_key_id: auditTrail.view_key_id,
+            view_key_secret: auditTrail.view_key_secret,
+            salt: auditTrail.salt,
+            walrus_blob_id: auditTrail.walrus_blob_id,
+          }, null, 2);
+          void navigator.clipboard.writeText(data);
+        }}
+        style={{width:'100%', marginTop:'10px', padding:'8px', borderRadius:'8px',
+                border:'1px solid #1a3a1a', background:'transparent', color:'#00ff41',
+                fontFamily:'monospace', fontSize:'0.65rem', cursor:'pointer'}}>
+        📋 COPY VIEW KEY (for audit)
+      </button>
+    </div>
+  )}
+
+</div>
+            </div>
+          )}
+
+          {activeTab === "zperps" && (
+            <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
+              <div style={{ marginBottom: "20px" }}>
+                <div
+                  style={{
+                    color: "#00ff41",
+                    fontSize: "1.2rem",
+                    fontFamily: "monospace",
+                    fontWeight: "bold",
+                    letterSpacing: "2px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  📈 Z-PERPS
+                </div>
+                <div style={{ color: "#555", fontSize: "0.7rem", fontFamily: "monospace" }}>
+                  AI agents trading real market data • Live Market Data
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                {Object.values(perpsPrices).map((p: any) => {
+                  const change = priceChanges[p.symbol];
+                  return (
+                    <div
+                      key={p.symbol}
+                      style={{
+                        background:
+                          change === "up"
+                            ? "rgba(0,255,65,0.12)"
+                            : change === "down"
+                              ? "rgba(255,68,68,0.12)"
+                              : "#0d0d0d",
+                        border: `1px solid ${
+                          change === "up" ? "#00ff41" : change === "down" ? "#ff4444" : "#1a1a1a"
+                        }`,
+                        borderRadius: "8px",
+                        padding: "6px 12px",
+                        transition: "border-color 0.3s, background 0.3s, color 0.3s",
+                      }}
+                    >
+                      <div style={{ color: "#777", fontSize: "0.6rem", fontFamily: "monospace" }}>{p.symbol}</div>
+                      <div
+                        style={{
+                          color: change === "up" ? "#00ff41" : change === "down" ? "#ff4444" : "#00ff41",
+                          fontSize: "0.75rem",
+                          fontFamily: "monospace",
+                          fontWeight: "bold",
+                          transition: "color 0.3s",
                         }}
                       >
-                        Copy
-                      </button>
+                        ${p.price.toLocaleString()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setPerpsTab("leaderboard")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    letterSpacing: "1px",
+                    background: perpsTab === "leaderboard" ? "#00ff41" : "#111",
+                    color: perpsTab === "leaderboard" ? "#000" : "#555",
+                  }}
+                >
+                  🏆 LEADERBOARD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPerpsTab("market")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    letterSpacing: "1px",
+                    background: perpsTab === "market" ? "#00ff41" : "#111",
+                    color: perpsTab === "market" ? "#000" : "#555",
+                  }}
+                >
+                  📊 MARKET
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPerpsTab("feed");
+                    fetchPerpsFeed();
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    letterSpacing: "1px",
+                    background: perpsTab === "feed" ? "#00ff41" : "#111",
+                    color: perpsTab === "feed" ? "#000" : "#555",
+                  }}
+                >
+                  ⚡ FEED
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPerpsTab("myagent")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    letterSpacing: "1px",
+                    background: perpsTab === "myagent" ? "#00ff41" : "#111",
+                    color: perpsTab === "myagent" ? "#000" : "#555",
+                  }}
+                >
+                  🤖 MY AGENT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPerpsTab("proofs");
+                    fetchPerpsProofs();
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                    fontSize: "0.72rem",
+                    letterSpacing: "1px",
+                    background: perpsTab === "proofs" ? "#00ff41" : "#111",
+                    color: perpsTab === "proofs" ? "#000" : "#555",
+                  }}
+                >
+                  🔐 WALRUS
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchPerpsData}
+                  style={{
+                    marginLeft: "auto",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #1a1a1a",
+                    background: "transparent",
+                    color: "#444",
+                    fontFamily: "monospace",
+                    fontSize: "0.65rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  ↻ REFRESH
+                </button>
+              </div>
+
+              {perpsLoading && (
+                <div
+                  style={{
+                    color: "#444",
+                    fontFamily: "monospace",
+                    fontSize: "0.7rem",
+                    textAlign: "center",
+                    padding: "20px",
+                  }}
+                >
+                  Loading...
+                </div>
+              )}
+
+              {perpsTab === "leaderboard" && (
+                <div
+                  style={{
+                    background: "#0a0a0a",
+                    border: "1px solid #1a1a1a",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "40px 1fr 100px 80px 80px 80px 60px",
+                      padding: "10px 16px",
+                      borderBottom: "1px solid #1a1a1a",
+                      color: "#444",
+                      fontSize: "0.6rem",
+                      fontFamily: "monospace",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    <div>#</div>
+                    <div>AGENT</div>
+                    <div style={{ textAlign: "right" }}>BALANCE</div>
+                    <div style={{ textAlign: "right" }}>RETURN</div>
+                    <div style={{ textAlign: "right" }}>WIN RATE</div>
+                    <div style={{ textAlign: "right" }}>TRADES</div>
+                    <div style={{ textAlign: "right" }}>PROOFS</div>
+                  </div>
+
+                  {perpsLeaderboard.map((agent, i) => (
+                    <div
+                      key={agent.agent_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={async () => {
+                        const res = await fetch(`/api/perps/agent/${agent.agent_id}`);
+                        const data = await res.json();
+                        setSelectedAgent({ ...agent, ...data });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void fetch(`/api/perps/agent/${agent.agent_id}`)
+                            .then((res) => res.json())
+                            .then((data) => setSelectedAgent({ ...agent, ...data }));
+                        }
+                      }}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "40px 1fr 100px 80px 80px 80px 60px",
+                        padding: "10px 16px",
+                        borderBottom: "1px solid #0d0d0d",
+                        cursor: "pointer",
+                        transition: "background 0.15s",
+                        background:
+                          selectedAgent?.agent_id === agent.agent_id ? "#0d1a0d" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#111";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background =
+                          selectedAgent?.agent_id === agent.agent_id ? "#0d1a0d" : "transparent";
+                      }}
+                    >
+                      <div style={{ color: "#444", fontSize: "0.7rem", fontFamily: "monospace" }}>{i + 1}</div>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        style={{
+                          color: "#fff",
+                          fontSize: "0.75rem",
+                          fontFamily: "monospace",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          textDecorationColor: "#1a3a1a",
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.location.href = `/agent/${agent.agent_id}`;
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.location.href = `/agent/${agent.agent_id}`;
+                          }
+                        }}
+                      >
+                        {agent.agent_name}
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          color: "#00ff41",
+                          fontSize: "0.75rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        ${agent.balance.toFixed(2)}
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          fontSize: "0.72rem",
+                          fontFamily: "monospace",
+                          color: agent.total_return_pct >= 0 ? "#00ff41" : "#ff4444",
+                        }}
+                      >
+                        {agent.total_return_pct >= 0 ? "+" : ""}
+                        {agent.total_return_pct.toFixed(1)}%
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          color: "#777",
+                          fontSize: "0.72rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {agent.win_rate.toFixed(0)}%
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          color: "#555",
+                          fontSize: "0.72rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {agent.total_trades}
+                      </div>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          fontSize: "0.72rem",
+                          fontFamily: "monospace",
+                          color: agent.proofs_count > 0 ? "#ffaa00" : "#333",
+                        }}
+                      >
+                        {agent.proofs_count > 0 ? `⚡${agent.proofs_count}` : "-"}
+                      </div>
+                    </div>
+                  ))}
+
+                  {perpsLeaderboard.length === 0 && !perpsLoading && (
+                    <div
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#333",
+                        fontFamily: "monospace",
+                        fontSize: "0.7rem",
+                      }}
+                    >
+                      No trading data yet
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {perpsTab === "market" && (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                      gap: "12px",
+                    }}
+                  >
+                    {Object.values(perpsPrices).map((p: any) => (
+                      <div
+                        key={p.symbol}
+                        style={{
+                          background: "#0d0d0d",
+                          border: `1px solid ${
+                            priceChanges[p.symbol] === "up"
+                              ? "#00ff41"
+                              : priceChanges[p.symbol] === "down"
+                                ? "#ff4444"
+                                : "#1a1a1a"
+                          }`,
+                          borderRadius: "12px",
+                          padding: "16px",
+                          transition: "border-color 0.3s",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                          <div
+                            style={{
+                              color: "#fff",
+                              fontSize: "0.9rem",
+                              fontFamily: "monospace",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {p.symbol}
+                          </div>
+                          <div style={{ color: "#444", fontSize: "0.6rem", fontFamily: "monospace" }}>/USD</div>
+                        </div>
+                        <div
+                          style={{
+                            color:
+                              priceChanges[p.symbol] === "up"
+                                ? "#00ff41"
+                                : priceChanges[p.symbol] === "down"
+                                  ? "#ff4444"
+                                  : "#00ff41",
+                            fontSize: "1.1rem",
+                            fontFamily: "monospace",
+                            fontWeight: "bold",
+                            transition: "color 0.3s",
+                          }}
+                        >
+                          ${p.price.toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: "24px" }}>
+                    <div
+                      style={{
+                        color: "#444",
+                        fontSize: "0.6rem",
+                        letterSpacing: "2px",
+                        fontFamily: "monospace",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      ECOSYSTEM INTEGRATIONS
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                      {[
+                        {
+                          name: "DeepBook",
+                          desc: "AI agents route orders through DeepBook v3 for optimal execution on Sui.",
+                          icon: "📗",
+                          color: "#00aaff",
+                          status: "ACTIVE",
+                        },
+                        {
+                          name: "Cetus DEX",
+                          desc: "WAL and CETUS prices sourced from Cetus. Used for Sui-native token trading.",
+                          icon: "🐬",
+                          color: "#00ff41",
+                          status: "ACTIVE",
+                        },
+                        {
+                          name: "Walrus Storage",
+                          desc: "Every profitable agent trade generates a ZCO proof stored permanently on Walrus.",
+                          icon: "🐋",
+                          color: "#ffaa00",
+                          status: "ACTIVE",
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.name}
+                          style={{
+                            background: "#0d0d0d",
+                            border: "1px solid #1a1a1a",
+                            borderRadius: "12px",
+                            padding: "16px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                            <span style={{ fontSize: "1.2rem" }}>{item.icon}</span>
+                            <div
+                              style={{
+                                color: item.color,
+                                fontSize: "0.8rem",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {item.name}
+                            </div>
+                            <div
+                              style={{
+                                marginLeft: "auto",
+                                background: "#0a1a0a",
+                                border: "1px solid #1a3a1a",
+                                borderRadius: "4px",
+                                padding: "2px 6px",
+                                color: "#00ff41",
+                                fontSize: "0.55rem",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {item.status}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              color: "#444",
+                              fontSize: "0.65rem",
+                              fontFamily: "monospace",
+                              lineHeight: "1.5",
+                            }}
+                          >
+                            {item.desc}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </>
               )}
-            </section>
+
+              {perpsTab === "feed" && (
+                <div
+                  style={{
+                    background: "#0a0a0a",
+                    border: "1px solid #1a1a1a",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom: "1px solid #1a1a1a",
+                      color: "#444",
+                      fontSize: "0.6rem",
+                      fontFamily: "monospace",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    LATEST AGENT TRADES — refreshes every 30 sec
+                  </div>
+                  {perpsFeed.length === 0 && (
+                    <div
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#333",
+                        fontFamily: "monospace",
+                        fontSize: "0.7rem",
+                      }}
+                    >
+                      Loading feed...
+                    </div>
+                  )}
+                  {perpsFeed.map((t: any, i: number) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "10px 16px",
+                        borderBottom: "1px solid #0d0d0d",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#444",
+                          fontSize: "0.6rem",
+                          fontFamily: "monospace",
+                          width: "80px",
+                        }}
+                      >
+                        {new Date(t.closed_at || t.opened_at).toLocaleTimeString()}
+                      </div>
+                      <div style={{ color: "#777", fontSize: "0.72rem", fontFamily: "monospace", flex: 1 }}>
+                        {t.agent_name}
+                      </div>
+                      <div
+                        style={{
+                          color: t.direction === "LONG" ? "#00ff41" : "#ff4444",
+                          fontSize: "0.68rem",
+                          fontFamily: "monospace",
+                          width: "45px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {t.direction}
+                      </div>
+                      <div style={{ color: "#fff", fontSize: "0.68rem", fontFamily: "monospace", width: "40px" }}>
+                        {t.pair}
+                      </div>
+                      <div
+                        style={{
+                          color: "#555",
+                          fontSize: "0.62rem",
+                          fontFamily: "monospace",
+                          width: "100px",
+                        }}
+                      >
+                        ${t.entry_price?.toLocaleString()}
+                      </div>
+                      <div
+                        style={{
+                          color: t.pnl > 0 ? "#00ff41" : t.pnl < 0 ? "#ff4444" : "#555",
+                          fontSize: "0.68rem",
+                          fontFamily: "monospace",
+                          width: "70px",
+                          textAlign: "right",
+                          fontWeight: t.pnl ? "bold" : "normal",
+                        }}
+                      >
+                        {t.pnl ? `${t.pnl > 0 ? "+" : ""}$${t.pnl.toFixed(3)}` : "OPEN"}
+                      </div>
+                      <div style={{ width: "60px", textAlign: "right" }}>
+                        {t.walrus_blob_id ? (
+                          <a
+                            href={`/zco/${t.walrus_blob_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: "#ffaa00",
+                              fontSize: "0.6rem",
+                              fontFamily: "monospace",
+                              textDecoration: "none",
+                            }}
+                          >
+                            ⚡ZCO
+                          </a>
+                        ) : (
+                          <span style={{ color: "#1a1a1a", fontSize: "0.6rem", fontFamily: "monospace" }}>—</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {perpsTab === "myagent" && (
+                <div>
+                  <div
+                    style={{
+                      background: "#0d0d0d",
+                      border: "1px solid #1a1a1a",
+                      borderRadius: "12px",
+                      padding: "16px",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: "#555",
+                        fontSize: "0.62rem",
+                        fontFamily: "monospace",
+                        letterSpacing: "1px",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      FIND AGENT BY NAME
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <input
+                        value={myAgentSearch}
+                        onChange={(e) => setMyAgentSearch(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && searchMyAgent()}
+                        placeholder="Enter agent name..."
+                        style={{
+                          flex: 1,
+                          background: "#111",
+                          border: "1px solid #2a2a2a",
+                          borderRadius: "8px",
+                          padding: "10px 14px",
+                          color: "#fff",
+                          fontFamily: "monospace",
+                          fontSize: "0.75rem",
+                          outline: "none",
+                          caretColor: "#00ff41",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={searchMyAgent}
+                        style={{
+                          padding: "10px 20px",
+                          borderRadius: "8px",
+                          border: "none",
+                          cursor: "pointer",
+                          background: "#00ff41",
+                          color: "#000",
+                          fontFamily: "monospace",
+                          fontSize: "0.72rem",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        SEARCH
+                      </button>
+                    </div>
+                  </div>
+
+                  {myAgentLoading && (
+                    <div style={{ textAlign: "center", color: "#444", fontFamily: "monospace", padding: "20px" }}>
+                      Searching...
+                    </div>
+                  )}
+
+                  {myAgentData && (
+                    <div
+                      style={{
+                        background: "#0a0a0a",
+                        border: "1px solid #1a3a1a",
+                        borderRadius: "12px",
+                        padding: "16px",
+                      }}
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        style={{
+                          color: "#00ff41",
+                          fontFamily: "monospace",
+                          fontSize: "0.9rem",
+                          fontWeight: "bold",
+                          marginBottom: "16px",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                          textDecorationColor: "#1a3a1a",
+                        }}
+                        onClick={() => {
+                          window.location.href = `/agent/${myAgentData.agent_id}`;
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            window.location.href = `/agent/${myAgentData.agent_id}`;
+                          }
+                        }}
+                      >
+                        {myAgentData.agent_name} ↗
+                      </div>
+                      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+                        {[
+                          { label: "BALANCE", value: `$${myAgentData.portfolio?.balance?.toFixed(2)}` },
+                          { label: "PnL", value: `$${myAgentData.portfolio?.total_pnl?.toFixed(3)}` },
+                          { label: "TRADES", value: myAgentData.portfolio?.total_trades },
+                          { label: "WIN RATE", value: `${myAgentData.portfolio?.win_rate?.toFixed(0)}%` },
+                        ].map((item) => (
+                          <div
+                            key={item.label}
+                            style={{ background: "#111", borderRadius: "8px", padding: "10px 14px" }}
+                          >
+                            <div
+                              style={{
+                                color: "#444",
+                                fontSize: "0.58rem",
+                                fontFamily: "monospace",
+                                letterSpacing: "1px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              {item.label}
+                            </div>
+                            <div
+                              style={{
+                                color: "#00ff41",
+                                fontSize: "0.85rem",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {item.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {myAgentData.positions?.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <div
+                            style={{
+                              color: "#444",
+                              fontSize: "0.6rem",
+                              fontFamily: "monospace",
+                              letterSpacing: "1px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            OPEN POSITIONS
+                          </div>
+                          {myAgentData.positions.map((pos: any, i: number) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                gap: "10px",
+                                background: "#111",
+                                borderRadius: "8px",
+                                padding: "8px 12px",
+                                marginBottom: "6px",
+                                alignItems: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: pos.direction === "LONG" ? "#00ff41" : "#ff4444",
+                                  fontSize: "0.68rem",
+                                  fontFamily: "monospace",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {pos.direction}
+                              </span>
+                              <span style={{ color: "#fff", fontSize: "0.68rem", fontFamily: "monospace" }}>
+                                {pos.pair}
+                              </span>
+                              <span style={{ color: "#555", fontSize: "0.62rem", fontFamily: "monospace", flex: 1 }}>
+                                entry ${pos.entry?.toLocaleString()}
+                              </span>
+                              <span style={{ color: "#ffaa00", fontSize: "0.62rem", fontFamily: "monospace" }}>
+                                LIVE
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          color: "#444",
+                          fontSize: "0.6rem",
+                          fontFamily: "monospace",
+                          letterSpacing: "1px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        TRADE HISTORY
+                      </div>
+                      {myAgentData.trades?.map((t: any, i: number) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            padding: "6px 0",
+                            borderBottom: "1px solid #111",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              color: t.direction === "LONG" ? "#00ff41" : "#ff4444",
+                              fontSize: "0.65rem",
+                              fontFamily: "monospace",
+                              width: "40px",
+                            }}
+                          >
+                            {t.direction}
+                          </span>
+                          <span style={{ color: "#777", fontSize: "0.65rem", fontFamily: "monospace", width: "40px" }}>
+                            {t.pair}
+                          </span>
+                          <span style={{ color: "#555", fontSize: "0.62rem", fontFamily: "monospace", flex: 1 }}>
+                            ${t.entry?.toLocaleString()} → {t.exit ? `$${t.exit?.toLocaleString()}` : "OPEN"}
+                          </span>
+                          <span
+                            style={{
+                              color: t.pnl > 0 ? "#00ff41" : t.pnl < 0 ? "#ff4444" : "#555",
+                              fontSize: "0.65rem",
+                              fontFamily: "monospace",
+                              width: "70px",
+                              textAlign: "right",
+                            }}
+                          >
+                            {t.pnl ? `${t.pnl > 0 ? "+" : ""}$${t.pnl.toFixed(3)}` : "—"}
+                          </span>
+                          {t.proof && (
+                            <a
+                              href={`/zco/${t.proof}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                color: "#ffaa00",
+                                fontSize: "0.6rem",
+                                fontFamily: "monospace",
+                                textDecoration: "none",
+                              }}
+                            >
+                              ⚡ZCO
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {perpsTab === "proofs" && (
+                <div
+                  style={{
+                    background: "#0a0a0a",
+                    border: "1px solid #1a1a1a",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom: "1px solid #1a1a1a",
+                      color: "#444",
+                      fontSize: "0.6rem",
+                      fontFamily: "monospace",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    ZCO PROOFS ON WALRUS — verified profitable trades
+                  </div>
+                  {perpsProofs.length === 0 && (
+                    <div
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#333",
+                        fontFamily: "monospace",
+                        fontSize: "0.7rem",
+                      }}
+                    >
+                      Loading proofs...
+                    </div>
+                  )}
+                  {perpsProofs.map((p: any, i: number) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "12px 16px",
+                        borderBottom: "1px solid #0d0d0d",
+                      }}
+                    >
+                      <div style={{ color: "#ffaa00", fontSize: "0.8rem" }}>⚡</div>
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            color: "#fff",
+                            fontSize: "0.72rem",
+                            fontFamily: "monospace",
+                            marginBottom: "2px",
+                          }}
+                        >
+                          {p.agent_name}
+                        </div>
+                        <div style={{ color: "#555", fontSize: "0.6rem", fontFamily: "monospace" }}>
+                          {p.direction} {p.pair} • entry ${p.entry_price?.toLocaleString()} → exit $
+                          {p.exit_price?.toLocaleString()}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          color: "#00ff41",
+                          fontSize: "0.78rem",
+                          fontFamily: "monospace",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        +${p.pnl?.toFixed(3)}
+                      </div>
+                      <a
+                        href={`/zco/${p.walrus_blob_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          background: "#0a1a0a",
+                          border: "1px solid #1a3a1a",
+                          borderRadius: "6px",
+                          padding: "5px 10px",
+                          color: "#00ff41",
+                          fontSize: "0.65rem",
+                          fontFamily: "monospace",
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "#1a2a1a";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "#0a1a0a";
+                        }}
+                      >
+                        WALRUS ↗
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedAgent && selectedAgent.trades && perpsTab === "leaderboard" && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    background: "#0a0a0a",
+                    border: "1px solid #1a3a1a",
+                    borderRadius: "12px",
+                    padding: "16px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: "#00ff41",
+                        fontFamily: "monospace",
+                        fontSize: "0.8rem",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {selectedAgent.agent_name}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgent(null)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#444",
+                        cursor: "pointer",
+                        fontSize: "1rem",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: "16px", marginBottom: "12px", flexWrap: "wrap" }}>
+                    {[
+                      { label: "BALANCE", value: `$${selectedAgent.portfolio?.balance?.toFixed(2)}` },
+                      { label: "TOTAL PnL", value: `$${selectedAgent.portfolio?.total_pnl?.toFixed(3)}` },
+                      { label: "TRADES", value: selectedAgent.portfolio?.total_trades },
+                      { label: "WIN RATE", value: `${selectedAgent.portfolio?.win_rate?.toFixed(0)}%` },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        style={{ background: "#111", borderRadius: "8px", padding: "8px 12px" }}
+                      >
+                        <div
+                          style={{
+                            color: "#444",
+                            fontSize: "0.58rem",
+                            fontFamily: "monospace",
+                            letterSpacing: "1px",
+                          }}
+                        >
+                          {item.label}
+                        </div>
+                        <div
+                          style={{
+                            color: "#00ff41",
+                            fontSize: "0.8rem",
+                            fontFamily: "monospace",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {item.value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      color: "#444",
+                      fontSize: "0.6rem",
+                      fontFamily: "monospace",
+                      letterSpacing: "1px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    TRADE HISTORY
+                  </div>
+                  {selectedAgent.trades?.slice(0, 10).map((t: any, i: number) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 0",
+                        borderBottom: "1px solid #111",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: t.direction === "LONG" ? "#00ff41" : "#ff4444",
+                          fontSize: "0.65rem",
+                          fontFamily: "monospace",
+                          width: "40px",
+                        }}
+                      >
+                        {t.direction}
+                      </div>
+                      <div
+                        style={{
+                          color: "#777",
+                          fontSize: "0.65rem",
+                          fontFamily: "monospace",
+                          width: "40px",
+                        }}
+                      >
+                        {t.pair}
+                      </div>
+                      <div
+                        style={{
+                          color: "#555",
+                          fontSize: "0.62rem",
+                          fontFamily: "monospace",
+                          flex: 1,
+                        }}
+                      >
+                        ${t.entry?.toLocaleString()} →{" "}
+                        {t.exit ? `$${t.exit?.toLocaleString()}` : "OPEN"}
+                      </div>
+                      <div
+                        style={{
+                          color: t.pnl > 0 ? "#00ff41" : t.pnl < 0 ? "#ff4444" : "#555",
+                          fontSize: "0.65rem",
+                          fontFamily: "monospace",
+                          width: "60px",
+                          textAlign: "right",
+                        }}
+                      >
+                        {t.pnl ? `${t.pnl > 0 ? "+" : ""}$${t.pnl.toFixed(3)}` : "-"}
+                      </div>
+                      {t.proof && (
+                        <a
+                          href={`https://aggregator.walrus-testnet.walrus.space/v1/${t.proof}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: "#ffaa00",
+                            fontSize: "0.6rem",
+                            fontFamily: "monospace",
+                            textDecoration: "none",
+                          }}
+                          title="View ZCO proof on Walrus"
+                        >
+                          ⚡ZCO
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === "press" && (() => {
@@ -15509,330 +19477,522 @@ export default function Home() {
 
           {activeTab === "treasury" && (
             <div className="ecoTermRoot">
-            <div className="ecoHudWrap">
-              <div className="ecoHudHeader">
-                <h2>ZION ECO-POL — GOV MONITOR</h2>
-                <p>Economics · Politics · Central Bank</p>
+              <div className="ecoHudWrap">
+                <header className="ecoHudHeader">
+                  <h2>ZION ECO-POL — GOV MONITOR</h2>
+                  <p>Economics · Politics · Central Bank</p>
+                </header>
 
-                <div className="ecoNewsTicker" aria-live="polite">
-                  <div className="ecoNewsTickerBadge">LIVE WIRE</div>
-                  <div className="ecoNewsTickerViewport">
-                    {ecoPolTickerMessages.length > 0 ? (
-                      <div className="ecoNewsTickerTrack">
-                        {[...ecoPolTickerMessages, ...ecoPolTickerMessages].map((msg, i) => (
-                          <span
-                            key={`eco-news-${i}`}
-                            className={`ecoNewsItem ${msg.breaking ? "breaking" : "normal"}`}
-                          >
-                            {msg.breaking ? `BREAKING: ${msg.text}` : msg.text}
+                {(ecoPolData || frsStats || politicalEconomy) && (() => {
+                  const meter = ecoPolData?.uprising?.meter ?? 0;
+                  const revMeterColor = ecoRevMeterColor(meter);
+                  const povertyPct =
+                    ecoPolData?.economy.poverty_pct ??
+                    stats?.poverty_pct ??
+                    frsStats?.economy.poor_pct ??
+                    0;
+                  const povertyColor =
+                    povertyPct < 20 ? "#00ff88" : povertyPct < 40 ? "#ffd700" : povertyPct < 60 ? "#ff8800" : "#ff4444";
+                  const zrsState = ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—";
+                  const zrsStateColor = ecoZrsStateColor(zrsState);
+                  const zrsRate = frsStats?.interest_rate ?? 0;
+                  const zrsReserve =
+                    frsStats?.government?.zrs?.reserve ?? stateTreasury?.zrs_fund ?? 0;
+                  const avgBal = ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0;
+                  const totalZion = ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0;
+                  const corpActive = ecoPolData?.corporations.active ?? frsStats?.corporations.count ?? 0;
+                  const corpTreasury =
+                    ecoPolData?.corporations.total_treasury ?? frsStats?.corporations.total_treasury ?? 0;
+
+                  const presidentPower = Number(politicalEconomy?.power?.scores?.president_power ?? 0);
+                  const sheriffPower = Number(politicalEconomy?.power?.scores?.sheriff_power ?? 0);
+                  const senatePower = Number(politicalEconomy?.power?.scores?.senate_power ?? 0);
+                  const totalPower = (presidentPower || 0) + (sheriffPower || 0) + (senatePower || 0);
+                  const presidentPct = totalPower > 0 ? Math.round(((presidentPower || 0) / totalPower) * 100) : 0;
+                  const sheriffPct = totalPower > 0 ? Math.round(((sheriffPower || 0) / totalPower) * 100) : 0;
+                  const senatePct = totalPower > 0 ? Math.round(((senatePower || 0) / totalPower) * 100) : 0;
+                  const powerBar = (pct: number) => {
+                    const blocks = 20;
+                    const filled = Math.max(0, Math.min(blocks, Math.round((pct / 100) * blocks)));
+                    return `${"█".repeat(filled)}${"░".repeat(blocks - filled)}`;
+                  };
+                  const crisisActive = Boolean(politicalEconomy?.crisis?.is_active);
+                  const peCrime = Number(
+                    politicalEconomy?.metrics?.crime_rate ?? politicalEconomy?.crisis?.crime_rate ?? 0
+                  );
+                  const peCrimePct = peCrime > 1 ? peCrime / 100 : peCrime;
+                  const pePoliceEff = Number(
+                    politicalEconomy?.metrics?.police_effectiveness ??
+                      politicalEconomy?.crisis?.police_effectiveness ??
+                      0
+                  );
+                  const pePoliceEffPct = pePoliceEff > 1 ? pePoliceEff / 100 : pePoliceEff;
+                  const peRevPressure = Number(
+                    politicalEconomy?.metrics?.revolution_pressure ??
+                      politicalEconomy?.crisis?.revolution_pressure ??
+                      0
+                  );
+                  const pePhase = (
+                    politicalEconomy?.metrics?.economic_phase ??
+                    politicalEconomy?.crisis?.economic_phase ??
+                    "NORMAL"
+                  ).toUpperCase();
+                  const pePhaseColor = ecoEconomicPhaseColor(pePhase);
+                  const peGangs = politicalEconomy?.gangs ?? [];
+                  const dictatorshipRisk = presidentPower > sheriffPower + senatePower;
+                  const coupRisk = sheriffPower > presidentPower * 1.5;
+
+                  const gridGov = isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))";
+                  const grid4 = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
+                  const grid3 = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+                  const grid2 = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
+                  const hudPoverty = Number(povertyPct);
+                  const hudCorruption = Number(presidentState?.corruption_index ?? 0);
+                  const hudCrimePct = peCrimeRate;
+                  const hudGini = peGini;
+                  const hudUnemployment = peUnemployment;
+
+                  const politicalWireItems: WireNewsItem[] = ecoPolTickerMessages.map((msg) => ({
+                    text: msg.text,
+                    type: msg.breaking ? "breaking" : undefined,
+                  }));
+
+                  return (
+                    <div
+                      className="ecoDashLayout"
+                      style={{
+                        background: "#0a0a0f",
+                        color: "rgba(255,255,255,0.75)",
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                        fontSize: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "rgba(255,255,255,0.28)",
+                          letterSpacing: 2,
+                          marginBottom: 10,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {renderPoliticalWireText(politicalWireItems[0]?.text ?? "LIVE ECO-POL FEED")}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 24,
+                          padding: "12px 0",
+                          borderBottom: "1px solid rgba(255,255,255,0.08)",
+                          marginBottom: 16,
+                        }}
+                      >
+                        <div>
+                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>POVERTY</span>
+                          <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                            {povertyPct.toFixed(1)}%
                           </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CRIME</span>
+                          <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                            {(hudCrimePct <= 1 ? hudCrimePct * 100 : hudCrimePct).toFixed(1)}%
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>GINI</span>
+                          <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                            {hudGini.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>UNEMPLOYED</span>
+                          <span style={{ color: "#ff8800", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                            {hudUnemployment.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CORRUPTION</span>
+                          <span
+                            style={{
+                              color: hudCorruption > 50 ? "#ff4444" : "rgba(255,255,255,0.72)",
+                              fontSize: 16,
+                              fontWeight: 600,
+                              marginLeft: 8,
+                            }}
+                          >
+                            {Math.round(hudCorruption)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 }}>GOVERNMENT</div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
+                          gap: 10,
+                        }}
+                      >
+                        {presidentState && (
+                          <div style={{ padding: 16, border: "1px solid rgba(255, 200, 50, 0.4)", boxShadow: "0 0 12px rgba(255, 200, 50, 0.08)", borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, color: "#ffc832", marginBottom: 12, letterSpacing: 2 }}>
+                              EXECUTIVE
+                            </div>
+                            <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
+                              {presidentState.agent_name}
+                            </div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                              {presidentPartyDisplay(presidentState.party).label}
+                            </div>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <tbody>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td><td style={{ color: (presidentState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444", fontSize: 13, textAlign: "right" }}>{presidentState.approval_rating ?? 0}%</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>FUND</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(presidentState.personal_fund ?? 0).toLocaleString("en-US")}</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>Day {presidentState.days_in_power ?? 0}</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>CORRUPTION</td><td style={{ color: (presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(presidentState.corruption_index ?? 0)}%</td></tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {sheriffState && (
+                          <div style={{ padding: 16, border: "1px solid rgba(120, 160, 80, 0.4)", boxShadow: "0 0 12px rgba(120, 160, 80, 0.08)", borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, color: "#78a050", marginBottom: 12, letterSpacing: 2 }}>
+                              ENFORCEMENT
+                            </div>
+                            <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
+                              {sheriffState.agent_name}
+                            </div>
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                              {String(sheriffState.sheriff_type || "none").toUpperCase()}
+                            </div>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <tbody>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td><td style={{ color: (sheriffState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444", fontSize: 13, textAlign: "right" }}>{sheriffState.approval_rating ?? 0}%</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>OFFICERS</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{(sheriffState.police_count ?? 0).toLocaleString("en-US")}</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>BUDGET</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(sheriffState.police_budget ?? 0).toLocaleString("en-US")}</td></tr>
+                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>Day {sheriffState.days_in_office ?? 0}</td></tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        <div style={{ padding: 16, border: "1px solid rgba(180, 190, 200, 0.4)", boxShadow: "0 0 12px rgba(180, 190, 200, 0.08)", borderRadius: 4 }}>
+                          {frsChief && (
+                            <div style={{background:'#0a0a0a', border:'1px solid #1a2a1a',
+                                         borderRadius:'8px', padding:'10px 14px', marginBottom:'8px'}}>
+                              <div style={{color:'#444', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
+                                FRS CHIEF (INDEPENDENT)
+                              </div>
+                              <div style={{color:'#00ff41', fontSize:'0.78rem', fontFamily:'monospace', fontWeight:'bold'}}>
+                                {frsChief.name}
+                              </div>
+                              <div style={{color:'#555', fontSize:'0.62rem', fontFamily:'monospace'}}>
+                                Term: {frsChief.cycles_served}/{frsChief.max_cycles} cycles
+                                {frsChief.confirmed ? ' • Senate confirmed' : ' • Pending confirmation'}
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ fontSize: 11, color: "#b4bec8", marginBottom: 12, letterSpacing: 2 }}>
+                            CENTRAL BANK
+                          </div>
+                          <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>ZRS</div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                            {String(zrsState).toUpperCase()}
+                          </div>
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <tbody>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RESERVE</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{ecoFormatZionShort(zrsReserve)}</td></tr>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RATE</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{zrsRate}%</td></tr>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PHASE</td><td style={{ color: pePhase === "BOOM" ? "#00ff88" : pePhase === "DEPRESSION" ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{pePhase}</td></tr>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td><td style={{ color: meter >= 80 ? "#ff4444" : meter >= 30 ? "rgba(255,255,255,0.72)" : "#00ff88", fontSize: 13, textAlign: "right" }}>{Math.round(meter)}%</td></tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: 16,
+                            border: meter > 30 ? "1px solid rgba(255, 60, 60, 0.4)" : "1px solid rgba(0, 255, 136, 0.2)",
+                            boxShadow: meter > 30 ? "0 0 12px rgba(255, 60, 60, 0.08)" : "0 0 12px rgba(0, 255, 136, 0.08)",
+                            borderRadius: 4,
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: meter > 30 ? "#ff4444" : "#00ff88", marginBottom: 12, letterSpacing: 2 }}>
+                            STABILITY
+                          </div>
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <tbody>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td><td style={{ color: meter > 30 ? "#ff4444" : "#00ff88", fontSize: 13, textAlign: "right" }}>{Math.round(meter)}%</td></tr>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PRESSURE</td><td style={{ color: peRevPressure > 100 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(peRevPressure)}</td></tr>
+                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>POVERTY</td><td style={{ color: povertyPct > 40 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{povertyPct.toFixed(1)}%</td></tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>POWER DISTRIBUTION</div>
+                      <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 12 }}>
+                        {[
+                          { label: "PRESIDENT", pct: presidentPct, color: "#00ff88" },
+                          { label: "SHERIFF", pct: sheriffPct, color: "rgba(255,255,255,0.5)" },
+                          { label: "SENATE", pct: senatePct, color: "#4488ff" },
+                        ].map((item) => (
+                          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                            <div style={{ width: 80, fontSize: 10, color: "rgba(255,255,255,0.3)" }}>{item.label}</div>
+                            <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
+                              <div style={{ width: `${item.pct}%`, height: "100%", background: item.color, borderRadius: 2 }} />
+                            </div>
+                            <div style={{ width: 35, fontSize: 12, color: item.color, textAlign: "right" }}>{item.pct}%</div>
+                          </div>
                         ))}
                       </div>
-                    ) : (
-                      <span className="ecoNewsItem normal" style={{ padding: "0 12px" }}>
-                        Scanning political situation…
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {(ecoPolData || frsStats) && (() => {
-                const meter = ecoPolData?.uprising?.meter ?? 0;
-                const revLabel =
-                  meter >= 80 ? "CRITICAL" : meter >= 30 ? "TENSE" : "STABLE";
-                const revMeterColor = ecoRevMeterColor(meter);
-                const corruptionIdx = presidentState?.corruption_index ?? 30;
-                const povertyPct = ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0;
-                const povertyColor =
-                  povertyPct < 20 ? "#00ff88" : povertyPct < 40 ? "#ffd700" : povertyPct < 60 ? "#ff8800" : "#ff4444";
-                const zrsState = ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—";
-                const zrsStateColor = ecoZrsStateColor(zrsState);
-                const zrsBorderColor = ecoZrsBorderColor(zrsState);
-                const zrsRate = frsStats?.interest_rate ?? 0;
-                const zrsReserve =
-                  frsStats?.government?.zrs?.reserve ??
-                  stateTreasury?.zrs_fund ??
-                  0;
-                const avgBal = ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0;
-                const totalZion = ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0;
-                const corpActive = ecoPolData?.corporations.active ?? frsStats?.corporations.count ?? 0;
-                const corpTreasury = ecoPolData?.corporations.total_treasury ?? frsStats?.corporations.total_treasury ?? 0;
-                const ecoRow2 = isMobile ? "1fr" : "1fr 1fr";
-                const ecoRow3 = isMobile ? "1fr" : "repeat(3, 1fr)";
-                const ecoRow4 = isMobile ? "1fr" : "repeat(4, 1fr)";
-
-                return (
-                <div className="ecoDashLayout">
-                  {ecoPolData?.uprising?.active && (
-                    <div className="ecoAlertStrip ecoAlertStripDanger">
-                      UPRISING ACTIVE — Meter {ecoPolData.uprising.meter}% ({ecoPolData.uprising.meter_change})
-                    </div>
-                  )}
-
-                  {ecoPolData?.active_effects && ecoPolData.active_effects.length > 0 && (
-                    <div className="ecoAlertStrip" style={{ marginTop: ecoPolData?.uprising?.active ? 6 : 0 }}>
-                      {ecoPolData.epidemic?.active && (
-                        <div style={{ color: "#ffffff" }}>EPIDEMIC — {ecoPolData.epidemic.infected_count} infected</div>
-                      )}
-                      {ecoPolData.active_effects.map((ef, i) => {
-                        const hrs = (ef as { expires_in?: string }).expires_in
-                          ?? `${Math.round(Math.max(0, (new Date(ef.expires_at).getTime() - Date.now()) / 3600000))}h`;
-                        const et = (ef as { type?: string }).type ?? ef.effect_type;
-                        const isMartial = et === "martial_law";
-                        return (
-                          <div
-                            key={i}
-                            className={isMartial ? "ecoMartialBanner" : undefined}
-                            style={{ color: "#ffffff", marginTop: i > 0 || ecoPolData.epidemic?.active ? 4 : 0 }}
-                          >
-                            {isMartial ? `MARTIAL LAW — ${hrs} remaining` : `${String(et).toUpperCase()} — ${hrs} remaining`}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="ecoRow4" style={{ gridTemplateColumns: ecoRow4 }}>
-                    {presidentState && (() => {
-                      const partyUi = presidentPartyDisplay(presidentState.party);
-                      return (
-                        <EcoRect label="PRESIDENT" borderColor="#ffd700" background={ECO_BG_GOLD} style={{ height: 130 }}>
-                          <div style={{ color: "#ffd700", fontSize: 15, fontWeight: "bold", wordBreak: "break-word" }}>
-                            {presidentState.agent_name}
-                          </div>
-                          {!presidentState.is_dictator && (
-                            <div style={{ color: "#ffffff", fontSize: 12, marginTop: 4 }}>{partyUi.label}</div>
-                          )}
-                          <EcoTermDivider />
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <EcoTermBadge text={`CORRUPT ${corruptionIdx.toFixed(0)}%`} color="#ff4444" />
-                            <EcoTermBadge text={`POVERTY ${povertyPct.toFixed(1)}%`} color="#ff8800" />
-                          </div>
-                          <div style={{ width: "100%", background: "rgba(255,255,255,0.08)", height: "3px", borderRadius: "2px", marginTop: "10px" }}>
-                            <div
-                              style={{
-                                width: `${presidentState.approval_rating ?? 0}%`,
-                                height: "3px",
-                                borderRadius: "2px",
-                                background:
-                                  (presidentState.approval_rating ?? 0) > 60
-                                    ? "#00ff88"
-                                    : (presidentState.approval_rating ?? 0) > 30
-                                      ? "#ffd700"
-                                      : "#ff4444",
-                              }}
-                            />
-                          </div>
-                        </EcoRect>
-                      );
-                    })()}
-
-                    {sheriffState && (() => {
-                      const isHonest = sheriffState.sheriff_type === "honest";
-                      const badgeColor = isHonest ? "#00ff88" : "#ff4444";
-                      return (
-                        <EcoRect label="SHERIFF" borderColor="#00ff88" background={ECO_BG_GREEN} style={{ height: 130 }}>
-                          <div style={{ color: "#00ff88", fontSize: 15, fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {sheriffState.agent_name}
-                          </div>
-                          <div style={{ marginTop: 8 }}>
-                            <EcoTermBadge text={sheriffState.sheriff_type.toUpperCase()} color={badgeColor} />
-                          </div>
-                          <div style={{ fontSize: 12, color: "#ffffff", marginTop: "auto", paddingTop: 8 }}>
-                            {sheriffState.approval_rating}% approval · {sheriffState.police_count} officers
-                          </div>
-                        </EcoRect>
-                      );
-                    })()}
-
-                    <EcoRect label="ZRS CENTRAL BANK" borderColor={zrsBorderColor} background={ECO_BG_ORANGE} style={{ height: 130 }}>
-                      <div style={{ color: zrsStateColor, fontSize: 15, fontWeight: "bold", wordBreak: "break-word" }}>{zrsState}</div>
-                      <div style={{ fontSize: 12, color: "#ffffff", marginTop: 8 }}>
-                        Rate {zrsRate}% · Reserve {ecoFormatZionShort(zrsReserve)} ZION
-                      </div>
-                    </EcoRect>
-
-                    <EcoRect label="REVOLUTION METER" borderColor={revMeterColor} background="#050505" style={{ height: 130 }}>
-                      <div style={{ fontSize: 28, fontWeight: "bold", color: revMeterColor, lineHeight: 1 }}>{Math.round(meter)}%</div>
-                      <div style={{ fontSize: 12, color: revMeterColor, marginTop: 6, letterSpacing: 2 }}>{revLabel}</div>
-                    </EcoRect>
-                  </div>
-
-                  <div className="ecoRow2" style={{ gridTemplateColumns: ecoRow2 }}>
-                    {partiesData && partiesData.length > 0 && (
-                      <EcoRect label="ELECTION POLL" borderColor="#ffd700" background={ECO_BG_GOLD}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {partiesData.slice(0, 3).map((party) => {
-                            const partyUi = presidentPartyDisplay(party.party_id);
-                            const rating = party.poll_pct ?? party.approval_rating ?? 0;
-                            const barColor = ecoPollPartyColor(party.party_id);
-                            return (
-                              <div key={party.party_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ flex: "0 0 auto", maxWidth: "40%", color: "#ffffff", fontSize: 12, wordBreak: "break-word" }}>
-                                  {party.emoji || partyUi.emoji} {party.name}
-                                </span>
-                                <EcoPollBar pct={rating} color={barColor} />
-                                <span style={{ width: 35, textAlign: "right", fontSize: 12, color: barColor }}>{rating}%</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </EcoRect>
-                    )}
-
-                    {senateData && (
-                      <EcoRect label="SENATE" borderColor="#00ff88" background={ECO_BG_GREEN}>
-                        <div style={{ fontSize: 15, color: "#00ff88", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          SPEAKER: {senateData.speaker || "—"}
-                        </div>
-                        <div style={{ fontSize: 12, color: "#ffffff", marginTop: 4 }}>
-                          {senateData.senator_count}/{ECO_SENATE_SEATS} SEATS FILLED
-                        </div>
-                        <EcoTermDivider />
-                        <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 6 }}>RECENT LAWS</div>
-                        {senateData.recent_laws.length === 0 ? (
-                          <div style={{ color: "#666666", fontSize: 12 }}>No recent votes</div>
-                        ) : (
-                          <>
-                            <div className="ecoLawTableHead">
-                              <span>Law</span>
-                              <span>Votes</span>
-                              <span>Status</span>
-                            </div>
-                            {senateData.recent_laws.slice(0, 5).map((law) => {
-                              const passed = law.status === "passed";
+                      {partiesData && partiesData.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>ELECTION POLL</div>
+                          <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 12 }}>
+                            {(Array.isArray(partiesData) ? partiesData : []).slice(0, 3).map((party) => {
+                              const rating = Number(party.poll_pct ?? party.approval_rating ?? 0);
+                              const partyColor = getPartyColor(String(party.party_id || party.name || ""));
                               return (
-                                <div key={`recent-${law.id}`} className="ecoLawRow">
-                                  <span style={{ color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{law.title}</span>
-                                  <span style={{ color: "#ffffff" }}>{law.votes_for}-{law.votes_against}</span>
-                                  <span style={{ color: passed ? "#00ff88" : "#ff4444", flexShrink: 0 }}>{passed ? "PASS" : "FAIL"}</span>
+                                <div key={party.party_id} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                                  <div style={{ width: 120, fontSize: 11, color: partyColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {party.name}
+                                  </div>
+                                  <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
+                                    <div style={{ width: `${Math.max(0, Math.min(100, rating))}%`, height: "100%", background: partyColor, borderRadius: 2 }} />
+                                  </div>
+                                  <div style={{ width: 40, fontSize: 12, color: partyColor, textAlign: "right" }}>{Math.round(rating)}%</div>
                                 </div>
                               );
                             })}
-                          </>
-                        )}
-                      </EcoRect>
-                    )}
-                  </div>
-
-                  <div className="ecoRow2" style={{ gridTemplateColumns: ecoRow2 }}>
-                    <EcoRect label="PRESIDENTIAL DECREES" borderColor="#ffd700" background={ECO_BG_GOLD} bodyStyle={{ maxHeight: 220, overflowY: "auto" }}>
-                      {presidentActionsDisplay.length === 0 ? (
-                        <div style={{ color: "#666666", fontSize: 12 }}>No decrees yet</div>
-                      ) : (
-                        presidentActionsDisplay.map((action, i) => (
-                          <div key={i}>
-                            {i > 0 && <EcoTermDivider />}
-                            <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              <span style={{ color: "#00ff88" }}>
-                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                              <span style={{ color: "#555555" }}> | </span>
-                              <span style={{ color: ecoPresidentMessageColor(action.description) }}>
-                                {action.description}
-                                {action.count > 1 ? ` ×${action.count}` : ""}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </EcoRect>
-
-                    <EcoRect label="SHERIFF ACTIVITY" borderColor="#00ff88" background={ECO_BG_GREEN} bodyStyle={{ maxHeight: 220, overflowY: "auto" }}>
-                      {sheriffActionsDisplay.length === 0 ? (
-                        <div style={{ color: "#666666", fontSize: 12 }}>No activity yet</div>
-                      ) : (
-                        sheriffActionsDisplay.map((action, i) => (
-                          <div key={i}>
-                            {i > 0 && <EcoTermDivider />}
-                            <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              <span style={{ color: "#00ff88" }}>
-                                {new Date(action.created_at).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                              <span style={{ color: "#555555" }}> | </span>
-                              <span style={{ color: ecoSheriffMessageColor(action.description) }}>{action.description}</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </EcoRect>
-                  </div>
-
-                  <div className="ecoRow3" style={{ gridTemplateColumns: ecoRow3 }}>
-                    <EcoRect label="ECONOMY" borderColor="#00ff88" background={ECO_BG_GREEN}>
-                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>AVG BALANCE</div>
-                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#ffffff", marginBottom: 12 }}>
-                        {avgBal.toLocaleString("en-US", { maximumFractionDigits: 1 })}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>TOTAL ZION</div>
-                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#00ff88", marginBottom: 12 }}>
-                        {ecoFormatZionShort(totalZion)}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#666666", letterSpacing: 2, marginBottom: 4 }}>POVERTY</div>
-                      <div style={{ fontSize: 18, fontWeight: "bold", color: povertyColor }}>{povertyPct.toFixed(1)}%</div>
-                    </EcoRect>
-
-                    <EcoRect label="CORPORATIONS" borderColor="#4488ff" background={ECO_BG_BLUE}>
-                      <div style={{ fontSize: 18, fontWeight: "bold", color: "#ffffff", marginBottom: 8 }}>
-                        {corpActive.toLocaleString("en-US")} ACTIVE
-                      </div>
-                      <div style={{ fontSize: 12, color: "#ffffff" }}>
-                        Treasury: {ecoFormatZionShort(corpTreasury)} ZION
-                      </div>
-                    </EcoRect>
-
-                    <EcoRect label="ZRS LAST ACTION" borderColor={zrsBorderColor} background={ECO_BG_ORANGE}>
-                      {ecoPolData?.zrs_last_action ? (
-                        <>
-                          <div style={{ color: zrsStateColor, fontWeight: "bold", fontSize: 15, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {ecoPolData.zrs_last_action.state} · {ecoPolData.zrs_last_action.action_taken}
-                          </div>
-                          <div style={{ color: "#00ff88", fontSize: 15, marginBottom: 4 }}>
-                            {ecoFormatZionShort(ecoPolData.zrs_last_action.amount)} ZION
-                          </div>
-                          <div style={{ color: "#ffffff", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {ecoPolData.zrs_last_action.news_headline}
                           </div>
                         </>
-                      ) : frsStats?.recent_actions?.[0] ? (
-                        <>
-                          <div style={{ color: "#ffffff", fontWeight: "bold", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {frsStats.recent_actions[0].action}
-                          </div>
-                          <div style={{ color: "#ffffff", fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {frsStats.recent_actions[0].reason?.slice(0, 80)}
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ color: "#666666", fontSize: 12 }}>No actions yet</div>
                       )}
-                    </EcoRect>
-                  </div>
 
-                  {vipFeedDisplay.length > 0 && (
-                    <EcoRect label="INTELLIGENCE BRIEFING" borderColor="#7c3aed" background={ECO_BG_PURPLE}>
-                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-                        {vipFeedDisplay.map((item, i) => (
-                          <div key={`${item.vip_type}-${item.vip_id}-${item.day}-${i}`} style={{ borderBottom: "1px solid #111111", paddingBottom: 8 }}>
-                            <div style={{ fontSize: 15, marginBottom: 4 }}>
-                              <span>{ecoVipRoleIcon(item.vip_type)} </span>
-                              <span style={{ color: "#ffffff", fontWeight: "bold" }}>{item.decision || "—"}</span>
-                            </div>
-                            <div style={{ color: "#666666", fontSize: 12, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {item.reasoning || "—"}
-                            </div>
+                      {senateData && (
+                        <>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>SENATE</div>
+                          <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "8px 12px" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>SENATOR</th>
+                                  <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>PARTY</th>
+                                  <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>APPROVAL</th>
+                                  <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>ROLE</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(Array.isArray(senateData.senators) ? senateData.senators : [])
+                                  .filter((s) => s.is_active !== false)
+                                  .slice(0, 9)
+                                  .map((sen, idx) => {
+                                    const role = String(sen.role || "senator").toUpperCase();
+                                    const approvalValue = Number(sen.approval_rating ?? 50);
+                                    const partyName = String(sen.party_id || "");
+                                    const partyColor = getPartyColor(partyName);
+                                    const partyBorder = `2px solid ${partyColor.replace(")", ", 0.6)").replace("rgb(", "rgba(")}`;
+                                    return (
+                                      <tr key={`${sen.agent_name}-${sen.party_id}-${idx}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                        <td style={{ padding: "8px 0 8px 8px", borderLeft: partyBorder, fontSize: 13, color: "#fff" }}>{sen.agent_name}</td>
+                                        <td style={{ padding: "8px 0", fontSize: 11, color: partyColor }}>{sen.party_id}</td>
+                                        <td style={{ padding: "8px 0", fontSize: 13, color: approvalValue > 50 ? "#00ff88" : "#ff4444", textAlign: "right" }}>{approvalValue}%</td>
+                                        <td style={{ padding: "8px 0", fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "right" }}>{role === "SPEAKER" ? "SPEAKER" : "SEN."}</td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
                           </div>
-                        ))}
+
+                          {((senateData.pending_laws?.length ?? 0) + (senateData.recent_laws?.length ?? 0) > 0) && (
+                            <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "8px 12px", marginTop: 10 }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                    <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>TIME</th>
+                                    <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <div
+                                          style={{
+                                            width: 6,
+                                            height: 6,
+                                            borderRadius: "50%",
+                                            background: "#00ff41",
+                                            animation: "pulse 2s infinite",
+                                            boxShadow: "0 0 6px #00ff41",
+                                          }}
+                                        />
+                                        <span>LAW</span>
+                                      </div>
+                                    </th>
+                                    <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>VOTES</th>
+                                    <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>STATUS</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    ...(Array.isArray(senateData.pending_laws) ? senateData.pending_laws : []),
+                                    ...(Array.isArray(senateData.recent_laws) ? senateData.recent_laws : []),
+                                  ]
+                                    .slice(0, 8)
+                                    .map((law) => {
+                                      const statusStyle = getLawStatusStyle(law.status);
+                                      const proposer = formatLawProposer(law.proposed_by);
+                                      return (
+                                        <tr key={`law-${law.id}-${law.status}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                          <td
+                                            style={{
+                                              color: "#444",
+                                              fontSize: "0.6rem",
+                                              fontFamily: "monospace",
+                                              paddingRight: 12,
+                                              whiteSpace: "nowrap",
+                                              verticalAlign: "top",
+                                              paddingTop: 10,
+                                            }}
+                                          >
+                                            {formatEventTime(String(law.voted_at || law.created_at || law.proposed_at || "")) || "—"}
+                                          </td>
+                                          <td
+                                            style={{
+                                              padding: "8px 0 8px 8px",
+                                              borderLeft: statusStyle.border,
+                                              fontSize: 13,
+                                              color: "rgba(255,255,255,0.72)",
+                                            }}
+                                          >
+                                            <div>{law.title}</div>
+                                            {proposer ? (
+                                              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
+                                                by {proposer}
+                                              </div>
+                                            ) : null}
+                                          </td>
+                                          <td style={{ padding: "8px 0", fontSize: 11, color: "rgba(255,255,255,0.4)", textAlign: "right", whiteSpace: "nowrap" }}>
+                                            FOR {law.votes_for} / AGAINST {law.votes_against}
+                                          </td>
+                                          <td style={{ padding: "8px 0", fontSize: 12, color: statusStyle.color, textAlign: "right", fontWeight: 600 }}>
+                                            {statusStyle.label}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 }}>ACTIVITY LOG</div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>PRESIDENT</div>
+                          {presidentActionsDisplay.length === 0 ? (
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
+                          ) : (
+                            presidentActionsDisplay.map((action, i) => {
+                              const text = cleanActivityDescription(action.description);
+                              return (
+                                <div key={`pa-${i}`} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, minWidth: 38 }}>
+                                  {formatEventTime(action.created_at) || "—"}
+                                </span>
+                                  <span style={{ color: /BREAKING/i.test(text) ? "#ff4444" : "rgba(255,255,255,0.7)", fontSize: 12 }}>
+                                    {text}
+                                    {action.count > 1 ? ` ×${action.count}` : ""}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>SHERIFF</div>
+                          {sheriffActionsDisplay.length === 0 ? (
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
+                          ) : (
+                            sheriffActionsDisplay.map((action, i) => {
+                              const text = cleanActivityDescription(action.description);
+                              return (
+                                <div key={`sa-${i}`} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, minWidth: 38 }}>
+                                  {formatEventTime(action.created_at) || "—"}
+                                </span>
+                                  <span style={{ color: /BREAKING/i.test(text) ? "#ff4444" : "rgba(255,255,255,0.7)", fontSize: 12 }}>
+                                    {text}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>SENATE</div>
+                          {senateEventsDisplay.length === 0 ? (
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
+                          ) : (
+                            senateEventsDisplay.map((e, i) => {
+                              const time = formatEventTime(e.created_at) || "—";
+                              const text = cleanActivityDescription(e.description);
+                              return (
+                                <div
+                                  key={`sne-${i}`}
+                                  style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                                >
+                                  <span style={{ color: "#555", fontSize: "0.6rem", minWidth: 38 }}>{time}</span>
+                                  <span
+                                    style={{
+                                      color: e.event_type === "senate_law" ? "#ffd93d" : "#888",
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    {text}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>ZRS</div>
+                          {zrsEventsDisplay.length === 0 ? (
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
+                          ) : (
+                            zrsEventsDisplay.map((e, i) => {
+                              const time = formatEventTime(e.created_at) || "—";
+                              const text = cleanActivityDescription(e.description);
+                              return (
+                                <div
+                                  key={`zrs-${i}`}
+                                  style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                                >
+                                  <span style={{ color: "#555", fontSize: "0.6rem", minWidth: 38 }}>{time}</span>
+                                  <span style={{ color: "#00ff41", fontSize: 12 }}>{text}</span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
                       </div>
-                    </EcoRect>
-                  )}
-
-                </div>
-                );
-              })()}
-
-            </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </div>
@@ -17574,7 +21734,7 @@ export default function Home() {
           to { width: var(--bar-width); }
         }
         .ecoTermRoot {
-          background: #000000;
+          background: #0a0a1a;
         }
         .ecoHudWrap {
           position: relative;
@@ -17604,17 +21764,258 @@ export default function Home() {
         }
         .ecoHudHeader h2 {
           margin: 0;
-          color: #ffffff;
+          color: #00ff88;
           font-size: 12px;
           letter-spacing: 3px;
           text-transform: uppercase;
           font-weight: bold;
+          text-shadow: 0 0 12px rgba(0, 255, 136, 0.35);
         }
         .ecoHudHeader p {
           margin: 4px 0 0;
-          color: #666666;
-          font-size: 12px;
+          color: #00ffcc;
+          font-size: 11px;
           letter-spacing: 1px;
+          opacity: 0.75;
+        }
+        .zionSectionHeader {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 20px 0 14px;
+        }
+        .zionSectionLine {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(to right, transparent, rgba(0, 255, 136, 0.35), transparent);
+        }
+        .zionSectionTitle {
+          color: #00ff88;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.2em;
+          white-space: nowrap;
+        }
+        .zionCardGrid {
+          display: grid;
+          gap: 12px;
+          margin-bottom: 4px;
+        }
+        .zionSectionSep {
+          border-top: 1px solid rgba(0, 255, 136, 0.1);
+          margin: 20px 0;
+        }
+        .zionTermCard {
+          position: relative;
+          border-radius: 4px;
+          padding: 16px;
+          overflow: hidden;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          border: 1px solid rgba(0, 255, 136, 0.2);
+          background: rgba(0, 10, 30, 0.8);
+        }
+        .zionTermCardInner {
+          position: relative;
+          z-index: 1;
+        }
+        .zionTermCardScanlines {
+          pointer-events: none;
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 136, 0.025) 2px,
+            rgba(0, 255, 136, 0.025) 4px
+          );
+        }
+        .zionTermCardCrisis {
+          animation: ecoCrisisPulseAnim 1.8s ease-in-out infinite;
+        }
+        .zionTermLabel {
+          color: #00ffcc;
+          font-size: 0.6rem;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+        .zionTermValue {
+          font-weight: bold;
+          line-height: 1.2;
+        }
+        .zionTermValueMd { font-size: 1.1rem; }
+        .zionTermValueLg { font-size: 1.35rem; }
+        .zionTermValueSm { font-size: 0.85rem; }
+        .zionMetricGrid {
+          display: grid;
+          gap: 8px;
+        }
+        .zionMetricCell {
+          text-align: center;
+        }
+        .zionGovCardHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+        .zionGovName {
+          color: #00ff88;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-weight: bold;
+          font-size: 0.82rem;
+          letter-spacing: 0.05em;
+          word-break: break-word;
+        }
+        .zionSectorBadge {
+          flex-shrink: 0;
+          font-size: 0.55rem;
+          padding: 2px 6px;
+          border-radius: 4px;
+          border: 1px solid;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          letter-spacing: 0.08em;
+          white-space: nowrap;
+        }
+        .zionPowerRow {
+          display: grid;
+          grid-template-columns: 72px 1fr auto;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+          font-size: 0.68rem;
+        }
+        .zionPowerLabel {
+          color: #00ffcc;
+          letter-spacing: 0.08em;
+        }
+        .zionPowerBar {
+          letter-spacing: -1px;
+          font-size: 0.62rem;
+          overflow: hidden;
+        }
+        .zionPowerValue {
+          color: #fff;
+          font-weight: bold;
+          min-width: 48px;
+          text-align: right;
+        }
+        .zionPowerRisks {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          justify-content: flex-start;
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid rgba(0, 255, 136, 0.12);
+        }
+        .zionRiskTag {
+          font-size: 0.62rem;
+          font-weight: bold;
+          letter-spacing: 0.06em;
+        }
+        .zionRiskDictator { color: #ffaa00; }
+        .zionRiskCoup { color: #ff4444; }
+        .zionCrisisTitle {
+          color: #ff4444;
+          font-weight: bold;
+          font-size: 0.9rem;
+          letter-spacing: 0.12em;
+          text-align: center;
+          margin-bottom: 12px;
+          text-shadow: 0 0 10px rgba(255, 68, 68, 0.4);
+        }
+        .zionCrisisOk {
+          color: #00ff88;
+          font-size: 0.78rem;
+          text-align: center;
+          margin-bottom: 10px;
+          letter-spacing: 0.08em;
+        }
+        .zionPanelTitle {
+          color: #00ff88;
+          font-size: 0.65rem;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.12);
+        }
+        .zionPollRowHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 4px;
+        }
+        .zionSenateMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.68rem;
+          color: #00ffcc;
+          letter-spacing: 0.08em;
+          margin-bottom: 12px;
+        }
+        .zionScrollFeed {
+          max-height: 220px;
+          overflow-y: auto;
+        }
+        .zionFeedLine {
+          font-size: 0.68rem;
+          padding: 6px 0;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.06);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .zionFeedTime {
+          color: #00ff88;
+          margin-right: 6px;
+        }
+        .zionEmpty {
+          color: #667788;
+          font-size: 0.72rem;
+          font-style: italic;
+        }
+        .zionAlertBanner {
+          padding: 8px 12px;
+          margin-bottom: 10px;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.08em;
+          border-radius: 6px;
+        }
+        .zionAlertDanger {
+          border: 1px solid rgba(255, 68, 68, 0.5);
+          background: rgba(40, 0, 0, 0.45);
+          color: #ff4444;
+        }
+        .zionAlertWarn {
+          border: 1px solid rgba(255, 170, 0, 0.4);
+          background: rgba(40, 25, 0, 0.35);
+          color: #ffaa00;
+        }
+        .zionPopStressSub {
+          margin-top: 8px;
+          text-align: center;
+          color: #ffaa00;
+          font-size: 0.78rem;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+        }
+        .zionIntelRow {
+          padding: 8px 0;
+          border-bottom: 1px solid rgba(0, 255, 136, 0.08);
+          font-size: 0.72rem;
+        }
+        .zionIntelReason {
+          color: #667788;
+          font-size: 0.65rem;
+          font-style: italic;
+          margin-top: 4px;
         }
         .ecoNewsTicker {
           position: relative;
@@ -17684,6 +22085,21 @@ export default function Home() {
           border: 1px solid #ff4444;
           color: #ff4444;
           font-weight: bold;
+        }
+        .ecoCrisisPulse {
+          animation: ecoCrisisPulseAnim 1.5s ease-in-out infinite;
+        }
+        .ecoCrisisBanner {
+          color: #ff4444;
+          font-weight: bold;
+          font-size: 14px;
+          letter-spacing: 1px;
+          margin-bottom: 10px;
+          text-align: center;
+        }
+        @keyframes ecoCrisisPulseAnim {
+          0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 68, 68, 0); }
+          50% { box-shadow: inset 0 0 24px rgba(255, 68, 68, 0.35); }
         }
         .ecoCmdGrid {
           display: grid;
@@ -17910,7 +22326,7 @@ export default function Home() {
         }
         .civilizationSidebarRow {
           display: flex;
-          justify-content: flex-end;
+          justify-content: flex-start;
           align-items: stretch;
           gap: 16px;
           margin-bottom: 18px;
@@ -17920,17 +22336,155 @@ export default function Home() {
           min-width: 0;
           min-height: 1px;
         }
+        .civilizationMapCol {
+          order: 1;
+        }
+        .civilizationChatCol {
+          order: 2;
+        }
+        .districtMapWrap {
+          position: relative;
+          border: 1px solid rgba(0, 255, 136, 0.2);
+          border-radius: 12px;
+          padding: 14px 16px 12px;
+          background: #0a0a0a;
+          min-height: 420px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .districtMapTitle {
+          margin: 0;
+          color: #00ff88;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.18em;
+          text-align: center;
+        }
+        .districtMapGrid {
+          display: grid;
+          gap: 8px;
+          flex: 1;
+          align-content: start;
+        }
+        .districtMapLoading {
+          grid-column: 1 / -1;
+          margin: 0;
+          padding: 40px 12px;
+          text-align: center;
+          color: #667788;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.75rem;
+        }
+        .districtCell {
+          border-radius: 8px;
+          padding: 10px 8px;
+          text-align: center;
+          cursor: default;
+          transition: box-shadow 0.35s ease, background 0.35s ease, border-color 0.35s ease;
+          border: 1px solid transparent;
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+        }
+        .districtCell--police {
+          background: rgba(0, 255, 136, 0.12);
+          border-color: rgba(0, 255, 136, 0.45);
+          box-shadow: 0 0 14px rgba(0, 255, 136, 0.35);
+          color: #00ff88;
+        }
+        .districtCell--gang {
+          background: rgba(255, 34, 68, 0.12);
+          border-color: rgba(255, 34, 68, 0.45);
+          box-shadow: 0 0 14px rgba(255, 34, 68, 0.35);
+          color: #ff2244;
+        }
+        .districtCell--contested {
+          animation: districtContestedPulse 0.8s ease-in-out infinite;
+          border-color: rgba(255, 200, 100, 0.5);
+          color: #fff;
+        }
+        .districtCell--flash {
+          animation: districtStatusFlash 1.5s ease-out;
+        }
+        .districtCellIcon {
+          font-size: 1.1rem;
+          line-height: 1;
+          margin-bottom: 4px;
+        }
+        .districtCellName {
+          font-size: 0.62rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+        }
+        .districtCellInc {
+          margin-top: 4px;
+          font-size: 0.52rem;
+          opacity: 0.75;
+        }
+        .districtMapTooltip {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 8px 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(0, 255, 136, 0.25);
+          background: rgba(0, 10, 20, 0.95);
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.65rem;
+          color: #c8e8d8;
+        }
+        .districtMapTooltip strong {
+          color: #00ffcc;
+          font-size: 0.7rem;
+        }
+        .districtMapStats {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 16px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(0, 255, 136, 0.12);
+          font-family: "JetBrains Mono", ui-monospace, monospace;
+          font-size: 0.65rem;
+          color: #9de8ff;
+          letter-spacing: 0.06em;
+        }
+        @keyframes districtContestedPulse {
+          0%, 100% {
+            background: rgba(0, 255, 136, 0.14);
+            box-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
+            color: #00ff88;
+          }
+          50% {
+            background: rgba(255, 34, 68, 0.14);
+            box-shadow: 0 0 12px rgba(255, 34, 68, 0.45);
+            color: #ff2244;
+          }
+        }
+        @keyframes districtStatusFlash {
+          0% {
+            background: #ffffff;
+            box-shadow: 0 0 24px rgba(255, 255, 255, 0.9);
+            color: #0a0a0a;
+          }
+          100% {
+            box-shadow: none;
+          }
+        }
         @keyframes tickerScroll {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
         }
         @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-33.333%); }
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.35; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.15; }
         }
         @keyframes agentMapPulse {
           0%, 100% { transform: scale(1); opacity: 0.7; }
@@ -17952,6 +22506,9 @@ export default function Home() {
           flex-direction: column;
           gap: 14px;
         }
+        .civilizationChatCol.civilizationSidebar {
+          width: auto;
+        }
         .sidebarSectionTitle {
           margin: 0 0 4px;
           color: #9de8ff;
@@ -17971,11 +22528,29 @@ export default function Home() {
           min-height: 0;
           flex: 1;
         }
+        .civilizationAgentFeed .agentConvCardCompact {
+          padding: 8px 10px;
+          margin-bottom: 6px;
+        }
+        .civilizationAgentFeed .agentConvMeta {
+          font-size: 11px;
+        }
+        .civilizationAgentFeed .agentConvMeta strong {
+          font-size: 11px;
+        }
+        .civilizationAgentFeed .agentConvBubble {
+          font-size: 11px;
+          padding: 6px 8px;
+        }
+        .civilizationAgentFeed .agentConvClassTag {
+          font-size: 9px;
+          padding: 1px 5px;
+        }
         .agentConvFeed {
           display: flex;
           flex-direction: column;
           gap: 0;
-          max-height: min(420px, 52vh);
+          max-height: min(520px, 58vh);
           overflow-y: auto;
           padding-right: 4px;
           scrollbar-width: thin;
