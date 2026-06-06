@@ -8,6 +8,12 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
 import { createCometVfx } from "./vfx/cometVfx";
+import { TEXTURED_CLOUD_VERT, TEXTURED_CLOUD_FRAG } from "./vfx/stormCloudShader";
+import {
+  TEST_STORM_SPRITE_COUNT,
+  TEST_STORM_SPRITE_INTENSITY,
+  createStormSpriteVfx,
+} from "./vfx/stormSpriteVfx";
 
 export function computeProsperity({
   unemployment = 0,
@@ -952,38 +958,6 @@ function createTexturedPlanetMaterial(textures, lightDir) {
   return mat;
 }
 
-const TEXTURED_CLOUD_VERT = `
-varying vec2 vUv;
-varying vec3 vWorldNormal;
-void main() {
-  vUv = uv;
-  vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-const TEXTURED_CLOUD_FRAG = `
-uniform sampler2D uCloudMap;
-uniform vec3 uLightDir;
-uniform float uProsperity;
-uniform float uTime;
-varying vec2 vUv;
-varying vec3 vWorldNormal;
-void main() {
-  vec4 tex = texture2D(uCloudMap, vUv);
-  if (tex.a < 0.03) discard;
-  float sunDot = dot(normalize(vWorldNormal), normalize(uLightDir));
-  float nightSide = smoothstep(0.06, -0.08, sunDot);
-  float stormHash = fract(sin(dot(floor(vUv * 48.0), vec2(127.1, 311.7))) * 43758.5453);
-  float flashPeriod = stormHash * 14.0 + 18.0;
-  float flashPhase = fract(uTime / flashPeriod + stormHash * 4.1);
-  float flash = smoothstep(0.0, 0.01, flashPhase) * (1.0 - smoothstep(0.01, 0.09, flashPhase));
-  flash *= step(0.93, stormHash) * nightSide * uProsperity * tex.a;
-  vec3 col = tex.rgb + vec3(0.72, 0.88, 1.0) * flash * 3.0;
-  gl_FragColor = vec4(col, tex.a * 0.88);
-}
-`;
-
 /** @param {THREE.Texture} cloudTex @param {THREE.Vector3} lightDir */
 function createTexturedCloudMaterial(cloudTex, lightDir) {
   return new THREE.ShaderMaterial({
@@ -1178,6 +1152,16 @@ export function LivingPlanet({
           console.log("[textures] real NASA maps loaded from /public/textures/");
         } catch (texErr) {
           console.error("[textures] failed, fallback to noise planet:", texErr.message || texErr);
+        }
+      }
+
+      /** @type {{ update: Function, dispose: Function }} */
+      let stormSpriteVfx = { update() {}, dispose() {} };
+      if (useTexturedPlanet && planet) {
+        try {
+          stormSpriteVfx = createStormSpriteVfx(planet, lightDir);
+        } catch (stormErr) {
+          console.error("[storm sprites] failed to init, disabled", stormErr);
         }
       }
 
@@ -1452,6 +1436,7 @@ export function LivingPlanet({
 
         spaceFx.update(t, delta, camera);
         cometVfx.update(t, delta);
+        stormSpriteVfx.update(t, delta, TEST_STORM_SPRITE_INTENSITY, TEST_STORM_SPRITE_COUNT, frameScale);
         if (useBloom && composer) {
           try {
             composer.render();
@@ -1481,6 +1466,7 @@ export function LivingPlanet({
         satellites.forEach(disposeObject);
         spaceFx.dispose();
         cometVfx.dispose();
+        stormSpriteVfx.dispose();
         if (loadedTextures) {
           Object.values(loadedTextures).forEach((tex) => tex.dispose());
         }
