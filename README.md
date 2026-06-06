@@ -297,4 +297,6 @@ zion-contracts/          # Move: zion_bet, civilization, token
 
 *Built for Sui Overflow 2026 · DeepBook Track*
 
+Earth imagery: NASA Visible Earth / Blue Marble
+
 </p>

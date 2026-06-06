@@ -905,11 +905,13 @@ function createTexturedPlanetMaterial(textures, lightDir) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uLightDir = { value: lightDir.clone() };
     shader.uniforms.uProsperity = { value: 0.5 };
+    shader.uniforms.uRevolution = { value: 0 };
+    shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uNightMap = { value: textures.night };
 
     shader.vertexShader = "varying vec3 vWorldNormal;\n" + shader.vertexShader;
     shader.fragmentShader =
-      "varying vec3 vWorldNormal;\nuniform vec3 uLightDir;\nuniform float uProsperity;\nuniform sampler2D uNightMap;\n" +
+      "varying vec3 vWorldNormal;\nuniform vec3 uLightDir;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uTime;\nuniform sampler2D uNightMap;\n" +
       shader.fragmentShader;
 
     shader.vertexShader = shader.vertexShader.replace(
@@ -926,7 +928,15 @@ function createTexturedPlanetMaterial(textures, lightDir) {
         float dayFactor = clamp(dot(N, L), 0.0, 1.0);
 
         vec3 dayColor = texture2D(map, vUv).rgb;
-        vec3 nightColor = texture2D(uNightMap, vUv).rgb * uProsperity * 2.0;
+
+        vec3 cityLights = texture2D(uNightMap, vUv).rgb;
+        vec3 warmColor = vec3(1.0, 0.82, 0.48);
+        vec3 redColor = vec3(1.0, 0.15, 0.05);
+        vec3 cityColor = mix(warmColor, redColor, uRevolution);
+        float cityBright = mix(1.0, 2.2, uRevolution);
+        float cityLuma = max(cityLights.r, max(cityLights.g, cityLights.b));
+        float flicker = 1.0 + sin(uTime * 10.0 + cityLuma * 50.0) * 0.07 * uRevolution;
+        vec3 nightColor = cityLights * cityColor * uProsperity * 2.0 * cityBright * flicker;
 
         vec3 surface = dayColor * max(dayFactor, 0.06)
                      + nightColor * (1.0 - dayFactor);
@@ -938,7 +948,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v6";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v7";
   return mat;
 }
 
@@ -1035,9 +1045,10 @@ function createNoiseCloudLayers(scene, lightDir, prosperity) {
  * @property {number} [population]
  */
 
-/** @param {{ prosperity?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
+/** @param {{ prosperity?: number, revolution?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
 export function LivingPlanet({
   prosperity = 0.5,
+  revolution = 0,
   civilizationData,
   height = 400,
   showHud = false,
@@ -1045,10 +1056,16 @@ export function LivingPlanet({
   const containerRef = useRef(null);
   const targetProsperityRef = useRef(Math.max(0, Math.min(1, prosperity)));
   const currentProsperityRef = useRef(Math.max(0, Math.min(1, prosperity)));
+  const targetRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
+  const currentRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
 
   useEffect(() => {
     targetProsperityRef.current = Math.max(0, Math.min(1, prosperity));
   }, [prosperity]);
+
+  useEffect(() => {
+    targetRevolutionRef.current = Math.max(0, Math.min(100, revolution));
+  }, [revolution]);
 
   const initDoneRef = useRef(false);
 
@@ -1325,10 +1342,14 @@ export function LivingPlanet({
         const frameScale = delta * 60;
 
         currentProsperityRef.current += (targetProsperityRef.current - currentProsperityRef.current) * 0.02;
+        currentRevolutionRef.current += (targetRevolutionRef.current - currentRevolutionRef.current) * 0.02;
         const p = currentProsperityRef.current;
+        const revNorm = currentRevolutionRef.current / 100;
 
         if (useTexturedPlanet && planetMat.userData.shader) {
           planetMat.userData.shader.uniforms.uProsperity.value = p;
+          planetMat.userData.shader.uniforms.uRevolution.value = revNorm;
+          planetMat.userData.shader.uniforms.uTime.value = t;
           planetMat.userData.shader.uniforms.uLightDir.value.copy(lightDir);
         } else if (planetMat.uniforms) {
           planetMat.uniforms.uProsperity.value = p;
