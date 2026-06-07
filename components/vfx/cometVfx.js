@@ -4,13 +4,13 @@ import { SpriteParticleEmitter } from "./SpriteParticleEmitter";
 export const USE_COMETS = true;
 
 const COMET_TEXTURE_PATH = "/textures/comet_glow.png";
-const COMET_HEAD_SCALE = 0.14;
+const COMET_HEAD_SCALE = 0.07;
 const COMET_SPAWN_MIN = 15;
 const COMET_SPAWN_MAX = 20;
 const COMET_FIRST_SPAWN = 4;
-const COMET_EMIT_RATE = 90;
-const COMET_SPEED = 5.8;
-const COMET_CROSS_TIME = 2.7;
+const COMET_EMIT_RATE = 270;
+const COMET_SPEED = 17.4;
+const COMET_CROSS_TIME = 0.9;
 const HEAD_FADE_IN = 0.22;
 const HEAD_FADE_OUT = 0.38;
 
@@ -105,8 +105,8 @@ export function createCometVfx(scene, sunDir) {
       position: headWorld,
       velocity: _vel,
       lifetime: 0.55 + Math.random() * 0.38,
-      startSize: 0.1 + Math.random() * 0.05,
-      endSize: 0.008 + Math.random() * 0.012,
+      startSize: 0.05 + Math.random() * 0.025,
+      endSize: 0.004 + Math.random() * 0.006,
       startColor: 0xd0ecff,
       endColor: 0x3060a0,
       startOpacity: 0.85,
