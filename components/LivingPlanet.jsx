@@ -445,11 +445,11 @@ void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
   if (d > 0.5) discard;
-  float core = 1.0 - smoothstep(0.0, 0.5, d);
+  float core = exp(-d * d * 16.0);
   float twinkle = 0.93 + 0.07 * sin(uTime * 1.1 + vPhase);
-  float spikes = vBright * (0.012 / (abs(c.x) + 0.007) + 0.012 / (abs(c.y) + 0.007));
-  float alpha = (core + spikes) * twinkle * (0.7 + vMilky * 0.5);
-  vec3 col = vColor * (1.0 + vBright * 0.6 + vMilky * 0.25);
+  float halo = vBright * exp(-d * d * 6.0) * 0.28;
+  float alpha = (core + halo) * twinkle;
+  vec3 col = vColor * (1.0 + vBright * 0.35);
   gl_FragColor = vec4(col * twinkle, alpha);
 }
 `;
@@ -674,6 +674,30 @@ function createHeroSatellite() {
   return group;
 }
 
+/** @type {THREE.CanvasTexture | null} */
+let softStarTextureCache = null;
+
+function getSoftStarTexture() {
+  if (softStarTextureCache) return softStarTextureCache;
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.18, "rgba(255,255,255,0.85)");
+    g.addColorStop(0.45, "rgba(255,255,255,0.12)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  softStarTextureCache = new THREE.CanvasTexture(canvas);
+  softStarTextureCache.encoding = THREE.sRGBEncoding;
+  return softStarTextureCache;
+}
+
 function buildStarLayerData({
   count,
   radius,
@@ -781,24 +805,6 @@ function createPointsFromStarData(data, material, renderOrder) {
   return points;
 }
 
-function createNebulaGlowTexture() {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return new THREE.Texture();
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, "rgba(180, 200, 255, 0.45)");
-  g.addColorStop(0.35, "rgba(100, 130, 200, 0.14)");
-  g.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.encoding = THREE.sRGBEncoding;
-  return tex;
-}
-
 /** Layered starfield: mid (r~60) + near (r~30) for parallax depth under OrbitControls. @param {THREE.Scene} scene */
 function createLayeredStarfield(scene) {
   const midMat = createStarPointsMaterial();
@@ -829,34 +835,7 @@ function createLayeredStarfield(scene) {
   scene.add(midStars);
   scene.add(nearStars);
 
-  const nebulaGroup = new THREE.Group();
-  /** @type {{ sprite: THREE.Sprite, mat: THREE.SpriteMaterial, tex: THREE.Texture }[]} */
-  const nebulaMeshes = [];
-  const nebulaSpecs = [
-    { dir: [0.62, 0.22, 0.72], color: 0x6080c0, scale: 28, opacity: 0.07 },
-    { dir: [-0.38, -0.48, 0.68], color: 0x406888, scale: 22, opacity: 0.05 },
-    { dir: [0.18, 0.72, -0.58], color: 0x705090, scale: 20, opacity: 0.045 },
-  ];
-  for (const spec of nebulaSpecs) {
-    const tex = createNebulaGlowTexture();
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      color: spec.color,
-      transparent: true,
-      opacity: spec.opacity,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const sprite = new THREE.Sprite(mat);
-    sprite.position.copy(new THREE.Vector3(...spec.dir).normalize().multiplyScalar(52));
-    sprite.scale.set(spec.scale, spec.scale * 0.62, 1);
-    sprite.renderOrder = -13;
-    nebulaGroup.add(sprite);
-    nebulaMeshes.push({ sprite, mat, tex });
-  }
-  scene.add(nebulaGroup);
-
-  console.log("[sky] layered starfield: mid=1500@r60 near=600@r30 nebulae=3");
+  console.log("[sky] layered starfield: mid=1500@r60 near=600@r30");
 
   return {
     midMat,
@@ -866,18 +845,10 @@ function createLayeredStarfield(scene) {
       midStars.rotation.x += 0.000012 * frameScale;
       nearStars.rotation.y += 0.00009 * frameScale;
       nearStars.rotation.z += 0.000022 * frameScale;
-      for (const n of nebulaMeshes) {
-        n.sprite.material.rotation += 0.000025 * frameScale;
-      }
     },
     dispose() {
       disposeObject(midStars);
       disposeObject(nearStars);
-      for (const n of nebulaMeshes) {
-        n.tex.dispose();
-        n.mat.dispose();
-      }
-      disposeObject(nebulaGroup);
     },
   };
 }
@@ -992,13 +963,15 @@ function createSpaceEffects(scene) {
   const milkyStars = new THREE.Points(
     milkyGeo,
     new THREE.PointsMaterial({
+      map: getSoftStarTexture(),
       size: 0.55,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.16,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       vertexColors: true,
       sizeAttenuation: true,
+      alphaTest: 0.02,
     })
   );
   scene.add(milkyStars);
@@ -1154,16 +1127,19 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     shader.uniforms.uPopulation = { value: 0.5 };
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uNightMap = { value: textures.night };
+    shader.uniforms.uSpecularMap = { value: textures.specular };
+    shader.uniforms.uCameraPos = { value: new THREE.Vector3(0, 0, 4.2) };
 
-    shader.vertexShader = "varying vec3 vWorldNormal;\n" + shader.vertexShader;
+    shader.vertexShader = "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n" + shader.vertexShader;
     shader.fragmentShader =
-      "varying vec3 vWorldNormal;\nuniform vec3 uLightDir;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\n" +
+      "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\nuniform vec3 uLightDir;\nuniform vec3 uCameraPos;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\nuniform sampler2D uSpecularMap;\n" +
       shader.fragmentShader;
 
     shader.vertexShader = shader.vertexShader.replace(
       "#include <defaultnormal_vertex>",
       `#include <defaultnormal_vertex>
-      vWorldNormal = normalize(mat3(modelMatrix) * normal);`
+      vWorldNormal = normalize(mat3(modelMatrix) * normal);
+      vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -1171,9 +1147,23 @@ function createTexturedPlanetMaterial(textures, lightDir) {
       `{
         vec3 N = normalize(vWorldNormal);
         vec3 L = normalize(uLightDir);
-        float dayAmount = smoothstep(-0.15, 0.15, dot(N, L));
+        vec3 V = normalize(uCameraPos - vWorldPos);
+        vec3 H = normalize(L + V);
+        float sunDot = dot(N, L);
+        float dayAmount = smoothstep(-0.15, 0.15, sunDot);
 
         vec3 dayColor = texture2D(map, vUv).rgb;
+        float sunFacing = max(sunDot, 0.0);
+        vec3 dayLit = dayColor * (0.90 + sunFacing * 0.12);
+
+        float specMask = texture2D(uSpecularMap, vUv).r;
+        float oceanSheen = pow(max(dot(N, H), 0.0), 20.0) * specMask * sunFacing;
+        dayLit += vec3(0.85, 0.90, 0.95) * oceanSheen * 0.26;
+
+        float daySideMask = smoothstep(0.05, 0.55, sunDot);
+        float viewRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
+        float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
+        dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.2;
 
         vec3 nightTex = texture2D(uNightMap, vUv).rgb;
         float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
@@ -1189,7 +1179,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
         vec3 nightBase = dayColor * 0.04;
         vec3 nightColor = nightBase + cityGlow;
 
-        vec3 surface = mix(nightColor, dayColor, dayAmount);
+        vec3 surface = mix(nightColor, dayLit, dayAmount);
 
         gl_FragColor = vec4(surface, 1.0);
       }`
@@ -1198,7 +1188,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v12";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v14";
   return mat;
 }
 
@@ -1624,6 +1614,7 @@ export function LivingPlanet({
           planetMat.userData.shader.uniforms.uPopulation.value = pop;
           planetMat.userData.shader.uniforms.uTime.value = t;
           planetMat.userData.shader.uniforms.uLightDir.value.copy(lightDir);
+          planetMat.userData.shader.uniforms.uCameraPos.value.copy(camera.position);
         } else if (planetMat.uniforms) {
           planetMat.uniforms.uProsperity.value = p;
           planetMat.uniforms.uTime.value = t;
