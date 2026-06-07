@@ -1187,6 +1187,10 @@ function loadMilkyWaySky(scene, renderer) {
         }
         texture.encoding = THREE.sRGBEncoding;
         texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        texture.generateMipmaps = true;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
         const brightness = v.mean < 12 ? 1.75 : v.mean < 25 ? 1.35 : 1.0;
         const mat = new THREE.MeshBasicMaterial({
           map: texture,
@@ -1333,42 +1337,59 @@ function disposeObject(obj) {
   });
 }
 
-const EARTH_TEXTURE_PATHS = {
-  day: "/textures/earth_day.jpg",
-  night: "/textures/earth_night.jpg",
-  normal: "/textures/earth_normal.jpg",
-  specular: "/textures/earth_specular.jpg",
-  clouds: "/textures/earth_clouds.png",
+const EARTH_TEXTURE_CANDIDATES = {
+  day: ["/textures/earth_day_8k.jpg", "/textures/earth_day.jpg"],
+  night: ["/textures/earth_night_8k.png", "/textures/earth_night.jpg"],
+  normal: ["/textures/earth_normal_8k.jpg", "/textures/earth_normal.jpg"],
+  specular: ["/textures/earth_specular_8k.jpg", "/textures/earth_specular.jpg"],
+  clouds: ["/textures/earth_clouds_8k.png", "/textures/earth_clouds.png"],
 };
+
+/** @param {THREE.Texture} tex @param {THREE.WebGLRenderer} renderer @param {{ srgb?: boolean }} [opts] */
+function configureGlobeTexture(tex, renderer, opts = {}) {
+  if (opts.srgb) tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+}
 
 /** @param {THREE.WebGLRenderer} renderer */
 function loadEarthTextures(renderer) {
-  const aniso = renderer.capabilities.getMaxAnisotropy();
   const loader = new THREE.TextureLoader();
 
-  /** @param {string} key @param {string} url @param {boolean} srgb */
-  const loadOne = (key, url, srgb) =>
+  /** @param {string} key @param {string[]} urls @param {boolean} srgb */
+  const loadOne = (key, urls, srgb) =>
     new Promise((resolve, reject) => {
-      loader.load(
-        url,
-        (tex) => {
-          if (srgb) tex.encoding = THREE.sRGBEncoding;
-          tex.anisotropy = aniso;
-          tex.wrapS = THREE.RepeatWrapping;
-          tex.wrapT = THREE.RepeatWrapping;
-          resolve({ key, tex });
-        },
-        undefined,
-        (err) => reject(new Error(`Failed to load ${url}: ${err?.message || "404/CORS"}`))
-      );
+      const tryUrl = (index) => {
+        if (index >= urls.length) {
+          reject(new Error(`Failed to load ${key} from ${urls.join(", ")}`));
+          return;
+        }
+        const url = urls[index];
+        loader.load(
+          url,
+          (tex) => {
+            configureGlobeTexture(tex, renderer, { srgb });
+            console.log(`[textures] ${key}: ${url} (${tex.image?.width || "?"}x${tex.image?.height || "?"})`);
+            resolve({ key, tex });
+          },
+          undefined,
+          () => tryUrl(index + 1)
+        );
+      };
+      tryUrl(0);
     });
 
   return Promise.all([
-    loadOne("day", EARTH_TEXTURE_PATHS.day, true),
-    loadOne("night", EARTH_TEXTURE_PATHS.night, true),
-    loadOne("normal", EARTH_TEXTURE_PATHS.normal, false),
-    loadOne("specular", EARTH_TEXTURE_PATHS.specular, false),
-    loadOne("clouds", EARTH_TEXTURE_PATHS.clouds, true),
+    loadOne("day", EARTH_TEXTURE_CANDIDATES.day, true),
+    loadOne("night", EARTH_TEXTURE_CANDIDATES.night, true),
+    loadOne("normal", EARTH_TEXTURE_CANDIDATES.normal, false),
+    loadOne("specular", EARTH_TEXTURE_CANDIDATES.specular, false),
+    loadOne("clouds", EARTH_TEXTURE_CANDIDATES.clouds, true),
   ]).then((results) => {
     /** @type {Record<string, THREE.Texture>} */
     const textures = {};
@@ -1657,8 +1678,17 @@ export function LivingPlanet({
     let disposed = false;
     let animId = 0;
 
-    const getW = () => Math.max(container.clientWidth || 800, 1);
-    const getH = () => Math.max(container.clientHeight || height || 600, 1);
+    const MAX_PIXEL_RATIO = 2;
+    const getPixelRatio = () => Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+    const isContainerFullscreen = () => document.fullscreenElement === container;
+    const getW = () => {
+      const w = isContainerFullscreen() ? window.innerWidth : container.clientWidth;
+      return Math.max(w || 800, 1);
+    };
+    const getH = () => {
+      const h = isContainerFullscreen() ? window.innerHeight : container.clientHeight;
+      return Math.max(h || height || 600, 1);
+    };
 
     console.log("CONTAINER:", container.clientWidth, "x", container.clientHeight);
 
@@ -1681,8 +1711,8 @@ export function LivingPlanet({
       camera.position.set(0, 0, camZ);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(w, h);
+      renderer.setPixelRatio(getPixelRatio());
+      renderer.setSize(w, h, false);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.15;
       renderer.outputEncoding = THREE.sRGBEncoding;
@@ -1703,7 +1733,7 @@ export function LivingPlanet({
       controls.autoRotateSpeed = 0.35;
       controls.update();
 
-      const initPr = renderer.getPixelRatio();
+      const initPr = getPixelRatio();
       const expectedW = Math.round(w * initPr);
       const expectedH = Math.round(h * initPr);
       console.log(
@@ -1923,9 +1953,9 @@ export function LivingPlanet({
         const rh = getH();
         camera.aspect = rw / rh;
         camera.updateProjectionMatrix();
-        const pr = Math.min(window.devicePixelRatio, 2);
+        const pr = getPixelRatio();
         renderer.setPixelRatio(pr);
-        renderer.setSize(rw, rh);
+        renderer.setSize(rw, rh, false);
         if (useBloom && composer) {
           composer.setPixelRatio(pr);
           composer.setSize(rw, rh);
