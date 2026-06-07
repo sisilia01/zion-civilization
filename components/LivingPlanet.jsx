@@ -7,6 +7,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createCometVfx } from "./vfx/cometVfx";
 
 export function computeProsperity({
@@ -386,7 +387,7 @@ void main() {
 
   vec3 atmoColor = mix(vec3(0.42, 0.22, 0.10), vec3(0.22, 0.52, 0.95), uProsperity);
   float sunFacing = dot(N, normalize(uLightDir));
-  float dayMask = smoothstep(-0.05, 0.4, sunFacing);
+  float dayMask = smoothstep(-0.08, 0.4, sunFacing);
   float sunDot = sunFacing;
   float twilightBand = smoothstep(-0.08, 0.0, sunDot) * (1.0 - smoothstep(0.0, 0.08, sunDot));
   vec3 twilightTint = vec3(1.0, 0.5, 0.22) * twilightBand * 0.18;
@@ -927,26 +928,23 @@ function createTexturedPlanetMaterial(textures, lightDir) {
       `{
         vec3 N = normalize(vWorldNormal);
         vec3 L = normalize(uLightDir);
-        float sunDot = dot(N, L);
-        float dayFactor = clamp(sunDot, 0.0, 1.0);
-        float nightSide = sunDot < 0.0 ? 1.0 : 0.0;
-        float nightFactor = nightSide * (1.0 - dayFactor);
+        float dayAmount = smoothstep(-0.15, 0.15, dot(N, L));
 
         vec3 dayColor = texture2D(map, vUv).rgb;
 
-        vec3 cityLights = texture2D(uNightMap, vUv).rgb;
-        float cityLuma = max(cityLights.r, max(cityLights.g, cityLights.b));
-        float cityMask = smoothstep(0.03, 0.15, cityLuma);
+        vec3 nightTex = texture2D(uNightMap, vUv).rgb;
+        float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
+        float cityMask = smoothstep(0.12, 0.35, cityLum);
 
         vec3 warmColor = vec3(1.0, 0.82, 0.48);
         vec3 redColor = vec3(1.0, 0.35, 0.12);
-        float revTint = uRevolution * cityMask;
-        vec3 cityColor = mix(warmColor, redColor, revTint);
-        float cityBright = mix(1.0, 1.4, revTint);
-        float flicker = 1.0 + sin(uTime * 10.0 + cityLuma * 50.0) * 0.04 * revTint;
-        vec3 nightColor = cityLights * cityColor * uProsperity * 2.0 * cityBright * flicker * nightFactor;
+        vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
+        vec3 cityGlow = nightTex * cityMask * cityTint * 3.5;
 
-        vec3 surface = dayColor * dayFactor + nightColor;
+        vec3 nightBase = dayColor * 0.04;
+        vec3 nightColor = nightBase + cityGlow;
+
+        vec3 surface = mix(nightColor, dayColor, dayAmount);
 
         gl_FragColor = vec4(surface, 1.0);
       }`
@@ -955,7 +953,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v8";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v11";
   return mat;
 }
 
@@ -1118,6 +1116,18 @@ export function LivingPlanet({
       renderer.domElement.style.display = "block";
       container.appendChild(renderer.domElement);
 
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0, 0);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+      controls.minDistance = 2.5;
+      controls.maxDistance = 6;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.35;
+      controls.update();
+
       const initPr = renderer.getPixelRatio();
       const expectedW = Math.round(w * initPr);
       const expectedH = Math.round(h * initPr);
@@ -1130,14 +1140,14 @@ export function LivingPlanet({
       );
 
       const lightDir = new THREE.Vector3(3, 2, 5).normalize();
-      const ambientLight = new THREE.AmbientLight(0x223355, 0.08);
+      const ambientLight = new THREE.AmbientLight(0x0a1020, 0.05);
       scene.add(ambientLight);
       const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
       dirLight.position.set(3, 2, 5);
       dirLight.target.position.set(0, 0, 0);
       scene.add(dirLight);
       scene.add(dirLight.target);
-      const earthFill = new THREE.HemisphereLight(0x336688, 0x0a0a12, 0.18);
+      const earthFill = new THREE.HemisphereLight(0x1a2840, 0x020306, 0.1);
       scene.add(earthFill);
       console.log("sun pos:", dirLight.position.x, dirLight.position.y, dirLight.position.z, "intensity:", dirLight.intensity);
       console.log("camera pos:", camera.position.x, camera.position.y, camera.position.z);
@@ -1390,16 +1400,7 @@ export function LivingPlanet({
         }
         atmosphere.rotation.y += 0.00025 * frameScale;
 
-        const rw = getW();
-        const rh = getH();
-        const cz = rw / rh > 1.5 ? 4.6 : 4.2;
-        const orbitR = 0.07;
-        camera.position.set(
-          Math.sin(t * 0.028) * orbitR,
-          Math.cos(t * 0.022) * orbitR * 0.45 + Math.sin(t * 1.7) * 0.0012,
-          cz + Math.cos(t * 0.019) * 0.035
-        );
-        camera.lookAt(0, 0, 0);
+        controls.update();
 
         stars.position.copy(camera.position).multiplyScalar(0.018);
 
@@ -1488,6 +1489,7 @@ export function LivingPlanet({
         satellites.forEach(disposeObject);
         spaceFx.dispose();
         cometVfx.dispose();
+        controls.dispose();
         if (loadedTextures) {
           Object.values(loadedTextures).forEach((tex) => tex.dispose());
         }
