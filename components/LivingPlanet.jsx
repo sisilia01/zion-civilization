@@ -388,17 +388,15 @@ void main() {
   vec3 N = normalize(vNormal);
   vec3 camDir = normalize(vWorldPos - uCameraPos);
   float rim = 1.0 - clamp(dot(N, camDir), 0.0, 1.0);
-  float fres = pow(rim, 5.0);
+  float fres = pow(rim, 4.6);
 
-  vec3 atmoColor = mix(vec3(0.42, 0.22, 0.10), vec3(0.22, 0.52, 0.95), uProsperity);
+  vec3 atmoColor = vec3(0.3, 0.55, 1.0);
   float sunFacing = dot(N, normalize(uLightDir));
-  float dayMask = smoothstep(-0.08, 0.4, sunFacing);
-  float sunDot = sunFacing;
-  float twilightBand = smoothstep(-0.08, 0.0, sunDot) * (1.0 - smoothstep(0.0, 0.08, sunDot));
-  vec3 twilightTint = vec3(1.0, 0.5, 0.22) * twilightBand * 0.18;
+  float dayMask = smoothstep(-0.05, 0.45, sunFacing);
 
-  vec3 col = (atmoColor * fres * 0.38 + twilightTint * fres) * dayMask;
-  float alpha = fres * 0.12 * dayMask;
+  vec3 col = atmoColor * fres * 0.58;
+  col *= dayMask;
+  float alpha = fres * 0.19 * dayMask;
   gl_FragColor = vec4(col, alpha);
 }
 `;
@@ -1436,6 +1434,10 @@ function createTexturedPlanetMaterial(textures, lightDir) {
         float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
         dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.2;
 
+        float poleLat = abs(N.y);
+        float poleMask = smoothstep(0.58, 0.9, poleLat);
+        dayLit += vec3(0.16, 0.18, 0.2) * poleMask * sunFacing * 0.32;
+
         vec3 nightTex = texture2D(uNightMap, vUv).rgb;
         float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
         float thr = mix(0.30, 0.10, uPopulation);
@@ -1459,7 +1461,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v14";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v15";
   return mat;
 }
 
@@ -1937,14 +1939,24 @@ export function LivingPlanet({
         starfield.nearMat.uniforms.uTime.value = t;
         starfield.update(t, delta, frameScale);
 
-        planet.rotation.y += 0.00025 * frameScale;
+        const planetSpin = 0.00025 * frameScale;
+        const cloudExtraDrift = 0.000135 * frameScale;
+        const cloudSpin = planetSpin + cloudExtraDrift;
+        planet.rotation.y += planetSpin;
         if (clouds) {
-          clouds.rotation.y += 0.00027 * frameScale;
+          clouds.rotation.y += cloudSpin;
+          clouds.rotation.x = 0.011;
         } else {
-          if (cloudsLow) cloudsLow.rotation.y += 0.00027 * frameScale;
-          if (cloudsHigh) cloudsHigh.rotation.y += 0.00029 * frameScale;
+          if (cloudsLow) {
+            cloudsLow.rotation.y += cloudSpin;
+            cloudsLow.rotation.x = 0.009;
+          }
+          if (cloudsHigh) {
+            cloudsHigh.rotation.y += cloudSpin + cloudExtraDrift * 0.12;
+            cloudsHigh.rotation.x = 0.013;
+          }
         }
-        atmosphere.rotation.y += 0.00025 * frameScale;
+        atmosphere.rotation.y += planetSpin;
 
         controls.update();
 
