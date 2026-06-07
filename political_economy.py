@@ -63,6 +63,7 @@ def compute_macro_metrics(cur) -> dict[str, Any]:
     alive = int(indicators.get("alive") or 0)
     unemployment_rate = float(indicators.get("unemployment_rate") or 0)
     gini = float(indicators.get("gini_coefficient") or 0)
+    gang_crime_pct = float(indicators.get("crime_pct") or 0)
 
     sheriff = get_sheriff(cur) or {}
     actual_police = int(sheriff.get("police_count") or 0)
@@ -72,14 +73,16 @@ def compute_macro_metrics(cur) -> dict[str, Any]:
     crime_mult = 1 + (unemployment_rate / 100) ** 2
     crime_rate = min(1.0, BASE_CRIME * crime_mult * (1 - police_effectiveness))
 
-    agent_wealth = float(indicators.get("total_economy") or 0) - float(
-        indicators.get("zrs_reserve") or 0
+    cur.execute(
+        "SELECT COALESCE(SUM(balance), 0) AS s FROM agents WHERE is_alive = true"
     )
+    agent_wealth = float((cur.fetchone() or {}).get("s") or 0)
     cur.execute(
         "SELECT COALESCE(SUM(treasury), 0) AS s FROM corporations WHERE is_active = true"
     )
     corp_wealth = float((cur.fetchone() or {}).get("s") or 0)
-    gdp = agent_wealth + corp_wealth + float(indicators.get("zrs_reserve") or 0)
+    zrs_wealth = float(indicators.get("zrs_reserve") or 0)
+    gdp = agent_wealth + corp_wealth + zrs_wealth
 
     crisis = get_crisis_state(cur)
     last_gdp = float(crisis.get("last_gdp") or gdp)
@@ -101,6 +104,7 @@ def compute_macro_metrics(cur) -> dict[str, Any]:
         "alive": alive,
         "unemployment_rate": unemployment_rate,
         "crime_rate": round(crime_rate, 4),
+        "gang_crime_pct": round(gang_crime_pct, 1),
         "police_effectiveness": round(police_effectiveness, 4),
         "actual_police": actual_police,
         "target_police": target_police,
@@ -150,12 +154,8 @@ def update_crisis_metrics(cur, metrics: dict[str, Any]) -> dict[str, Any]:
         pressure += 10
 
     pressure = max(0.0, min(300.0, pressure))
-    from civ_common import get_revolution_meter
-
-    meter_target = min(100, int(pressure / 1.5))
-    current_meter = get_revolution_meter(cur)
-    if meter_target != current_meter:
-        update_revolution_meter(cur, meter_target - current_meter, "political economy sync")
+    # revolution_pressure is diagnostic only — civilization_state.revolution_meter
+    # is updated exclusively via process_revolution_cycle() / update_revolution_meter().
 
     cur.execute(
         """
@@ -493,7 +493,7 @@ def run_power_struggles(cur, scores: dict[str, float]) -> str | None:
         _log_power_event(cur, "SENATE_WINS", desc, scores, "SENATE_WINS")
         cur.execute(
             """
-            UPDATE president_state SET approval_rating = GREATEST(0, approval_rating - 30)
+            UPDATE president_state SET approval_rating = GREATEST(10, approval_rating - 15)
             WHERE is_active = true
             """
         )
@@ -692,8 +692,7 @@ def run_cycle() -> dict[str, Any]:
 
     zrs_recovery_cycle(cur, metrics)
     apply_economic_phase_effects(cur, metrics)
-    scores = compute_power_scores(cur)
-    struggle = run_power_struggles(cur, scores)
+    # Power struggles run in senate.run_governance_tick() only — not duplicated here.
     revolution = trigger_revolution(cur, metrics)
     generate_narrative_events(cur, metrics, crisis_active)
 
@@ -704,8 +703,6 @@ def run_cycle() -> dict[str, Any]:
     result = {
         **metrics,
         "crisis_active": crisis_active,
-        "power_scores": scores,
-        "power_struggle": struggle,
         "revolution": revolution,
     }
     print(

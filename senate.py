@@ -4,13 +4,14 @@ import json
 import math
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from civ_common import (
     apply_martial_law_divisions,
     ensure_schema,
     get_conn,
     get_cursor,
+    get_latest_ai_decision,
     insert_active_effect,
     log_event,
     nationalize_corporations_from_zrs,
@@ -124,6 +125,7 @@ def ensure_senate_schema(cur):
         ("election_delayed", "BOOLEAN DEFAULT false"),
         ("hours_in_power", "INTEGER DEFAULT 0"),
         ("dissolved_until", "TIMESTAMP"),
+        ("created_at", "TIMESTAMP DEFAULT NOW()"),
     ]:
         try:
             cur.execute(
@@ -239,11 +241,20 @@ def living_senators_count(cur) -> int:
     return int(cur.fetchone()["c"] or 0)
 
 
-def pass_threshold(cur) -> int:
+def pass_threshold(cur, law_type: str | None = None) -> int:
     n = living_senators_count(cur)
     if n <= 0:
         return 999
-    return max(1, math.ceil(2 * n / 3))
+    lt = (law_type or "").upper()
+    important_laws = {"MARTIAL_LAW", "NATIONALIZE", "NATIONALIZATION"}
+    constitutional_laws = {"DISSOLVE", "DISSOLVE_SENATE"}
+    if lt in constitutional_laws:
+        ratio = 0.75
+    elif lt in important_laws:
+        ratio = 0.60
+    else:
+        ratio = 0.51
+    return max(1, math.ceil(n * ratio))
 
 
 def senate_refill_blocked(cur) -> bool:
@@ -280,7 +291,9 @@ def pick_senator_candidate(cur, party_id: str, exclude_ids: set | None = None) -
             f"""
             SELECT id, name, charisma, class, balance
             FROM agents
-            WHERE is_alive = true AND class IN ('poor', 'critical'){ex_clause}
+            WHERE is_alive = true
+              AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+              AND class IN ('poor', 'critical'){ex_clause}
             ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
             LIMIT 1
             """,
@@ -292,7 +305,9 @@ def pick_senator_candidate(cur, party_id: str, exclude_ids: set | None = None) -
             f"""
             SELECT id, name, charisma, class, balance
             FROM agents
-            WHERE is_alive = true AND class = %s{ex_clause}
+            WHERE is_alive = true
+              AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+              AND class = %s{ex_clause}
             ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
             LIMIT 1
             """,
@@ -352,6 +367,56 @@ def ensure_senate_exists(cur):
                 0,
                 priority="normal",
             )
+
+    # Diversity guard: if chamber skews to one party, force minimum representation.
+    cur.execute(
+        """
+        SELECT s.party_id, COUNT(*) AS c
+        FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        GROUP BY s.party_id
+        """
+    )
+    counts = {row["party_id"]: int(row["c"] or 0) for row in cur.fetchall()}
+    for party_id in PARTY_IDS:
+        if counts.get(party_id, 0) > 0:
+            continue
+        agent = pick_senator_candidate(cur, party_id, seated_ids)
+        if not agent:
+            cur.execute(
+                """
+                SELECT id, name, charisma, class, balance
+                FROM agents
+                WHERE is_alive = true
+                  AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+                  AND id NOT IN %s
+                ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
+                LIMIT 1
+                """,
+                (tuple(seated_ids) if seated_ids else (-1,),),
+            )
+            agent = cur.fetchone()
+        if not agent or agent["id"] in seated_ids:
+            continue
+        approval = min(90, 40 + int(agent.get("charisma") or 50) // 2)
+        cur.execute(
+            """
+            INSERT INTO senate (
+                agent_id, agent_name, party_id, role, approval_rating, is_active
+            ) VALUES (%s, %s, %s, 'senator', %s, true)
+            """,
+            (agent["id"], agent["name"], party_id, approval),
+        )
+        seated_ids.add(agent["id"])
+        log_event(
+            cur,
+            agent["id"],
+            "senate",
+            f"Senate diversity guard: {agent['name']} seated for {party_id}",
+            0,
+            priority="normal",
+        )
 
     cur.execute(
         """
@@ -453,27 +518,32 @@ def propose_law(cur, president: dict, law_type: str | None = None, proposer: str
 
 def senator_wants_yes(cur, senator: dict, law: dict, president: dict) -> bool:
     law_type = law["law_type"]
-    party = senator["party_id"]
-    stance = PARTY_LAW_STANCE.get(party, {}).get(law_type)
-
-    if stance is None:
-        if party == "centrists":
-            controversial = law_type in ("ELECTION_DELAY", "MARTIAL_LAW", "WEALTH_TAX")
-            base = random.random() < (0.35 if controversial else 0.55)
-        else:
-            base = random.random() < 0.5
-    else:
-        base = stance
+    base = senator_votes_for(senator, law_type)
 
     pres_approval = int(president.get("approval_rating") or 50)
     if pres_approval > 70:
-        base = base or random.random() < 0.3
+        base = base or random.random() < 0.2
     elif pres_approval < 30:
         base = (not base) if random.random() < 0.4 else base
 
     if random.random() < ROGUE_VOTE_CHANCE:
         return not base
     return base
+
+
+def senator_votes_for(senator: dict, law_type: str) -> bool:
+    party = (senator.get("party_id") or senator.get("party") or "").lower()
+    if "populist" in party or "people" in party or "front" in party:
+        if law_type in ("WELFARE", "TAX_RELIEF", "AMNESTY", "STIMULUS", "STIMULUS_PACKAGE", "WEALTH_TAX"):
+            return random.random() < 0.85
+        if law_type in ("CORP_DEREGULATION", "PRIVATIZATION", "DEREGULATION"):
+            return random.random() < 0.15
+    elif "conservative" in party:
+        if law_type in ("CORP_DEREGULATION", "PRIVATIZATION", "TAX_REFORM", "DEREGULATION"):
+            return random.random() < 0.85
+        if law_type in ("WELFARE", "AMNESTY", "STIMULUS", "STIMULUS_PACKAGE"):
+            return random.random() < 0.20
+    return random.random() < 0.55
 
 
 def execute_law_effect(cur, law: dict, president: dict) -> bool:
@@ -760,8 +830,17 @@ def senate_vote(cur, law_id: int):
             (senator["id"],),
         )
 
-    threshold = pass_threshold(cur)
-    if votes_for >= threshold:
+    law_type = (law.get("law_type") or "").upper()
+    threshold = pass_threshold(cur, law_type)
+    requires_supermajority = law_type in {
+        "MARTIAL_LAW",
+        "NATIONALIZE",
+        "NATIONALIZATION",
+        "DISSOLVE",
+        "DISSOLVE_SENATE",
+    }
+    passed_vote = votes_for >= threshold if requires_supermajority else votes_for > votes_against
+    if passed_vote:
         if execute_law_effect(cur, law, president):
             status = "passed"
             outcome = f"PASSED {votes_for}-{votes_against}"
@@ -991,6 +1070,7 @@ def run_election(cur, election_type: str = "president"):
             WHERE is_active = true
             """
         )
+        # Fresh term — do not copy prior approval/corruption to the new row.
 
     president_insert_columns = [
         "agent_id",
@@ -1013,12 +1093,12 @@ def run_election(cur, election_type: str = "president"):
         "%s",
         "%s",
         "%s",
-        "55",
-        "1000",
+        "50",
         "500",
+        "0",
         "true",
         "'ruling'",
-        "25",
+        "0",
         "0",
         "0",
         "0",
@@ -1061,6 +1141,19 @@ def run_election(cur, election_type: str = "president"):
                 "UPDATE political_parties SET losses = losses + 1 WHERE party_id = %s",
                 (old_party,),
             )
+        cur.execute(
+            """
+            UPDATE civilization_state
+            SET martial_law_until = NULL
+            WHERE id = 1
+              AND martial_law_until IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM president_state
+                  WHERE is_active = true
+                    AND martial_law_until > NOW()
+              )
+            """
+        )
 
     cur.execute(
         """
@@ -1103,9 +1196,45 @@ def count_opposition_senators(cur, president: dict) -> int:
     return int(cur.fetchone()["c"] or 0)
 
 
+def _president_office_age_hours(cur, president: dict) -> float:
+    try:
+        cur.execute(
+            """
+            SELECT created_at FROM president_state
+            WHERE is_active = true
+            ORDER BY created_at DESC LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if not row:
+            return 999.0
+
+        if isinstance(row, dict):
+            created_at = row.get("created_at")
+        else:
+            created_at = row[0]
+
+        if not created_at:
+            return 999.0
+
+        now = datetime.now(timezone.utc)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        return (now - created_at).total_seconds() / 3600
+    except Exception as e:
+        print(f"_president_office_age_hours error: {e}")
+        return 999.0
+
+
 def check_impeachment(cur):
     president = get_president(cur)
     if not president:
+        return
+    if not isinstance(president, dict):
+        president = dict(president) if hasattr(president, "keys") else {}
+    if not president:
+        return
+    if _president_office_age_hours(cur, president) < 12:
         return
     approval = int(president.get("approval_rating") or 50)
     if approval >= IMPEACH_APPROVAL_MAX:
@@ -1132,7 +1261,7 @@ def check_impeachment(cur):
     if impeach_votes < pass_threshold(cur):
         log_event(
             cur,
-            president["agent_id"],
+            president.get("agent_id"),
             "senate",
             f"Impeachment FAILED {impeach_votes}-{len(senators) - impeach_votes} "
             f"(President approval {approval}%)",
@@ -1141,8 +1270,8 @@ def check_impeachment(cur):
         )
         return
 
-    pname = president["agent_name"]
-    pid = president["agent_id"]
+    pname = president.get("agent_name") or "President"
+    pid = president.get("agent_id")
     cur.execute(
         "UPDATE president_state SET is_active = false, phase = 'impeached' WHERE is_active = true"
     )
@@ -1215,6 +1344,8 @@ def check_coup(cur):
 def should_run_scheduled_election(cur, president: dict) -> bool:
     if not president:
         return True
+    if _president_office_age_hours(cur, president) < 24:
+        return False
     if president.get("election_delayed"):
         cur.execute(
             """
@@ -1232,6 +1363,89 @@ def should_run_scheduled_election(cur, president: dict) -> bool:
     return hours > 720 or approval < 10
 
 
+def run_governance_tick(cur, ctx: dict) -> dict:
+    """Legislative step — confirms FRS Chief, votes laws (budget via senate_budget.py hourly)."""
+    from frs_chief import senate_confirm_frs_chief, get_frs_chief
+
+    ensure_senate_exists(cur)
+    president = get_president(cur)
+    summary_parts = []
+
+    chief = get_frs_chief(cur)
+    if chief.get("confirmation_status") == "pending":
+        msg = senate_confirm_frs_chief(cur, ctx)
+        summary_parts.append(msg[:60])
+
+    if ctx.get("senate", {}).get("emergency_session") or ctx.get("emergency_session"):
+        if president:
+            propose_law(cur, president, "STIMULUS_PACKAGE", proposer="senate_emergency")
+            summary_parts.append("emergency stimulus proposed")
+
+    if president:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c FROM senate_laws
+            WHERE status = 'pending' AND proposed_by = 'president'
+            """
+        )
+        pending_pres = int(cur.fetchone()["c"] or 0)
+        if pending_pres < 1 and random.random() < 0.35:
+            law_type = choose_law_for_president(cur, president)
+            propose_law(cur, president, law_type, proposer="president")
+            summary_parts.append(f"proposed {law_type}")
+        presidential_actions(cur, president)
+
+    cur.execute(
+        "SELECT id FROM senate_laws WHERE status = 'pending' ORDER BY proposed_at ASC"
+    )
+    voted = 0
+    for row in cur.fetchall():
+        senate_vote(cur, row["id"])
+        voted += 1
+
+    check_impeachment(cur)
+    from political_economy import run_power_struggles, compute_power_scores
+
+    scores = compute_power_scores(cur)
+    run_power_struggles(cur, scores)
+    check_coup(cur)
+
+    president = get_president(cur)
+    if president and should_run_scheduled_election(cur, president):
+        summary_parts.append("scheduled election")
+        run_election(cur, "president")
+        president = get_president(cur)
+
+    ctx["senate"] = {
+        "summary": "; ".join(summary_parts) or f"voted {voted} laws",
+        "laws_voted": voted,
+        "frs_confirmed": ctx.get("frs_confirmed"),
+    }
+    summary = ctx["senate"]["summary"]
+    log_event(
+        cur,
+        None,
+        "senate",
+        f"Senate governance tick: {summary}",
+        voted,
+        priority="normal",
+    )
+    return ctx
+
+
+def trigger_emergency_session(cur, reason: str):
+    """Called when starvation or crisis exceeds threshold."""
+    log_event(
+        cur,
+        None,
+        "senate",
+        f"EMERGENCY SESSION: {reason}",
+        0,
+        priority="breaking",
+    )
+    return {"emergency_session": True, "senate": {"emergency_session": True, "reason": reason}}
+
+
 def main():
     conn = get_conn()
     cur = get_cursor(conn)
@@ -1245,6 +1459,18 @@ def main():
     try:
         ensure_senate_exists(cur)
         president = get_president(cur)
+
+        # Read AI Senate decision
+        ai_decision = get_latest_ai_decision(cur, "senate")
+        ai_action = ai_decision.get("action", "")
+        ai_amount = float(ai_decision.get("amount", 0) or 0)
+
+        if ai_action == "stimulate_economy" and president:
+            print(f"Senate influenced by AI to pass stimulus: {ai_amount} ZION")
+            propose_law(cur, president, "STIMULUS_PACKAGE", proposer="senate_ai")
+        elif ai_action == "tax_change" and president:
+            print("Senate influenced by AI for tax reform")
+            propose_law(cur, president, "TAX_REFORM", proposer="senate_ai")
 
         if president:
             cur.execute(
@@ -1275,15 +1501,19 @@ def main():
         run_power_struggles(cur, scores)
         check_coup(cur)
 
-        from senate_budget import run_budget_cycle
-
-        run_budget_cycle(cur)
-
         president = get_president(cur)
         if president and should_run_scheduled_election(cur, president):
             print("  Scheduled election triggered")
             run_election(cur, "president")
 
+        log_event(
+            cur,
+            None,
+            "senate",
+            "Senate cycle complete — laws voted, power struggles checked",
+            0,
+            priority="normal",
+        )
         conn.commit()
         print("\n✅ Senate cycle complete!")
     except Exception as e:

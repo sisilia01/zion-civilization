@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """Shared DB helpers and schema for ZION civilization workers."""
+import json
+
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
+
+# Read-only view name — avoids contending with writers on civilization_state row
+CIV_STATE_READ = "civilization_state_read"
+
+LOCK_ERRORS = (
+    psycopg2.errors.LockNotAvailable,
+    psycopg2.errors.DeadlockDetected,
+    psycopg2.errors.QueryCanceled,
+)
+
+
+def is_db_lock_error(exc: BaseException) -> bool:
+    return isinstance(exc, LOCK_ERRORS)
 
 DB_CONFIG = {
     "host": "localhost",
@@ -20,6 +36,18 @@ SECTOR_MULTIPLIERS = {
     "pharma": 1.2,
     "media": 1.0,
 }
+
+
+def run_db_script(fn, label: str = "Script") -> None:
+    """Run a one-shot worker; print a clear message if PostgreSQL is down."""
+    import sys
+
+    try:
+        fn()
+    except psycopg2.OperationalError as exc:
+        print(f"\n❌ {label}: database unavailable — {exc}")
+        print("   Ensure PostgreSQL is running and civ_common.DB_CONFIG is correct.\n")
+        sys.exit(1)
 
 
 def get_conn():
@@ -55,15 +83,15 @@ ZRS_RESERVE_FLOOR = 50_000.0  # 5% of 400k ZRS reserve (1M total supply)
 UNIVERSITY_COST = 50
 ACADEMY_COST = 25
 DAILY_FOOD_COST = 1
-OFFICER_SALARY_PER_CYCLE = 8
+OFFICER_SALARY_PER_CYCLE = 15
 CRISIS_ZRS_MODES = frozenset({"RECESSION", "CRISIS", "DEPRESSION"})
 
 
-def agent_class_from_balance(balance: float) -> str:
+def agent_class_from_balance(balance: float, median_balance: float | None = None) -> str:
     """Six-tier ladder — delegates to civ_economics genius model."""
     from civ_economics import agent_class_from_balance as _genius_class
 
-    return _genius_class(balance)
+    return _genius_class(balance, median_balance=median_balance)
 
 
 def tax_rate_for_balance(balance: float) -> float:
@@ -78,12 +106,21 @@ def reclassify_all_agents(cur):
     """Apply six-tier classes from balance for all alive agents."""
     cur.execute(
         """
-        UPDATE agents SET class = CASE
-            WHEN balance < 1 THEN 'critical'
-            WHEN balance < 10 THEN 'poor'
-            WHEN balance < 100 THEN 'working'
-            WHEN balance < 1000 THEN 'middle'
-            WHEN balance < 5000 THEN 'rich'
+        WITH m AS (
+            SELECT COALESCE(
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY balance),
+                1
+            ) AS med
+            FROM agents
+            WHERE is_alive = true
+        )
+        UPDATE agents
+        SET class = CASE
+            WHEN balance <= 0 THEN 'critical'
+            WHEN balance < (SELECT med * 0.3 FROM m) THEN 'poor'
+            WHEN balance < (SELECT med * 2 FROM m) THEN 'working'
+            WHEN balance < (SELECT med * 10 FROM m) THEN 'middle'
+            WHEN balance < (SELECT med * 50 FROM m) THEN 'rich'
             ELSE 'elite'
         END
         WHERE is_alive = true
@@ -256,7 +293,71 @@ def ensure_schema(cur):
             ("division_officers_baseline", "JSONB"),
             ("last_meter_delta", "INTEGER DEFAULT 0"),
             ("last_meter_reason", "VARCHAR(200)"),
+            ("media_sentiment", "NUMERIC(6,2) DEFAULT 0"),
+            ("pending_gang_retaliation", "BOOLEAN DEFAULT FALSE"),
+            ("last_raid_failed_clan_id", "INTEGER"),
+            ("starvation_deaths_hour", "INTEGER DEFAULT 0"),
+            ("last_total_zion", "NUMERIC(24,2)"),
+            ("governance_tick_id", "INTEGER DEFAULT 0"),
+            ("tick_context", "JSONB DEFAULT '{}'::jsonb"),
+            ("martial_law_until", "TIMESTAMP"),
         ],
+    )
+    cur.execute(
+        f"""
+        CREATE OR REPLACE VIEW {CIV_STATE_READ} AS
+        SELECT * FROM civilization_state WHERE id = 1
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS frs_chief_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            agent_id INTEGER,
+            chief_name VARCHAR(120) DEFAULT 'FRS Chair',
+            nominated_by INTEGER,
+            confirmation_status VARCHAR(20) DEFAULT 'vacant',
+            term_cycles_remaining INTEGER DEFAULT 0,
+            cycles_served INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT FALSE,
+            appointed_at TIMESTAMP,
+            confirmed_at TIMESTAMP,
+            pending_directive JSONB DEFAULT '{}'::jsonb,
+            last_directive JSONB DEFAULT '{}'::jsonb,
+            model VARCHAR(80) DEFAULT 'microsoft/phi-4-mini-instruct',
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute("INSERT INTO frs_chief_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS governance_tick_log (
+            id SERIAL PRIMARY KEY,
+            tick_id INTEGER NOT NULL,
+            step VARCHAR(40) NOT NULL,
+            summary TEXT,
+            context JSONB DEFAULT '{}'::jsonb,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS court_cases (
+            id SERIAL PRIMARY KEY,
+            defendant_agent_id INTEGER,
+            case_type VARCHAR(40) DEFAULT 'corruption',
+            status VARCHAR(20) DEFAULT 'pending',
+            verdict VARCHAR(20),
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            resolved_at TIMESTAMP
+        )
+        """
     )
 
     cur.execute(
@@ -367,6 +468,9 @@ def ensure_schema(cur):
         ("dictatorship_mode", "BOOLEAN DEFAULT false"),
         ("vetoes_used", "INTEGER DEFAULT 0"),
         ("election_delayed", "BOOLEAN DEFAULT false"),
+        ("martial_law_until", "TIMESTAMP"),
+        ("tax_relief_until", "TIMESTAMP"),
+        ("corruption_index", "NUMERIC(5,2) DEFAULT 30"),
     ]:
         try:
             cur.execute(
@@ -578,15 +682,40 @@ UPRISING_END_THRESHOLD = 50
 RIOT_CTRL_STRONG = 20
 
 
-def get_civilization_state(cur) -> dict:
-    cur.execute("SELECT * FROM civilization_state WHERE id = 1")
+def ensure_martial_law_columns(cur) -> None:
+    """Lightweight migration — martial_law_until on president_state and civilization_state."""
+    for table in ("president_state", "civilization_state"):
+        try:
+            cur.execute(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS martial_law_until TIMESTAMP"
+            )
+        except Exception:
+            pass
+    try:
+        cur.execute(
+            f"""
+            CREATE OR REPLACE VIEW {CIV_STATE_READ} AS
+            SELECT * FROM civilization_state WHERE id = 1
+            """
+        )
+    except Exception:
+        pass
+
+
+def read_civilization_state(cur) -> dict:
+    """Lock-free read via civilization_state_read view."""
+    cur.execute(f"SELECT * FROM {CIV_STATE_READ} LIMIT 1")
     row = cur.fetchone()
     return dict(row) if row else {}
 
 
+def get_civilization_state(cur) -> dict:
+    return read_civilization_state(cur)
+
+
 def get_revolution_meter(cur) -> int:
     cur.execute(
-        "SELECT COALESCE(revolution_meter, 0) AS m FROM civilization_state WHERE id = 1"
+        f"SELECT COALESCE(revolution_meter, 0) AS m FROM {CIV_STATE_READ} LIMIT 1"
     )
     row = cur.fetchone()
     return int(float((row or {}).get("m") or 0))
@@ -594,7 +723,7 @@ def get_revolution_meter(cur) -> int:
 
 def is_uprising_active(cur) -> bool:
     cur.execute(
-        "SELECT COALESCE(uprising_active, false) AS a FROM civilization_state WHERE id = 1"
+        f"SELECT COALESCE(uprising_active, false) AS a FROM {CIV_STATE_READ} LIMIT 1"
     )
     row = cur.fetchone()
     return bool((row or {}).get("a"))
@@ -727,7 +856,7 @@ def end_uprising(cur, police_won: bool = True) -> bool:
         return False
 
     cur.execute(
-        "SELECT division_officers_baseline FROM civilization_state WHERE id = 1"
+        f"SELECT division_officers_baseline FROM {CIV_STATE_READ} LIMIT 1"
     )
     row = cur.fetchone()
     baseline = row.get("division_officers_baseline") if row else None
@@ -1195,32 +1324,104 @@ def get_zrs_state(cur):
 
 
 def route_tax_revenue(cur, total_tax: float):
-    """40% president personal_fund | 40% ZRS reserve | 20% sheriff (no burn — full conservation)."""
-    pres = round(total_tax * 0.40, 2)
-    zrs = round(total_tax * 0.40, 2)
-    sheriff = round(total_tax - pres - zrs, 2)
-    if zrs > 0:
+    """Legacy wrapper — agent taxes use route_agent_tax_revenue."""
+    return route_agent_tax_revenue(cur, total_tax)
+
+
+def route_agent_tax_revenue(cur, total_tax: float):
+    """Agent income tax: 40% senate | 30% state_treasury | 30% ZRS reserve."""
+    total_tax = round(float(total_tax), 2)
+    if total_tax <= 0:
+        return 0.0, 0.0, 0.0
+    senate = round(total_tax * 0.40, 2)
+    state = round(total_tax * 0.30, 2)
+    zrs = round(total_tax - senate - state, 2)
+    if senate > 0:
         cur.execute(
-            "UPDATE zrs_state SET reserve = COALESCE(reserve, 0) + %s WHERE id = 1",
-            (zrs,),
+            """
+            INSERT INTO senate_budget (id, balance, total_received)
+            VALUES (1, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                balance = senate_budget.balance + EXCLUDED.balance,
+                total_received = senate_budget.total_received + EXCLUDED.total_received,
+                updated_at = NOW()
+            """,
+            (senate, senate),
         )
-    if pres > 0:
+    if state > 0:
+        credit_state_treasury(cur, state, fund="social_fund")
+    if zrs > 0:
+        zrs_add_reserve(cur, zrs)
+    return senate, state, zrs
+
+
+def route_corp_tax_revenue(cur, total_tax: float):
+    """Corporate profit tax: 40% senate | 40% ZRS | 20% president personal_fund."""
+    total_tax = round(float(total_tax), 2)
+    if total_tax <= 0:
+        return 0.0, 0.0, 0.0
+    senate = round(total_tax * 0.40, 2)
+    zrs = round(total_tax * 0.40, 2)
+    president = round(total_tax - senate - zrs, 2)
+    if senate > 0:
+        cur.execute(
+            """
+            INSERT INTO senate_budget (id, balance, total_received)
+            VALUES (1, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                balance = senate_budget.balance + EXCLUDED.balance,
+                total_received = senate_budget.total_received + EXCLUDED.total_received,
+                updated_at = NOW()
+            """,
+            (senate, senate),
+        )
+    if zrs > 0:
+        zrs_add_reserve(cur, zrs)
+    if president > 0:
         cur.execute(
             """
             UPDATE president_state SET personal_fund = personal_fund + %s
             WHERE is_active = true
             """,
-            (pres,),
+            (president,),
         )
-    if sheriff > 0:
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_budget = police_budget + %s
-            WHERE is_active = true
-            """,
-            (sheriff,),
-        )
-    return pres, zrs, sheriff, 0.0
+    return senate, zrs, president
+
+
+def credit_state_treasury(cur, amount: float, fund: str = "social_fund") -> bool:
+    """Credit state_treasury bucket (conservation-safe)."""
+    amount = round(float(amount), 2)
+    if amount <= 0:
+        return False
+    col = {"social_fund", "zrs_fund", "police_fund"}.intersection({fund}) or {"social_fund"}
+    column = col.pop()
+    cur.execute(
+        f"""
+        INSERT INTO state_treasury (id, {column})
+        VALUES (1, %s)
+        ON CONFLICT (id) DO UPDATE SET {column} = state_treasury.{column} + EXCLUDED.{column}
+        """,
+        (amount,),
+    )
+    return True
+
+
+def debit_state_treasury(cur, amount: float, fund: str = "social_fund") -> bool:
+    """Debit state_treasury bucket if sufficient funds."""
+    amount = round(float(amount), 2)
+    if amount <= 0:
+        return False
+    column = fund if fund in ("social_fund", "zrs_fund", "police_fund") else "social_fund"
+    cur.execute(f"SELECT COALESCE({column}, 0) AS bal FROM state_treasury WHERE id = 1")
+    row = cur.fetchone() or {}
+    bal = float(row.get("bal") or 0)
+    if bal < amount:
+        return False
+    cur.execute(
+        f"UPDATE state_treasury SET {column} = {column} - %s WHERE id = 1",
+        (amount,),
+    )
+    return True
 
 
 def transfer_agent_balance(cur, from_id: int, to_id: int, amount: float) -> bool:
@@ -1267,30 +1468,61 @@ def settle_agent_balance_to_zrs(cur, agent_id: int, amount: float | None = None)
 def settle_agent_death(cur, agent_id: int) -> float:
     """Death settlement: living parent inherits; otherwise ZRS reserve."""
     cur.execute(
-        "SELECT balance, parent_id FROM agents WHERE id = %s",
+        "SELECT balance, parent_id, clan_id FROM agents WHERE id = %s",
         (agent_id,),
     )
     row = cur.fetchone()
     if not row:
         return 0.0
+    old_clan_id = row.get("clan_id")
     amount = round(max(0.0, float(row["balance"] or 0)), 2)
-    if amount <= 0:
-        return 0.0
-    cur.execute("UPDATE agents SET balance = 0 WHERE id = %s", (agent_id,))
-    heir = row.get("parent_id")
-    if heir:
-        cur.execute(
-            "SELECT id FROM agents WHERE id = %s AND is_alive = true",
-            (heir,),
-        )
-        if cur.fetchone():
+    transferred = 0.0
+    if amount > 0:
+        cur.execute("UPDATE agents SET balance = 0 WHERE id = %s", (agent_id,))
+        heir = row.get("parent_id")
+        if heir:
             cur.execute(
-                "UPDATE agents SET balance = balance + %s WHERE id = %s",
-                (amount, heir),
+                "SELECT id FROM agents WHERE id = %s AND is_alive = true",
+                (heir,),
             )
-            return amount
-    zrs_add_reserve(cur, amount)
-    return amount
+            if cur.fetchone():
+                cur.execute(
+                    "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                    (amount, heir),
+                )
+                transferred = amount
+            else:
+                zrs_add_reserve(cur, amount)
+                transferred = amount
+        else:
+            zrs_add_reserve(cur, amount)
+            transferred = amount
+
+    cur.execute(
+        """
+        UPDATE agents SET
+            clan_id = NULL,
+            clan_name = NULL,
+            employer_corp_id = NULL,
+            job_role = NULL,
+            job_status = 'unemployed'
+        WHERE id = %s
+        """,
+        (agent_id,),
+    )
+    if old_clan_id:
+        cur.execute(
+            """
+            UPDATE clans c SET members_count = (
+                SELECT COUNT(*) FROM agents
+                WHERE clan_id = c.id AND is_alive = true
+            )
+            WHERE c.id = %s
+            """,
+            (old_clan_id,),
+        )
+
+    return transferred
 
 
 def route_food_spending(cur, total_food: float):
@@ -1522,7 +1754,7 @@ def transfer_power(
                 agent_id, agent_name, party, approval_rating, personal_fund,
                 police_fund, is_active, phase, corruption_index, days_in_power,
                 hours_in_power, vetoes_used, dictatorship_mode, is_dictator, dissolved_until
-            ) VALUES (%s, %s, %s, 40, 0, 0, true, %s, 60, 0, 0, 0, %s, %s, NULL)
+            ) VALUES (%s, %s, %s, 50, 500, 0, true, %s, 0, 0, 0, 0, %s, %s, NULL)
             """,
             (
                 new_agent_id,
@@ -1555,7 +1787,7 @@ def economy_snapshot(cur):
         SELECT COUNT(*) AS total,
                COALESCE(AVG(balance), 0) AS avg_balance,
                COALESCE(SUM(balance), 0) AS total_money,
-               COUNT(*) FILTER (WHERE balance < 10 OR class IN ('poor','critical')) AS poor_count
+               COUNT(*) FILTER (WHERE balance < 50) AS poor_count
         FROM agents WHERE is_alive = true
         """
     )
@@ -1591,3 +1823,199 @@ def economy_snapshot(cur):
         "corp_treasury_total": corp_t,
         "inflation_index": inflation_index,
     }
+
+
+def _memory_row_value(row, key: str, index: int):
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return row.get(key)
+    try:
+        return row[index]
+    except (IndexError, TypeError):
+        return None
+
+
+def get_latest_ai_decision(cur, faction: str) -> dict:
+    """Get the latest AI decision for a faction."""
+    try:
+        cur.execute(
+            """
+            SELECT last_5_decisions, strategy_notes, total_cycles
+            FROM ai_faction_memory
+            WHERE faction = %s
+            """,
+            (faction,),
+        )
+        row = cur.fetchone()
+        decisions_raw = _memory_row_value(row, "last_5_decisions", 0)
+        if not row or not decisions_raw:
+            return {}
+        if isinstance(decisions_raw, str):
+            decisions = json.loads(decisions_raw)
+        else:
+            decisions = decisions_raw if isinstance(decisions_raw, list) else []
+        latest = decisions[-1] if decisions else {}
+        if not isinstance(latest, dict):
+            return {}
+        return {
+            "action": latest.get("action", "do_nothing"),
+            "amount": latest.get("amount", 0),
+            "reasoning": latest.get("reasoning", ""),
+            "strategy": _memory_row_value(row, "strategy_notes", 1) or "",
+            "cycles": _memory_row_value(row, "total_cycles", 2) or 0,
+        }
+    except Exception:
+        return {}
+
+
+def ai_approved_action(cur, faction: str, action_type: str) -> bool:
+    """Check if AI approved a specific action type this cycle."""
+    decision = get_latest_ai_decision(cur, faction)
+    return decision.get("action") == action_type
+
+
+def compute_total_zion(cur) -> dict:
+    """Sum all major ZION balances — conservation ledger."""
+    cur.execute(
+        "SELECT COALESCE(SUM(balance), 0) AS s FROM agents WHERE is_alive = true"
+    )
+    agents = float((cur.fetchone() or {}).get("s") or 0)
+    cur.execute(
+        "SELECT COALESCE(SUM(treasury), 0) AS s FROM corporations WHERE is_active = true"
+    )
+    corps = float((cur.fetchone() or {}).get("s") or 0)
+    cur.execute("SELECT COALESCE(SUM(treasury), 0) AS s FROM clans")
+    clans = float((cur.fetchone() or {}).get("s") or 0)
+    cur.execute(
+        "SELECT COALESCE(SUM(virtual_balance), 0) AS s FROM agent_portfolio"
+    )
+    perps = float((cur.fetchone() or {}).get("s") or 0)
+    cur.execute("SELECT COALESCE(reserve, 0) AS r FROM zrs_state WHERE id = 1")
+    zrs = float((cur.fetchone() or {}).get("r") or 0)
+    cur.execute(
+        "SELECT COALESCE(personal_fund, 0) AS p, COALESCE(police_fund, 0) AS pf "
+        "FROM president_state WHERE is_active = true LIMIT 1"
+    )
+    pres = cur.fetchone() or {}
+    president_fund = float(pres.get("p") or 0)
+    cur.execute(
+        "SELECT COALESCE(police_budget, 0) AS b FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    police = float((cur.fetchone() or {}).get("b") or 0)
+    cur.execute("SELECT COALESCE(balance, 0) AS b FROM senate_budget WHERE id = 1")
+    senate = float((cur.fetchone() or {}).get("b") or 0)
+    cur.execute(
+        "SELECT COALESCE(zrs_fund, 0) AS z, COALESCE(police_fund, 0) AS p, "
+        "COALESCE(social_fund, 0) AS s FROM state_treasury WHERE id = 1"
+    )
+    st = cur.fetchone() or {}
+    state_treasury = float(st.get("z") or 0) + float(st.get("p") or 0) + float(st.get("s") or 0)
+    total = round(
+        agents + corps + clans + perps + zrs + president_fund + police + senate + state_treasury,
+        2,
+    )
+    return {
+        "total": total,
+        "agents": agents,
+        "corporations": corps,
+        "clans": clans,
+        "perps": perps,
+        "zrs_reserve": zrs,
+        "president_fund": president_fund,
+        "police_budget": police,
+        "senate_budget": senate,
+        "state_treasury": state_treasury,
+    }
+
+
+def check_money_conservation(cur, label: str = "", alert_pct: float = 1.0) -> dict:
+    """Alert if total ZION moved > alert_pct% since last check (unexpected mint/burn)."""
+    ledger = compute_total_zion(cur)
+    total = ledger["total"]
+    cur.execute(f"SELECT COALESCE(last_total_zion, 0) AS t FROM {CIV_STATE_READ} LIMIT 1")
+    prev = float((cur.fetchone() or {}).get("t") or 0)
+    delta_pct = 0.0
+    if prev > 0:
+        delta_pct = abs(total - prev) / prev * 100
+    try:
+        cur.execute(
+            "UPDATE civilization_state SET last_total_zion = %s, updated_at = NOW() WHERE id = 1",
+            (total,),
+        )
+    except LOCK_ERRORS:
+        pass
+    if prev > 0 and delta_pct > alert_pct:
+        breakdown = (
+            f"agents={ledger['agents']:,.0f} corps={ledger['corporations']:,.0f} "
+            f"clans={ledger['clans']:,.0f} zrs={ledger['zrs_reserve']:,.0f} "
+            f"pres={ledger['president_fund']:,.0f} police={ledger['police_budget']:,.0f} "
+            f"senate={ledger['senate_budget']:,.0f} state={ledger['state_treasury']:,.0f}"
+        )
+        print(
+            f"ERROR MONEY CONSERVATION [{label}]: drift {delta_pct:.2f}% "
+            f"({prev:,.0f} → {total:,.0f}) | {breakdown}",
+            flush=True,
+        )
+        log_event(
+            cur,
+            None,
+            "economy",
+            f"MONEY ERROR [{label}]: total ZION drifted {delta_pct:.2f}% "
+            f"({prev:,.0f} → {total:,.0f}) — {breakdown}",
+            round(total - prev, 2),
+            priority="breaking",
+        )
+    ledger["prev_total"] = prev
+    ledger["delta_pct"] = round(delta_pct, 4)
+    return ledger
+
+
+def get_tick_context(cur) -> dict:
+    """Deprecated — tick context is in-process only; no DB reads."""
+    return {}
+
+
+def set_tick_context(cur, ctx: dict):
+    """Deprecated no-op — avoids civilization_state lock contention."""
+    return
+
+
+def merge_tick_step(cur, step: str, data: dict):
+    """Deprecated no-op — use in-memory ctx dict in governance_tick only."""
+    return
+
+
+def bump_governance_tick_id(cur) -> int:
+    """Increment tick id; uses NOWAIT to avoid blocking other writers."""
+    try:
+        cur.execute("SELECT id FROM civilization_state WHERE id = 1 FOR UPDATE NOWAIT")
+        cur.execute(
+            """
+            UPDATE civilization_state
+            SET governance_tick_id = COALESCE(governance_tick_id, 0) + 1, updated_at = NOW()
+            WHERE id = 1
+            RETURNING governance_tick_id
+            """
+        )
+        row = cur.fetchone()
+        if row:
+            return int((row or {}).get("governance_tick_id") or 1)
+    except LOCK_ERRORS:
+        pass
+    cur.execute(
+        f"SELECT COALESCE(governance_tick_id, 0) AS tid FROM {CIV_STATE_READ} LIMIT 1"
+    )
+    row = cur.fetchone()
+    return int((row or {}).get("tid") or 0) + 1
+
+
+def log_governance_step(cur, tick_id: int, step: str, summary: str, ctx: dict | None = None):
+    cur.execute(
+        """
+        INSERT INTO governance_tick_log (tick_id, step, summary, context)
+        VALUES (%s, %s, %s, %s::jsonb)
+        """,
+        (tick_id, step, summary[:500], json.dumps(ctx or {})),
+    )
+    log_event(cur, None, "governance", f"[TICK #{tick_id}] {step}: {summary[:200]}", 0, priority="normal")

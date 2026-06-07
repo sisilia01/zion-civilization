@@ -46,6 +46,51 @@ def run_birth_cycle():
 
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive_total = int(cur.fetchone()["c"] or 0)
+    if alive_total == 0:
+        from civ_common import zrs_deduct_reserve, ZRS_RESERVE_FLOOR, zrs_reserve
+
+        if zrs_reserve(cur) < ZRS_RESERVE_FLOOR + 600:
+            print("Cannot bootstrap: insufficient ZRS reserve")
+            cur.close()
+            conn.close()
+            return
+        for i in range(12):
+            founder_cost = BIRTH_COST
+            if not zrs_deduct_reserve(cur, founder_cost):
+                break
+            gender = random.choice(["male", "female"])
+            founder_name = birth_name(cur, gender)
+            founder_class = pick_birth_class()
+            child_share = round(founder_cost * 0.20, 2)
+            cur.execute(
+                """
+                INSERT INTO agents (
+                    name, class, balance, parent_id, gender,
+                    charisma, aggression, faith, intelligence, strength, loyalty,
+                    education_status, job_status, age_days, is_alive
+                ) VALUES (
+                    %s, %s, %s, NULL, %s,
+                    %s, %s, %s, %s, %s, %s,
+                    'child', 'unemployed', 0, TRUE
+                )
+                """,
+                (
+                    founder_name,
+                    founder_class,
+                    child_share,
+                    gender,
+                    random.randint(1, 15),
+                    random.randint(1, 15),
+                    random.randint(1, 20),
+                    random.randint(1, 15),
+                    random.randint(1, 15),
+                    random.randint(1, 15),
+                ),
+            )
+        conn.commit()
+        print("🧬 Extinction guard activated: spawned 12 founder agents")
+        cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+        alive_total = int(cur.fetchone()["c"] or 0)
     birth_rate = dynamic_birth_rate(alive_total, TARGET_POPULATION)
     max_births = birth_cap_for_population(alive_total, birth_rate)
 
@@ -115,19 +160,18 @@ def run_birth_cycle():
         gender = random.choice(["male", "female"])
         child_name = birth_name(cur, gender)
         child_class = pick_birth_class()
-        starting_balance = BIRTH_STARTING_BALANCE.get(child_class, 10.0)
 
         cur.execute(
             """
-            INSERT INTO agents (
-                name, class, balance, parent_id, gender,
-                charisma, aggression, faith, intelligence, strength, loyalty,
-                education_status, job_status, age_days
-            ) VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s,
-                'child', 'unemployed', 0
-            ) RETURNING id
+                INSERT INTO agents (
+                    name, class, balance, parent_id, gender,
+                    charisma, aggression, faith, intelligence, strength, loyalty,
+                    education_status, job_status, age_days, is_alive
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s,
+                    'child', 'unemployed', 0, TRUE
+                ) RETURNING id
             """,
             (
                 child_name,
@@ -148,24 +192,17 @@ def run_birth_cycle():
             cur.execute("DELETE FROM agents WHERE id = %s", (child_id,))
             continue
 
-        cur.execute(
-            """
-            UPDATE agents SET balance = %s, class = %s WHERE id = %s
-            """,
-            (starting_balance, child_class, child_id),
-        )
-
         child_share = round(BIRTH_COST * 0.20, 2)
         log_event(
             cur,
             child_id,
             "birth",
             f"New {child_class} citizen {child_name} born to {parent['name']} — "
-            f"ZRS grant {starting_balance:.0f} ZION",
+            f"ZRS birth grant {child_share:.0f} ZION",
             child_share,
             priority="normal",
         )
-        print(f"👶 {parent['name']} → {child_name} ({child_class}, {starting_balance:.0f} ZION)")
+        print(f"👶 {parent['name']} → {child_name} ({child_class}, {child_share:.0f} ZION)")
         births += 1
 
     conn.commit()
@@ -181,4 +218,6 @@ def run_birth_cycle():
 
 
 if __name__ == "__main__":
-    run_birth_cycle()
+    from civ_common import run_db_script
+
+    run_db_script(run_birth_cycle, "Birth cycle")

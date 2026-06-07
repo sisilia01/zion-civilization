@@ -42,7 +42,7 @@ SUI_COIN_ID = ""  # auto-detected below
 
 JUDGES = [
     {"name": "DeepSeek", "model": "deepseek/deepseek-chat-v3-0324"},
-    {"name": "Gemini", "model": "google/gemini-2.0-flash-lite-001"},
+    {"name": "Gemini", "model": "google/gemini-3.1-flash-lite"},
     {"name": "GPT", "model": "openai/gpt-4o-mini"},
 ]
 

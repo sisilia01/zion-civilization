@@ -200,7 +200,7 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
                 """
                 UPDATE president_state
                 SET personal_fund = personal_fund + %s,
-                    approval_rating = GREATEST(0, approval_rating - 5)
+                    approval_rating = GREATEST(10, approval_rating - 5)
                 WHERE is_active = true
                 """,
                 (collected,),
@@ -282,7 +282,7 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
         cur.execute(
             """
             UPDATE president_state
-            SET approval_rating = GREATEST(0, approval_rating - 10)
+            SET approval_rating = GREATEST(10, approval_rating - 10)
             WHERE is_active = true
             """
         )
@@ -389,7 +389,7 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence"}}"""
             cur.execute(
                 """
                 UPDATE president_state
-                SET approval_rating = GREATEST(0, approval_rating - 5)
+                SET approval_rating = GREATEST(10, approval_rating - 5)
                 WHERE is_active = true
                 """
             )
@@ -538,8 +538,24 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence"}}"""
 
         if action == "recruit":
             cur.execute(
-                "UPDATE clans SET members_count = members_count + 5 WHERE id = %s",
-                (clan["id"],),
+                """
+                UPDATE agents SET clan_id = %s, clan_name = %s
+                WHERE id IN (
+                    SELECT id FROM agents
+                    WHERE is_alive = true AND clan_id IS NULL
+                      AND class IN ('poor', 'critical', 'working')
+                    ORDER BY RANDOM() LIMIT 5
+                )
+                """,
+                (clan["id"], clan["name"]),
+            )
+            cur.execute(
+                """
+                UPDATE clans SET members_count = (
+                    SELECT COUNT(*) FROM agents WHERE clan_id = %s AND is_alive = true
+                ) WHERE id = %s
+                """,
+                (clan["id"], clan["id"]),
             )
             log_event(
                 cur,
@@ -601,7 +617,7 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence"}}"""
             cur.execute(
                 """
                 UPDATE president_state
-                SET approval_rating = GREATEST(0, approval_rating - 3)
+                SET approval_rating = GREATEST(10, approval_rating - 3)
                 WHERE is_active = true
                 """
             )

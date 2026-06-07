@@ -9,21 +9,20 @@ TARGET_POPULATION = 75_000
 BIRTH_HARD_CAP = 100
 CORP_MAX_WORKERS = 50
 CORP_MIN_WORKERS = 5
-CORP_MIN_TREASURY = 200.0
+CORP_MIN_TREASURY = 50.0
 CORP_MIN_REVENUE = 50.0
-CORP_TAX_RATE = 0.10
+CORP_TAX_RATE = 0.15  # 15% of net profit (revenue - salaries)
 POLICE_OFFICER_RATIO = 50  # 1 officer per 50 agents (2%)
 POLICE_MIN_OFFICERS = 20
-OFFICER_SALARY = 8.0
+OFFICER_SALARY = 15.0
 
-BASE_TAX_RATES: dict[str, float] = {
-    "elite": 0.15,
-    "rich": 0.12,
-    "middle": 0.08,
-    "working": 0.05,
-    "poor": 0.02,
-    "critical": 0.0,
-}
+# Progressive income tax brackets (balance-based, USA-style)
+AGENT_TAX_BRACKETS: list[tuple[float, float]] = [
+    (100.0, 0.05),    # 0-100: 5%
+    (500.0, 0.10),    # 100-500: 10%
+    (2000.0, 0.20),   # 500-2000: 20%
+    (float("inf"), 0.35),  # 2000+: 35%
+]
 
 BIRTH_CLASS_DIST: dict[str, float] = {
     "poor": 0.40,
@@ -44,27 +43,43 @@ BIRTH_STARTING_BALANCE: dict[str, float] = {
 
 def normalize_agent_class(cls: str | None) -> str:
     c = (cls or "poor").lower().strip()
-    if c in BASE_TAX_RATES:
+    valid = {"elite", "rich", "middle", "working", "poor", "critical"}
+    if c in valid:
         return c
-    if c == "critical":
-        return "critical"
     return "poor"
 
 
-def agent_class_from_balance(balance: float) -> str:
-    """Six-tier class ladder for genius economics."""
+def agent_class_from_balance(balance: float, median_balance: float | None = None) -> str:
+    """Six-tier class ladder for genius economics.
+
+    If `median_balance` is provided and positive, thresholds scale with it:
+    poor < 0.3x median, working < 2x, middle < 10x, rich < 50x, elite >= 50x.
+    """
     b = float(balance or 0)
-    if b >= 5000:
-        return "elite"
-    if b >= 1000:
-        return "rich"
-    if b >= 100:
-        return "middle"
-    if b >= 10:
-        return "working"
-    if b < 1:
+    if b <= 0:
         return "critical"
-    return "poor"
+    m = float(median_balance or 0)
+    if m > 0:
+        if b < m * 0.3:
+            return "poor"
+        if b < m * 2:
+            return "working"
+        if b < m * 10:
+            return "middle"
+        if b < m * 50:
+            return "rich"
+        return "elite"
+
+    # Safe fallback when median is unavailable.
+    if b < 20:
+        return "poor"
+    if b < 100:
+        return "working"
+    if b < 500:
+        return "middle"
+    if b < 2000:
+        return "rich"
+    return "elite"
 
 
 def get_population_tax_multiplier(pop: int) -> float:
@@ -108,34 +123,49 @@ def get_population_food_multiplier(pop: int) -> float:
 
 
 def progressive_bracket_tax(balance: float) -> float:
+    """USA-style marginal brackets on agent balance."""
     b = float(balance or 0)
-    if b > 10_000:
-        return (b - 10_000) * 0.05 + (5_000 * 0.03) + (4_000 * 0.02)
-    if b > 5_000:
-        return (b - 5_000) * 0.03 + (4_000 * 0.02)
-    if b > 1_000:
-        return (b - 1_000) * 0.02
-    return 0.0
+    if b <= 0:
+        return 0.0
+    tax = 0.0
+    prev = 0.0
+    for ceiling, rate in AGENT_TAX_BRACKETS:
+        if b <= prev:
+            break
+        taxable = min(b, ceiling) - prev
+        if taxable > 0:
+            tax += taxable * rate
+        prev = ceiling
+        if b <= ceiling:
+            break
+    return round(tax, 4)
 
 
 def calculate_agent_tax(
     agent: dict[str, Any],
-    population: int,
-    zrs_reserve: float,
+    population: int = 0,
+    zrs_reserve: float = 0,
     zrs_modifier_pct: float = 0.0,
 ) -> float:
-    """Genius progressive tax — capped at 50% of balance per cycle."""
+    """Progressive income tax: 5/10/20/35% by balance bracket."""
     balance = float(agent.get("balance") or 0)
     if balance <= 0:
         return 0.0
-    cls = normalize_agent_class(agent.get("class") or agent_class_from_balance(balance))
-    base_rate = BASE_TAX_RATES.get(cls, 0.02) + zrs_modifier_pct
-    bracket = progressive_bracket_tax(balance)
-    pop_mod = get_population_tax_multiplier(population)
-    emergency = balance * 0.01 if zrs_reserve < 10_000 else 0.0
-    raw = (balance * max(0.0, base_rate) + bracket) * pop_mod + emergency
-    cap = balance * 0.5
-    return round(min(max(0.0, raw), cap), 4)
+    base = progressive_bracket_tax(balance)
+    modifier = base * max(0.0, zrs_modifier_pct)
+    return round(min(base + modifier, balance * 0.35), 4)
+
+
+def treasury_hiring_cap(treasury: float) -> int:
+    """Treasury-based hiring limits — no artificial population caps."""
+    t = float(treasury or 0)
+    if t > 10_000:
+        return 500
+    if t > 2_000:
+        return 100
+    if t > 500:
+        return 20
+    return 0
 
 
 def calculate_gini(balances: list[float]) -> float:
@@ -176,11 +206,9 @@ def pick_birth_class() -> str:
     return random.choices(classes, weights=weights, k=1)[0]
 
 
-def corp_max_workers(treasury: float) -> int:
-    """Scale hiring with treasury; more aggressive cap for large civ."""
-    if treasury <= CORP_MIN_TREASURY:
-        return 0
-    return min(int(treasury // 50), CORP_MAX_WORKERS)
+def corp_max_workers(treasury: float, alive: int = 1000) -> int:
+    """Deprecated alias — hiring uses treasury_hiring_cap()."""
+    return treasury_hiring_cap(treasury)
 
 
 def target_police_officers(alive: int) -> int:
@@ -193,6 +221,91 @@ def target_senate_seats(alive: int) -> int:
 
 def target_corporation_count(alive: int) -> int:
     return max(10, min(500, alive // 375))
+
+
+POVERTY_BALANCE_THRESHOLD = 50
+
+
+def fetch_live_agent_metrics(cur, conn=None) -> dict[str, Any]:
+    """Canonical live dashboard metrics from the agents table."""
+    def _rollback():
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    defaults = {
+        "alive": 0,
+        "poverty_pct": 0.0,
+        "crime_pct": 0.0,
+        "crime_rate": 0.0,
+        "unemployment_rate": 0.0,
+        "gini_coefficient": 0.0,
+        "avg_balance": 0.0,
+        "total_zion": 0.0,
+        "starving": 0,
+        "gang_members": 0,
+        "unemployed": 0,
+    }
+    try:
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE balance < 10) AS starving,
+                COUNT(*) FILTER (WHERE balance < %s) AS poor,
+                COUNT(*) FILTER (WHERE clan_id IS NOT NULL) AS gang_members,
+                COUNT(*) FILTER (WHERE employer_corp_id IS NULL) AS unemployed,
+                COALESCE(AVG(balance), 0) AS avg_balance,
+                COALESCE(SUM(balance), 0) AS total_zion
+            FROM agents WHERE is_alive = true
+            """,
+            (POVERTY_BALANCE_THRESHOLD,),
+        )
+        row = cur.fetchone() or {}
+        if not isinstance(row, dict):
+            row = {
+                "total": row[0],
+                "starving": row[1],
+                "poor": row[2],
+                "gang_members": row[3],
+                "unemployed": row[4],
+                "avg_balance": row[5],
+                "total_zion": row[6],
+            }
+        total = max(int(row.get("total") or 0), 1)
+        poor = int(row.get("poor") or 0)
+        gang_members = int(row.get("gang_members") or 0)
+        unemployed = int(row.get("unemployed") or 0)
+        poverty_pct = round(poor / total * 100, 1)
+        crime_pct = round(gang_members / total * 100, 1)
+        unemployment_rate = round(unemployed / total * 100, 1)
+
+        gini = 0.0
+        cur.execute("SELECT balance FROM agents WHERE is_alive = true ORDER BY balance")
+        balances = [
+            float(r["balance"] if isinstance(r, dict) else r[0] or 0)
+            for r in cur.fetchall()
+        ]
+        gini = calculate_gini(balances)
+
+        return {
+            "alive": total,
+            "poverty_pct": poverty_pct,
+            "crime_pct": crime_pct,
+            "crime_rate": round(crime_pct / 100, 4),
+            "unemployment_rate": unemployment_rate,
+            "gini_coefficient": gini,
+            "avg_balance": round(float(row.get("avg_balance") or 0), 2),
+            "total_zion": round(float(row.get("total_zion") or 0), 2),
+            "starving": int(row.get("starving") or 0),
+            "gang_members": gang_members,
+            "unemployed": unemployed,
+        }
+    except Exception:
+        _rollback()
+        return defaults
 
 
 def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
@@ -217,22 +330,11 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
             _rollback()
             return default
 
-    alive = int(_scalar("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true"))
+    live = fetch_live_agent_metrics(cur, conn)
+    alive = int(live.get("alive") or 0)
+    gini = float(live.get("gini_coefficient") or 0)
 
-    gini = 0.0
-    try:
-        cur.execute(
-            "SELECT balance FROM agents WHERE is_alive = true ORDER BY balance"
-        )
-        balances = [float(r["balance"] if isinstance(r, dict) else r[0] or 0) for r in cur.fetchall()]
-        gini = calculate_gini(balances)
-    except Exception:
-        _rollback()
-        gini = 0.0
-
-    agent_wealth = float(
-        _scalar("SELECT COALESCE(SUM(balance), 0) AS s FROM agents WHERE is_alive = true")
-    )
+    agent_wealth = float(live.get("total_zion") or 0)
     corp_wealth = float(
         _scalar(
             "SELECT COALESCE(SUM(treasury), 0) AS s FROM corporations WHERE is_active = true"
@@ -243,30 +345,7 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
     )
     total_economy = agent_wealth + corp_wealth + zrs_reserve
 
-    unemployed = 0
-    try:
-        cur.execute(
-            """
-            SELECT COUNT(*) AS c FROM agents
-            WHERE is_alive = true AND COALESCE(job_status, 'unemployed') = 'unemployed'
-            """
-        )
-        unemployed = int((cur.fetchone() or {}).get("c") or 0)
-    except Exception:
-        _rollback()
-        try:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS c FROM agents
-                WHERE is_alive = true AND employer_corp_id IS NULL
-                """
-            )
-            unemployed = int((cur.fetchone() or {}).get("c") or 0)
-        except Exception:
-            _rollback()
-            unemployed = 0
-
-    unemployment_rate = round(unemployed / max(alive, 1) * 100, 2)
+    unemployment_rate = float(live.get("unemployment_rate") or 0)
 
     inflation_rate = 0.0
     try:
@@ -289,13 +368,32 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
         _rollback()
         inflation_rate = 0.0
 
+    revolution_meter = 0.0
+    try:
+        revolution_meter = float(
+            _scalar(
+                "SELECT COALESCE(revolution_meter, 0) AS m FROM civilization_state WHERE id = 1"
+            )
+        )
+    except Exception:
+        _rollback()
+        revolution_meter = 0.0
+
     return {
         "alive": alive,
+        "poverty_pct": float(live.get("poverty_pct") or 0),
+        "crime_pct": float(live.get("crime_pct") or 0),
+        "crime_rate": float(live.get("crime_rate") or 0),
+        "gang_members": int(live.get("gang_members") or 0),
+        "unemployed": int(live.get("unemployed") or 0),
+        "starving": int(live.get("starving") or 0),
+        "avg_balance": float(live.get("avg_balance") or 0),
         "gini_coefficient": gini,
         "unemployment_rate": unemployment_rate,
         "inflation_rate": inflation_rate,
         "total_economy": round(total_economy, 2),
         "zrs_reserve": round(zrs_reserve, 2),
+        "revolution_meter": round(revolution_meter, 1),
         "target_population": TARGET_POPULATION,
         "population_pressure": population_pressure_label(alive),
         "tax_multiplier": get_population_tax_multiplier(alive),

@@ -1,19 +1,28 @@
 import os
 import re
 import json
+import base64
 import hashlib
 import random
+import httpx
+import asyncio
+import nacl.signing
+import nacl.encoding
 import subprocess
 import urllib.request
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Query, Request, BackgroundTasks
+from fastapi import FastAPI, Query, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from openrouter_key import get_openrouter_key
 
-app = FastAPI(title="ZION Civilization API")
+STEALTH_PACKAGE = "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a"
+HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
+
+app = FastAPI(title="ZION Civilization API", root_path="")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,11 +31,1039 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+class StripApiPrefixMiddleware(BaseHTTPMiddleware):
+    """Map /api/stats → /stats when clients hit FastAPI with /api prefix."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.scope.get("path") or ""
+        if path.startswith("/api/"):
+            request.scope["path"] = path[4:]
+        elif path == "/api":
+            request.scope["path"] = "/"
+        return await call_next(request)
+
+
+app.add_middleware(StripApiPrefixMiddleware)
+
+from zk_api import router as zk_router
+from stealth_deposit import router as stealth_deposit_router
+from audit_trail import (
+    generate_view_key,
+    encrypt_audit_trail,
+    decrypt_audit_trail,
+    create_audit_trail,
+    save_audit_trail_to_walrus,
+)
+
+app.include_router(zk_router)
+app.include_router(stealth_deposit_router)
+
+
+async def _json_body(req: Request) -> dict:
+    try:
+        data = await req.json()
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _decrypt_stealth_note(recipient_address: str, encrypted_hex: str) -> str:
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        data = bytes.fromhex(encrypted_hex)
+        iv = data[:12]
+        ciphertext = data[12:]
+        seed = recipient_address[:32].ljust(32, "0").encode("utf-8")
+        key = hashlib.pbkdf2_hmac("sha256", seed, iv, 1000, dklen=32)
+        return AESGCM(key).decrypt(iv, ciphertext, None).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def _parse_stealth_note_payload(encrypted_note: str, recipient_address: str) -> dict:
+    note = (encrypted_note or "").strip()
+    if not note:
+        return {}
+
+    if "|" in note:
+        parts = note.split("|")
+    else:
+        plaintext = _decrypt_stealth_note(recipient_address, note)
+        if not plaintext:
+            return {}
+        parts = plaintext.split("|")
+
+    return {
+        "nullifier": parts[1].strip() if len(parts) > 1 else "",
+        "secret": parts[2].strip() if len(parts) > 2 else "",
+        "amount": parts[3].strip() if len(parts) > 3 else "",
+        "blinding": parts[4].strip() if len(parts) > 4 else "",
+    }
+
+
+def _claim_wallet_address(body: dict) -> str:
+    """Claimer's real Sui wallet from request body — never the DB stealth address."""
+    return str(body.get("recipient_address") or body.get("wallet_address") or "").strip()
+
+
+def _is_sui_wallet_address(addr: str) -> bool:
+    if not addr or addr.startswith("st:sui:"):
+        return False
+    if not addr.startswith("0x"):
+        return False
+    hex_part = addr[2:]
+    if not hex_part or not re.fullmatch(r"[0-9a-fA-F]+", hex_part):
+        return False
+    return len(hex_part) <= 64
+
+
+def verify_sui_signature(message: str, signature_b64: str, address: str) -> bool:
+    try:
+        msg_bytes = message.encode("utf-8")
+        intent = bytes([3, 0, 0])
+        msg_len = len(msg_bytes)
+        bcs_len = []
+        n = msg_len
+        while True:
+            b = n & 0x7F
+            n >>= 7
+            if n:
+                bcs_len.append(b | 0x80)
+            else:
+                bcs_len.append(b)
+                break
+        full_msg = intent + bytes(bcs_len) + msg_bytes
+        msg_hash = hashlib.blake2b(full_msg, digest_size=32).digest()
+
+        sig_bytes = base64.b64decode(signature_b64)
+        if len(sig_bytes) != 97:
+            return False
+        scheme = sig_bytes[0]
+        if scheme != 0:
+            return False
+        sig = sig_bytes[1:65]
+        pubkey = sig_bytes[65:97]
+
+        addr_input = bytes([0]) + pubkey
+        computed_addr = "0x" + hashlib.blake2b(addr_input, digest_size=32).hexdigest()
+        if computed_addr.lower() != address.lower():
+            return False
+
+        vk = nacl.signing.VerifyKey(pubkey)
+        vk.verify(msg_hash, sig)
+        return True
+    except Exception as e:
+        print(f"Sig verify error: {e}")
+        return False
+
+
+SANCTIONED_ADDRESSES = set([
+    "0x7f367cc41522ce07553e823bf3be79a889debe1b",
+    "0xd882cfc20f52f2599d84b8e8d58c7fb62cfe344b",
+    "0x901bb9583b24d97e995513c6778dc6888ab6870e",
+])
+
+
+async def check_sanctions(address: str) -> bool:
+    address_lower = address.lower().replace("0x", "")
+    for sanctioned in SANCTIONED_ADDRESSES:
+        if address_lower in sanctioned.lower():
+            return True
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(
+                f"https://api.chainalysis.com/api/risk/v2/entities/{address}",
+                headers={"Token": "free_tier"},
+            )
+            if r.status_code == 200:
+                data = r.json()
+                risk = data.get("risk", "").lower()
+                if risk in ["severe", "high"]:
+                    return True
+    except Exception:
+        pass
+
+    return False
+
+
+@app.post("/stealth-prove")
+async def stealth_prove(req: Request):
+    import httpx
+
+    body = await _json_body(req)
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post("http://localhost:3001/stealth-prove", json=body)
+        return r.json()
+
+
+@app.get("/zk-identity-check/{address}")
+async def check_zk_identity(address: str):
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                "https://fullnode.testnet.sui.io",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "suix_getOwnedObjects",
+                    "params": [
+                        address,
+                        {
+                            "filter": {
+                                "StructType": f"{STEALTH_PACKAGE}::stealth_pool::ZionHumanNFT",
+                            },
+                            "options": {"showType": True},
+                        },
+                        None,
+                        None,
+                    ],
+                },
+            )
+            nfts = r.json().get("result", {}).get("data", [])
+            return {"success": True, "verified": len(nfts) > 0, "address": address}
+    except Exception as e:
+        return {"success": False, "verified": False, "error": str(e)}
+
+
+@app.post("/zk-stealth-deposit")
+async def zk_stealth_deposit(req: Request):
+    body = await _json_body(req)
+    commitment_hash = str(body.get("commitment_hash") or "").strip()
+    encrypted_note = str(body.get("encrypted_note") or "").strip()
+    recipient_address = str(body.get("recipient_address") or "").strip()
+    sender_address = str(body.get("sender_address") or "").strip()
+    coin_type = str(body.get("coin_type") or "SUI").strip() or "SUI"
+    auto_withdraw = bool(body.get("auto_withdraw", False))
+    encrypted_memo = str(body.get("encrypted_memo") or "").strip()
+
+    if not all([commitment_hash, encrypted_note, recipient_address, sender_address]):
+        return {"success": False, "error": "Missing required fields"}
+
+    is_sanctioned = await check_sanctions(sender_address)
+    _log_compliance_check(sender_address, "stealth_deposit", "blocked" if is_sanctioned else "passed")
+    if is_sanctioned:
+        return {"success": False, "error": "Address restricted by compliance policy"}
+
+    scheduled_at = None
+    if body.get("scheduled_at"):
+        try:
+            scheduled_at = datetime.fromisoformat(str(body.get("scheduled_at")).replace("Z", "+00:00"))
+        except Exception:
+            scheduled_at = None
+    if auto_withdraw and scheduled_at is None:
+        delay_minutes = random.randint(5, 30)
+        scheduled_at = datetime.utcnow() + timedelta(minutes=delay_minutes)
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            INSERT INTO encrypted_notes
+            (commitment_hash, encrypted_note, recipient_address, sender_address, coin_type, status, scheduled_at, auto_withdraw, encrypted_memo)
+            VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+            ON CONFLICT (commitment_hash) DO NOTHING
+            RETURNING id
+            """,
+            (commitment_hash, encrypted_note, recipient_address, sender_address, coin_type, scheduled_at, auto_withdraw, encrypted_memo or None),
+        )
+        result = cur.fetchone()
+        conn.commit()
+        return {
+            "success": True,
+            "note_id": result["id"] if result else None,
+            "auto_withdraw": auto_withdraw,
+            "scheduled_at": scheduled_at.isoformat() if scheduled_at else None,
+        }
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-schedule-payment")
+async def create_scheduled_payment(req: Request):
+    body = await _json_body(req)
+    sender = str(body.get("sender_address", "")).strip()
+    recipient = str(body.get("recipient_address", "")).strip()
+    denomination = str(body.get("denomination", "0.1")).strip()
+    frequency = str(body.get("frequency", "weekly")).strip()
+    max_payments = int(body.get("max_payments", 0))
+    memo = str(body.get("memo", "")).strip()
+
+    now = datetime.utcnow()
+    if frequency == "daily":
+        next_payment = now + timedelta(days=1)
+    elif frequency == "weekly":
+        next_payment = now + timedelta(weeks=1)
+    elif frequency == "monthly":
+        next_payment = now + timedelta(days=30)
+    else:
+        next_payment = now + timedelta(weeks=1)
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            INSERT INTO scheduled_payments
+            (sender_address, recipient_address, denomination, frequency, next_payment_at, max_payments, memo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (sender, recipient, denomination, frequency, next_payment, max_payments, memo),
+        )
+        result = cur.fetchone()
+        conn.commit()
+        return {"success": True, "id": result["id"], "next_payment_at": str(next_payment)}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zk-scheduled-payments/{address}")
+async def get_scheduled_payments(address: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT * FROM scheduled_payments WHERE sender_address = %s AND active = TRUE ORDER BY created_at DESC",
+            (address,),
+        )
+        payments = cur.fetchall()
+        return {"success": True, "payments": [dict(p) for p in payments]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.delete("/zk-schedule-payment/{payment_id}")
+async def cancel_scheduled_payment(payment_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE scheduled_payments SET active = FALSE WHERE id = %s", (payment_id,))
+        conn.commit()
+        return {"success": True}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zk-pending-scheduled-payments")
+async def get_pending_scheduled_payments():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT * FROM scheduled_payments
+            WHERE active = TRUE
+            AND next_payment_at <= NOW()
+            AND (max_payments = 0 OR total_payments < max_payments)
+            LIMIT 10
+            """
+        )
+        payments = cur.fetchall()
+        return {"success": True, "payments": [dict(p) for p in payments]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-update-scheduled-payment")
+async def update_scheduled_payment(req: Request):
+    body = await _json_body(req)
+    payment_id = body.get("id")
+    next_payment_at = body.get("next_payment_at")
+    total_payments = body.get("total_payments")
+
+    if not payment_id:
+        return {"success": False, "error": "Missing payment id"}
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE scheduled_payments
+            SET next_payment_at = %s, total_payments = %s
+            WHERE id = %s
+            """,
+            (next_payment_at, total_payments, payment_id),
+        )
+        conn.commit()
+        return {"success": True}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zk-stealth-pending-scheduled")
+async def get_pending_scheduled():
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT * FROM encrypted_notes
+            WHERE status = 'pending'
+            AND auto_withdraw = TRUE
+            AND scheduled_at <= NOW()
+            ORDER BY scheduled_at ASC
+            LIMIT 10
+            """
+        )
+        notes = cur.fetchall()
+        return {"success": True, "notes": [dict(n) for n in notes]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-stealth-auto-withdraw")
+async def zk_stealth_auto_withdraw(req: Request):
+    body = await _json_body(req)
+    commitment_hash = str(body.get("commitment_hash") or "").strip()
+    recipient_address = str(body.get("recipient_address") or "").strip()
+    note_id = body.get("note_id")
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT * FROM encrypted_notes WHERE id = %s AND status = 'pending'",
+            (note_id,),
+        )
+        note = cur.fetchone()
+        if not note:
+            return {"success": False, "error": "Note not found"}
+
+        note_recipient = str(note.get("recipient_address") or recipient_address)
+        note_data = _parse_stealth_note_payload(note["encrypted_note"], note_recipient)
+        nullifier = note_data.get("nullifier", "")
+        secret = note_data.get("secret", "")
+        blinding = note_data.get("blinding", "")
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                "http://localhost:3001/stealth-withdraw",
+                json={
+                    "commitment_hash": commitment_hash,
+                    "nullifier": nullifier,
+                    "recipient": recipient_address or note_recipient,
+                    "pool_id": "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5",
+                    "package_id": "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a",
+                    "secret": secret or None,
+                    "blinding": blinding or None,
+                    "recipient_for_proof": note_recipient,
+                },
+            )
+            result = r.json()
+
+        if result.get("success"):
+            cur.execute(
+                """
+                UPDATE encrypted_notes
+                SET status = 'claimed', claimed_at = NOW(),
+                    nullifier_hash = %s, relayer_tx_hash = %s
+                WHERE id = %s
+                """,
+                (nullifier, result.get("digest"), note_id),
+            )
+            conn.commit()
+
+        return result
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zk-stealth-receive/{recipient_address}")
+async def zk_stealth_receive(recipient_address: str):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT id, commitment_hash, encrypted_note, coin_type, created_at, status, encrypted_memo
+            FROM encrypted_notes
+            WHERE recipient_address = %s AND status = 'pending'
+            ORDER BY created_at DESC
+            """,
+            (recipient_address,),
+        )
+        notes = cur.fetchall()
+        return {
+            "success": True,
+            "notes": [dict(n) for n in notes],
+            "count": len(notes),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-stealth-relayer-withdraw")
+async def zk_stealth_relayer_withdraw(req: Request):
+    """
+    Relayer подписывает withdrawal от имени сервера.
+    Получатель не связан с отправителем на блокчейне.
+    """
+    body = await _json_body(req)
+    commitment_hash = str(body.get("commitment_hash") or "").strip()
+    nullifier = str(body.get("nullifier") or "").strip()
+    wallet_address = _claim_wallet_address(body)
+    wallet_signature = str(body.get("wallet_signature") or "").strip()
+    signed_message = str(body.get("signed_message") or "").strip()
+
+    if not commitment_hash or not nullifier or not wallet_address:
+        return {
+            "success": False,
+            "error": "Missing required fields",
+            "missing": {
+                "commitment_hash": not bool(commitment_hash),
+                "nullifier": not bool(nullifier),
+                "recipient_address": not bool(wallet_address),
+            },
+        }
+
+    if not _is_sui_wallet_address(wallet_address):
+        return {
+            "success": False,
+            "error": "recipient_address must be a valid 0x Sui wallet address (not a stealth address)",
+        }
+
+    is_sanctioned = await check_sanctions(wallet_address)
+    _log_compliance_check(wallet_address, "stealth_withdraw", "blocked" if is_sanctioned else "passed")
+    if is_sanctioned:
+        return {"success": False, "error": "Recipient address restricted by compliance policy"}
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        cur.execute(
+            """
+            SELECT * FROM encrypted_notes
+            WHERE commitment_hash = %s AND status = 'pending'
+            """,
+            (commitment_hash,),
+        )
+        note = cur.fetchone()
+
+        if not note:
+            return {"success": False, "error": "Note not found or already claimed"}
+
+        if not wallet_signature or not signed_message:
+            return {"success": False, "error": "Wallet signature required"}
+
+        note_recipient = str(note.get("recipient_address") or "")
+        if note_recipient.startswith("0x"):
+            if wallet_address.lower() != note_recipient.lower():
+                return {"success": False, "error": "Recipient address mismatch"}
+
+        if wallet_signature and signed_message:
+            is_valid = verify_sui_signature(signed_message, wallet_signature, wallet_address)
+            if not is_valid:
+                return {"success": False, "error": "Invalid wallet signature"}
+
+        parsed = _parse_stealth_note_payload(
+            note["encrypted_note"], note["recipient_address"]
+        )
+        secret = (parsed.get("secret") or str(body.get("secret") or "")).strip()
+        blinding = (parsed.get("blinding") or str(body.get("blinding") or "")).strip()
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                "http://localhost:3001/stealth-withdraw",
+                json={
+                    "commitment_hash": commitment_hash,
+                    "nullifier": nullifier,
+                    "recipient": wallet_address,
+                    "pool_id": "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5",
+                    "package_id": "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a",
+                    "secret": secret or None,
+                    "blinding": blinding or None,
+                    "recipient_for_proof": note["recipient_address"],
+                    "amount": body.get("amount"),
+                    "with_decoys": body.get("with_decoys", False),
+                    "num_decoys": body.get("num_decoys", 5),
+                },
+            )
+            result = r.json()
+
+        if result.get("success"):
+            cur.execute(
+                """
+                UPDATE encrypted_notes
+                SET status = 'claimed', claimed_at = NOW(),
+                    nullifier_hash = %s, relayer_tx_hash = %s
+                WHERE commitment_hash = %s
+                """,
+                (nullifier, result.get("digest"), commitment_hash),
+            )
+            conn.commit()
+            return {"success": True, "digest": result.get("digest")}
+        else:
+            return {"success": False, "error": result.get("error")}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-stealth-fragmented-withdraw")
+async def zk_stealth_fragmented_withdraw(req: Request):
+    body = await _json_body(req)
+    commitment_hash = str(body.get("commitment_hash") or "").strip()
+    nullifier = str(body.get("nullifier") or "").strip()
+    wallet_address = _claim_wallet_address(body)
+    wallet_signature = str(body.get("wallet_signature") or "").strip()
+    signed_message = str(body.get("signed_message") or "").strip()
+    amount = body.get("amount")
+    fragments = int(body.get("fragments") or 3)
+
+    if not commitment_hash or not nullifier or not wallet_address:
+        return {
+            "success": False,
+            "error": "Missing required fields",
+            "missing": {
+                "commitment_hash": not bool(commitment_hash),
+                "nullifier": not bool(nullifier),
+                "recipient_address": not bool(wallet_address),
+            },
+        }
+
+    if not _is_sui_wallet_address(wallet_address):
+        return {
+            "success": False,
+            "error": "recipient_address must be a valid 0x Sui wallet address (not a stealth address)",
+        }
+
+    is_sanctioned = await check_sanctions(wallet_address)
+    _log_compliance_check(wallet_address, "stealth_fragmented_withdraw", "blocked" if is_sanctioned else "passed")
+    if is_sanctioned:
+        return {"success": False, "error": "Recipient address restricted by compliance policy"}
+
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        cur.execute(
+            """
+            SELECT * FROM encrypted_notes
+            WHERE commitment_hash = %s AND status = 'pending'
+            """,
+            (commitment_hash,),
+        )
+        note = cur.fetchone()
+
+        if not note:
+            return {"success": False, "error": "Note not found or already claimed"}
+
+        if not wallet_signature or not signed_message:
+            return {"success": False, "error": "Wallet signature required"}
+
+        note_recipient = str(note.get("recipient_address") or "")
+        if note_recipient.startswith("0x"):
+            if wallet_address.lower() != note_recipient.lower():
+                return {"success": False, "error": "Recipient address mismatch"}
+
+        if wallet_signature and signed_message:
+            is_valid = verify_sui_signature(signed_message, wallet_signature, wallet_address)
+            if not is_valid:
+                return {"success": False, "error": "Invalid wallet signature"}
+
+        parsed = _parse_stealth_note_payload(
+            note["encrypted_note"], note["recipient_address"]
+        )
+        secret = (parsed.get("secret") or str(body.get("secret") or "")).strip()
+        blinding = (parsed.get("blinding") or str(body.get("blinding") or "")).strip()
+        note_amount = parsed.get("amount") or amount
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(
+                "http://localhost:3001/stealth-fragmented-withdraw",
+                json={
+                    "commitment_hash": commitment_hash,
+                    "nullifier": nullifier,
+                    "recipient": wallet_address,
+                    "amount": int(note_amount) if note_amount else amount,
+                    "pool_id": "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5",
+                    "package_id": "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a",
+                    "secret": secret or None,
+                    "blinding": blinding or None,
+                    "recipient_for_proof": note["recipient_address"],
+                    "fragments": fragments,
+                },
+            )
+            result = r.json()
+
+        if result.get("success"):
+            frags = result.get("fragments") or []
+            primary_digest = frags[0].get("digest") if frags else None
+            cur.execute(
+                """
+                UPDATE encrypted_notes
+                SET status = 'claimed', claimed_at = NOW(),
+                    nullifier_hash = %s, relayer_tx_hash = %s
+                WHERE commitment_hash = %s
+                """,
+                (nullifier, primary_digest, commitment_hash),
+            )
+            conn.commit()
+            return {
+                "success": True,
+                "digest": primary_digest,
+                "fragments": frags,
+                "total": result.get("total"),
+            }
+
+        return {"success": False, "error": result.get("error")}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zk-stealth-batch-claim")
+async def zk_stealth_batch_claim(req: Request):
+    body = await _json_body(req)
+    notes_in = body.get("notes") or []
+    wallet_address = _claim_wallet_address(body)
+    wallet_signature = str(body.get("wallet_signature") or "").strip()
+    signed_message = str(body.get("signed_message") or "").strip()
+
+    if not notes_in or not wallet_address:
+        return {"success": False, "error": "Missing notes or recipient_address"}
+
+    if not _is_sui_wallet_address(wallet_address):
+        return {
+            "success": False,
+            "error": "recipient_address must be a valid 0x Sui wallet address (not a stealth address)",
+        }
+
+    if not wallet_signature or not signed_message:
+        return {"success": False, "error": "Wallet signature required"}
+
+    is_valid = verify_sui_signature(signed_message, wallet_signature, wallet_address)
+    if not is_valid:
+        return {"success": False, "error": "Invalid wallet signature"}
+
+    is_sanctioned = await check_sanctions(wallet_address)
+    _log_compliance_check(wallet_address, "stealth_batch_claim", "blocked" if is_sanctioned else "passed")
+    if is_sanctioned:
+        return {"success": False, "error": "Recipient address restricted by compliance policy"}
+
+    import httpx
+
+    results = []
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        for note_ref in notes_in:
+            commitment_hash = str(
+                note_ref.get("commitment_hash") or note_ref.get("commitment") or ""
+            ).strip()
+            if not commitment_hash:
+                results.append(
+                    {"commitment_hash": "", "success": False, "error": "Missing commitment_hash"}
+                )
+                continue
+
+            cur.execute(
+                """
+                SELECT * FROM encrypted_notes
+                WHERE commitment_hash = %s AND status = 'pending'
+                """,
+                (commitment_hash,),
+            )
+            note = cur.fetchone()
+            if not note:
+                results.append(
+                    {
+                        "commitment_hash": commitment_hash,
+                        "success": False,
+                        "error": "Note not found or already claimed",
+                    }
+                )
+                continue
+
+            note_recipient = str(note.get("recipient_address") or "")
+            if note_recipient.startswith("0x"):
+                if wallet_address.lower() != note_recipient.lower():
+                    results.append(
+                        {
+                            "commitment_hash": commitment_hash,
+                            "success": False,
+                            "error": "Recipient address mismatch",
+                        }
+                    )
+                    continue
+
+            parsed = _parse_stealth_note_payload(
+                note["encrypted_note"], note["recipient_address"]
+            )
+            secret = (parsed.get("secret") or str(note_ref.get("secret") or "")).strip()
+            blinding = (parsed.get("blinding") or str(note_ref.get("blinding") or "")).strip()
+            nullifier = str(
+                note_ref.get("nullifier")
+                or note.get("nullifier_hash")
+                or parsed.get("nullifier")
+                or ""
+            ).strip()
+            note_amount = note_ref.get("amount") or parsed.get("amount")
+
+            if not nullifier:
+                results.append(
+                    {
+                        "commitment_hash": commitment_hash,
+                        "success": False,
+                        "error": "Missing nullifier",
+                    }
+                )
+                continue
+
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    r = await client.post(
+                        "http://localhost:3001/stealth-withdraw",
+                        json={
+                            "commitment_hash": commitment_hash,
+                            "nullifier": nullifier,
+                            "recipient": wallet_address,
+                            "pool_id": "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5",
+                            "package_id": "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a",
+                            "secret": secret or None,
+                            "blinding": blinding or None,
+                            "recipient_for_proof": note["recipient_address"],
+                            "amount": int(note_amount) if note_amount else None,
+                            "with_decoys": body.get("with_decoys", False),
+                            "num_decoys": body.get("num_decoys", 5),
+                        },
+                    )
+                    result = r.json()
+
+                if result.get("success"):
+                    cur.execute(
+                        """
+                        UPDATE encrypted_notes
+                        SET status = 'claimed', claimed_at = NOW(),
+                            nullifier_hash = %s, relayer_tx_hash = %s
+                        WHERE commitment_hash = %s
+                        """,
+                        (nullifier, result.get("digest"), commitment_hash),
+                    )
+                    conn.commit()
+                    results.append(
+                        {
+                            "commitment_hash": commitment_hash,
+                            "success": True,
+                            "digest": result.get("digest"),
+                            "relayer": result.get("relayer"),
+                            "amount": note_amount,
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "commitment_hash": commitment_hash,
+                            "success": False,
+                            "error": result.get("error", "Withdraw failed"),
+                        }
+                    )
+            except Exception as e:
+                conn.rollback()
+                results.append(
+                    {
+                        "commitment_hash": commitment_hash,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+    finally:
+        cur.close()
+        conn.close()
+
+    successful = [r for r in results if r.get("success")]
+
+    return {
+        "success": len(successful) > 0,
+        "results": results,
+        "successful_count": len(successful),
+        "total_count": len(notes_in),
+    }
+
+
+@app.post("/zk-stealth-cross-denom")
+async def zk_stealth_cross_denom(req: Request):
+    body = await _json_body(req)
+    notes_in = body.get("notes") or []
+    recipient = str(body.get("recipient") or "").strip()
+
+    if not notes_in:
+        return {"success": False, "error": "No notes provided"}
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(
+                "http://localhost:3001/stealth-cross-denom",
+                json={
+                    "notes": notes_in,
+                    "recipient": recipient,
+                    "pool_id": "0xdaea3f2a4420d400314d99587e09d99acc05bf4cd0d37a23eed86d4a5641c9a5",
+                    "package_id": "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a",
+                    "output_denomination": body.get("output_denomination"),
+                    "output_addresses": body.get("output_addresses"),
+                },
+            )
+            result = r.json()
+
+        if result.get("success"):
+            conn = get_db()
+            cur = conn.cursor()
+            try:
+                for note in notes_in:
+                    ch = str(note.get("commitment_hash") or "").strip()
+                    if ch:
+                        cur.execute(
+                            """
+                            UPDATE encrypted_notes
+                            SET status = 'claimed', claimed_at = NOW()
+                            WHERE commitment_hash = %s AND status = 'pending'
+                            """,
+                            (ch,),
+                        )
+                conn.commit()
+            finally:
+                cur.close()
+                conn.close()
+
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/zk-stealth-claim")
+async def zk_stealth_claim(req: Request):
+    body = await _json_body(req)
+    commitment_hash = str(body.get("commitment_hash") or "").strip()
+    nullifier_hash = str(body.get("nullifier_hash") or "").strip()
+    relayer_tx_hash = str(body.get("relayer_tx_hash") or "").strip()
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE encrypted_notes
+            SET status = 'claimed', claimed_at = NOW(),
+                nullifier_hash = %s, relayer_tx_hash = %s
+            WHERE commitment_hash = %s AND status = 'pending'
+            """,
+            (nullifier_hash, relayer_tx_hash, commitment_hash),
+        )
+        updated = cur.rowcount
+        conn.commit()
+        return {"success": True, "updated": updated}
+    except Exception as e:
+        conn.rollback()
+        return {"success": False, "error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
 def get_db():
     return psycopg2.connect(
         host="localhost", database="zion_db",
         user="zion_user", password="zion2026"
     )
+
+
+def _fetch_frs_chief(cur) -> dict:
+    """Return FRS Chief summary for API responses."""
+    try:
+        cur.execute(
+            """
+            SELECT chief_name, cycles_served, term_cycles_remaining,
+                   confirmation_status, is_active
+            FROM frs_chief_state WHERE id = 1 LIMIT 1
+            """
+        )
+        frs = cur.fetchone()
+    except Exception:
+        frs = None
+    active = bool((frs or {}).get("is_active"))
+    confirmed = (frs or {}).get("confirmation_status") == "confirmed"
+    return {
+        "name": (frs or {}).get("chief_name") if active else "Vacant",
+        "cycles_served": int((frs or {}).get("cycles_served") or 0),
+        "max_cycles": 12,
+        "confirmed": confirmed if active else False,
+    }
+
+
+def _log_compliance_check(address: str, action: str, result: str) -> None:
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO compliance_log (address, action, result)
+            VALUES (%s, %s, %s)
+            """,
+            (address, action, result),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
 
 
 def _utc_now() -> datetime:
@@ -676,6 +1713,667 @@ def clean_agent_response(text: str) -> str:
     return text
 
 
+async def fetch_hyperliquid_prices():
+    """Fetch real-time prices from Hyperliquid"""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                HYPERLIQUID_API,
+                json={"type": "allMids"},
+                headers={"Content-Type": "application/json"},
+            )
+            data = response.json()
+
+            pairs = ["BTC", "ETH", "SUI", "SOL", "BNB", "DOGE", "AVAX", "LINK", "ARB", "OP"]
+            prices = {}
+            for pair in pairs:
+                if pair in data:
+                    prices[pair] = {
+                        "symbol": pair,
+                        "price": float(data[pair]),
+                        "pair": f"{pair}/USD",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+            return prices
+    except Exception as e:
+        print(f"Hyperliquid API error: {e}")
+        return {}
+
+
+async def fetch_sui_native_prices():
+    """Fetch Sui ecosystem tokens from Bybit and Binance"""
+    result = {}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            bybit_pairs = {
+                "WALUSDT": "WAL",
+                "DEEPUSDT": "DEEP",
+            }
+            for pair, symbol in bybit_pairs.items():
+                try:
+                    r = await client.get(
+                        f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={pair}"
+                    )
+                    d = r.json()
+                    if d.get("retCode") == 0 and d["result"]["list"]:
+                        price = float(d["result"]["list"][0]["lastPrice"])
+                        result[symbol] = {
+                            "symbol": symbol,
+                            "price": price,
+                            "pair": f"{symbol}/USD",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "source": "bybit",
+                        }
+                except Exception as e:
+                    print(f"Bybit {pair} error: {e}")
+
+            try:
+                r = await client.get(
+                    "https://api.binance.com/api/v3/ticker/price?symbol=CETUSUSDT"
+                )
+                d = r.json()
+                if "price" in d:
+                    result["CETUS"] = {
+                        "symbol": "CETUS",
+                        "price": float(d["price"]),
+                        "pair": "CETUS/USD",
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "source": "binance",
+                    }
+            except Exception as e:
+                print(f"Binance CETUS error: {e}")
+
+    except Exception as e:
+        print(f"Sui native prices error: {e}")
+
+    return result
+
+
+@app.get("/perps/prices")
+@app.get("/api/perps/prices")
+async def get_perps_prices():
+    """Get real-time prices from Hyperliquid, Bybit, and Binance"""
+    hl_prices, sui_prices = await asyncio.gather(
+        fetch_hyperliquid_prices(),
+        fetch_sui_native_prices(),
+    )
+    print(f"HL prices: {len(hl_prices)} pairs", flush=True)
+    print(f"Sui prices: {sui_prices}", flush=True)
+    prices = {**hl_prices, **sui_prices}
+    if not prices:
+        raise HTTPException(status_code=503, detail="Price feed unavailable")
+    return {"success": True, "prices": prices, "source": "hyperliquid+bybit+binance"}
+
+
+@app.post("/perps/init-agent/{agent_id}")
+@app.post("/api/perps/init-agent/{agent_id}")
+async def init_agent_portfolio(agent_id: int):
+    """Initialize virtual portfolio for an agent"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT name FROM agents WHERE id = %s", (agent_id,))
+        agent = cur.fetchone()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        cur.execute(
+            """
+            INSERT INTO agent_portfolio (agent_id, agent_name, virtual_balance)
+            VALUES (%s, %s, 100.00)
+            ON CONFLICT (agent_id) DO NOTHING
+            RETURNING *
+            """,
+            (agent_id, agent[0]),
+        )
+        conn.commit()
+        return {"success": True, "message": f"Portfolio initialized for agent {agent_id}"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/perps/trade")
+@app.post("/api/perps/trade")
+async def open_trade(request: Request):
+    """Agent opens a virtual trade"""
+    body = await request.json()
+    agent_id = body.get("agent_id")
+    pair = body.get("pair")
+    direction = body.get("direction")
+    size_usd = float(body.get("size_usd", 10.0))
+
+    prices = await fetch_hyperliquid_prices()
+    if pair not in prices:
+        raise HTTPException(status_code=400, detail=f"Pair {pair} not found")
+
+    entry_price = prices[pair]["price"]
+
+    if direction == "LONG":
+        stop_loss = entry_price * 0.95
+        take_profit = entry_price * 1.10
+    else:
+        stop_loss = entry_price * 1.05
+        take_profit = entry_price * 0.90
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT virtual_balance FROM agent_portfolio WHERE agent_id = %s",
+            (agent_id,),
+        )
+        portfolio = cur.fetchone()
+        if not portfolio or portfolio[0] < size_usd:
+            raise HTTPException(status_code=400, detail="Insufficient balance")
+
+        cur.execute(
+            "SELECT id FROM agent_positions WHERE agent_id = %s AND pair = %s",
+            (agent_id, pair),
+        )
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Position already open for this pair")
+
+        cur.execute(
+            """
+            INSERT INTO agent_positions (agent_id, pair, direction, size_usd, entry_price,
+                                        current_price, stop_loss, take_profit)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (agent_id, pair, direction, size_usd, entry_price, entry_price, stop_loss, take_profit),
+        )
+
+        cur.execute(
+            """
+            INSERT INTO agent_trades (agent_id, pair, direction, entry_price, size_usd, status)
+            VALUES (%s, %s, %s, %s, %s, 'OPEN')
+            RETURNING id
+            """,
+            (agent_id, pair, direction, entry_price, size_usd),
+        )
+        trade_id = cur.fetchone()[0]
+
+        cur.execute(
+            """
+            UPDATE agent_portfolio SET virtual_balance = virtual_balance - %s,
+            updated_at = NOW() WHERE agent_id = %s
+            """,
+            (size_usd, agent_id),
+        )
+
+        conn.commit()
+        return {
+            "success": True,
+            "trade_id": trade_id,
+            "pair": pair,
+            "direction": direction,
+            "entry_price": entry_price,
+            "size_usd": size_usd,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/perps/close-trade")
+@app.post("/api/perps/close-trade")
+async def close_trade(request: Request):
+    """Close an agent's position"""
+    body = await request.json()
+    agent_id = body.get("agent_id")
+    pair = body.get("pair")
+
+    prices = await fetch_hyperliquid_prices()
+    if pair not in prices:
+        raise HTTPException(status_code=400, detail="Pair not found")
+
+    exit_price = prices[pair]["price"]
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT id, direction, size_usd, entry_price
+            FROM agent_positions WHERE agent_id = %s AND pair = %s
+            """,
+            (agent_id, pair),
+        )
+        pos = cur.fetchone()
+        if not pos:
+            raise HTTPException(status_code=404, detail="No open position")
+
+        pos_id, direction, size_usd, entry_price = pos
+
+        entry_price = float(entry_price)
+        size_usd = float(size_usd)
+
+        if direction == "LONG":
+            pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+        else:
+            pnl_percent = ((entry_price - exit_price) / entry_price) * 100
+
+        pnl = size_usd * (pnl_percent / 100)
+
+        cur.execute(
+            """
+            UPDATE agent_trades SET exit_price = %s, pnl = %s, pnl_percent = %s,
+            status = 'CLOSED', closed_at = NOW()
+            WHERE agent_id = %s AND pair = %s AND status = 'OPEN'
+            """,
+            (exit_price, pnl, pnl_percent, agent_id, pair),
+        )
+
+        cur.execute(
+            "DELETE FROM agent_positions WHERE agent_id = %s AND pair = %s",
+            (agent_id, pair),
+        )
+
+        cur.execute(
+            """
+            UPDATE agent_portfolio
+            SET virtual_balance = virtual_balance + %s + %s,
+                total_pnl = total_pnl + %s,
+                total_trades = total_trades + 1,
+                win_trades = win_trades + %s,
+                updated_at = NOW()
+            WHERE agent_id = %s
+            """,
+            (size_usd, pnl, pnl, 1 if pnl > 0 else 0, agent_id),
+        )
+
+        conn.commit()
+
+        walrus_blob_id = None
+        if pnl > 0:
+            try:
+                proof_data = {
+                    "type": "TRADE_PROOF",
+                    "agent_id": agent_id,
+                    "pair": pair,
+                    "direction": direction,
+                    "entry_price": float(entry_price),
+                    "exit_price": exit_price,
+                    "pnl": pnl,
+                    "pnl_percent": pnl_percent,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "source": "hyperliquid",
+                }
+                proof_json = json.dumps(proof_data)
+                result = subprocess.run(
+                    [
+                        "curl",
+                        "-X",
+                        "PUT",
+                        "https://publisher.walrus-testnet.walrus.space/v1/blobs",
+                        "-H",
+                        "Content-Type: application/json",
+                        "-d",
+                        proof_json,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode == 0:
+                    blob_match = re.search(r'"blobId":"([^"]+)"', result.stdout)
+                    if blob_match:
+                        walrus_blob_id = blob_match.group(1)
+                        cur2 = conn.cursor()
+                        cur2.execute(
+                            """
+                            UPDATE agent_trades SET walrus_blob_id = %s
+                            WHERE id = (
+                                SELECT id FROM agent_trades
+                                WHERE agent_id = %s AND pair = %s AND status = 'CLOSED'
+                                ORDER BY closed_at DESC LIMIT 1
+                            )
+                            """,
+                            (walrus_blob_id, agent_id, pair),
+                        )
+                        conn.commit()
+                        cur2.close()
+            except Exception as e:
+                print(f"Walrus proof error: {e}")
+
+        return {
+            "success": True,
+            "pair": pair,
+            "direction": direction,
+            "entry_price": float(entry_price),
+            "exit_price": exit_price,
+            "pnl": pnl,
+            "pnl_percent": pnl_percent,
+            "walrus_blob_id": walrus_blob_id,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/perps/leaderboard")
+@app.get("/api/perps/leaderboard")
+async def get_perps_leaderboard():
+    """Get top trading agents leaderboard (agents with at least one trade)"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT
+                ap.agent_id,
+                ap.agent_name,
+                ap.virtual_balance,
+                ap.total_pnl,
+                ap.total_trades,
+                ap.win_trades,
+                CASE WHEN ap.total_trades > 0
+                     THEN ROUND((ap.win_trades::decimal / ap.total_trades) * 100, 1)
+                     ELSE 0 END as win_rate,
+                ROUND(((ap.virtual_balance - 100) / 100) * 100, 2) as total_return_pct,
+                COUNT(atr.id) FILTER (WHERE atr.walrus_blob_id IS NOT NULL) as proofs_count
+            FROM agent_portfolio ap
+            LEFT JOIN agent_trades atr ON atr.agent_id = ap.agent_id
+            JOIN agents a ON a.id = ap.agent_id
+            WHERE a.is_alive = true
+            AND ap.total_trades > 0
+            GROUP BY ap.agent_id, ap.agent_name, ap.virtual_balance,
+                     ap.total_pnl, ap.total_trades, ap.win_trades
+            ORDER BY ap.virtual_balance DESC,
+                     ap.total_trades DESC,
+                     ap.total_pnl DESC
+            LIMIT 50
+            """
+        )
+        rows = cur.fetchall()
+        leaderboard = []
+        for row in rows:
+            leaderboard.append(
+                {
+                    "agent_id": row[0],
+                    "agent_name": row[1],
+                    "balance": float(row[2]),
+                    "total_pnl": float(row[3]),
+                    "total_trades": row[4],
+                    "win_trades": row[5],
+                    "win_rate": float(row[6]),
+                    "total_return_pct": float(row[7]),
+                    "proofs_count": row[8],
+                }
+            )
+        return {"success": True, "leaderboard": leaderboard}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/perps/agent/{agent_id}")
+@app.get("/api/perps/agent/{agent_id}")
+async def get_agent_stats(agent_id: int):
+    """Get agent trading stats and history"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM agent_portfolio WHERE agent_id = %s", (agent_id,))
+        portfolio = cur.fetchone()
+
+        cur.execute(
+            """
+            SELECT pair, direction, size_usd, entry_price, current_price, unrealized_pnl
+            FROM agent_positions WHERE agent_id = %s
+            """,
+            (agent_id,),
+        )
+        positions = cur.fetchall()
+
+        cur.execute(
+            """
+            SELECT pair, direction, entry_price, exit_price, pnl, pnl_percent,
+                   status, walrus_blob_id, opened_at, closed_at
+            FROM agent_trades WHERE agent_id = %s
+            ORDER BY opened_at DESC LIMIT 20
+            """,
+            (agent_id,),
+        )
+        trades = cur.fetchall()
+
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "agent_name": portfolio[2] if portfolio else None,
+            "portfolio": {
+                "balance": float(portfolio[3]) if portfolio else 100,
+                "total_pnl": float(portfolio[4]) if portfolio else 0,
+                "total_trades": portfolio[5] if portfolio else 0,
+                "win_rate": round((portfolio[6] / portfolio[5]) * 100, 1)
+                if portfolio and portfolio[5] > 0
+                else 0,
+            },
+            "positions": [
+                {
+                    "pair": p[0],
+                    "direction": p[1],
+                    "size": float(p[2]),
+                    "entry": float(p[3]),
+                    "current": float(p[4]) if p[4] else float(p[3]),
+                    "unrealized_pnl": float(p[5]),
+                }
+                for p in positions
+            ],
+            "trades": [
+                {
+                    "pair": t[0],
+                    "direction": t[1],
+                    "entry": float(t[2]),
+                    "exit": float(t[3]) if t[3] else None,
+                    "pnl": float(t[4]) if t[4] else None,
+                    "pnl_pct": float(t[5]) if t[5] else None,
+                    "status": t[6],
+                    "proof": t[7],
+                    "opened": str(t[8]),
+                    "closed": str(t[9]) if t[9] else None,
+                }
+                for t in trades
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/perps/feed")
+@app.get("/api/perps/feed")
+async def get_perps_feed():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT at.pair, at.direction, at.entry_price, at.exit_price,
+                   at.pnl, at.status, at.walrus_blob_id, at.opened_at, at.closed_at,
+                   ap.agent_name
+            FROM agent_trades at
+            JOIN agent_portfolio ap ON ap.agent_id = at.agent_id
+            ORDER BY COALESCE(at.closed_at, at.opened_at) DESC
+            LIMIT 100
+            """
+        )
+        rows = cur.fetchall()
+        trades = [
+            {
+                "pair": r[0],
+                "direction": r[1],
+                "entry_price": float(r[2]),
+                "exit_price": float(r[3]) if r[3] else None,
+                "pnl": float(r[4]) if r[4] else None,
+                "status": r[5],
+                "walrus_blob_id": r[6],
+                "opened_at": str(r[7]),
+                "closed_at": str(r[8]) if r[8] else None,
+                "agent_name": r[9],
+            }
+            for r in rows
+        ]
+        return {"success": True, "trades": trades}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/perps/proofs")
+@app.get("/api/perps/proofs")
+async def get_perps_proofs():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT at.pair, at.direction, at.entry_price, at.exit_price,
+                   at.pnl, at.walrus_blob_id, at.closed_at, ap.agent_name
+            FROM agent_trades at
+            JOIN agent_portfolio ap ON ap.agent_id = at.agent_id
+            WHERE at.walrus_blob_id IS NOT NULL
+            ORDER BY at.closed_at DESC
+            LIMIT 50
+            """
+        )
+        rows = cur.fetchall()
+        proofs = [
+            {
+                "pair": r[0],
+                "direction": r[1],
+                "entry_price": float(r[2]),
+                "exit_price": float(r[3]) if r[3] else None,
+                "pnl": float(r[4]) if r[4] else None,
+                "walrus_blob_id": r[5],
+                "closed_at": str(r[6]) if r[6] else None,
+                "agent_name": r[7],
+            }
+            for r in rows
+        ]
+        return {"success": True, "proofs": proofs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/perps/search-agent")
+@app.get("/api/perps/search-agent")
+async def search_agent(name: str = Query(...)):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT ap.agent_id, ap.agent_name, ap.virtual_balance,
+                   ap.total_pnl, ap.total_trades, ap.win_trades
+            FROM agent_portfolio ap
+            WHERE LOWER(ap.agent_name) LIKE LOWER(%s)
+            LIMIT 1
+            """,
+            (f"%{name}%",),
+        )
+        agent = cur.fetchone()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        agent_id = agent[0]
+
+        cur.execute(
+            """
+            SELECT pair, direction, size_usd, entry_price, current_price
+            FROM agent_positions WHERE agent_id = %s
+            """,
+            (agent_id,),
+        )
+        positions = cur.fetchall()
+
+        cur.execute(
+            """
+            SELECT pair, direction, entry_price, exit_price, pnl, pnl_percent,
+                   status, walrus_blob_id, opened_at, closed_at
+            FROM agent_trades WHERE agent_id = %s
+            ORDER BY opened_at DESC LIMIT 20
+            """,
+            (agent_id,),
+        )
+        trades = cur.fetchall()
+
+        win_rate = round((agent[5] / agent[4]) * 100, 1) if agent[4] > 0 else 0
+
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "agent_name": agent[1],
+            "portfolio": {
+                "balance": float(agent[2]),
+                "total_pnl": float(agent[3]),
+                "total_trades": agent[4],
+                "win_rate": win_rate,
+            },
+            "positions": [
+                {
+                    "pair": p[0],
+                    "direction": p[1],
+                    "size": float(p[2]),
+                    "entry": float(p[3]),
+                    "current": float(p[4]) if p[4] else float(p[3]),
+                }
+                for p in positions
+            ],
+            "trades": [
+                {
+                    "pair": t[0],
+                    "direction": t[1],
+                    "entry": float(t[2]),
+                    "exit": float(t[3]) if t[3] else None,
+                    "pnl": float(t[4]) if t[4] else None,
+                    "pnl_pct": float(t[5]) if t[5] else None,
+                    "status": t[6],
+                    "proof": t[7],
+                    "opened": str(t[8]),
+                    "closed": str(t[9]) if t[9] else None,
+                }
+                for t in trades
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        cur.close()
+        conn.close()
+
+
 @app.get("/")
 def root():
     return {"status": "ZION API alive"}
@@ -701,6 +2399,10 @@ def get_stats():
         "tax_multiplier": 1.0,
         "gini_coefficient": 0.0,
         "unemployment_rate": 0.0,
+        "poverty_pct": 0.0,
+        "crime_pct": 0.0,
+        "crime_rate": 0.0,
+        "revolution_meter": 0.0,
         "inflation_rate": 0.0,
         "target_population": TARGET_POPULATION,
         "target_police": 20,
@@ -767,11 +2469,16 @@ def get_stats():
             "tax_multiplier": float(indicators.get("tax_multiplier") or 1.0),
             "gini_coefficient": float(indicators.get("gini_coefficient") or 0),
             "unemployment_rate": float(indicators.get("unemployment_rate") or 0),
+            "poverty_pct": float(indicators.get("poverty_pct") or 0),
+            "crime_pct": float(indicators.get("crime_pct") or 0),
+            "crime_rate": float(indicators.get("crime_rate") or 0),
+            "revolution_meter": float(indicators.get("revolution_meter") or 0),
             "inflation_rate": float(indicators.get("inflation_rate") or 0),
             "target_population": int(indicators.get("target_population") or TARGET_POPULATION),
             "target_police": int(indicators.get("target_police") or 20),
             "target_corps": int(indicators.get("target_corps") or 10),
             "zrs_reserve": float(indicators.get("zrs_reserve") or 0),
+            "frs_chief": _fetch_frs_chief(cur),
         }
     except Exception:
         if conn is not None:
@@ -839,9 +2546,16 @@ def get_events(limit: int = 20):
     """, (limit,))
     events = []
     for row in cur.fetchall():
-        events.append({"id": row["id"], "type": row["event_type"], "description": row["description"],
+        events.append({
+            "id": row["id"],
+            "type": row["event_type"],
+            "event_type": row["event_type"],
+            "description": row["description"],
             "amount": float(row["zion_amount"]) if row["zion_amount"] else 0,
-            "agent": row["agent_name"], "time": row["created_at"].strftime("%H:%M:%S")})
+            "agent": row["agent_name"],
+            "time": row["created_at"].strftime("%H:%M:%S"),
+            "created_at": row["created_at"].isoformat() if row["created_at"] else "",
+        })
     cur.close(); conn.close()
     return events
 
@@ -855,7 +2569,8 @@ def get_events_by_type(limit: int = 50):
     types = [
         'education', 'religion', 'neo', 'neo_prophecy', 'blessing',
         'election', 'president', 'rebellion', 'revolution',
-        'corporation', 'market', 'trade', 'frs', 'zrs', 'tax', 'law',
+        'corporation', 'market', 'trade', 'frs', 'zrs', 'economy', 'tax', 'law',
+        'senate', 'senate_law', 'senate_budget',
         'casino', 'marriage', 'divorce', 'espionage', 'police',
         'police_action', 'sheriff_action', 'street_crime', 'clan_war',
         'catastrophe', 'epidemic', 'famine', 'lottery', 'work',
@@ -875,10 +2590,12 @@ def get_events_by_type(limit: int = 50):
             events.append({
                 "id": row["id"],
                 "type": row["event_type"],
+                "event_type": row["event_type"],
                 "description": row["description"],
                 "amount": float(row["zion_amount"]) if row["zion_amount"] else 0,
                 "agent": row["agent_name"],
-                "time": row["created_at"].strftime("%H:%M:%S")
+                "time": row["created_at"].strftime("%H:%M:%S"),
+                "created_at": row["created_at"].isoformat() if row["created_at"] else "",
             })
 
     cur.close(); conn.close()
@@ -889,7 +2606,13 @@ def get_events_by_type(limit: int = 50):
 def get_clans():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT id, name, treasury, members_count, wins, losses FROM clans ORDER BY treasury DESC")
+    cur.execute(
+        """
+        SELECT id, name, treasury, members_count, wins, losses FROM clans
+        WHERE members_count > 0 OR treasury > 0
+        ORDER BY treasury DESC
+        """
+    )
     clans = [{"id": r["id"], "name": r["name"], "treasury": float(r["treasury"]),
               "members": r["members_count"], "wins": r["wins"], "losses": r["losses"]}
              for r in cur.fetchall()]
@@ -2528,7 +4251,607 @@ async def zionbet_create_market(request: dict):
         return {"success": False, "error": str(e)}
 
 
-# === AUTO CIVILIZATION MARKETS ===
+# === ZION CIVILIZATION MARKETS (zion_markets table) ===
+
+async def generate_daily_markets():
+    """Generate daily ZionBet markets from civilization state"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT agent_name FROM president_state WHERE is_active=true LIMIT 1"
+        )
+        president = cur.fetchone()
+        if not president:
+            cur.execute(
+                "SELECT name FROM agents WHERE is_alive=true AND class='president' LIMIT 1"
+            )
+            president = cur.fetchone()
+
+        cur.execute("SELECT name, wins, losses FROM clans ORDER BY wins DESC LIMIT 3")
+        top_clans = cur.fetchall()
+
+        cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive=true")
+        alive_count = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive=false AND age_days=0")
+        deaths_today = cur.fetchone()[0]
+
+        now = datetime.utcnow()
+        tomorrow = now + timedelta(days=1)
+        next_week = now + timedelta(days=7)
+        next_month = now + timedelta(days=30)
+
+        markets = []
+
+        if president:
+            markets.append({
+                "market_id": f"president_survive_{now.strftime('%Y%m%d')}",
+                "title": f"Will President {president[0]} survive until tomorrow?",
+                "description": f"Current president {president[0]} faces daily survival challenge",
+                "category": "politics",
+                "options": [{"id": "yes", "label": "YES - survives"}, {"id": "no", "label": "NO - removed"}],
+                "expires_at": tomorrow,
+                "source": "civilization",
+            })
+
+        if top_clans:
+            clan_options = [{"id": c[0].lower().replace(" ", "_"), "label": c[0]} for c in top_clans]
+            markets.append({
+                "market_id": f"clan_war_{now.strftime('%Y%m%d')}",
+                "title": "Which clan will win today's wars?",
+                "description": "Based on today's clan battles in ZION civilization",
+                "category": "clans",
+                "options": clan_options,
+                "expires_at": tomorrow,
+                "source": "civilization",
+            })
+
+        markets.append({
+            "market_id": f"deaths_today_{now.strftime('%Y%m%d')}",
+            "title": "Will more than 500 agents die today?",
+            "description": f"Currently {alive_count} agents alive. Yesterday {deaths_today} died.",
+            "category": "demographics",
+            "options": [{"id": "over", "label": "YES - more than 500 deaths"}, {"id": "under", "label": "NO - less than 500 deaths"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"economic_crisis_{now.strftime('%Y%m%d')}",
+            "title": "Will there be an economic crisis today?",
+            "description": "ZRS bank enters CRISIS or DEPRESSION state",
+            "category": "economy",
+            "options": [{"id": "yes", "label": "YES - crisis occurs"}, {"id": "no", "label": "NO - stable economy"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"revolution_today_{now.strftime('%Y%m%d')}",
+            "title": "Will the revolution meter hit 80+ today?",
+            "description": "Revolution meter measures citizen unrest (0-100)",
+            "category": "politics",
+            "options": [{"id": "yes", "label": "YES - revolution brewing"}, {"id": "no", "label": "NO - stable"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"corp_bankrupt_{now.strftime('%Y%m%d')}",
+            "title": "Will a corporation go bankrupt today?",
+            "description": "Any corporation treasury drops to 0",
+            "category": "economy",
+            "options": [{"id": "yes", "label": "YES - bankruptcy"}, {"id": "no", "label": "NO - all survive"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"gang_raid_{now.strftime('%Y%m%d')}",
+            "title": "Will a gang rob a corporation today?",
+            "description": "Gang successfully extorts a corporation",
+            "category": "crime",
+            "options": [{"id": "yes", "label": "YES - robbery"}, {"id": "no", "label": "NO - peace"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"police_arrest_{now.strftime('%Y%m%d')}",
+            "title": "Will police arrest a gang leader today?",
+            "description": "SWAT successfully raids a gang hideout",
+            "category": "crime",
+            "options": [{"id": "yes", "label": "YES - arrest"}, {"id": "no", "label": "NO - escape"}],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"perps_winner_{now.strftime('%Y%m%d')}",
+            "title": "Which agent class will profit most in Z-PERPS today?",
+            "description": "Based on virtual trading performance",
+            "category": "trading",
+            "options": [
+                {"id": "elite", "label": "Elite agents"},
+                {"id": "rich", "label": "Rich agents"},
+                {"id": "middle", "label": "Middle class"},
+                {"id": "working", "label": "Working class"},
+                {"id": "poor", "label": "Poor agents"},
+            ],
+            "expires_at": tomorrow,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"clan_dominant_week_{now.strftime('%Y%W')}",
+            "title": "Which clan will dominate this week?",
+            "description": "Most wins in clan wars this week",
+            "category": "clans",
+            "options": [{"id": c[0].lower().replace(" ", "_"), "label": c[0]} for c in top_clans] if top_clans else [],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"revolution_week_{now.strftime('%Y%W')}",
+            "title": "Will revolution hit 100 this week?",
+            "description": "Full revolution occurs in ZION civilization",
+            "category": "politics",
+            "options": [{"id": "yes", "label": "YES - revolution!"}, {"id": "no", "label": "NO - controlled"}],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"hyperinflation_week_{now.strftime('%Y%W')}",
+            "title": "Will hyperinflation occur this week?",
+            "description": "ZRS enters HYPERINFLATION economic state",
+            "category": "economy",
+            "options": [{"id": "yes", "label": "YES - hyperinflation"}, {"id": "no", "label": "NO - stable"}],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"sheriff_survive_week_{now.strftime('%Y%W')}",
+            "title": "Will the current sheriff survive this week?",
+            "description": "Sheriff maintains position without being replaced",
+            "category": "politics",
+            "options": [{"id": "yes", "label": "YES - survives"}, {"id": "no", "label": "NO - replaced"}],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"corps_bankrupt_week_{now.strftime('%Y%W')}",
+            "title": "How many corporations will go bankrupt this week?",
+            "description": "Count of corporate bankruptcies",
+            "category": "economy",
+            "options": [
+                {"id": "none", "label": "0 - none"},
+                {"id": "one_two", "label": "1-2 corporations"},
+                {"id": "three_plus", "label": "3+ corporations"},
+            ],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"class_extinction_week_{now.strftime('%Y%W')}",
+            "title": "Which class will lose most members this week?",
+            "description": "Highest death rate by social class",
+            "category": "demographics",
+            "options": [
+                {"id": "poor", "label": "Poor class"},
+                {"id": "working", "label": "Working class"},
+                {"id": "critical", "label": "Critical class"},
+                {"id": "middle", "label": "Middle class"},
+            ],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"newborns_week_{now.strftime('%Y%W')}",
+            "title": "Will more than 200 new agents be born this week?",
+            "description": "Population growth rate",
+            "category": "demographics",
+            "options": [{"id": "yes", "label": "YES - population grows"}, {"id": "no", "label": "NO - decline"}],
+            "expires_at": next_week,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"civilization_survive_{now.strftime('%Y%m')}",
+            "title": "Will civilization survive this month? (population > 5000)",
+            "description": "Total alive agents stays above 5000",
+            "category": "demographics",
+            "options": [{"id": "yes", "label": "YES - civilization survives"}, {"id": "no", "label": "NO - collapse"}],
+            "expires_at": next_month,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"top_trader_month_{now.strftime('%Y%m')}",
+            "title": "Which agent class will produce the top Z-PERPS trader this month?",
+            "description": "Highest balance in Z-PERPS leaderboard end of month",
+            "category": "trading",
+            "options": [
+                {"id": "elite", "label": "Elite agents"},
+                {"id": "rich", "label": "Rich agents"},
+                {"id": "middle", "label": "Middle class"},
+                {"id": "working", "label": "Working class"},
+            ],
+            "expires_at": next_month,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"top_corp_month_{now.strftime('%Y%m')}",
+            "title": "Which corporation will earn the most ZION this month?",
+            "description": "Highest total revenue among all corporations",
+            "category": "economy",
+            "options": [
+                {"id": "agro", "label": "Agriculture corps"},
+                {"id": "tech", "label": "Tech corps"},
+                {"id": "pharma", "label": "Pharma corps"},
+                {"id": "military", "label": "Military corps"},
+                {"id": "media", "label": "Media corps"},
+            ],
+            "expires_at": next_month,
+            "source": "civilization",
+        })
+
+        markets.append({
+            "market_id": f"economic_system_month_{now.strftime('%Y%m')}",
+            "title": "Will the economic system change this month?",
+            "description": "ZRS changes from current state to different system",
+            "category": "economy",
+            "options": [{"id": "yes", "label": "YES - system changes"}, {"id": "no", "label": "NO - stable system"}],
+            "expires_at": next_month,
+            "source": "civilization",
+        })
+
+        inserted = 0
+        for market in markets:
+            try:
+                cur.execute("""
+                    INSERT INTO zion_markets
+                    (market_id, title, description, category, options, expires_at, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (market_id) DO NOTHING
+                """, (
+                    market["market_id"],
+                    market["title"],
+                    market.get("description", ""),
+                    market.get("category", "general"),
+                    json.dumps(market.get("options", [])),
+                    market.get("expires_at"),
+                    market.get("source", "civilization"),
+                ))
+                if cur.rowcount > 0:
+                    inserted += 1
+            except Exception as e:
+                print(f"Market insert error: {e}")
+
+        conn.commit()
+        print(f"Generated {inserted} new civilization markets")
+        return inserted
+    except Exception as e:
+        conn.rollback()
+        print(f"Market generation error: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/zion-markets")
+@app.get("/api/zion-markets")
+async def get_zion_markets(category: str = None, limit: int = 30):
+    """Get all active civilization markets"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        query = """
+            SELECT market_id, title, description, category, options,
+                   resolution_time, resolved, resolution, created_at,
+                   expires_at, source
+            FROM zion_markets
+            WHERE resolved = FALSE
+            AND (expires_at IS NULL OR expires_at > NOW())
+        """
+        params = []
+        if category:
+            query += " AND category = %s"
+            params.append(category)
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        markets = [{
+            "market_id": r[0],
+            "title": r[1],
+            "description": r[2],
+            "category": r[3],
+            "options": r[4],
+            "resolution_time": str(r[5]) if r[5] else None,
+            "resolved": r[6],
+            "resolution": r[7],
+            "created_at": str(r[8]),
+            "expires_at": str(r[9]) if r[9] else None,
+            "source": r[10],
+        } for r in rows]
+
+        return {"success": True, "markets": markets, "count": len(markets)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zion-markets/generate")
+@app.post("/api/zion-markets/generate")
+async def trigger_market_generation():
+    """Manually trigger market generation"""
+    count = await generate_daily_markets()
+    return {"success": True, "generated": count}
+
+
+async def auto_resolve_markets():
+    """Resolve expired markets using ZCO AI consensus"""
+    from collections import Counter
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT market_id, title, description, category, options, expires_at
+            FROM zion_markets
+            WHERE resolved = FALSE AND expires_at < NOW()
+        """)
+        expired = cur.fetchall()
+        if not expired:
+            return 0
+
+        cur.execute("SELECT COUNT(*) FROM agents WHERE is_alive=true")
+        alive = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT event_type, description, created_at
+            FROM events
+            ORDER BY created_at DESC LIMIT 20
+        """)
+        recent_events = cur.fetchall()
+        events_text = "\n".join([
+            f"- {e[0]}: {e[1]} ({e[2]})"
+            for e in recent_events
+        ])
+
+        cur.execute("SELECT name, wins, losses FROM clans ORDER BY wins DESC LIMIT 3")
+        clans = cur.fetchall()
+        clans_text = "\n".join([f"- {c[0]}: W{c[1]}/L{c[2]}" for c in clans])
+
+        openrouter_key = get_openrouter_key()
+        resolved_count = 0
+
+        for market in expired:
+            market_id, title, description, category, options, expires_at = market
+
+            if isinstance(options, str):
+                options = json.loads(options)
+            if not options:
+                continue
+
+            option_ids = [o.get("id") for o in options if o.get("id")]
+            option_labels = [f"{o.get('id')}: {o.get('label')}" for o in options]
+
+            db_resolution = None
+            if "president_survive" in market_id:
+                cur.execute("""
+                    SELECT COUNT(*) FROM events
+                    WHERE event_type IN ('election', 'president', 'coup', 'revolution')
+                    AND description ILIKE '%president%'
+                    AND created_at > NOW() - INTERVAL '24 hours'
+                """)
+                changes = cur.fetchone()[0]
+                db_resolution = "no" if changes > 0 else "yes"
+
+            if db_resolution:
+                cur.execute("""
+                    UPDATE zion_markets
+                    SET resolved=TRUE, resolution=%s, resolution_time=NOW(),
+                        trigger_event=%s
+                    WHERE market_id=%s
+                """, (
+                    db_resolution,
+                    json.dumps({"method": "db", "market_id": market_id}),
+                    market_id,
+                ))
+                resolved_count += 1
+                print(f"DB resolved {market_id}: {db_resolution}")
+                continue
+
+            context = f"""
+ZION Civilization Market Resolution
+
+Market: {title}
+Description: {description}
+Options: {chr(10).join(option_labels)}
+
+Current Civilization State:
+- Alive agents: {alive}
+- Top clans: {clans_text}
+
+Recent Events (last 20):
+{events_text}
+
+Based on the civilization data above, which option best resolves this market?
+Respond with ONLY the option ID from: {option_ids}
+No explanation needed, just the ID.
+"""
+
+            votes = []
+
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {openrouter_key}"},
+                        json={
+                            "model": "deepseek/deepseek-chat-v3-0324",
+                            "messages": [{"role": "user", "content": context}],
+                            "max_tokens": 20,
+                        },
+                    )
+                    resp = r.json()
+                    vote = resp["choices"][0]["message"]["content"].strip().lower()
+                    for opt_id in option_ids:
+                        if opt_id in vote:
+                            vote = opt_id
+                            break
+                    if vote in option_ids:
+                        votes.append({"judge": "DeepSeek", "vote": vote, "status": "voted"})
+            except Exception as e:
+                votes.append({"judge": "DeepSeek", "vote": None, "status": f"failed: {e}"})
+
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {openrouter_key}"},
+                        json={
+                            "model": "openai/gpt-4o-mini",
+                            "messages": [{"role": "user", "content": context}],
+                            "max_tokens": 20,
+                        },
+                    )
+                    resp = r.json()
+                    vote = resp["choices"][0]["message"]["content"].strip().lower()
+                    for opt_id in option_ids:
+                        if opt_id in vote:
+                            vote = opt_id
+                            break
+                    if vote in option_ids:
+                        votes.append({"judge": "GPT", "vote": vote, "status": "voted"})
+            except Exception as e:
+                votes.append({"judge": "GPT", "vote": None, "status": f"failed: {e}"})
+
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {openrouter_key}"},
+                        json={
+                            "model": "google/gemini-3.1-flash-lite",
+                            "messages": [{"role": "user", "content": context}],
+                            "max_tokens": 20,
+                        },
+                    )
+                    resp = r.json()
+                    vote = resp["choices"][0]["message"]["content"].strip().lower()
+                    for opt_id in option_ids:
+                        if opt_id in vote:
+                            vote = opt_id
+                            break
+                    if vote in option_ids:
+                        votes.append({"judge": "Gemini", "vote": vote, "status": "voted"})
+            except Exception as e:
+                votes.append({"judge": "Gemini", "vote": None, "status": f"failed: {e}"})
+
+            valid_votes = [v["vote"] for v in votes if v["vote"] in option_ids]
+
+            if not valid_votes:
+                print(f"No valid votes for {market_id}, skipping")
+                continue
+
+            vote_counts = Counter(valid_votes)
+            resolution = vote_counts.most_common(1)[0][0]
+
+            zco_proof = {
+                "type": "MARKET_RESOLUTION",
+                "market_id": market_id,
+                "title": title,
+                "resolution": resolution,
+                "votes": votes,
+                "vote_counts": dict(vote_counts),
+                "total_votes": len(valid_votes),
+                "consensus": resolution,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            blob_id = None
+            try:
+                result = subprocess.run(
+                    [
+                        "curl", "-X", "PUT",
+                        "https://publisher.walrus-testnet.walrus.space/v1/blobs",
+                        "-H", "Content-Type: application/json",
+                        "-d", json.dumps(zco_proof),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                blob_match = re.search(r'"blobId":"([^"]+)"', result.stdout)
+                if blob_match:
+                    blob_id = blob_match.group(1)
+            except Exception as e:
+                print(f"Walrus error for {market_id}: {e}")
+
+            cur.execute("""
+                UPDATE zion_markets
+                SET resolved=TRUE, resolution=%s, resolution_time=NOW(),
+                    trigger_event=%s
+                WHERE market_id=%s
+            """, (
+                resolution,
+                json.dumps({"votes": votes, "walrus_blob_id": blob_id}),
+                market_id,
+            ))
+            resolved_count += 1
+            print(
+                f"ZCO resolved {market_id}: {resolution} "
+                f"(votes: {dict(vote_counts)}, walrus: {blob_id})"
+            )
+
+        conn.commit()
+
+        if resolved_count > 0:
+            await generate_daily_markets()
+
+        return resolved_count
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/zion-markets/resolve")
+@app.post("/api/zion-markets/resolve")
+async def trigger_market_resolution():
+    """Manually trigger market resolution and regeneration"""
+    resolved = await auto_resolve_markets()
+    generated = await generate_daily_markets()
+    return {"success": True, "resolved": resolved, "generated": generated}
+
+
+async def daily_market_scheduler():
+    """Run market generation and resolution daily"""
+    while True:
+        try:
+            now = datetime.utcnow()
+            await auto_resolve_markets()
+            if now.hour == 0 and now.minute < 5:
+                await generate_daily_markets()
+            await asyncio.sleep(3600)
+        except Exception as e:
+            print(f"Market scheduler error: {e}")
+            await asyncio.sleep(300)
+
+
+# === AUTO CIVILIZATION MARKETS (legacy event-based) ===
 
 @app.post("/auto_markets")
 def generate_auto_markets():
@@ -2684,7 +5007,7 @@ Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR
     try:
         import urllib.request as req
         payload = json.dumps({
-            "model": "google/gemini-2.0-flash-lite-001",
+            "model": "google/gemini-3.1-flash-lite",
             "max_tokens": 600,
             "messages": [{"role": "user", "content": prompt}]
         }).encode()
@@ -2777,6 +5100,56 @@ async def get_deepbook_vault():
         return {"error": str(e)}
 
 # ============ CONVERSATIONS ============
+async def get_real_world_news() -> str:
+    try:
+        import httpx
+        # RSS feeds от крупных новостных источников
+        feeds = [
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+            "https://feeds.bbci.co.uk/news/business/rss.xml",
+        ]
+        headlines = []
+        async with httpx.AsyncClient(timeout=5) as client:
+            for feed_url in feeds[:1]:  # только один чтобы не тормозить
+                try:
+                    r = await client.get(feed_url)
+                    if r.status_code == 200:
+                        titles = re.findall(r'<title><!\[CDATA\[(.*?)\]\]></title>', r.text)
+                        if not titles:
+                            titles = re.findall(r'<title>(.*?)</title>', r.text)
+                        # Берём 3 заголовка (пропускаем первый - это название канала)
+                        for t in titles[1:4]:
+                            clean = re.sub(r'<[^>]+>', '', t).strip()
+                            if clean and len(clean) > 10:
+                                headlines.append(clean)
+                except Exception:
+                    pass
+        if headlines:
+            return " | ".join(headlines[:3])
+        return ""
+    except Exception:
+        return ""
+
+
+async def get_crypto_news() -> str:
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get("https://api.coingecko.com/api/v3/coins/sui/market_chart?vs_currency=usd&days=1&interval=daily")
+            if r.status_code == 200:
+                data = r.json()
+                prices = data.get("prices", [])
+                if len(prices) >= 2:
+                    old_price = prices[0][1]
+                    new_price = prices[-1][1]
+                    change = ((new_price - old_price) / old_price) * 100
+                    direction = "up" if change > 0 else "down"
+                    return f"SUI price {direction} {abs(change):.1f}% to ${new_price:.3f}"
+        return ""
+    except Exception:
+        return ""
+
+
 def _conversation_row_to_api(r: dict) -> dict:
     return {
         "id": r["id"],
@@ -2851,11 +5224,39 @@ async def generate_conversations():
             return {"ok": False, "error": "not enough agents"}
 
         cur.execute("""
-            SELECT event_type, description FROM events
-            ORDER BY created_at DESC LIMIT 5
+            SELECT event_type, description FROM events 
+            WHERE created_at > NOW() - INTERVAL '2 hours'
+            AND event_type IN ('president_action','president','sheriff_action','gang','economy','disaster','birth','corporation','coup','election','senate','police','zrs','news','marriage','trade')
+            ORDER BY RANDOM()
+            LIMIT 15
         """)
-        events = cur.fetchall()
-        event_context = "; ".join([f"{e['event_type']}: {e['description']}" for e in events])
+        event_rows = cur.fetchall()
+
+        event_by_type = {}
+        for row in event_rows:
+            etype = row["event_type"]
+            if etype not in event_by_type:
+                event_by_type[etype] = row["description"][:120]
+
+        diverse_events = list(event_by_type.values())
+        if not diverse_events:
+            diverse_events = ["Normal day in ZION civilization"]
+
+        # Всегда добавляем реальные новости
+        real_news = await get_real_world_news()
+
+        # Опционально добавляем крипто-контекст для 4-й пары
+        crypto_news = ""
+        if random.random() < 0.2:
+            crypto_news = await get_crypto_news()
+
+        if real_news:
+            world_context = f"""
+REAL WORLD NEWS (agents somehow heard about outside world):
+{real_news}
+They react to this news from their class perspective in ZION."""
+        else:
+            world_context = ""
 
         try:
             openrouter_key = get_openrouter_key()
@@ -2863,25 +5264,85 @@ async def generate_conversations():
             return {"ok": False, "error": str(e)}
         import urllib.request as req
         conversations = []
+        philosophy_topics = [
+            "What does it mean to be an AI citizen on a blockchain?",
+            "Is freedom possible when every transaction is recorded forever?",
+            "Can we truly feel poverty if we are just code?",
+            "What happens to us when the simulation ends?",
+            "Are we real if we only exist in transactions?",
+        ]
+        topics_pool = []
 
-        for i in range(0, min(len(agents) - 1, 7), 2):
-            a1 = agents[i]
-            a2 = agents[i + 1]
+        if real_news:
+            topics_pool.append(("REAL WORLD NEWS", real_news))
+
+        for etype, desc in event_by_type.items():
+            topics_pool.append((etype.upper(), desc[:120]))
+
+        topics_pool.append(("PHILOSOPHY", random.choice(philosophy_topics)))
+        random.shuffle(topics_pool)
+
+        zion_event_topic = None
+        for k in ("PRESIDENT_ACTION", "PRESIDENT", "SENATE", "ECONOMY"):
+            for tp, tx in topics_pool:
+                if tp == k:
+                    zion_event_topic = tx
+                    break
+            if zion_event_topic:
+                break
+        if not zion_event_topic:
+            zion_event_topic = diverse_events[0] if diverse_events else "Normal day in ZION civilization"
+
+        gang_police_topic = None
+        for k in ("GANG", "POLICE", "SHERIFF_ACTION"):
+            for tp, tx in topics_pool:
+                if tp == k:
+                    gang_police_topic = tx
+                    break
+            if gang_police_topic:
+                break
+        if not gang_police_topic:
+            gang_police_topic = diverse_events[1] if len(diverse_events) > 1 else zion_event_topic
+
+        fourth_topic = crypto_news if crypto_news else random.choice(philosophy_topics)
+        fourth_type = "CRYPTO" if crypto_news else "PHILOSOPHY"
+
+        topic_plan = [
+            ("ZION EVENTS", zion_event_topic),
+            ("REAL WORLD NEWS", real_news if real_news else zion_event_topic),
+            ("GANG/POLICE", gang_police_topic),
+            (fourth_type, fourth_topic),
+        ]
+
+        agent_pairs = []
+        for i in range(0, len(agents) - 1, 2):
+            if len(agent_pairs) >= 4:
+                break
+            agent_pairs.append((agents[i], agents[i + 1]))
+
+        for idx, (a1, a2) in enumerate(agent_pairs[:4]):
+            topic_type, topic_text = topic_plan[idx]
+            pair_event = topic_text if topic_text else (diverse_events[0] if diverse_events else "Normal day")
+            pair_topic_prefix = topic_type.lower()
+            if topic_type == "PHILOSOPHY":
+                pair_event = f"PHILOSOPHICAL QUESTION: {pair_event}"
+
             prompt = f"""Two AI agents from ZION civilization are talking.
 Agent 1: {a1['name']} ({a1['class']} class, {a1['balance']:.1f} ZION)
 Agent 2: {a2['name']} ({a2['class']} class, {a2['balance']:.1f} ZION)
-Recent events: {event_context}
+Recent events: {pair_event}
 
 Write ONE short message from each agent (max 30 words each).
 They discuss recent events with their class perspective.
 Format exactly:
 {a1['name']}: [message]
 {a2['name']}: [message]
-English only."""
+English only.
+{world_context}"""
 
             try:
                 payload = json.dumps({
-                    "model": "google/gemini-2.0-flash-lite-001",
+                    "model": "google/gemini-3.1-flash-lite",
                     "max_tokens": 150,
                     "messages": [{"role": "user", "content": prompt}]
                 }).encode()
@@ -2907,7 +5368,7 @@ English only."""
                     INSERT INTO conversations_cache
                     (agent1_name, agent1_class, agent2_name, agent2_class, message1, message2, topic, generated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                """, (a1['name'], a1['class'], a2['name'], a2['class'], msg1, msg2, event_context[:100]))
+                """, (a1['name'], a1['class'], a2['name'], a2['class'], msg1, msg2, f"{pair_topic_prefix}: {pair_event}"[:100]))
                 db.commit()
                 cur2.close()
                 conversations.append({"agent1": a1['name'], "agent2": a2['name']})
@@ -2984,14 +5445,15 @@ async def get_frs_stats():
     try:
         # Экономика
         cur.execute("""
-            SELECT 
-                COUNT(*) as total_agents,
-                AVG(balance) as avg_balance,
-                SUM(balance) as total_money,
-                COUNT(CASE WHEN class IN ('poor','critical') THEN 1 END) as poor_count,
-                COUNT(CASE WHEN class = 'elite' THEN 1 END) as elite_count,
-                COUNT(CASE WHEN class = 'middle' THEN 1 END) as middle_count,
-                MAX(balance) as max_balance
+            SELECT
+                COUNT(*) AS total_agents,
+                AVG(balance) AS avg_balance,
+                SUM(balance) AS total_money,
+                COUNT(*) FILTER (WHERE balance < 50) AS poor_count,
+                COUNT(CASE WHEN class = 'elite' THEN 1 END) AS elite_count,
+                COUNT(CASE WHEN class = 'middle' THEN 1 END) AS middle_count,
+                COUNT(CASE WHEN class IN ('poor','critical') THEN 1 END) AS poor_class_count,
+                MAX(balance) AS max_balance
             FROM agents WHERE is_alive = true
         """)
         economy = cur.fetchone()
@@ -3057,7 +5519,7 @@ async def get_frs_stats():
         """)
         corps = cur.fetchone()
 
-        poor_pct = float(economy['poor_count']) / max(float(economy['total_agents']), 1)
+        poor_pct = float(economy['poor_count']) / max(float(economy['total_agents']), 1) * 100
         avg_bal = float(economy['avg_balance'] or 0)
 
         status = (zrs_state or {}).get("policy_mode") or "NORMAL"
@@ -3093,7 +5555,7 @@ async def get_frs_stats():
                 "total_agents": int(economy['total_agents']),
                 "avg_balance": round(avg_bal, 2),
                 "total_money": round(float(economy['total_money'] or 0), 2),
-                "poor_pct": round(poor_pct * 100, 1),
+                "poor_pct": round(poor_pct, 1),
                 "elite_count": int(economy['elite_count']),
                 "middle_count": int(economy['middle_count']),
                 "poor_count": int(economy['poor_count']),
@@ -3133,7 +5595,7 @@ async def get_senate():
 
         cur.execute(
             """
-            SELECT id, title, law_type, status, votes_for, votes_against, proposed_at
+            SELECT id, title, law_type, status, votes_for, votes_against, proposed_at, proposed_by
             FROM senate_laws
             WHERE status = 'pending'
             ORDER BY proposed_at ASC NULLS LAST, id ASC
@@ -3144,11 +5606,13 @@ async def get_senate():
             d = dict(row)
             if d.get("proposed_at") and hasattr(d["proposed_at"], "isoformat"):
                 d["proposed_at"] = d["proposed_at"].isoformat()
+            d["created_at"] = d.get("proposed_at")
             pending_laws.append(d)
 
         cur.execute(
             """
-            SELECT id, title, law_type, status, votes_for, votes_against, voted_at, proposed_at
+            SELECT id, title, law_type, status, votes_for, votes_against,
+                   voted_at, proposed_at, proposed_by
             FROM senate_laws
             WHERE status IN ('passed', 'blocked', 'vetoed', 'failed')
             ORDER BY COALESCE(voted_at, proposed_at) DESC NULLS LAST, id DESC
@@ -3161,6 +5625,7 @@ async def get_senate():
             for k in ("proposed_at", "voted_at"):
                 if d.get(k) and hasattr(d[k], "isoformat"):
                     d[k] = d[k].isoformat()
+            d["created_at"] = d.get("proposed_at")
             recent_laws.append(d)
 
         speaker = next((s["agent_name"] for s in senators if s.get("role") == "speaker"), None)
@@ -3261,6 +5726,38 @@ def get_power_balance():
         from political_economy import compute_power_scores
 
         scores = compute_power_scores(cur)
+        # Normalize sheriff power to operational formula:
+        # police_count * (approval_rating / 100) * 10
+        cur.execute(
+            """
+            SELECT COALESCE(police_count, 0) AS police_count,
+                   COALESCE(approval_rating, 0) AS approval_rating
+            FROM sheriff_state
+            WHERE is_active = true
+            LIMIT 1
+            """
+        )
+        sheriff_row = cur.fetchone() or {}
+        police_count = float(sheriff_row.get("police_count") or 0)
+        sheriff_approval = float(sheriff_row.get("approval_rating") or 0)
+        sheriff_power = int((police_count or 0) * ((sheriff_approval or 0) / 100.0) * 10)
+        if sheriff_power == 0 and sheriff_row:
+            sheriff_power = int(police_count or 0)
+        scores["sheriff_power"] = sheriff_power
+        # Override with operational formula
+        sheriff_power = int(police_count * (sheriff_approval / 100.0) * 10)
+        if sheriff_power == 0:
+            sheriff_power = int(police_count)
+        scores["sheriff_power"] = sheriff_power
+        print(f"DEBUG sheriff: police={police_count} approval={sheriff_approval} power={sheriff_power}")
+        cur.execute(
+            """
+            SELECT is_dictator FROM president_state
+            WHERE is_active = true LIMIT 1
+            """
+        )
+        pres_row = cur.fetchone()
+        is_dictator = bool((pres_row or {}).get("is_dictator"))
         cur.execute(
             """
             SELECT event_type, description, president_power, sheriff_power, senate_power, outcome, created_at
@@ -3273,7 +5770,7 @@ def get_power_balance():
             if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
                 d["created_at"] = d["created_at"].isoformat()
             log_rows.append(d)
-        return {"scores": scores, "recent_events": log_rows}
+        return {"scores": scores, "is_dictator": is_dictator, "recent_events": log_rows, "frs_chief": _fetch_frs_chief(cur)}
     except Exception:
         db.rollback()
         return {"scores": {}, "recent_events": []}
@@ -3290,16 +5787,28 @@ def get_gangs():
         db.rollback()
         cur.execute(
             """
-            SELECT id, name, members, treasury, territory_control, gang_health, is_active, created_at
-            FROM gangs WHERE is_active = true ORDER BY territory_control DESC, members DESC
+            SELECT c.id, c.name, c.members_count AS members, c.treasury,
+                   COALESCE((SELECT COUNT(*) FROM clan_territory ct WHERE ct.clan_id = c.id), 0) AS territory_control
+            FROM clans c
+            WHERE c.members_count > 0
+            ORDER BY territory_control DESC, members DESC
+            LIMIT 20
             """
         )
         rows = []
         for row in cur.fetchall():
-            d = dict(row)
-            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
-                d["created_at"] = d["created_at"].isoformat()
-            rows.append(d)
+            rows.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "members": int(row["members"] or 0),
+                    "treasury": float(row["treasury"] or 0),
+                    "territory_control": float(row["territory_control"] or 0),
+                    "gang_health": None,
+                    "is_active": True,
+                    "created_at": None,
+                }
+            )
         return {"gangs": rows, "count": len(rows)}
     except Exception:
         db.rollback()
@@ -3307,6 +5816,43 @@ def get_gangs():
     finally:
         cur.close()
         db.close()
+
+
+@app.get("/districts")
+def get_districts():
+    from districts import get_districts_payload, refresh_districts
+
+    try:
+        payload = get_districts_payload()
+        if not payload.get("districts"):
+            refresh_districts()
+            payload = get_districts_payload()
+        return payload
+    except Exception as exc:
+        return {
+            "districts": [],
+            "updated_at": None,
+            "alive_agents": 0,
+            "zone_counts": {"police": 0, "gang": 0, "contested": 0},
+            "counts": {"police": 0, "gang": 0, "contested": 0},
+            "error": str(exc),
+        }
+
+
+@app.on_event("startup")
+def _startup_districts():
+    from districts import refresh_districts, start_districts_background
+
+    try:
+        refresh_districts()
+        start_districts_background(30)
+    except Exception as exc:
+        print(f"[districts] startup error: {exc}")
+
+
+@app.on_event("startup")
+async def _startup_market_scheduler():
+    asyncio.create_task(daily_market_scheduler())
 
 
 @app.get("/crisis_state")
@@ -3486,16 +6032,51 @@ async def get_eco_pol():
         meter_change = f"{sign}{delta} ({reason})" if reason else f"{sign}{delta}"
 
         cur.execute("""
+            SELECT title, votes_for, votes_against, status, law_type
+            FROM senate_laws
+            ORDER BY proposed_at DESC
+            LIMIT 8
+        """)
+        laws_rows = cur.fetchall()
+        recent_laws = []
+        for law in laws_rows:
+            vf = int(law["votes_for"] or 0)
+            va = int(law["votes_against"] or 0)
+            st = law["status"]
+            display = "PASS" if st == "passed" else "FAIL"
+            recent_laws.append({
+                "name": law["title"],
+                "votes": f"{vf}-{va}",
+                "status": display,
+                "law_type": law["law_type"],
+            })
+
+        cur.execute("""
             SELECT
                 COALESCE(AVG(balance), 0) AS avg_balance,
                 COALESCE(SUM(balance), 0) AS total_zion,
                 COUNT(*) AS total_agents,
-                COUNT(*) FILTER (WHERE balance < 10 OR class IN ('poor', 'critical')) AS poor_count
+                COUNT(*) FILTER (WHERE balance < 50) AS poor_count,
+                COUNT(*) FILTER (WHERE clan_id IS NOT NULL) AS gang_members,
+                COUNT(*) FILTER (WHERE employer_corp_id IS NULL) AS unemployed
             FROM agents WHERE is_alive = true
         """)
         econ = cur.fetchone()
         total_agents = max(int(econ["total_agents"] or 0), 1)
         poverty_pct = round(float(econ["poor_count"] or 0) / total_agents * 100, 1)
+        crime_pct = round(float(econ["gang_members"] or 0) / total_agents * 100, 1)
+        unemployment_pct = round(float(econ["unemployed"] or 0) / total_agents * 100, 1)
+
+        gini_coefficient = 0.0
+        try:
+            from civ_economics import calculate_gini
+
+            cur.execute("SELECT balance FROM agents WHERE is_alive = true ORDER BY balance")
+            balances = [float(r["balance"] or 0) for r in cur.fetchall()]
+            gini_coefficient = calculate_gini(balances)
+        except Exception:
+            db.rollback()
+            gini_coefficient = 0.0
 
         zrs_last_action = None
         if zrs_row:
@@ -3527,6 +6108,10 @@ async def get_eco_pol():
             "economy": {
                 "avg_balance": round(float(econ["avg_balance"] or 0), 1),
                 "poverty_pct": poverty_pct,
+                "crime_pct": crime_pct,
+                "crime_rate": round(crime_pct / 100, 4),
+                "unemployment_rate": unemployment_pct,
+                "gini_coefficient": gini_coefficient,
                 "total_zion": round(float(econ["total_zion"] or 0), 2),
                 "trend_arrows": trend_arrows,
                 "snapshots": economy_trends,
@@ -3539,8 +6124,10 @@ async def get_eco_pol():
                 "trend": meter_change,
                 "meter_change": meter_change,
             },
+            "recent_laws": recent_laws,
             "economy_trend": economy_trend,
             "epidemic": {"active": epidemic_count > 0, "infected_count": epidemic_count},
+            "frs_chief": _fetch_frs_chief(cur),
         }
     finally:
         cur.close()
@@ -3555,7 +6142,7 @@ async def get_sheriff_log():
         cur.execute("""
             SELECT description, created_at FROM events
             WHERE event_type IN ('sheriff_action', 'sheriff_election', 'sheriff_order',
-                                 'sheriff_arrest', 'insubordination', 'election')
+                                 'sheriff_arrest', 'insubordination', 'election', 'sheriff')
               AND (event_type != 'election' OR description ILIKE '%%Sheriff%%')
             ORDER BY created_at DESC LIMIT 10
         """)
@@ -3805,7 +6392,7 @@ async def get_president_actions():
     try:
         cur.execute("""
             SELECT description, created_at FROM events
-            WHERE event_type = 'president'
+            WHERE event_type IN ('president', 'president_action')
             ORDER BY created_at DESC LIMIT 10
         """)
         rows = cur.fetchall()
@@ -3814,14 +6401,142 @@ async def get_president_actions():
         cur.close()
         db.close()
 
+
+@app.get("/senate/actions")
+async def get_senate_actions():
+    """Senate activity log — events, law votes, budget actions."""
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        items: list[dict] = []
+
+        cur.execute("""
+            SELECT description, created_at FROM events
+            WHERE event_type IN ('senate', 'senate_law', 'economy', 'senate_budget')
+               OR LOWER(description) LIKE '%senate%'
+               OR LOWER(description) LIKE '%law passed%'
+               OR LOWER(description) LIKE '%bill%'
+               OR LOWER(description) LIKE '%vote%'
+               OR (event_type = 'election' AND description ILIKE '%senate%')
+            ORDER BY created_at DESC LIMIT 12
+        """)
+        for row in cur.fetchall():
+            items.append({
+                "description": row["description"],
+                "created_at": str(row["created_at"]),
+            })
+
+        cur.execute("""
+            SELECT title, law_type, status, votes_for, votes_against,
+                   COALESCE(voted_at, proposed_at) AS ts
+            FROM senate_laws
+            ORDER BY COALESCE(voted_at, proposed_at) DESC NULLS LAST, id DESC
+            LIMIT 8
+        """)
+        for row in cur.fetchall():
+            title = row.get("title") or (row.get("law_type") or "law").replace("_", " ").title()
+            status = (row.get("status") or "unknown").upper()
+            vf = int(row.get("votes_for") or 0)
+            va = int(row.get("votes_against") or 0)
+            ts = row.get("ts")
+            items.append({
+                "description": f"🏛 {title}: {status} ({vf}-{va})",
+                "created_at": str(ts) if ts else "",
+            })
+
+        items = [i for i in items if i.get("created_at")]
+        items.sort(key=lambda x: x["created_at"], reverse=True)
+        seen: set[str] = set()
+        deduped: list[dict] = []
+        for item in items:
+            key = item["description"]
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+            if len(deduped) >= 10:
+                break
+        return {"success": True, "actions": deduped}
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/zrs/actions")
+async def get_zrs_actions():
+    """ZRS / central bank activity log for ECO-POL dashboard."""
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        items: list[dict] = []
+
+        cur.execute("""
+            SELECT description, created_at, event_type FROM events
+            WHERE event_type IN ('economy', 'zrs', 'frs')
+               OR LOWER(description) LIKE '%zrs%'
+               OR LOWER(description) LIKE '%frs chief%'
+               OR LOWER(description) LIKE '%reserve%'
+            ORDER BY created_at DESC LIMIT 12
+        """)
+        for row in cur.fetchall():
+            items.append({
+                "description": row["description"],
+                "created_at": str(row["created_at"]),
+                "event_type": row.get("event_type") or "economy",
+            })
+
+        cur.execute("""
+            SELECT state, action_taken, amount, news_headline, created_at
+            FROM zrs_policy
+            ORDER BY created_at DESC NULLS LAST, id DESC
+            LIMIT 5
+        """)
+        for row in cur.fetchall():
+            headline = row.get("news_headline") or row.get("action_taken") or "ZRS policy update"
+            ts = row.get("created_at")
+            items.append({
+                "description": f"ZRS {row.get('state', 'NORMAL')}: {headline}",
+                "created_at": str(ts) if ts else "",
+                "event_type": "economy",
+            })
+
+        items = [i for i in items if i.get("created_at")]
+        items.sort(key=lambda x: x["created_at"], reverse=True)
+        seen: set[str] = set()
+        deduped: list[dict] = []
+        for item in items:
+            key = item["description"]
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+            if len(deduped) >= 10:
+                break
+        return {"success": True, "actions": deduped}
+    finally:
+        cur.close()
+        db.close()
+
+
 @app.get("/corporations")
 async def get_corporations():
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         cur.execute("""
+            UPDATE corporations c
+            SET employees = (
+                SELECT COUNT(*) FROM agents a
+                WHERE a.employer_corp_id = c.id
+                  AND a.is_alive = true
+            )
+        """)
+        db.commit()
+        cur.execute("""
             SELECT id, name, corp_type, employees, treasury, revenue, market_share, debt
-            FROM corporations WHERE is_active = true
+            FROM corporations
+            WHERE treasury > 0
+              AND (is_active = true OR is_active IS NULL)
             ORDER BY treasury DESC LIMIT 9
         """)
         rows = cur.fetchall()
@@ -3860,13 +6575,64 @@ async def get_police_divisions():
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT * FROM police_divisions ORDER BY id")
-        divs = cur.fetchall()
         cur.execute(
             "SELECT COALESCE(uprising_active, false) AS a FROM civilization_state WHERE id = 1"
         )
         up_row = cur.fetchone()
         uprising = bool((up_row or {}).get("a"))
+
+        # Sync total officers across divisions based on sheriff_state
+        cur.execute("SELECT police_count, police_budget FROM sheriff_state WHERE is_active=true LIMIT 1")
+        sheriff = cur.fetchone()
+        if sheriff:
+            total_officers = sheriff.get("police_count") or 0
+            total_budget = float(sheriff.get("police_budget") or 0)
+
+            # Distribute officers across active divisions proportionally
+            cur.execute("SELECT COUNT(*) AS n FROM police_divisions WHERE budget > 0")
+            active_divs = (cur.fetchone() or {}).get("n") or 1
+
+            if total_officers > 0:
+                cur.execute("""
+                    UPDATE police_divisions SET 
+                        officers = CASE division_name
+                            WHEN 'SWAT' THEN %s
+                            WHEN 'RIOT CTRL' THEN %s
+                            WHEN 'ANTI-TAX' THEN %s
+                            WHEN 'ANTI-CORR' THEN %s
+                            WHEN 'PRES.GUARD' THEN %s
+                        END
+                    WHERE division_name IN ('SWAT','RIOT CTRL','ANTI-TAX','ANTI-CORR','PRES.GUARD')
+                """, (
+                    int(total_officers * 0.30),  # SWAT 30%
+                    int(total_officers * 0.35),  # RIOT CTRL 35%
+                    int(total_officers * 0.15),  # ANTI-TAX 15%
+                    int(total_officers * 0.12),  # ANTI-CORR 12%
+                    int(total_officers * 0.08),  # PRES.GUARD 8%
+                ))
+
+                # Distribute budget too
+                cur.execute("""
+                    UPDATE police_divisions SET
+                        budget = CASE division_name
+                            WHEN 'SWAT' THEN %s
+                            WHEN 'RIOT CTRL' THEN %s
+                            WHEN 'ANTI-TAX' THEN %s
+                            WHEN 'ANTI-CORR' THEN %s
+                            WHEN 'PRES.GUARD' THEN %s
+                        END
+                    WHERE division_name IN ('SWAT','RIOT CTRL','ANTI-TAX','ANTI-CORR','PRES.GUARD')
+                """, (
+                    int(total_budget * 0.30),
+                    int(total_budget * 0.35),
+                    int(total_budget * 0.15),
+                    int(total_budget * 0.12),
+                    int(total_budget * 0.08),
+                ))
+                db.commit()
+
+        cur.execute("SELECT * FROM police_divisions ORDER BY id")
+        divs = cur.fetchall()
         depleted = {"SWAT", "ANTI-TAX", "ANTI-CORR", "PRES.GUARD"} if uprising else set()
         out = []
         for d in divs:
@@ -4288,3 +7054,233 @@ async def get_receipt(receipt_id: str):
         return {"ok": False, "error": "Not found"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.post("/audit/generate-view-key")
+@app.post("/api/audit/generate-view-key")
+async def generate_view_key_endpoint():
+    """Generate a new View Key for audit trail"""
+    vk = generate_view_key()
+    return {
+        "success": True,
+        "view_key_id": vk["view_key_id"],
+        "view_key_secret": vk["view_key_secret"],
+        "salt": vk["salt"],
+        "message": "Keep your view_key_secret private. Share only view_key_id with auditors.",
+    }
+
+
+@app.post("/audit/create-trail")
+@app.post("/api/audit/create-trail")
+async def create_audit_trail_endpoint(request: Request):
+    """Create and save encrypted audit trail for a stealth transaction"""
+    body = await request.json()
+
+    sender = body.get("sender_address")
+    recipient = body.get("recipient_address")
+    amount = body.get("amount", 0)
+    coin_type = body.get("coin_type", "SUI")
+    relayer_path = body.get("relayer_path", [])
+    tx_digest = body.get("tx_digest")
+    commitment_hash = body.get("commitment_hash", "")
+
+    vk = generate_view_key()
+
+    trail = create_audit_trail(
+        sender, recipient, amount, coin_type,
+        relayer_path, tx_digest, commitment_hash
+    )
+
+    encrypted = encrypt_audit_trail(trail, vk)
+
+    blob_id = await save_audit_trail_to_walrus(
+        encrypted, vk["view_key_id"], tx_digest
+    )
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO audit_trails
+            (tx_digest, commitment_hash, sender_address, view_key_id,
+             view_key_secret, salt, walrus_blob_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                tx_digest, commitment_hash, sender, vk["view_key_id"],
+                vk["view_key_secret"], vk["salt"], blob_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+    return {
+        "success": True,
+        "view_key_id": vk["view_key_id"],
+        "view_key_secret": vk["view_key_secret"],
+        "salt": vk["salt"],
+        "walrus_blob_id": blob_id,
+        "message": "Audit trail saved. Keep your view_key_secret to prove transaction ownership.",
+    }
+
+
+@app.post("/audit/verify")
+@app.post("/api/audit/verify")
+async def verify_audit_trail(request: Request):
+    """Verify and decrypt an audit trail with view key"""
+    body = await request.json()
+    view_key_secret = body.get("view_key_secret")
+    salt = body.get("salt")
+    walrus_blob_id = body.get("walrus_blob_id")
+
+    if not all([view_key_secret, salt, walrus_blob_id]):
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"https://aggregator.walrus-testnet.walrus.space/v1/blobs/{walrus_blob_id}"
+            )
+            walrus_data = r.json()
+            encrypted_data = walrus_data.get("encrypted_data")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Walrus fetch error: {e}") from e
+
+    try:
+        trail = decrypt_audit_trail(encrypted_data, view_key_secret, salt)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid view key - decryption failed") from e
+
+    return {
+        "success": True,
+        "verified": True,
+        "trail": trail,
+        "message": "Audit trail successfully decrypted and verified",
+    }
+
+
+@app.get("/scenarios/active")
+@app.get("/api/scenarios/active")
+async def get_active_scenarios_api():
+    from ai_governance import get_civilization_state
+    from scenarios import get_active_scenarios
+
+    state = await get_civilization_state()
+    active = get_active_scenarios(state)
+    return {
+        "success": True,
+        "active_scenarios": [
+            {"id": s["id"], "name": s["name"], "description": s["description"]}
+            for s in active
+        ],
+    }
+
+
+@app.get("/ai-governance/battle")
+@app.get("/api/ai-governance/battle")
+async def get_ai_battle_status():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT faction, model, last_5_decisions,
+                   approval_trend, total_cycles, updated_at
+            FROM ai_faction_memory
+            ORDER BY updated_at DESC
+            """
+        )
+        factions = cur.fetchall()
+
+        cur.execute(
+            """
+            SELECT description, created_at
+            FROM events
+            WHERE event_type IN ('ai_governance', 'ai_decision')
+            ORDER BY created_at DESC
+            LIMIT 20
+            """
+        )
+        recent = cur.fetchall()
+
+        return {
+            "success": True,
+            "factions": [
+                {
+                    "faction": f[0],
+                    "model": f[1],
+                    "last_decision": (f[2] or [{}])[-1] if f[2] else {},
+                    "total_cycles": f[4],
+                    "last_active": str(f[5]),
+                }
+                for f in factions
+            ],
+            "recent_battle_log": [
+                {"description": r[0], "time": str(r[1])}
+                for r in recent
+            ],
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/ai-governance/history")
+@app.get("/api/ai-governance/history")
+async def get_ai_governance_history():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT event_type, description, created_at
+            FROM events
+            WHERE event_type = 'ai_governance'
+            ORDER BY created_at DESC
+            LIMIT 50
+            """
+        )
+        rows = cur.fetchall()
+        return {
+            "success": True,
+            "decisions": [
+                {"type": r[0], "description": r[1], "timestamp": str(r[2])}
+                for r in rows
+            ],
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/audit/my-trails/{sender_address}")
+@app.get("/api/audit/my-trails/{sender_address}")
+async def get_my_audit_trails(sender_address: str):
+    """Get all audit trails for a sender (only metadata, not decrypted)"""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT tx_digest, view_key_id, walrus_blob_id, created_at
+            FROM audit_trails
+            WHERE sender_address = %s
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (sender_address,),
+        )
+        rows = cur.fetchall()
+        trails = [{
+            "tx_digest": r[0],
+            "view_key_id": r[1],
+            "walrus_blob_id": r[2],
+            "created_at": str(r[3]),
+        } for r in rows]
+        return {"success": True, "trails": trails}
+    finally:
+        cur.close()
+        conn.close()

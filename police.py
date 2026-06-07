@@ -76,7 +76,6 @@ def sync_police_force_to_population(cur) -> int:
         "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
         (new_count,),
     )
-    sync_police_divisions(cur)
     log_event(
         cur,
         None,
@@ -91,6 +90,64 @@ def sync_police_force_to_population(cur) -> int:
 def get_sheriff(cur):
     cur.execute("SELECT * FROM sheriff_state WHERE is_active = true LIMIT 1")
     return cur.fetchone()
+
+
+def distribute_officers(cur):
+    """Sync sheriff count and distribute officers/budget across 5 divisions."""
+    cur.execute(
+        """
+        SELECT police_count, police_budget
+        FROM sheriff_state
+        WHERE is_active = true
+        LIMIT 1
+        """
+    )
+    sh = cur.fetchone()
+    if not sh:
+        return
+
+    total_officers = max(0, int(sh.get("police_count") or 0))
+    total_budget = max(0.0, float(sh.get("police_budget") or 0))
+
+    # Ensure baseline division rows exist before splitting.
+    sync_police_divisions(cur)
+    cur.execute(
+        """
+        SELECT id
+        FROM police_divisions
+        ORDER BY id
+        LIMIT 5
+        """
+    )
+    divisions = cur.fetchall()
+    if not divisions:
+        return
+
+    div_n = len(divisions)
+    officers_base = total_officers // div_n
+    officers_rem = total_officers % div_n
+    budget_each = round(total_budget / div_n, 2)
+
+    allocated_officers = 0
+    allocated_budget = 0.0
+    for idx, div in enumerate(divisions):
+        officers = officers_base + (1 if idx < officers_rem else 0)
+        budget = budget_each if idx < div_n - 1 else round(total_budget - allocated_budget, 2)
+        cur.execute(
+            """
+            UPDATE police_divisions
+            SET officers = %s, budget = %s
+            WHERE id = %s
+            """,
+            (officers, budget, div["id"]),
+        )
+        allocated_officers += officers
+        allocated_budget += budget
+
+    cur.execute(
+        "UPDATE sheriff_state SET police_count = %s WHERE is_active = true",
+        (allocated_officers,),
+    )
 
 
 def target_officers_for_budget(budget: float) -> int:
@@ -214,6 +271,78 @@ def police_salary_check(cur) -> int:
     return quit_total
 
 
+def collect_corporate_protection_fees(cur) -> float:
+    """Collect 2% protection fee from protected active corporations."""
+    cur.execute(
+        """
+        SELECT id, name, treasury, police_protection
+        FROM corporations
+        WHERE is_active = true AND treasury > 500
+        """
+    )
+    corps = cur.fetchall()
+    total_collected = 0.0
+    protected_count = 0
+    for corp in corps:
+        if not corp.get("police_protection"):
+            continue
+        protected_count += 1
+        fee = float(corp.get("treasury") or 0) * 0.02
+        fee = min(fee, 500.0)
+        if fee <= 0:
+            continue
+        cur.execute(
+            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+            (fee, corp["id"]),
+        )
+        cur.execute(
+            "UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active = true",
+            (fee,),
+        )
+        total_collected += fee
+
+    if total_collected > 0:
+        log_event(
+            cur,
+            None,
+            "police",
+            f"Corporate protection fees collected: {total_collected:.0f} ZION from {protected_count} corporations",
+            total_collected,
+        )
+    return total_collected
+
+
+def collect_presidential_grant(cur) -> float:
+    """Transfer a part of president personal fund to police budget."""
+    cur.execute(
+        "SELECT personal_fund, agent_id FROM president_state WHERE is_active = true LIMIT 1"
+    )
+    pres = cur.fetchone()
+    if not pres or float(pres.get("personal_fund") or 0) < 200:
+        return 0.0
+
+    grant = min(500.0, float(pres.get("personal_fund") or 0) * 0.05)
+    if grant <= 0:
+        return 0.0
+
+    cur.execute(
+        "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
+        (grant,),
+    )
+    cur.execute(
+        "UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active = true",
+        (grant,),
+    )
+    log_event(
+        cur,
+        pres.get("agent_id"),
+        "police",
+        f"Presidential grant to police: {grant:.0f} ZION",
+        grant,
+    )
+    return grant
+
+
 def gang_strength(cur, clan_id):
     cur.execute(
         """
@@ -226,6 +355,51 @@ def gang_strength(cur, clan_id):
     return int(r["m"] or 0) * 10 + float(r["avg_b"] or 0)
 
 
+def emergency_criminal_crackdown(cur) -> int:
+    """SWAT crackdown when criminals exceed 30% of population."""
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
+    total = int(cur.fetchone()["c"] or 0)
+    if total <= 0:
+        return 0
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM agents
+        WHERE is_alive = true
+          AND clan_id IS NOT NULL
+          AND class IN ('poor', 'critical', 'working')
+        """
+    )
+    criminals = int(cur.fetchone()["c"] or 0)
+    if criminals / total <= 0.30:
+        return 0
+
+    kill_n = max(1, int(criminals * 0.20))
+    cur.execute(
+        """
+        UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'police_crackdown'
+        WHERE id IN (
+            SELECT id FROM agents
+            WHERE is_alive = true
+              AND clan_id IS NOT NULL
+              AND class IN ('poor', 'critical', 'working')
+            ORDER BY RANDOM()
+            LIMIT %s
+        )
+        """,
+        (kill_n,),
+    )
+    killed = int(cur.rowcount or 0)
+    if killed > 0:
+        msg = (
+            f"EMERGENCY CRACKDOWN: Police eliminated {killed} criminals "
+            f"({criminals}/{total} ratio exceeded 30%)"
+        )
+        log_event(cur, None, "police_crackdown", msg, 0, priority="breaking")
+        print(msg)
+    return killed
+
+
 def main():
     conn = get_conn()
     cur = get_cursor(conn)
@@ -236,6 +410,8 @@ def main():
 
     print(f"\n🚔 ZION Police — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
+    emergency_criminal_crackdown(cur)
+
     sheriff = get_sheriff(cur)
     if not sheriff:
         print("No sheriff — skipping police cycle")
@@ -245,6 +421,14 @@ def main():
     recruited = sync_police_force_to_population(cur)
     if recruited:
         print(f"  Population scaling: +{recruited} officers hired")
+
+    corp_fees = collect_corporate_protection_fees(cur)
+    if corp_fees > 0:
+        print(f"  Corporate protection fees: +{corp_fees:.0f} ZION")
+
+    pres_grant = collect_presidential_grant(cur)
+    if pres_grant > 0:
+        print(f"  Presidential grant: +{pres_grant:.0f} ZION")
 
     police_salary_check(cur)
 
@@ -369,11 +553,20 @@ def main():
             loss,
             priority="urgent",
         )
-        print(f"❌ Raid failed: -{loss} officers (no civilian casualties)")
+        cur.execute(
+            """
+            UPDATE civilization_state SET
+                pending_gang_retaliation = true,
+                last_raid_failed_clan_id = %s
+            WHERE id = 1
+            """,
+            (target["id"],),
+        )
+        print(f"❌ Raid failed: -{loss} officers — gang retaliation queued")
 
     if not is_uprising_active(cur):
-        sync_police_divisions(cur)
         added = hire_divisions_from_budget(cur)
+        distribute_officers(cur)
         if added:
             print(f"  👮 Division hiring: +{added} officers (budget-based staffing)")
     conn.commit()

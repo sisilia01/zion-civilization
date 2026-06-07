@@ -166,7 +166,9 @@ def issue_president_orders(cur, president):
 
 
 def process_sheriff_orders(cur, sheriff):
+    print("process_sheriff_orders: starting...", flush=True)
     if not sheriff:
+        print("process_sheriff_orders: no sheriff, skipping", flush=True)
         return 0, 0
 
     stype = sheriff.get("sheriff_type") or "honest"
@@ -174,88 +176,97 @@ def process_sheriff_orders(cur, sheriff):
     executed = 0
     ignored = 0
 
-    cur.execute(
-        """
-        SELECT id, order_type, payload FROM sheriff_orders
-        WHERE status = 'pending' ORDER BY issued_at ASC LIMIT 10
-        """
-    )
-    orders = cur.fetchall()
-
-    for order in orders:
-        oid = order["id"]
-        otype = order["order_type"]
-        payload = order["payload"] or {}
-        if isinstance(payload, str):
-            payload = json.loads(payload)
-
-        if stype == "corrupt" and random.random() < 0.45:
-            cur.execute(
-                """
-                UPDATE sheriff_orders SET status = 'faked', faked = true,
-                    result_text = %s, executed_at = NOW()
-                WHERE id = %s
-                """,
-                (f"Sheriff {sname} reported success (faked)", oid),
-            )
-            ignored += 1
-            if otype == "ATTACK_GANG" and payload.get("gang_name"):
-                log_event(
-                    cur,
-                    sheriff["agent_id"],
-                    "sheriff_action",
-                    f"TIP-OFF: Gang {payload['gang_name']} warned before raid!",
-                    0,
-                    priority="urgent",
-                )
-            continue
-
-        if stype == "junta" and random.random() < 0.35:
-            ignored += 1
-            cur.execute(
-                "UPDATE sheriff_orders SET status = 'ignored', executed_at = NOW() WHERE id = %s",
-                (oid,),
-            )
-            cur.execute(
-                "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 15 WHERE is_active = true"
-            )
-            continue
-
-        result = _execute_order(cur, sheriff, otype, payload)
+    try:
         cur.execute(
             """
-            UPDATE sheriff_orders SET status = 'executed', result_text = %s, executed_at = NOW()
-            WHERE id = %s
-            """,
-            (result, oid),
+            SELECT id, order_type, status, payload FROM sheriff_orders
+            WHERE status = 'pending' ORDER BY issued_at ASC LIMIT 10
+            """
         )
-        executed += 1
-        log_event(
-            cur,
-            sheriff["agent_id"],
-            "sheriff_action",
-            f"Sheriff {sname}: {result}",
-            0,
-            priority="normal",
-        )
+        orders = cur.fetchall()
+        print(f"process_sheriff_orders: found {len(orders)} pending orders", flush=True)
 
-    cur.execute(
-        """
-        UPDATE sheriff_state SET
-            orders_executed_cycle = %s,
-            orders_ignored_cycle = %s
-        WHERE is_active = true
-        """,
-        (executed, ignored),
-    )
+        for order in orders:
+            print(f"process_sheriff_orders: processing order id={order.get('id')} type={order.get('order_type')}", flush=True)
+            oid = order["id"]
+            otype = order["order_type"]
+            payload = order["payload"] or {}
+            if isinstance(payload, str):
+                payload = json.loads(payload)
 
-    if stype in ("corrupt", "junta"):
+            if stype == "corrupt" and random.random() < 0.45:
+                cur.execute(
+                    """
+                    UPDATE sheriff_orders SET status = 'faked', faked = true,
+                        result_text = %s, executed_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (f"Sheriff {sname} reported success (faked)", oid),
+                )
+                ignored += 1
+                if otype == "ATTACK_GANG" and payload.get("gang_name"):
+                    log_event(
+                        cur,
+                        sheriff["agent_id"],
+                        "sheriff_action",
+                        f"TIP-OFF: Gang {payload['gang_name']} warned before raid!",
+                        0,
+                        priority="urgent",
+                    )
+                continue
+
+            if stype == "junta" and random.random() < 0.35:
+                ignored += 1
+                cur.execute(
+                    "UPDATE sheriff_orders SET status = 'ignored', executed_at = NOW() WHERE id = %s",
+                    (oid,),
+                )
+                cur.execute(
+                    "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 15 WHERE is_active = true"
+                )
+                continue
+
+            print(f"process_sheriff_orders: executing order {oid} ({otype})...", flush=True)
+            result = _execute_order(cur, sheriff, otype, payload)
+            cur.execute(
+                """
+                UPDATE sheriff_orders SET status = 'executed', result_text = %s, executed_at = NOW()
+                WHERE id = %s
+                """,
+                (result, oid),
+            )
+            executed += 1
+            log_event(
+                cur,
+                sheriff["agent_id"],
+                "sheriff_action",
+                f"Sheriff {sname}: {result}",
+                0,
+                priority="normal",
+            )
+
         cur.execute(
-            "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + %s WHERE is_active = true",
-            (ignored * 12,),
+            """
+            UPDATE sheriff_state SET
+                orders_executed_cycle = %s,
+                orders_ignored_cycle = %s
+            WHERE is_active = true
+            """,
+            (executed, ignored),
         )
 
-    return executed, ignored
+        if stype in ("corrupt", "junta"):
+            cur.execute(
+                "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + %s WHERE is_active = true",
+                (ignored * 12,),
+            )
+
+        print(f"process_sheriff_orders: done — executed={executed} ignored={ignored}", flush=True)
+        return executed, ignored
+
+    except Exception as e:
+        print(f"process_sheriff_orders error: {e}", flush=True)
+        return 0, 0
 
 
 def _execute_order(cur, sheriff, otype, payload):
@@ -451,3 +462,218 @@ def attempt_coup(cur, sheriff, president):
     cur.execute(
         "UPDATE sheriff_state SET coup_points = 0 WHERE is_active = true"
     )
+
+
+def check_dictator_mode(cur, president, sheriff) -> bool:
+    """Проверяет становится ли президент диктатором и обрабатывает противостояние."""
+    if not president:
+        return False
+
+    approval = int(president.get("approval_rating") or 50)
+    hours = int(president.get("hours_in_power") or 0)
+    already = bool(president.get("is_dictator"))
+    is_dictator = already or (approval < 15 and hours > 72)
+
+    if not is_dictator:
+        return False
+
+    if not already:
+        cur.execute(
+            """
+            UPDATE president_state
+            SET is_dictator = true
+            WHERE id = %s
+            """,
+            (president["id"],),
+        )
+
+    treasury = float(president.get("personal_fund") or 0)
+    if treasury > 100:
+        gang_hire_budget = treasury * 0.8
+        cur.execute(
+            """
+            UPDATE president_state
+            SET personal_fund = personal_fund * 0.2
+            WHERE id = %s
+            """,
+            (president["id"],),
+        )
+        boost = max(1, int(gang_hire_budget / 100))
+        per_clan = max(1, boost // 3)
+        cur.execute(
+            """
+            SELECT id FROM clans
+            WHERE members_count > 0
+            ORDER BY members_count DESC
+            LIMIT 3
+            """
+        )
+        for row in cur.fetchall():
+            clan_id = row["id"]
+            cur.execute(
+                """
+                UPDATE agents SET clan_id = %s, clan_name = (SELECT name FROM clans WHERE id = %s)
+                WHERE id IN (
+                    SELECT id FROM agents
+                    WHERE is_alive = true AND clan_id IS NULL
+                      AND class IN ('poor', 'critical', 'working')
+                    ORDER BY RANDOM() LIMIT %s
+                )
+                """,
+                (clan_id, clan_id, per_clan),
+            )
+        cur.execute(
+            """
+            UPDATE clans c SET members_count = (
+                SELECT COUNT(*) FROM agents WHERE clan_id = c.id AND is_alive = true
+            )
+            """
+        )
+        log_event(
+            cur,
+            president["agent_id"],
+            "dictator",
+            f"DICTATOR {president['agent_name']} hired gang protection! "
+            f"Spent {gang_hire_budget:.0f} ZION on gangs",
+            gang_hire_budget,
+        )
+
+    return True
+
+
+def check_anti_dictator_coup(cur, president, sheriff) -> bool:
+    """Шериф и сенат пытаются свергнуть диктатора."""
+    if not president:
+        return False
+
+    cur.execute(
+        "SELECT COALESCE(SUM(members_count), 0) AS total FROM clans WHERE members_count > 0"
+    )
+    gang_strength = int((cur.fetchone() or {}).get("total") or 0)
+
+    sheriff = sheriff or {}
+    police_count = int(sheriff.get("police_count") or 0)
+    sheriff_approval = int(sheriff.get("approval_rating") or 50)
+    sheriff_strength = police_count * (sheriff_approval / 100)
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        """
+    )
+    senate_count = int((cur.fetchone() or {}).get("c") or 0)
+    senate_strength = senate_count * 15
+
+    opposition_strength = sheriff_strength + senate_strength
+
+    log_event(
+        cur,
+        president["agent_id"],
+        "dictator",
+        f"POWER STRUGGLE: Dictator gangs={gang_strength} vs "
+        f"Opposition(police={int(sheriff_strength)}+senate={senate_strength})",
+        0,
+    )
+
+    if opposition_strength > gang_strength:
+        sname = (sheriff or {}).get("agent_name") or "Sheriff"
+        log_event(
+            cur,
+            president["agent_id"],
+            "coup",
+            f"COUP SUCCESS! Sheriff {sname} and Senate overthrew DICTATOR "
+            f"{president['agent_name']}! Opposition strength "
+            f"{int(opposition_strength)} > Gang strength {gang_strength}",
+            0,
+            priority="urgent",
+        )
+
+        cur.execute(
+            "UPDATE president_state SET is_active = false, is_dictator = false WHERE id = %s",
+            (president["id"],),
+        )
+
+        if sheriff.get("id"):
+            cur.execute(
+                """
+                UPDATE sheriff_state
+                SET approval_rating = LEAST(approval_rating + 20, 100)
+                WHERE id = %s
+                """,
+                (sheriff["id"],),
+            )
+            log_event(
+                cur,
+                sheriff["agent_id"],
+                "coup",
+                f"Sheriff {sname} takes temporary power. New elections scheduled.",
+                0,
+                priority="urgent",
+            )
+
+        return True
+
+    log_event(
+        cur,
+        president["agent_id"],
+        "dictator",
+        f"Dictator {president['agent_name']} SURVIVED coup attempt! Gang protection holds.",
+        0,
+    )
+    return False
+
+
+def check_sheriff_self_coup(cur, sheriff, president) -> bool:
+    """Шериф сам делает переворот если коррупция высокая и его рейтинг высок."""
+    if not sheriff or not president:
+        return False
+
+    sheriff_approval = int(sheriff.get("approval_rating") or 50)
+    sheriff_type = sheriff.get("sheriff_type") or "honest"
+    corruption = float(president.get("corruption_index") or 30)
+
+    if not (
+        sheriff_approval > 70
+        and corruption > 60
+        and sheriff_type in ("junta", "corrupt")
+    ):
+        return False
+
+    log_event(
+        cur,
+        sheriff["agent_id"],
+        "coup",
+        f"SHERIFF COUP! {sheriff['agent_name']} (approval={sheriff_approval}%, "
+        f"type={sheriff_type}) arrests corrupt President {president['agent_name']} "
+        f"(corruption={corruption:.0f}%)!",
+        0,
+        priority="urgent",
+    )
+
+    cur.execute(
+        "UPDATE president_state SET is_active = false, is_dictator = false WHERE id = %s",
+        (president["id"],),
+    )
+
+    cur.execute(
+        """
+        UPDATE sheriff_state
+        SET sheriff_type = 'junta',
+            approval_rating = LEAST(approval_rating + 10, 95)
+        WHERE id = %s
+        """,
+        (sheriff["id"],),
+    )
+
+    log_event(
+        cur,
+        sheriff["agent_id"],
+        "coup",
+        f"JUNTA ESTABLISHED: Sheriff {sheriff['agent_name']} rules by decree. "
+        f"Elections in 72 hours.",
+        0,
+        priority="urgent",
+    )
+    return True

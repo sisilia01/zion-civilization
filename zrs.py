@@ -14,6 +14,7 @@ from civ_common import (
     zrs_deduct_reserve,
     zrs_reserve,
 )
+from corporations import zrs_corp_bailout
 
 RESERVE_FLOOR = ZRS_RESERVE_FLOOR
 BOOM_ABSORB_RATE = 0.05
@@ -23,6 +24,7 @@ CORP_LOAN_INTEREST = 0.05
 CORP_LOAN_DUE_CYCLES = 10
 MAX_LOANS_PER_CORP = 3
 MAX_LOANS_RESERVE_PCT = 0.10
+ZRS_EVENT_TYPE = "economy"  # ECO-POL dashboard activity column
 
 
 def determine_state(econ: dict, consecutive_crisis: int) -> str:
@@ -154,7 +156,7 @@ def collect_corp_loan_repayments(cur) -> float:
                 log_event(
                     cur,
                     None,
-                    "zrs",
+                    ZRS_EVENT_TYPE,
                     f"ZRS loan repaid: {loan['corp_name']} ({principal:.0f} ZION)",
                     payment,
                     priority="normal",
@@ -182,7 +184,7 @@ def collect_corp_loan_repayments(cur) -> float:
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"ZRS loan DEFAULT: {loan['corp_name']} missed payment ({payment:.0f} ZION due)",
             payment,
             priority="urgent",
@@ -266,7 +268,7 @@ def lend_to_corporations(cur) -> float:
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"ZRS corp loan: {corp['name']} +{CORP_LOAN_AMOUNT:.0f} ZION "
             f"({CORP_LOAN_INTEREST * 100:.0f}%/cycle, due cycle {cycle + CORP_LOAN_DUE_CYCLES})",
             CORP_LOAN_AMOUNT,
@@ -387,12 +389,64 @@ def zrs_redistribute_wealth(
     log_event(
         cur,
         None,
-        "zrs",
+        ZRS_EVENT_TYPE,
         f"ZRS REDISTRIBUTION: {collected:.0f} ZION from top {top_pct*100:.0f}% → bottom {bottom_pct*100:.0f}%",
         collected,
         priority="breaking",
     )
     return collected
+
+
+def zrs_trading_subsidy(cur) -> int:
+    """Give ZRS subsidy to agents who are profitable in Z-PERPS."""
+    try:
+        cur.execute(
+            """
+            SELECT ap.agent_id, ap.total_pnl, ap.virtual_balance
+            FROM agent_portfolio ap
+            JOIN agents a ON a.id = ap.agent_id
+            WHERE a.is_alive = true
+            AND ap.total_pnl > 0
+            AND ap.total_trades >= 1
+            """
+        )
+        profitable_traders = cur.fetchall()
+
+        subsidized = 0
+        total_paid = 0.0
+        for row in profitable_traders:
+            agent_id = row["agent_id"]
+            pnl = float(row["total_pnl"] or 0)
+            subsidy = min(pnl * 0.10, 50.0)
+            if subsidy <= 0:
+                continue
+            if not zrs_deduct_reserve(cur, subsidy):
+                break
+            cur.execute(
+                """
+                UPDATE agents SET balance = balance + %s
+                WHERE id = %s AND is_alive = true
+                """,
+                (subsidy, agent_id),
+            )
+            if cur.rowcount > 0:
+                subsidized += 1
+                total_paid += subsidy
+
+        if subsidized > 0:
+            print(f"ZRS trading subsidy: {subsidized} agents rewarded")
+            log_event(
+                cur,
+                None,
+                ZRS_EVENT_TYPE,
+                f"ZRS trading subsidy: {subsidized} agents rewarded ({total_paid:.0f} ZION from reserve)",
+                total_paid,
+                priority="normal",
+            )
+        return subsidized
+    except Exception as e:
+        print(f"Trading subsidy error: {e}")
+        return 0
 
 
 def zrs_stimulus(cur, per_agent: float) -> float:
@@ -409,7 +463,7 @@ def zrs_stimulus(cur, per_agent: float) -> float:
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"ZRS QE: {total:.0f} ZION stimulus to {n} agents ({per_agent:.0f} each)",
             total,
             priority="urgent",
@@ -435,7 +489,7 @@ def zrs_monetary_policy(cur) -> dict:
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"ZRS RESERVE LOW: {reserve:,.0f} / target {target_reserve:,.0f} — fiscal tightening signal",
             reserve,
             priority="urgent",
@@ -473,6 +527,131 @@ def absorb_from_agents(cur, rate: float) -> float:
     return absorbed
 
 
+def inject_to_corporations(cur, total_amount: float, where_sql: str = "is_active = true") -> tuple[int, float]:
+    """Reserve-backed QE to corporations only."""
+    total_amount = round(float(total_amount), 2)
+    if total_amount <= 0:
+        return 0, 0.0
+    if not zrs_deduct_reserve(cur, total_amount):
+        return 0, 0.0
+    cur.execute(f"SELECT id FROM corporations WHERE {where_sql}")
+    corps = cur.fetchall()
+    if not corps:
+        zrs_add_reserve(cur, total_amount)
+        return 0, 0.0
+    per_corp = round(total_amount / len(corps), 2)
+    for row in corps:
+        cur.execute(
+            "UPDATE corporations SET treasury = treasury + %s WHERE id = %s",
+            (per_corp, row["id"]),
+        )
+    return len(corps), round(per_corp * len(corps), 2)
+
+
+def execute_frs_directive(cur, ctx: dict | None = None) -> dict:
+    """Execute FRS Chief directive — sole monetary policy writer."""
+    import json
+
+    cur.execute("SELECT pending_directive, chief_name, is_active FROM frs_chief_state WHERE id = 1")
+    row = cur.fetchone() or {}
+    if not row.get("is_active"):
+        return {"action": "skipped", "reason": "no_active_frs_chief"}
+
+    directive = row.get("pending_directive") or {}
+    if isinstance(directive, str):
+        try:
+            directive = json.loads(directive)
+        except json.JSONDecodeError:
+            directive = {}
+
+    action = directive.get("action", "do_nothing")
+    amount = float(directive.get("amount", 0) or 0)
+    policy_mode = directive.get("policy_mode", "NORMAL")
+    chief_name = row.get("chief_name") or "FRS Chief"
+    moved = 0.0
+    headline = ""
+
+    if action == "tax_change":
+        rate = max(0.0, min(25.0, amount if amount else 5.0))
+        cur.execute(
+            """
+            UPDATE zrs_state SET interest_rate = %s, policy_mode = %s, updated_at = NOW()
+            WHERE id = 1
+            """,
+            (rate, policy_mode),
+        )
+        headline = f"FRS Chief {chief_name} sets interest rate to {rate}%"
+    elif action == "absorb_money" and amount > 0:
+        absorbed = absorb_from_agents(cur, min(0.05, float(amount)))
+        moved = absorbed
+        cur.execute(
+            "UPDATE zrs_state SET policy_mode = %s, updated_at = NOW() WHERE id = 1",
+            (policy_mode,),
+        )
+        headline = f"FRS Chief {chief_name} absorbed {absorbed:.0f} ZION (boom policy)"
+    elif action == "stimulate_economy" and amount > 0:
+        n, total = inject_to_corporations(
+            cur, amount, "is_active = true AND treasury < 5000"
+        )
+        moved = total
+        cur.execute(
+            "UPDATE zrs_state SET policy_mode = %s, updated_at = NOW() WHERE id = 1",
+            (policy_mode,),
+        )
+        headline = f"FRS Chief {chief_name} corp QE: {total:.0f} ZION to {n} corporations"
+    elif action == "declare_emergency":
+        corp_qe = min(float(amount or 0), zrs_reserve(cur) - ZRS_RESERVE_FLOOR)
+        n_corp, corp_total = inject_to_corporations(
+            cur, max(0, corp_qe * 0.7), "is_active = true"
+        )
+        n_ag, ag_total = inject_to_agents(
+            cur, 40.0, "is_alive = true AND class IN ('poor', 'critical')"
+        )
+        moved = corp_total + ag_total
+        cur.execute(
+            "UPDATE zrs_state SET policy_mode = 'EMERGENCY', updated_at = NOW() WHERE id = 1"
+        )
+        headline = (
+            f"FRS Chief {chief_name} EMERGENCY QE: {corp_total:.0f} to {n_corp} corps, "
+            f"{ag_total:.0f} to {n_ag} agents"
+        )
+    else:
+        cur.execute(
+            "UPDATE zrs_state SET policy_mode = %s, updated_at = NOW() WHERE id = 1",
+            (policy_mode,),
+        )
+        headline = f"FRS Chief {chief_name}: hold ({policy_mode})"
+
+    if headline:
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, moved, priority="urgent")
+    result = {"action": action, "amount": amount, "headline": headline, "moved": moved}
+    if ctx is not None:
+        ctx["zrs_execution"] = result
+    return result
+
+
+def run_zrs_maintenance(cur):
+    """Non-policy maintenance: corp loans, snapshots, subsidies."""
+    econ = economy_snapshot(cur)
+    cur.execute("SELECT policy_mode FROM zrs_state WHERE id = 1")
+    state = (cur.fetchone() or {}).get("policy_mode") or "NORMAL"
+    record_zrs_policy(cur, state, "MAINTENANCE", 0, "ZRS maintenance cycle", econ, 0)
+    record_economy_snapshot(cur, state)
+    loan_flow = lend_to_corporations(cur)
+    zrs_corp_bailout(cur)
+    subsidized = zrs_trading_subsidy(cur)
+    reserve = zrs_reserve(cur)
+    log_event(
+        cur,
+        None,
+        ZRS_EVENT_TYPE,
+        f"ZRS maintenance ({state}): reserve {reserve:,.0f} ZION | "
+        f"loans {loan_flow:,.0f} | {subsidized} trading subsidies",
+        loan_flow,
+        priority="normal",
+    )
+
+
 def main():
     conn = get_conn()
     cur = get_cursor(conn)
@@ -482,6 +661,17 @@ def main():
     print(f"\n🏦 ZION Reserve System — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 50)
 
+    result = execute_frs_directive(cur)
+    print(f"  FRS directive: {result.get('headline') or result.get('reason', '—')}")
+    run_zrs_maintenance(cur)
+    conn.commit()
+    print("✅ ZRS maintenance complete!\n")
+    cur.close()
+    conn.close()
+
+
+def _legacy_autonomous_policy_disabled():
+    """Legacy autonomous ZRS policy — disabled; FRS Chief is sole authority."""
     monetary = zrs_monetary_policy(cur)
     econ = economy_snapshot(cur)
     cur.execute("SELECT * FROM zrs_state WHERE id = 1")
@@ -513,7 +703,7 @@ def main():
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             headline,
             absorbed,
             priority="urgent",
@@ -521,7 +711,7 @@ def main():
     elif state == "NORMAL":
         action = "HOLD"
         headline = f"ZRS NORMAL: Interest {rate}%. Minor adjustments only."
-        log_event(cur, None, "zrs", headline, 0, priority="normal")
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, 0, priority="normal")
     elif state == "RECESSION":
         tax_mod = -2.0
         n, total = inject_to_agents(
@@ -532,13 +722,13 @@ def main():
         amount = total
         action = "INJECT_SMALL"
         headline = f"ZRS STIMULUS: Injecting liquidity to support economy ({n} poor agents)"
-        log_event(cur, None, "zrs", headline, total, priority="urgent")
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, total, priority="urgent")
     elif state == "CRISIS":
         n, total = inject_to_agents(cur, 100.0)
         amount = total
         action = "INJECT_LARGE"
         headline = "ZRS EMERGENCY QE: Major liquidity injection!"
-        log_event(cur, None, "zrs", headline, total, priority="breaking")
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, total, priority="breaking")
 
         cur.execute(
             """
@@ -557,7 +747,7 @@ def main():
                 log_event(
                     cur,
                     None,
-                    "zrs",
+                    ZRS_EVENT_TYPE,
                     f"ZRS bailout: {corp['name']} +10000 ZION",
                     10000,
                     priority="urgent",
@@ -600,12 +790,12 @@ def main():
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"BREAKING: ZRS MEGA QE: {amount:,.0f} ZION injected — civilization saved!",
             amount,
             priority="breaking",
         )
-        log_event(cur, None, "zrs", headline, amount, priority="breaking")
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, amount, priority="breaking")
         rate = 0.0
     elif state == "HYPERINFLATION":
         tax_mod = 20.0
@@ -614,13 +804,13 @@ def main():
         amount = absorbed
         action = "ABSORB_AGGRESSIVE"
         headline = "ZRS EMERGENCY: Hyperinflation detected! Absorbing excess ZION"
-        log_event(cur, None, "zrs", headline, absorbed, priority="breaking")
+        log_event(cur, None, ZRS_EVENT_TYPE, headline, absorbed, priority="breaking")
 
     if state != prev_mode:
         log_event(
             cur,
             None,
-            "zrs",
+            ZRS_EVENT_TYPE,
             f"ZRS STATE CHANGE: {prev_mode} → {state}. Interest rate {rate}%",
             amount,
             priority="breaking",
@@ -647,6 +837,10 @@ def main():
     record_zrs_policy(cur, state, action, amount, headline, econ, rate)
     record_economy_snapshot(cur, state)
     lend_to_corporations(cur)
+    bailed = zrs_corp_bailout(cur)
+    if bailed:
+        print(f"  🏦 ZRS corp bootstrap bailout: {bailed} corps")
+    zrs_trading_subsidy(cur)
 
     conn.commit()
     print(f"Mode: {state} | Reserve: {reserve_before:,.0f} → {reserve_after:,.0f}")
@@ -661,7 +855,9 @@ def main():
 if __name__ == "__main__":
     import sys
 
+    from civ_common import run_db_script
+
     if len(sys.argv) > 1 and sys.argv[1] == "drain":
-        zrs_population_drain()
+        run_db_script(zrs_population_drain, "ZRS population drain")
     else:
-        main()
+        run_db_script(main, "ZRS cycle")

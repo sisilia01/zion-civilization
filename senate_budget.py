@@ -179,6 +179,167 @@ def spend_bribe_senators(cur, cost: float = 400.0) -> bool:
     return True
 
 
+def emergency_police_loan(cur) -> float:
+    """Issue emergency ZRS loan to police during near-anarchy."""
+    cur.execute(
+        "SELECT police_budget, police_count FROM sheriff_state WHERE is_active = true LIMIT 1"
+    )
+    sheriff = cur.fetchone()
+    if not sheriff:
+        return 0.0
+
+    police_budget = float(sheriff.get("police_budget") or 0)
+    police_count = int(sheriff.get("police_count") or 0)
+
+    cur.execute("SELECT COALESCE(SUM(members_count), 0) AS gang_total FROM clans WHERE members_count > 0")
+    gang_total = int((cur.fetchone() or {}).get("gang_total") or 0)
+
+    anarchy_threshold = gang_total > police_count * 5
+    budget_critical = police_budget < 500
+    if not (anarchy_threshold and budget_critical):
+        return 0.0
+
+    cur.execute("SELECT reserve FROM zrs_state LIMIT 1")
+    row = cur.fetchone()
+    zrs = float(row.get("reserve") or 0) if row else 0.0
+    if zrs <= 50000:
+        return 0.0
+
+    loan_amount = min(20000.0, zrs * 0.05)
+    interest_rate = 0.10
+    repayment = loan_amount * (1 + interest_rate)
+
+    cur.execute(
+        "UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active = true",
+        (loan_amount,),
+    )
+    cur.execute(
+        "UPDATE zrs_state SET reserve = reserve - %s",
+        (loan_amount,),
+    )
+    cur.execute(
+        """
+        INSERT INTO active_effects (effect_type, expires_at, metadata)
+        VALUES ('POLICE_LOAN', NOW() + INTERVAL '30 days', %s::jsonb)
+        """,
+        (
+            (
+                '{"repayment": '
+                + str(round(repayment, 2))
+                + ', "loan_amount": '
+                + str(round(loan_amount, 2))
+                + ', "interest_rate": '
+                + str(round(interest_rate, 4))
+                + "}"
+            ),
+        ),
+    )
+    log_event(
+        cur,
+        None,
+        "zrs",
+        f"ZRS EMERGENCY LOAN: {loan_amount:.0f} ZION to police at {interest_rate*100:.0f}% interest. "
+        f"Gang ratio: {gang_total}/{police_count}. Repayment: {repayment:.0f} ZION in 30 days",
+        loan_amount,
+        priority="urgent",
+    )
+    return loan_amount
+
+
+def process_police_loan_repayments(cur) -> int:
+    """Repay or roll over expired POLICE_LOAN effects."""
+    cur.execute(
+        """
+        SELECT id, metadata FROM active_effects
+        WHERE effect_type = 'POLICE_LOAN' AND expires_at < NOW()
+        """
+    )
+    loans = cur.fetchall()
+    processed = 0
+    for loan in loans:
+        metadata = loan.get("metadata") or {}
+        repayment = float(metadata.get("repayment") or 0)
+        if repayment <= 0:
+            cur.execute("DELETE FROM active_effects WHERE id = %s", (loan["id"],))
+            processed += 1
+            continue
+        cur.execute("SELECT police_budget FROM sheriff_state WHERE is_active = true LIMIT 1")
+        pb = cur.fetchone()
+        if pb and float(pb.get("police_budget") or 0) >= repayment:
+            cur.execute(
+                "UPDATE sheriff_state SET police_budget = police_budget - %s WHERE is_active = true",
+                (repayment,),
+            )
+            cur.execute(
+                "UPDATE zrs_state SET reserve = reserve + %s",
+                (repayment,),
+            )
+            cur.execute("DELETE FROM active_effects WHERE id = %s", (loan["id"],))
+            log_event(cur, None, "zrs", f"Police repaid ZRS loan: {repayment:.0f} ZION", repayment)
+        else:
+            cur.execute(
+                """
+                UPDATE active_effects
+                SET metadata = jsonb_set(
+                        COALESCE(metadata, '{}'::jsonb),
+                        '{repayment}',
+                        to_jsonb(%s::numeric)
+                    ),
+                    expires_at = NOW() + INTERVAL '7 days'
+                WHERE id = %s
+                """,
+                (round(repayment * 1.1, 2), loan["id"]),
+            )
+            log_event(
+                cur,
+                None,
+                "zrs",
+                f"Police defaulted on ZRS loan! Penalty added. New debt: {repayment*1.1:.0f} ZION",
+                repayment,
+                priority="urgent",
+            )
+        processed += 1
+    return processed
+
+
+def appropriate_police_budget(cur) -> float:
+    """Congress appropriates police funding from senate_budget (USA model)."""
+    budget = get_budget(cur)
+    balance = float(budget.get("balance") or 0)
+    if balance < 500:
+        return 0.0
+    try:
+        from political_economy import compute_macro_metrics
+
+        metrics = compute_macro_metrics(cur)
+        crime = float(metrics.get("crime_rate") or 0)
+        unemployment = float(metrics.get("unemployment_rate") or 0)
+    except Exception:
+        crime, unemployment = 0.0, 0.0
+    if crime < 0.3 and unemployment < 50:
+        return 0.0
+    amount = round(min(balance * 0.20, 5000.0), 2)
+    if amount <= 0:
+        return 0.0
+    cur.execute(
+        "UPDATE senate_budget SET balance = balance - %s, total_spent = total_spent + %s WHERE id = 1",
+        (amount, amount),
+    )
+    cur.execute(
+        "UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active = true",
+        (amount,),
+    )
+    log_event(
+        cur,
+        None,
+        "senate",
+        f"Congress appropriated {amount:.0f} ZION to police budget",
+        amount,
+        priority="normal",
+    )
+    return amount
+
+
 def run_budget_cycle(cur) -> None:
     """Auto-spend senate budget based on civilization needs."""
     budget = get_budget(cur)
@@ -192,6 +353,7 @@ def run_budget_cycle(cur) -> None:
     unemployment = float(crisis.get("unemployment_rate") or 0)
 
     roll = random.random()
+    appropriate_police_budget(cur)
     if social_debt > 1000 and roll < 0.4:
         spend_social_programs(cur, min(1000, balance * 0.3))
     elif unemployment > 60 and roll < 0.35:
@@ -208,6 +370,8 @@ def run_cycle() -> dict:
     conn = get_conn()
     cur = get_cursor(conn)
     ensure_schema(cur)
+    process_police_loan_repayments(cur)
+    emergency_police_loan(cur)
     run_budget_cycle(cur)
     budget = get_budget(cur)
     conn.commit()
@@ -218,7 +382,12 @@ def run_cycle() -> dict:
 
 def main():
     print(f"\n💰 ZION Senate Budget — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    result = run_cycle()
+    try:
+        result = run_cycle()
+    except Exception as exc:
+        print(f"❌ Senate budget cycle failed: {exc}")
+        print("⚠️ Check PostgreSQL connection settings in civ_common.py and DB service status.\n")
+        return
     print(f"  Senate balance: {result['balance']:.0f} ZION")
     print("✅ Senate budget cycle complete!\n")
 

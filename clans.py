@@ -10,6 +10,7 @@ from civ_common import (
     get_conn,
     get_cursor,
     get_division_officers,
+    get_latest_ai_decision,
     get_zrs_policy_mode,
     log_event,
     zrs_add_reserve,
@@ -18,7 +19,137 @@ from civ_common import (
 RECRUIT_BONUS = 5.0
 SIGNING_BALANCE_MAX = 3.0
 MAX_DOMINANT_GANGS = 3
-EXTORT_RATE = 0.08
+
+
+def police_defections_to_clans(cur) -> int:
+    cur.execute("SELECT police_count, police_budget FROM sheriff_state WHERE is_active=true LIMIT 1")
+    sheriff = cur.fetchone()
+    if not sheriff or float(sheriff.get("police_budget") or 0) >= 100:
+        return 0
+    defectors = random.randint(1, 5)
+    cur.execute(
+        "UPDATE sheriff_state SET police_count = GREATEST(0, police_count - %s) WHERE is_active=true",
+        (defectors,),
+    )
+    cur.execute(
+        "SELECT id, name FROM clans WHERE members_count > 0 ORDER BY RANDOM() LIMIT 1"
+    )
+    clan = cur.fetchone()
+    if not clan:
+        return 0
+    cur.execute(
+        """
+        UPDATE agents SET clan_id = %s, clan_name = %s
+        WHERE id IN (
+            SELECT id FROM agents
+            WHERE is_alive = true AND clan_id IS NULL
+              AND class IN ('poor', 'critical', 'working')
+            ORDER BY RANDOM() LIMIT %s
+        )
+        """,
+        (clan["id"], clan["name"], defectors),
+    )
+    assigned = cur.rowcount
+    if assigned:
+        sync_member_counts(cur)
+    log_event(
+        cur,
+        None,
+        "police",
+        f"{defectors} officers defected — {assigned} agents joined {clan['name']}",
+    )
+    return assigned
+
+
+def gang_retaliation_wave(cur) -> int:
+    """After failed police raid — clans strike back."""
+    cur.execute(
+        "SELECT pending_gang_retaliation, last_raid_failed_clan_id FROM civilization_state WHERE id = 1"
+    )
+    row = cur.fetchone() or {}
+    if not row.get("pending_gang_retaliation"):
+        return 0
+    clan_id = row.get("last_raid_failed_clan_id")
+    cur.execute(
+        """
+        SELECT id, name, treasury FROM corporations
+        WHERE is_active = true AND treasury > 200
+        ORDER BY RANDOM() LIMIT 3
+        """
+    )
+    hit = 0
+    for corp in cur.fetchall():
+        steal = round(float(corp["treasury"]) * 0.06, 2)
+        cur.execute(
+            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
+            (steal, corp["id"]),
+        )
+        if clan_id:
+            cur.execute(
+                "UPDATE clans SET treasury = treasury + %s WHERE id = %s",
+                (steal, clan_id),
+            )
+        hit += 1
+    cur.execute(
+        """
+        UPDATE civilization_state SET
+            pending_gang_retaliation = false,
+            last_raid_failed_clan_id = NULL
+        WHERE id = 1
+        """
+    )
+    log_event(
+        cur,
+        None,
+        "clan_war",
+        f"GANG RETALIATION: {hit} corporations extorted after failed SWAT raid!",
+        hit,
+        priority="breaking",
+    )
+    return hit
+
+
+def run_clan_cycle(cur=None):
+    """Full clan/gang cycle — single source of truth for organized crime."""
+    own_conn = cur is None
+    if own_conn:
+        conn = get_conn()
+        cur = get_cursor(conn)
+        ensure_schema(cur)
+        conn.commit()
+
+    try:
+        police_defections_to_clans(cur)
+        gang_retaliation_wave(cur)
+
+        ai_decision = get_latest_ai_decision(cur, "gangs")
+        ai_action = ai_decision.get("action", "")
+        force_war = ai_action == "attack_clan"
+        extra_recruit = 0
+        if ai_action == "recruit_members":
+            extra_recruit = min(int(float(ai_decision.get("amount", 0) or 0)), 30)
+
+        sync_member_counts(cur)
+        robbed = street_crime(cur)
+        recruited = recruit_poor(cur)
+        for _ in range(max(0, extra_recruit // 5)):
+            recruited += recruit_poor(cur)
+        # Extortion handled once per cycle in corporations.gang_extortion()
+        expand_territory(cur)
+        if force_war or random.random() < 0.4:
+            gang_war(cur)
+        dissolve_empty_clans(cur)
+        cap_dominant_gangs(cur)
+        sync_member_counts(cur)
+        cap_gang_treasuries(cur)
+
+        if own_conn:
+            conn.commit()
+        return {"recruited": recruited, "robberies": robbed}
+    finally:
+        if own_conn:
+            cur.close()
+            conn.close()
 
 
 def sync_member_counts(cur):
@@ -129,7 +260,7 @@ def street_crime(cur) -> int:
             continue
 
         cur.execute(
-            "UPDATE agents SET balance = balance - %s WHERE id = %s",
+            "UPDATE agents SET balance = GREATEST(0, balance - %s) WHERE id = %s",
             (stolen, victim["id"]),
         )
         cur.execute(
@@ -156,35 +287,6 @@ def street_crime(cur) -> int:
             priority="urgent",
         )
     return robberies
-
-
-def extort_territory(cur):
-    cur.execute(
-        """
-        SELECT ct.clan_id, cl.name AS clan_name, c.id AS corp_id, c.name AS corp_name, c.treasury
-        FROM clan_territory ct
-        JOIN clans cl ON cl.id = ct.clan_id
-        JOIN corporations c ON c.id = ct.corp_id
-        WHERE c.is_active = true
-        """
-    )
-    for row in cur.fetchall():
-        treasury = float(row["treasury"] or 0)
-        if treasury < 10:
-            continue
-        cut = round(treasury * EXTORT_RATE, 2)
-        cur.execute(
-            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
-            (cut, row["corp_id"]),
-        )
-        cur.execute(
-            "UPDATE clans SET treasury = treasury + %s WHERE id = %s",
-            (cut, row["clan_id"]),
-        )
-        cur.execute(
-            "UPDATE corporations SET controlled_by_clan_id = %s WHERE id = %s",
-            (row["clan_id"], row["corp_id"]),
-        )
 
 
 def expand_territory(cur):
@@ -251,7 +353,10 @@ def gang_war(cur):
     else:
         winner, loser = b, a
 
-    loot = round(float(loser["treasury"]) * 0.25, 2)
+    loser_treasury = float(loser["treasury"] or 0)
+    loot = round(loser_treasury * 0.25, 2)
+    loot = min(loot, loser_treasury * 0.3)  # максимум 30% казны за раз
+    loot = min(loot, 50000)  # абсолютный максимум за одну войну
     cur.execute(
         "UPDATE clans SET treasury = treasury + %s, wins = COALESCE(wins,0) + 1 WHERE id = %s",
         (loot, winner["id"]),
@@ -326,29 +431,12 @@ def cap_dominant_gangs(cur):
 
 
 def main():
-    conn = get_conn()
-    cur = get_cursor(conn)
-    ensure_schema(cur)
-    conn.commit()
-
     print(f"\n⚔️  ZION Clans — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    sync_member_counts(cur)
-    robbed = street_crime(cur)
-    recruited = recruit_poor(cur)
-    extort_territory(cur)
-    expand_territory(cur)
-    if random.random() < 0.4:
-        gang_war(cur)
-    dissolve_empty_clans(cur)
-    cap_dominant_gangs(cur)
-    sync_member_counts(cur)
-    cap_gang_treasuries(cur)
-
-    conn.commit()
-    print(f"✅ Clans cycle — recruited {recruited}, street robberies {robbed}\n")
-    cur.close()
-    conn.close()
+    result = run_clan_cycle()
+    print(f"✅ Clans cycle — recruited {result.get('recruited', 0)}, robberies {result.get('robberies', 0)}\n")
 
 
 if __name__ == "__main__":
-    main()
+    from civ_common import run_db_script
+
+    run_db_script(main, "Clans cycle")

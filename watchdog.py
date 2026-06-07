@@ -7,6 +7,7 @@ import subprocess
 import time
 import os
 import logging
+import random
 
 from civ_common import get_conn
 
@@ -27,20 +28,20 @@ DAEMONS: dict[str, str | None] = {}
 
 # Scripts that run once and exit: interval + log_stuck restarts
 CRON_SCRIPTS = {
-    # CIVILIZATION_LOGIC.md schedule (new architecture)
+    # USA democracy — unified governance tick (FRS → President → Senate → Sheriff)
+    "governance":        ("governance_tick.py", 1800),   # 30 min — canonical government cycle
     "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
-    "gangs":             ("gangs.py",            1800),   # 30 min — gang territory & crime
-    "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending
+    "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
     "birth":        ("birth.py",          1800),   # 30 min
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
     "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
     "clans":        ("clans.py",          3600),   # 1 hour
     "police":       ("police.py",         1800),   # 30 min — population sync
-    "sheriff":      ("sheriff.py",        3600),   # 1 hour
-    "president":    ("president.py",      3600),   # 1 hour
-    "senate":       ("senate.py",         3600),   # 1 hour — legislature & elections
+    # president/senate/sheriff governance handled by governance_tick.py only
     "political_parties": ("political_parties.py", 3600),
+    "disasters": ("disasters.py", 2700),  # 45 min average
+    "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day
     "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
@@ -67,7 +68,23 @@ ELECTION_CHECKS = {
     "president_check": ("president.py", 1800),
 }
 
+
+def get_random_interval(min_sec=900, max_sec=2700):
+    return random.randint(min_sec, max_sec)
+
+
+# Per-script random scheduling windows (seconds)
+RANDOM_INTERVAL_RANGES = {
+    "political_parties": (1200, 3600), # 20-60 min
+    "disasters": (2700, 5400),        # 45-90 min
+    "faction_engine": (900, 1800),    # 15-30 мин
+}
+
 last_run = {name: 0 for name in CRON_SCRIPTS}
+current_intervals = {name: interval for name, (_, interval) in CRON_SCRIPTS.items()}
+for _name, (_min_s, _max_s) in RANDOM_INTERVAL_RANGES.items():
+    if _name in current_intervals:
+        current_intervals[_name] = get_random_interval(_min_s, _max_s)
 last_election_check = {name: 0 for name in ELECTION_CHECKS}
 last_coin_manager = 0
 COIN_MANAGER_INTERVAL = 14400  # каждые 4 часа
@@ -173,8 +190,9 @@ def check_election_offices(now):
 
 def check_cron_scripts(now):
     """Interval + log_stuck logic for scripts that run and exit."""
-    for name, (script, interval) in CRON_SCRIPTS.items():
+    for name, (script, _) in CRON_SCRIPTS.items():
         try:
+            interval = current_intervals.get(name, CRON_SCRIPTS[name][1])
             time_since_run = now - last_run[name]
             if time_since_run < interval:
                 continue
@@ -183,10 +201,16 @@ def check_cron_scripts(now):
                 log.info(f"Running {name} (interval {interval}s)")
                 run_script(name, script)
                 last_run[name] = now
+                if name in RANDOM_INTERVAL_RANGES:
+                    min_s, max_s = RANDOM_INTERVAL_RANGES[name]
+                    current_intervals[name] = get_random_interval(min_s, max_s)
             elif check_log_stuck(name, interval):
                 log.warning(f"{name} appears stuck — restarting")
                 run_script(name, script)
                 last_run[name] = now
+                if name in RANDOM_INTERVAL_RANGES:
+                    min_s, max_s = RANDOM_INTERVAL_RANGES[name]
+                    current_intervals[name] = get_random_interval(min_s, max_s)
             else:
                 last_run[name] = now
         except Exception as e:
@@ -217,6 +241,15 @@ def main():
                     log.warning(
                         "Heartbeat — API:❌ down — check: systemctl status zion-api"
                     )
+                    print("[WATCHDOG] API down — restarting...")
+                    subprocess.Popen(
+                        ["nohup", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"],
+                        cwd="/root/zion_backend",
+                        stdout=open("/var/log/zion-api.log", "a"),
+                        stderr=open("/var/log/zion-api.log", "a"),
+                    )
+                    time.sleep(5)
+                    print("[WATCHDOG] API restarted")
 
             if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
                 subprocess.Popen(
