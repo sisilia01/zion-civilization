@@ -58,6 +58,8 @@ from audit_trail import (
 
 app.include_router(zk_router)
 app.include_router(stealth_deposit_router)
+from science_api import router as science_router
+app.include_router(science_router)
 
 
 async def _json_body(req: Request) -> dict:
