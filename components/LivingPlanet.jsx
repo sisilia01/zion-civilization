@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -416,19 +416,26 @@ attribute float aPhase;
 attribute float aSize;
 attribute float aBright;
 attribute float aMilky;
+attribute float aFreq;
 varying vec3 vColor;
 varying float vPhase;
 varying float vBright;
 varying float vMilky;
+varying float vFreq;
 uniform float uTime;
 void main() {
   vColor = color;
   vPhase = aPhase;
   vBright = aBright;
   vMilky = aMilky;
+  vFreq = aFreq;
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-  float twinkle = 0.94 + 0.06 * sin(uTime * 0.8 + aPhase);
-  gl_PointSize = aSize * twinkle * (280.0 / -mvPosition.z) * (1.0 + aMilky * 0.3);
+  float isHero = smoothstep(0.55, 0.9, aBright);
+  float amp = mix(0.30, 0.40, isHero);
+  float freq = mix(aFreq, aFreq * 0.42, isHero);
+  float wave = sin(uTime * freq + aPhase);
+  float twinkle = 1.0 - amp * 0.5 * (1.0 - wave);
+  gl_PointSize = aSize * (0.9 + 0.1 * twinkle) * (280.0 / -mvPosition.z) * (1.0 + aMilky * 0.3);
   gl_Position = projectionMatrix * mvPosition;
 }
 `;
@@ -438,13 +445,18 @@ varying vec3 vColor;
 varying float vPhase;
 varying float vBright;
 varying float vMilky;
+varying float vFreq;
 uniform float uTime;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
   if (d > 0.5) discard;
   float core = exp(-d * d * 16.0);
-  float twinkle = 0.93 + 0.07 * sin(uTime * 1.1 + vPhase);
+  float isHero = smoothstep(0.55, 0.9, vBright);
+  float amp = mix(0.32, 0.42, isHero);
+  float freq = mix(vFreq, vFreq * 0.42, isHero);
+  float wave = sin(uTime * freq + vPhase);
+  float twinkle = 1.0 - amp * 0.5 * (1.0 - wave);
   float halo = vBright * exp(-d * d * 6.0) * 0.28;
   float alpha = (core + halo) * twinkle;
   vec3 col = vColor * (1.0 + vBright * 0.35);
@@ -978,6 +990,7 @@ function buildStarLayerData({
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const phases = new Float32Array(count);
+  const freqs = new Float32Array(count);
   const sizes = new Float32Array(count);
   const brights = new Float32Array(count);
   const milky = new Float32Array(count);
@@ -1013,6 +1026,7 @@ function buildStarLayerData({
     colors[i * 3 + 2] = spec.b;
 
     phases[i] = Math.random() * Math.PI * 2;
+    freqs[i] = 0.4 + Math.random() * 1.4;
     sizes[i] = sizeMin + Math.pow(Math.random(), sizePower) * (sizeMax - sizeMin);
     brights[i] = Math.random() < brightChance ? 0.75 + Math.random() * 0.25 : 0;
     milky[i] = 0;
@@ -1038,10 +1052,11 @@ function buildStarLayerData({
     colors[idx * 3 + 1] = pal.g;
     colors[idx * 3 + 2] = pal.b;
     brights[idx] = 0.9 + Math.random() * 0.1;
+    freqs[idx] = 0.32 + Math.random() * 0.38;
     sizes[idx] = Math.max(sizes[idx], sizeMax * 0.82);
   }
 
-  return { positions, colors, phases, sizes, brights, milky };
+  return { positions, colors, phases, freqs, sizes, brights, milky };
 }
 
 function createStarPointsMaterial() {
@@ -1063,6 +1078,7 @@ function createPointsFromStarData(data, material, renderOrder) {
   geo.setAttribute("position", new THREE.BufferAttribute(data.positions, 3));
   geo.setAttribute("color", new THREE.BufferAttribute(data.colors, 3));
   geo.setAttribute("aPhase", new THREE.BufferAttribute(data.phases, 1));
+  geo.setAttribute("aFreq", new THREE.BufferAttribute(data.freqs, 1));
   geo.setAttribute("aSize", new THREE.BufferAttribute(data.sizes, 1));
   geo.setAttribute("aBright", new THREE.BufferAttribute(data.brights, 1));
   geo.setAttribute("aMilky", new THREE.BufferAttribute(data.milky, 1));
@@ -1604,6 +1620,34 @@ export function LivingPlanet({
   }, [population]);
 
   const initDoneRef = useRef(false);
+  const resizeRef = useRef(/** @type {(() => void) | null} */ (null));
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fsBtnHover, setFsBtnHover] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const el = containerRef.current;
+      const active = !!el && document.fullscreenElement === el;
+      setIsFullscreen(active);
+      resizeRef.current?.();
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    } catch (err) {
+      console.warn("[LivingPlanet] fullscreen toggle failed:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1888,6 +1932,7 @@ export function LivingPlanet({
           updatePostUniforms(rw, rh, pr);
         }
       };
+      resizeRef.current = resize;
       window.addEventListener("resize", resize);
       const ro = new ResizeObserver(resize);
       ro.observe(container);
@@ -2049,6 +2094,7 @@ export function LivingPlanet({
       cleanupFn = () => {
         disposed = true;
         initDoneRef.current = false;
+        resizeRef.current = null;
         cancelAnimationFrame(animId);
         window.removeEventListener("resize", resize);
         ro.disconnect();
@@ -2106,13 +2152,58 @@ export function LivingPlanet({
       style={{
         position: "relative",
         width: "100%",
-        height: `${height}px`,
-        minHeight: `${height}px`,
+        height: isFullscreen ? "100vh" : `${height}px`,
+        minHeight: isFullscreen ? "100vh" : `${height}px`,
         flexShrink: 0,
         overflow: "hidden",
         background: "#000",
       }}
     >
+      <button
+        type="button"
+        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+        onClick={toggleFullscreen}
+        onMouseEnter={() => setFsBtnHover(true)}
+        onMouseLeave={() => setFsBtnHover(false)}
+        style={{
+          position: "absolute",
+          top: showHud ? 36 : 10,
+          right: 10,
+          zIndex: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 24,
+          padding: 0,
+          borderRadius: 4,
+          border: `1px solid rgba(0, 255, 136, ${fsBtnHover ? 0.75 : 0.45})`,
+          background: fsBtnHover ? "rgba(0, 20, 16, 0.82)" : "rgba(0, 0, 0, 0.55)",
+          color: fsBtnHover ? "#00ffaa" : "rgba(0, 255, 136, 0.85)",
+          cursor: "pointer",
+          transition: "background 0.15s, border-color 0.15s, color 0.15s",
+          boxShadow: fsBtnHover ? "0 0 8px rgba(0, 255, 136, 0.25)" : "none",
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {isFullscreen ? (
+            <>
+              <path d="M4 14h6v6" />
+              <path d="M14 14h6v6" />
+              <path d="M4 10h6V4" />
+              <path d="M14 10h6V4" />
+            </>
+          ) : (
+            <>
+              <path d="M8 3H3v5" />
+              <path d="M16 3h5v5" />
+              <path d="M8 21H3v-5" />
+              <path d="M16 21h5v-5" />
+            </>
+          )}
+        </svg>
+      </button>
       {showHud && civilizationData && (
         <>
           <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "monospace", fontSize: 10, color: "rgba(0,255,136,0.85)", letterSpacing: 1, pointerEvents: "none" }}>
