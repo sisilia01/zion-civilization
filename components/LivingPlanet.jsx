@@ -1338,7 +1338,7 @@ function disposeObject(obj) {
 }
 
 const EARTH_TEXTURE_CANDIDATES = {
-  day: ["/textures/earth_day_8k.jpg", "/textures/earth_day.jpg"],
+  day: ["/textures/earth_day_nasa.jpg", "/textures/earth_day.jpg"],
   night: ["/textures/earth_night_8k.png", "/textures/earth_night.jpg"],
   normal: ["/textures/earth_normal_8k.jpg", "/textures/earth_normal.jpg"],
   specular: ["/textures/earth_specular_8k.jpg", "/textures/earth_specular.jpg"],
