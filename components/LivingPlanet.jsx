@@ -674,14 +674,22 @@ function createHeroSatellite() {
   return group;
 }
 
-function buildStars(count) {
+function buildStarLayerData({
+  count,
+  radius,
+  radiusJitter = 4,
+  sizeMin,
+  sizeMax,
+  sizePower = 2.8,
+  brightChance = 0.02,
+  heroCount = 0,
+}) {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const phases = new Float32Array(count);
   const sizes = new Float32Array(count);
   const brights = new Float32Array(count);
   const milky = new Float32Array(count);
-  const milkyAxis = new THREE.Vector3(0.55, 0.45, 0.7).normalize();
 
   const spectral = [
     { w: 0.08, r: 0.65, g: 0.78, b: 1.0 },
@@ -693,36 +701,185 @@ function buildStars(count) {
   ];
 
   for (let i = 0; i < count; i++) {
-    const r = 48 + Math.random() * 8;
+    const r = radius + (Math.random() - 0.5) * radiusJitter;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
-    const x = r * Math.sin(phi) * Math.cos(theta);
-    const y = r * Math.sin(phi) * Math.sin(theta);
-    const z = r * Math.cos(phi);
-    positions[i * 3] = x;
-    positions[i * 3 + 1] = y;
-    positions[i * 3 + 2] = z;
-
-    const dir = new THREE.Vector3(x, y, z).normalize();
-    const band = Math.pow(Math.max(0, 1.0 - Math.abs(dir.dot(milkyAxis)) * 2.5), 3.0);
-    milky[i] = band * (0.4 + Math.random() * 0.6);
+    positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i * 3 + 2] = r * Math.cos(phi);
 
     let roll = Math.random();
     let spec = spectral[0];
     for (const s of spectral) {
       roll -= s.w;
-      if (roll <= 0) { spec = s; break; }
+      if (roll <= 0) {
+        spec = s;
+        break;
+      }
     }
     colors[i * 3] = spec.r;
     colors[i * 3 + 1] = spec.g;
     colors[i * 3 + 2] = spec.b;
 
     phases[i] = Math.random() * Math.PI * 2;
-    sizes[i] = 0.35 + Math.pow(Math.random(), 3.2) * 2.8;
-    brights[i] = Math.random() < 0.025 ? 0.8 + Math.random() * 0.2 : 0.0;
+    sizes[i] = sizeMin + Math.pow(Math.random(), sizePower) * (sizeMax - sizeMin);
+    brights[i] = Math.random() < brightChance ? 0.75 + Math.random() * 0.25 : 0;
+    milky[i] = 0;
+  }
+
+  const heroPalette = [
+    { r: 0.72, g: 0.86, b: 1.0 },
+    { r: 0.88, g: 0.94, b: 1.0 },
+    { r: 1.0, g: 0.94, b: 0.72 },
+    { r: 1.0, g: 0.82, b: 0.55 },
+    { r: 0.78, g: 0.9, b: 1.0 },
+    { r: 1.0, g: 0.88, b: 0.62 },
+  ];
+  const usedHero = new Set();
+  for (let h = 0; h < heroCount; h++) {
+    let idx = Math.floor(Math.random() * count);
+    for (let guard = 0; guard < count && usedHero.has(idx); guard++) {
+      idx = (idx + 1) % count;
+    }
+    usedHero.add(idx);
+    const pal = heroPalette[h % heroPalette.length];
+    colors[idx * 3] = pal.r;
+    colors[idx * 3 + 1] = pal.g;
+    colors[idx * 3 + 2] = pal.b;
+    brights[idx] = 0.9 + Math.random() * 0.1;
+    sizes[idx] = Math.max(sizes[idx], sizeMax * 0.82);
   }
 
   return { positions, colors, phases, sizes, brights, milky };
+}
+
+function createStarPointsMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: STAR_VERT,
+    fragmentShader: STAR_FRAG,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    vertexColors: true,
+  });
+}
+
+/** @param {ReturnType<typeof buildStarLayerData>} data @param {THREE.ShaderMaterial} material @param {number} renderOrder */
+function createPointsFromStarData(data, material, renderOrder) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(data.positions, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(data.colors, 3));
+  geo.setAttribute("aPhase", new THREE.BufferAttribute(data.phases, 1));
+  geo.setAttribute("aSize", new THREE.BufferAttribute(data.sizes, 1));
+  geo.setAttribute("aBright", new THREE.BufferAttribute(data.brights, 1));
+  geo.setAttribute("aMilky", new THREE.BufferAttribute(data.milky, 1));
+  const points = new THREE.Points(geo, material);
+  points.renderOrder = renderOrder;
+  points.frustumCulled = false;
+  return points;
+}
+
+function createNebulaGlowTexture() {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.Texture();
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(180, 200, 255, 0.45)");
+  g.addColorStop(0.35, "rgba(100, 130, 200, 0.14)");
+  g.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+/** Layered starfield: mid (r~60) + near (r~30) for parallax depth under OrbitControls. @param {THREE.Scene} scene */
+function createLayeredStarfield(scene) {
+  const midMat = createStarPointsMaterial();
+  const nearMat = createStarPointsMaterial();
+
+  const midData = buildStarLayerData({
+    count: 1500,
+    radius: 60,
+    radiusJitter: 6,
+    sizeMin: 0.18,
+    sizeMax: 1.0,
+    sizePower: 3.5,
+    brightChance: 0.006,
+  });
+  const nearData = buildStarLayerData({
+    count: 600,
+    radius: 30,
+    radiusJitter: 3,
+    sizeMin: 0.45,
+    sizeMax: 3.2,
+    sizePower: 2.4,
+    brightChance: 0.045,
+    heroCount: 7,
+  });
+
+  const midStars = createPointsFromStarData(midData, midMat, -14);
+  const nearStars = createPointsFromStarData(nearData, nearMat, -9);
+  scene.add(midStars);
+  scene.add(nearStars);
+
+  const nebulaGroup = new THREE.Group();
+  /** @type {{ sprite: THREE.Sprite, mat: THREE.SpriteMaterial, tex: THREE.Texture }[]} */
+  const nebulaMeshes = [];
+  const nebulaSpecs = [
+    { dir: [0.62, 0.22, 0.72], color: 0x6080c0, scale: 28, opacity: 0.07 },
+    { dir: [-0.38, -0.48, 0.68], color: 0x406888, scale: 22, opacity: 0.05 },
+    { dir: [0.18, 0.72, -0.58], color: 0x705090, scale: 20, opacity: 0.045 },
+  ];
+  for (const spec of nebulaSpecs) {
+    const tex = createNebulaGlowTexture();
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      color: spec.color,
+      transparent: true,
+      opacity: spec.opacity,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.copy(new THREE.Vector3(...spec.dir).normalize().multiplyScalar(52));
+    sprite.scale.set(spec.scale, spec.scale * 0.62, 1);
+    sprite.renderOrder = -13;
+    nebulaGroup.add(sprite);
+    nebulaMeshes.push({ sprite, mat, tex });
+  }
+  scene.add(nebulaGroup);
+
+  console.log("[sky] layered starfield: mid=1500@r60 near=600@r30 nebulae=3");
+
+  return {
+    midMat,
+    nearMat,
+    update(_t, _delta, frameScale) {
+      midStars.rotation.y += 0.00005 * frameScale;
+      midStars.rotation.x += 0.000012 * frameScale;
+      nearStars.rotation.y += 0.00009 * frameScale;
+      nearStars.rotation.z += 0.000022 * frameScale;
+      for (const n of nebulaMeshes) {
+        n.sprite.material.rotation += 0.000025 * frameScale;
+      }
+    },
+    dispose() {
+      disposeObject(midStars);
+      disposeObject(nearStars);
+      for (const n of nebulaMeshes) {
+        n.tex.dispose();
+        n.mat.dispose();
+      }
+      disposeObject(nebulaGroup);
+    },
+  };
 }
 
 /** Equirectangular Milky Way panorama path (fetch via `npm run fetch-milkyway`). */
@@ -1353,26 +1510,7 @@ export function LivingPlanet({
         }
       }
 
-      const starData = buildStars(2500);
-      const starGeo = new THREE.BufferGeometry();
-      starGeo.setAttribute("position", new THREE.BufferAttribute(starData.positions, 3));
-      starGeo.setAttribute("color", new THREE.BufferAttribute(starData.colors, 3));
-      starGeo.setAttribute("aPhase", new THREE.BufferAttribute(starData.phases, 1));
-      starGeo.setAttribute("aSize", new THREE.BufferAttribute(starData.sizes, 1));
-      starGeo.setAttribute("aBright", new THREE.BufferAttribute(starData.brights, 1));
-      starGeo.setAttribute("aMilky", new THREE.BufferAttribute(starData.milky, 1));
-      const starMat = new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
-        vertexShader: STAR_VERT,
-        fragmentShader: STAR_FRAG,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        vertexColors: true,
-      });
-      const stars = new THREE.Points(starGeo, starMat);
-      stars.renderOrder = -10;
-      scene.add(stars);
+      const starfield = createLayeredStarfield(scene);
 
       const heroSat = createHeroSatellite();
       heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800 };
@@ -1507,7 +1645,9 @@ export function LivingPlanet({
         atmosMat.uniforms.uProsperity.value = p;
         atmosMat.uniforms.uTime.value = t;
         atmosMat.uniforms.uCameraPos.value.copy(camera.position);
-        starMat.uniforms.uTime.value = t;
+        starfield.midMat.uniforms.uTime.value = t;
+        starfield.nearMat.uniforms.uTime.value = t;
+        starfield.update(t, delta, frameScale);
 
         planet.rotation.y += 0.00025 * frameScale;
         if (clouds) {
@@ -1519,8 +1659,6 @@ export function LivingPlanet({
         atmosphere.rotation.y += 0.00025 * frameScale;
 
         controls.update();
-
-        stars.position.copy(camera.position).multiplyScalar(0.018);
 
         const visibleSat = p > 0.2;
         satellites.forEach((sat) => {
@@ -1603,7 +1741,7 @@ export function LivingPlanet({
         if (cloudsLow) disposeObject(cloudsLow);
         if (cloudsHigh) disposeObject(cloudsHigh);
         disposeObject(atmosphere);
-        disposeObject(stars);
+        starfield.dispose();
         if (milkySky) {
           milkySky.texture.dispose();
           milkySky.material.dispose();
