@@ -547,129 +547,398 @@ function forceOpaquePlanetMaterial(planetMat) {
   console.log("day map:", planetMat.map);
 }
 
+/** @type {THREE.CanvasTexture | null} */
+let solarCellGridTexCache = null;
+/** @type {THREE.CanvasTexture | null} */
+let zionDecalTexCache = null;
+/** @type {THREE.CanvasTexture | null} */
+let flagDecalTexCache = null;
+
+function createSolarCellGridTexture() {
+  if (solarCellGridTexCache) return solarCellGridTexCache;
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#101028";
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = "rgba(90, 100, 140, 0.42)";
+    ctx.lineWidth = 1;
+    const cols = 10;
+    const rows = 4;
+    for (let c = 0; c <= cols; c++) {
+      const x = (c / cols) * size;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size);
+      ctx.stroke();
+    }
+    for (let r = 0; r <= rows; r++) {
+      const y = (r / rows) * size;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size, y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(120, 160, 220, 0.08)";
+    ctx.fillRect(0, 0, size, size);
+  }
+  solarCellGridTexCache = new THREE.CanvasTexture(canvas);
+  solarCellGridTexCache.wrapS = solarCellGridTexCache.wrapT = THREE.RepeatWrapping;
+  solarCellGridTexCache.repeat.set(2, 1);
+  solarCellGridTexCache.anisotropy = 8;
+  return solarCellGridTexCache;
+}
+
+function createZionDecalTexture() {
+  if (zionDecalTexCache) return zionDecalTexCache;
+  const w = 256;
+  const h = 96;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "rgba(40, 34, 12, 0.35)";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#b8941f";
+    ctx.font = "700 52px Helvetica, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("ZION", w / 2, h / 2 + 2);
+  }
+  zionDecalTexCache = new THREE.CanvasTexture(canvas);
+  zionDecalTexCache.anisotropy = 8;
+  return zionDecalTexCache;
+}
+
+function createFlagDecalTexture() {
+  if (flagDecalTexCache) return flagDecalTexCache;
+  const w = 128;
+  const h = 80;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const stripeH = h / 13;
+    for (let i = 0; i < 13; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "#b22234" : "#ffffff";
+      ctx.fillRect(0, i * stripeH, w, stripeH + 1);
+    }
+    const cantonW = w * 0.42;
+    const cantonH = stripeH * 7;
+    ctx.fillStyle = "#3c3b6e";
+    ctx.fillRect(0, 0, cantonW, cantonH);
+    ctx.fillStyle = "#ffffff";
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 6; col++) {
+        const sx = 8 + col * 9 + (row % 2 ? 4.5 : 0);
+        const sy = 6 + row * 8;
+        if (sx < cantonW - 2) {
+          ctx.beginPath();
+          ctx.arc(sx, sy, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+  flagDecalTexCache = new THREE.CanvasTexture(canvas);
+  flagDecalTexCache.anisotropy = 8;
+  return flagDecalTexCache;
+}
+
+/** @param {-1 | 1} side left (-1) or right (+1) wing along local X */
 function createHeroSolarPanel(side) {
   const panelGroup = new THREE.Group();
   const panelMat = new THREE.MeshStandardMaterial({
-    color: 0x142d5c,
-    metalness: 0.6,
-    roughness: 0.2,
-    emissive: 0x0a1830,
-    emissiveIntensity: 0.08,
+    color: 0x14143a,
+    metalness: 0.5,
+    roughness: 0.28,
+    map: createSolarCellGridTexture(),
+    emissive: 0x060812,
+    emissiveIntensity: 0.06,
   });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x080810, metalness: 0.9, roughness: 0.35 });
-  const panelW = 0.42;
-  const panelH = 0.07;
-  const panelT = 0.001;
-  const base = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, panelT, 24, 6, 1), panelMat);
-  markShadows(base);
-  panelGroup.add(base);
-  for (let c = 1; c < 12; c++) {
-    const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.0005, panelH * 0.96, panelT * 1.6), frameMat);
-    vLine.position.x = -panelW / 2 + (panelW / 12) * c;
+  const gridMat = new THREE.MeshStandardMaterial({ color: 0x0a0a20, metalness: 0.4, roughness: 0.35 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.85, roughness: 0.32 });
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.88, roughness: 0.3 });
+  const panelW = 0.44;
+  const panelH = 0.095;
+  const frameT = 0.0022;
+  const bodyReach = 0.024;
+  const boomLen = 0.034;
+  const hubDist = bodyReach + boomLen + panelW * 0.5;
+
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.0014, 0.0014, boomLen, 8), armMat);
+  boom.rotation.z = Math.PI / 2;
+  boom.position.set(side * (bodyReach + boomLen * 0.5), 0, 0);
+  markShadows(boom);
+  panelGroup.add(boom);
+
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, 0.001, 28, 8, 1), panelMat);
+  panel.position.set(side * hubDist, 0, 0);
+  markShadows(panel);
+  panelGroup.add(panel);
+
+  const frameSpecs = [
+    [panelW + frameT * 2, frameT, 0.0016, 0, panelH * 0.5 + frameT * 0.5],
+    [panelW + frameT * 2, frameT, 0.0016, 0, -panelH * 0.5 - frameT * 0.5],
+    [frameT, panelH, 0.0016, panelW * 0.5 + frameT * 0.5, 0],
+    [frameT, panelH, 0.0016, -panelW * 0.5 - frameT * 0.5, 0],
+  ];
+  frameSpecs.forEach(([fw, fh, fd, fx, fy]) => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, fd), frameMat);
+    bar.position.set(fx, fy, 0.0008);
+    markShadows(bar);
+    panel.add(bar);
+  });
+
+  for (let c = 1; c < 14; c++) {
+    const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.0004, panelH * 0.94, 0.0014), gridMat);
+    vLine.position.x = -panelW / 2 + (panelW / 14) * c;
     markShadows(vLine);
-    panelGroup.add(vLine);
+    panel.add(vLine);
   }
-  for (let r = 1; r < 4; r++) {
-    const hLine = new THREE.Mesh(new THREE.BoxGeometry(panelW * 0.98, 0.0005, panelT * 1.6), frameMat);
-    hLine.position.y = -panelH / 2 + (panelH / 4) * r;
+  for (let r = 1; r < 5; r++) {
+    const hLine = new THREE.Mesh(new THREE.BoxGeometry(panelW * 0.97, 0.0004, 0.0014), gridMat);
+    hLine.position.y = -panelH / 2 + (panelH / 5) * r;
     markShadows(hLine);
-    panelGroup.add(hLine);
+    panel.add(hLine);
   }
-  panelGroup.position.x = side * (0.11 + panelW / 2);
+
   panelGroup.userData.panelMat = panelMat;
+  panelGroup.userData.side = side;
+  panelGroup.userData.panelDirX = side;
+  panelGroup.userData.panelDirY = 0;
   return panelGroup;
 }
 
 function createHeroSatellite() {
   const group = new THREE.Group();
-  const foilMat = new THREE.MeshStandardMaterial({
-    color: 0xd4af6a,
-    metalness: 1.0,
-    roughness: 0.25,
-    normalMap: createFoilNormalMap(),
-    normalScale: new THREE.Vector2(0.35, 0.35),
+  const foilNormal = createFoilNormalMap();
+  const greyMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3a3a,
+    metalness: 0.7,
+    roughness: 0.45,
   });
-  const structureMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.92, roughness: 0.28 });
-  const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.95, roughness: 0.35 });
-  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ee, metalness: 0.15, roughness: 0.55 });
-  const sensorMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.4 });
+  const foilMat = new THREE.MeshStandardMaterial({
+    color: 0xc9a227,
+    metalness: 0.7,
+    roughness: 0.45,
+    normalMap: foilNormal,
+    normalScale: new THREE.Vector2(0.25, 0.25),
+  });
+  const zionMat = new THREE.MeshStandardMaterial({
+    color: 0xc9a227,
+    metalness: 0.7,
+    roughness: 0.45,
+    map: createZionDecalTexture(),
+  });
+  const flagMat = new THREE.MeshStandardMaterial({
+    color: 0xc9a227,
+    metalness: 0.7,
+    roughness: 0.45,
+    map: createFlagDecalTexture(),
+  });
+  const structureMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.25 });
+  const dishMat = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    metalness: 0.92,
+    roughness: 0.18,
+    side: THREE.DoubleSide,
+  });
 
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.11, 32, 8), foilMat);
-  body.rotation.z = Math.PI / 2;
-  markShadows(body);
-  group.add(body);
-  const capF = new THREE.Mesh(new THREE.SphereGeometry(0.038, 24, 16), foilMat);
-  capF.position.x = 0.055;
-  markShadows(capF);
-  group.add(capF);
-  const capB = new THREE.Mesh(new THREE.SphereGeometry(0.038, 24, 16), foilMat);
-  capB.position.x = -0.055;
-  markShadows(capB);
-  group.add(capB);
+  const busLen = 0.05;
+  const busCore = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, busLen, 8), greyMat);
+  busCore.rotation.x = Math.PI / 2;
+  markShadows(busCore);
+  group.add(busCore);
 
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.18, 16, 1), structureMat);
-  boom.rotation.z = Math.PI / 2;
-  markShadows(boom);
-  group.add(boom);
+  const foilWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, busLen * 0.55, 8), foilMat);
+  foilWrap.rotation.x = Math.PI / 2;
+  markShadows(foilWrap);
+  group.add(foilWrap);
+
+  const greebles = [
+    [0.012, 0.008, 0.008, 0.014, 0.012, 0.018, greyMat],
+    [0.008, 0.006, 0.01, -0.016, -0.008, 0.012, foilMat],
+    [0.006, 0.005, 0.007, 0.01, -0.014, -0.016, greyMat],
+    [0.009, 0.007, 0.006, -0.012, 0.014, -0.014, foilMat],
+    [0.005, 0.004, 0.005, 0.018, 0.004, 0.0, greyMat],
+  ];
+  greebles.forEach(([w, h, d, x, y, z, mat]) => {
+    const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    g.position.set(x, y, z);
+    markShadows(g);
+    group.add(g);
+  });
+
+  const zionFace = new THREE.Mesh(new THREE.PlaneGeometry(0.026, 0.02), zionMat);
+  zionFace.position.set(0, 0.004, busLen * 0.5 + 0.001);
+  group.add(zionFace);
+  const flagFace = new THREE.Mesh(new THREE.PlaneGeometry(0.016, 0.01), flagMat);
+  flagFace.position.set(0.031, 0.006, 0.008);
+  flagFace.rotation.y = -Math.PI / 2;
+  group.add(flagFace);
 
   const panelL = createHeroSolarPanel(-1);
   const panelR = createHeroSolarPanel(1);
-  group.add(panelL);
-  group.add(panelR);
+  const panels = [panelL, panelR];
+  panels.forEach((p) => group.add(p));
 
-  const dishStem = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.04, 8), structureMat);
-  dishStem.position.set(0, 0.06, 0.025);
-  markShadows(dishStem);
-  group.add(dishStem);
-  const dish = new THREE.Mesh(
-    new THREE.SphereGeometry(0.028, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.18, side: THREE.DoubleSide })
-  );
-  dish.position.set(0, 0.085, 0.025);
-  dish.rotation.x = -0.35;
-  markShadows(dish);
-  group.add(dish);
-
-  const radL = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.09, 0.045, 1, 8, 4), whiteMat);
-  radL.position.set(-0.04, -0.02, 0.04);
-  markShadows(radL);
-  group.add(radL);
-  const radR = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.09, 0.045, 1, 8, 4), whiteMat);
-  radR.position.set(0.04, -0.02, 0.04);
-  markShadows(radR);
-  group.add(radR);
-
-  for (let i = 0; i < 3; i++) {
-    const cam = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.006, 0.006), sensorMat);
-    cam.position.set(-0.02 + i * 0.02, 0.04, -0.035);
-    markShadows(cam);
-    group.add(cam);
-  }
-
-  const wireAngles = [[0.2, 0.3, 0.1], [0.5, -0.2, 0.4], [-0.3, 0.6, -0.1], [0.8, 0.1, -0.5]];
-  wireAngles.forEach(([rx, ry, rz], w) => {
-    const wire = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0004, 0.0004, 0.06 + w * 0.012, 4),
-      w % 2 ? copperMat : foilMat
-    );
-    wire.position.set(-0.03 + w * 0.02, 0.02, 0.02);
-    wire.rotation.set(rx, ry, rz);
-    markShadows(wire);
-    group.add(wire);
+  const dishMount = new THREE.Group();
+  dishMount.position.z = busLen * 0.5;
+  const strutAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
+  strutAngles.forEach((a) => {
+    const strutLen = 0.038;
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.0012, strutLen, 6), structureMat);
+    strut.position.set(Math.cos(a) * 0.016, Math.sin(a) * 0.016, strutLen * 0.5);
+    strut.rotation.x = -0.42;
+    strut.rotation.y = a;
+    markShadows(strut);
+    dishMount.add(strut);
   });
 
-  const navLight = new THREE.Mesh(
-    new THREE.SphereGeometry(0.0012, 6, 6),
-    new THREE.MeshBasicMaterial({ color: 0xcc1100, transparent: true, opacity: 0.85 })
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(0.042, 32, 18, 0, Math.PI * 2, 0, Math.PI * 0.52),
+    dishMat
   );
-  navLight.position.set(0.05, 0.025, 0.03);
-  group.add(navLight);
+  dish.position.z = 0.052;
+  dish.rotation.x = -Math.PI / 2;
+  markShadows(dish);
+  dishMount.add(dish);
 
-  group.userData.panels = [panelL, panelR];
-  group.userData.navLight = navLight;
+  const feedStem = new THREE.Mesh(new THREE.CylinderGeometry(0.00055, 0.00055, 0.024, 6), structureMat);
+  feedStem.position.z = 0.032;
+  markShadows(feedStem);
+  dishMount.add(feedStem);
+  const feedHorn = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.001, 0.009, 8), structureMat);
+  feedHorn.position.z = 0.044;
+  markShadows(feedHorn);
+  dishMount.add(feedHorn);
+  for (const sx of [-0.0045, 0.0045]) {
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.0003, 0.0003, 0.014, 4), structureMat);
+    stick.position.set(sx, 0, 0.038);
+    stick.rotation.x = Math.PI / 2;
+    markShadows(stick);
+    dishMount.add(stick);
+  }
+  group.add(dishMount);
+
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.0013, 0.13, 8), structureMat);
+  mast.position.set(-0.008, 0.018, -0.018);
+  mast.rotation.set(-0.72, 0.28, 0.12);
+  markShadows(mast);
+  group.add(mast);
+  for (let i = 0; i < 3; i++) {
+    const inst = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.005, 0.005), i % 2 ? greyMat : foilMat);
+    inst.position.set(-0.008 + i * 0.004, 0.038 + i * 0.028, -0.018 - i * 0.012);
+    inst.rotation.set(-0.72, 0.28, 0.12);
+    markShadows(inst);
+    group.add(inst);
+  }
+
+  const whipSpecs = [
+    [0.018, 0.012, 0.014, 0.42, 0.15, 0.55],
+    [-0.016, -0.014, 0.012, -0.35, 1.2, -0.4],
+    [0.012, -0.018, -0.01, 0.55, -0.8, 0.25],
+    [-0.01, 0.016, -0.014, -0.6, 0.4, -0.7],
+  ];
+  whipSpecs.forEach(([px, py, pz, rx, ry, rz], wi) => {
+    const whip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.00028, 0.0002, 0.06 + wi * 0.008, 4),
+      wi % 2 ? foilMat : structureMat
+    );
+    whip.position.set(px, py, pz);
+    whip.rotation.set(rx, ry, rz);
+    markShadows(whip);
+    group.add(whip);
+  });
+
+  const beaconMat = new THREE.MeshStandardMaterial({
+    color: 0xff3333,
+    emissive: 0xff1100,
+    emissiveIntensity: 0,
+    metalness: 0.15,
+    roughness: 0.45,
+  });
+  const beaconAntenna = new THREE.Mesh(new THREE.CylinderGeometry(0.00065, 0.00065, 0.022, 6), structureMat);
+  beaconAntenna.position.set(0.014, 0.022, 0.012);
+  beaconAntenna.rotation.x = 0.35;
+  markShadows(beaconAntenna);
+  group.add(beaconAntenna);
+  const beaconTip = new THREE.Mesh(new THREE.SphereGeometry(0.0012, 8, 8), beaconMat);
+  beaconTip.position.set(0.014, 0.034, 0.018);
+  group.add(beaconTip);
+
+  group.userData.panels = panels;
+  group.userData.beaconMat = beaconMat;
+  group.userData.beaconTip = beaconTip;
   group.userData.foilMat = foilMat;
-  group.userData.dishMat = dish.material;
-  group.scale.set(0.52, 0.52, 0.52);
+  group.userData.dishMat = dishMat;
+  group.scale.set(0.38, 0.38, 0.38);
+  markDepth(group);
+  return group;
+}
+
+/** @type {{ bodyGeo: THREE.BoxGeometry, panelGeo: THREE.BoxGeometry, armGeo: THREE.CylinderGeometry, bodyMat: THREE.MeshStandardMaterial, panelMat: THREE.MeshStandardMaterial, armMat: THREE.MeshStandardMaterial } | null} */
+let distantSatPartsCache = null;
+
+function getDistantSatParts() {
+  if (distantSatPartsCache) return distantSatPartsCache;
+  const bodyGeo = new THREE.BoxGeometry(0.034, 0.026, 0.026);
+  const panelGeo = new THREE.BoxGeometry(0.13, 0.03, 0.001);
+  const armGeo = new THREE.CylinderGeometry(0.001, 0.001, 0.024, 4);
+  bodyGeo.userData.keepAlive = true;
+  panelGeo.userData.keepAlive = true;
+  armGeo.userData.keepAlive = true;
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a2a,
+    metalness: 0.55,
+    roughness: 0.52,
+  });
+  const panelMat = new THREE.MeshStandardMaterial({
+    color: 0x101030,
+    metalness: 0.42,
+    roughness: 0.38,
+    emissive: 0x040810,
+    emissiveIntensity: 0.03,
+  });
+  const armMat = new THREE.MeshStandardMaterial({
+    color: 0x444444,
+    metalness: 0.7,
+    roughness: 0.42,
+  });
+  bodyMat.userData.keepAlive = true;
+  panelMat.userData.keepAlive = true;
+  armMat.userData.keepAlive = true;
+  distantSatPartsCache = { bodyGeo, panelGeo, armGeo, bodyMat, panelMat, armMat };
+  return distantSatPartsCache;
+}
+
+function createDistantSatellite() {
+  const { bodyGeo, panelGeo, armGeo, bodyMat, panelMat, armMat } = getDistantSatParts();
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  markShadows(body);
+  group.add(body);
+
+  [-1, 1].forEach((side) => {
+    const arm = new THREE.Mesh(armGeo, armMat);
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(side * 0.024, 0, 0);
+    markShadows(arm);
+    group.add(arm);
+    const panel = new THREE.Mesh(panelGeo, panelMat);
+    panel.position.set(side * 0.095, 0, 0);
+    markShadows(panel);
+    group.add(panel);
+  });
+
+  group.scale.set(0.14, 0.14, 0.14);
+  group.userData.isDistant = true;
   markDepth(group);
   return group;
 }
@@ -1040,10 +1309,12 @@ function createSpaceEffects(scene) {
 
 function disposeObject(obj) {
   obj.traverse((child) => {
-    if (child.geometry) child.geometry.dispose();
+    if (child.geometry && !child.geometry.userData?.keepAlive) child.geometry.dispose();
     if (child.material) {
-      if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-      else child.material.dispose();
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => {
+        if (!m.userData?.keepAlive) m.dispose();
+      });
     }
   });
 }
@@ -1503,9 +1774,32 @@ export function LivingPlanet({
       const starfield = createLayeredStarfield(scene);
 
       const heroSat = createHeroSatellite();
-      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800 };
+      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800, isHero: true };
       scene.add(heroSat);
-      const satellites = [heroSat];
+
+      const distantSat2 = createDistantSatellite();
+      distantSat2.userData = {
+        radius: 1.72,
+        angle: 2.35,
+        orbitPeriod: 1150,
+        inclinationX: (35 * Math.PI) / 180,
+        nodeAngle: 0.85,
+        isDistant: true,
+      };
+      scene.add(distantSat2);
+
+      const distantSat3 = createDistantSatellite();
+      distantSat3.userData = {
+        radius: 1.62,
+        angle: 4.85,
+        orbitPeriod: 980,
+        inclinationX: (-60 * Math.PI) / 180,
+        nodeAngle: 2.35,
+        isDistant: true,
+      };
+      scene.add(distantSat3);
+
+      const satellites = [heroSat, distantSat2, distantSat3];
 
       const spaceFx = createSpaceEffects(scene);
       const cometVfx = createCometVfx(scene, lightDir);
@@ -1564,6 +1858,9 @@ export function LivingPlanet({
       const satWorldPos = new THREE.Vector3();
       const satPerp = new THREE.Vector3();
       const lightProj = new THREE.Vector3();
+      const orbitPos = new THREE.Vector3();
+      const orbitAxisX = new THREE.Vector3(1, 0, 0);
+      const orbitAxisY = new THREE.Vector3(0, 1, 0);
       const isInPlanetShadow = (satPos) => {
         const dotL = satPos.dot(lightDir);
         if (dotL >= 0) return false;
@@ -1659,28 +1956,44 @@ export function LivingPlanet({
           cfg.angle += ((Math.PI * 2) / cfg.orbitPeriod) * delta;
           const angle = cfg.angle;
           const radius = cfg.radius;
-          sat.position.set(
-            Math.cos(angle) * radius,
-            Math.sin(angle * 0.5) * radius * 0.3,
-            Math.sin(angle) * radius
-          );
+
+          if (cfg.inclinationX !== undefined) {
+            orbitPos.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+            if (cfg.nodeAngle) orbitPos.applyAxisAngle(orbitAxisY, cfg.nodeAngle);
+            orbitPos.applyAxisAngle(orbitAxisX, cfg.inclinationX);
+            sat.position.copy(orbitPos);
+          } else {
+            sat.position.set(
+              Math.cos(angle) * radius,
+              Math.sin(angle * 0.5) * radius * 0.3,
+              Math.sin(angle) * radius
+            );
+          }
+
           sat.lookAt(0, 0, 0);
+
+          if (cfg.isDistant) return;
+
           sat.rotation.z += Math.sin(t * 0.31) * 0.0008 * frameScale;
           sat.rotation.x += Math.cos(t * 0.17) * 0.0005 * frameScale;
           satWorldPos.copy(sat.position);
           const inPlanetShadow = isInPlanetShadow(satWorldPos);
           const ud = sat.userData;
-          if (ud.navLight) ud.navLight.visible = Math.sin(t * Math.PI) > 0;
-          ud.panels?.forEach((panel, pi) => {
-            const side = pi === 0 ? -1 : 1;
+          if (ud.beaconMat) {
+            const cycle = 1.5;
+            const onTime = 0.3;
+            ud.beaconMat.emissiveIntensity = t % cycle < onTime ? 2.6 : 0;
+          }
+          ud.panels?.forEach((panel) => {
+            const side = panel.userData.side ?? 1;
             panel.rotation.y = Math.atan2(lightDir.z * side, lightDir.x * side + 0.001) * 0.55;
-            panel.rotation.x = Math.asin(Math.max(-0.7, Math.min(0.7, lightDir.y))) * 0.35;
+            panel.rotation.x = Math.asin(Math.max(-0.7, Math.min(0.7, lightDir.y))) * 0.32;
             const panelMat = panel.userData.panelMat;
             if (panelMat) {
               const align = Math.abs(Math.cos(panel.rotation.y - Math.atan2(lightDir.x, lightDir.z)));
               const flash = align > 0.92 ? Math.min(1, (align - 0.92) / 0.08) : 0;
               panelMat.emissiveIntensity = 0.06 + flash * 0.12;
-              panelMat.emissive.setHex(flash > 0.5 ? 0x1a3050 : 0x0a1830);
+              panelMat.emissive.setHex(flash > 0.5 ? 0x182040 : 0x060812);
             }
           });
           if (ud.foilMat && !inPlanetShadow) {
@@ -1693,7 +2006,7 @@ export function LivingPlanet({
             ud.dishMat.roughness = inPlanetShadow ? 0.35 : 0.15;
           }
           sat.traverse((child) => {
-            if (!child.isMesh || !child.material || child === ud.navLight) return;
+            if (!child.isMesh || !child.material || child === ud.beaconTip) return;
             if (child.material.metalness !== undefined) {
               if (child.userData.baseRoughness === undefined) {
                 child.userData.baseRoughness = child.material.roughness;
