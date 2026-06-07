@@ -23,6 +23,11 @@ export function computeProsperity({
   return employScore * 0.35 + stabilityScore * 0.25 + wealthScore * 0.25 + popScore * 0.15;
 }
 
+/** Same scale as computeProsperity popScore — 0..1 normalized population. */
+export function normalizePopulation(population = 0) {
+  return Math.min(1, Math.max(0, population / 20000));
+}
+
 const NOISE_GLSL = `
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -720,8 +725,88 @@ function buildStars(count) {
   return { positions, colors, phases, sizes, brights, milky };
 }
 
-/** Real astronomy skybox — disabled until a proper 2:1 equirectangular star panorama is available. */
-const USE_REAL_SKY = false;
+/** Equirectangular Milky Way panorama path (fetch via `npm run fetch-milkyway`). */
+const MILKYWAY_TEXTURE_PATH = "/textures/milkyway.jpg";
+/** Real astronomy skybox — falls back to procedural Points if texture missing/invalid. */
+const USE_REAL_SKY = true;
+
+function sampleImageMean(image, sampleW = 256, sampleH = 128) {
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(image, 0, 0, sampleW, sampleH);
+  const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+  let sum = 0;
+  const n = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) {
+    sum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+  }
+  return sum / n;
+}
+
+/** @returns {{ ok: boolean, w: number, h: number, mean: number, ratio: number }} */
+function validateMilkyWayTexture(image) {
+  const w = image.width;
+  const h = image.height;
+  const ratio = w / h;
+  const mean = sampleImageMean(image) ?? 0;
+  const ok = Math.abs(ratio - 2) <= 0.15 && mean >= 2 && mean <= 60;
+  return { ok, w, h, mean, ratio };
+}
+
+/** @param {THREE.Scene} scene @param {THREE.WebGLRenderer} renderer */
+function loadMilkyWaySky(scene, renderer) {
+  return new Promise((resolve) => {
+    if (!USE_REAL_SKY) {
+      resolve(null);
+      return;
+    }
+    new THREE.TextureLoader().load(
+      MILKYWAY_TEXTURE_PATH,
+      (texture) => {
+        const img = texture.image;
+        const v = validateMilkyWayTexture(img);
+        if (!v.ok) {
+          console.warn("[sky] milkyway.jpg failed validation — procedural stars only", v);
+          texture.dispose();
+          resolve(null);
+          return;
+        }
+        texture.encoding = THREE.sRGBEncoding;
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const brightness = v.mean < 12 ? 1.75 : v.mean < 25 ? 1.35 : 1.0;
+        const mat = new THREE.MeshBasicMaterial({
+          map: texture,
+          side: THREE.BackSide,
+          depthWrite: false,
+        });
+        mat.color.setScalar(brightness);
+        const sky = new THREE.Mesh(new THREE.SphereGeometry(90, 64, 64), mat);
+        sky.renderOrder = -20;
+        sky.frustumCulled = false;
+        scene.add(sky);
+        console.log(
+          "[sky] Milky Way loaded:",
+          v.w,
+          "x",
+          v.h,
+          "mean=",
+          v.mean.toFixed(2),
+          "brightness=",
+          brightness
+        );
+        resolve({ mesh: sky, texture, material: mat, validation: v });
+      },
+      undefined,
+      (err) => {
+        console.warn("[sky] milkyway.jpg not found — procedural stars only", err);
+        resolve(null);
+      }
+    );
+  });
+}
 
 function createSpaceEffects(scene) {
   const milkyAxis = new THREE.Vector3(0.55, 0.45, 0.7).normalize();
@@ -909,12 +994,13 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     shader.uniforms.uLightDir = { value: lightDir.clone() };
     shader.uniforms.uProsperity = { value: 0.5 };
     shader.uniforms.uRevolution = { value: 0 };
+    shader.uniforms.uPopulation = { value: 0.5 };
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uNightMap = { value: textures.night };
 
     shader.vertexShader = "varying vec3 vWorldNormal;\n" + shader.vertexShader;
     shader.fragmentShader =
-      "varying vec3 vWorldNormal;\nuniform vec3 uLightDir;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uTime;\nuniform sampler2D uNightMap;\n" +
+      "varying vec3 vWorldNormal;\nuniform vec3 uLightDir;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\n" +
       shader.fragmentShader;
 
     shader.vertexShader = shader.vertexShader.replace(
@@ -934,12 +1020,14 @@ function createTexturedPlanetMaterial(textures, lightDir) {
 
         vec3 nightTex = texture2D(uNightMap, vUv).rgb;
         float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
-        float cityMask = smoothstep(0.12, 0.35, cityLum);
+        float thr = mix(0.30, 0.10, uPopulation);
+        float cityMask = smoothstep(thr, thr + 0.18, cityLum);
 
         vec3 warmColor = vec3(1.0, 0.82, 0.48);
         vec3 redColor = vec3(1.0, 0.35, 0.12);
         vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
-        vec3 cityGlow = nightTex * cityMask * cityTint * 3.5;
+        float cityBright = mix(1.8, 5.5, uPopulation);
+        vec3 cityGlow = nightTex * cityMask * cityTint * cityBright;
 
         vec3 nightBase = dayColor * 0.04;
         vec3 nightColor = nightBase + cityGlow;
@@ -953,7 +1041,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v11";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v12";
   return mat;
 }
 
@@ -969,6 +1057,7 @@ void main() {
 
 const TEXTURED_CLOUD_FRAG = `
 uniform sampler2D uCloudMap;
+uniform sampler2D uNightMap;
 uniform vec3 uLightDir;
 uniform float uProsperity;
 uniform float uTime;
@@ -977,23 +1066,38 @@ varying vec3 vWorldNormal;
 void main() {
   vec4 tex = texture2D(uCloudMap, vUv);
   if (tex.a < 0.03) discard;
-  float sunDot = dot(normalize(vWorldNormal), normalize(uLightDir));
-  float nightSide = smoothstep(0.06, -0.08, sunDot);
+
+  vec3 N = normalize(vWorldNormal);
+  vec3 L = normalize(uLightDir);
+  float dayAmount = smoothstep(-0.15, 0.15, dot(N, L));
+
+  vec3 dayCloud = tex.rgb;
+  vec3 nightCloud = tex.rgb * 0.06;
+
+  vec3 nightTex = texture2D(uNightMap, vUv).rgb;
+  float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
+  float cityMask = smoothstep(0.12, 0.35, cityLum);
+  nightCloud += vec3(1.0, 0.82, 0.48) * cityMask * 0.15 * tex.a;
+
+  vec3 col = mix(nightCloud, dayCloud, dayAmount);
+
+  float nightSide = 1.0 - dayAmount;
   float stormHash = fract(sin(dot(floor(vUv * 48.0), vec2(127.1, 311.7))) * 43758.5453);
   float flashPeriod = stormHash * 14.0 + 18.0;
   float flashPhase = fract(uTime / flashPeriod + stormHash * 4.1);
   float flash = smoothstep(0.0, 0.01, flashPhase) * (1.0 - smoothstep(0.01, 0.09, flashPhase));
   flash *= step(0.93, stormHash) * nightSide * uProsperity * tex.a;
-  vec3 col = tex.rgb + vec3(0.72, 0.88, 1.0) * flash * 3.0;
+  col += vec3(0.72, 0.88, 1.0) * flash * 3.0;
   gl_FragColor = vec4(col, tex.a * 0.88);
 }
 `;
 
-/** @param {THREE.Texture} cloudTex @param {THREE.Vector3} lightDir */
-function createTexturedCloudMaterial(cloudTex, lightDir) {
+/** @param {THREE.Texture} cloudTex @param {THREE.Texture} nightTex @param {THREE.Vector3} lightDir */
+function createTexturedCloudMaterial(cloudTex, nightTex, lightDir) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uCloudMap: { value: cloudTex },
+      uNightMap: { value: nightTex },
       uLightDir: { value: lightDir.clone() },
       uProsperity: { value: 0.5 },
       uTime: { value: 0 },
@@ -1050,10 +1154,11 @@ function createNoiseCloudLayers(scene, lightDir, prosperity) {
  * @property {number} [population]
  */
 
-/** @param {{ prosperity?: number, revolution?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
+/** @param {{ prosperity?: number, revolution?: number, population?: number, civilizationData?: CivilizationData, height?: number, showHud?: boolean }} props */
 export function LivingPlanet({
   prosperity = 0.5,
   revolution = 0,
+  population = 0,
   civilizationData,
   height = 400,
   showHud = false,
@@ -1063,6 +1168,8 @@ export function LivingPlanet({
   const currentProsperityRef = useRef(Math.max(0, Math.min(1, prosperity)));
   const targetRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
   const currentRevolutionRef = useRef(Math.max(0, Math.min(100, revolution)));
+  const targetPopulationRef = useRef(normalizePopulation(population));
+  const currentPopulationRef = useRef(normalizePopulation(population));
 
   useEffect(() => {
     targetProsperityRef.current = Math.max(0, Math.min(1, prosperity));
@@ -1071,6 +1178,10 @@ export function LivingPlanet({
   useEffect(() => {
     targetRevolutionRef.current = Math.max(0, Math.min(100, revolution));
   }, [revolution]);
+
+  useEffect(() => {
+    targetPopulationRef.current = normalizePopulation(population);
+  }, [population]);
 
   const initDoneRef = useRef(false);
 
@@ -1186,7 +1297,7 @@ export function LivingPlanet({
           planet.renderOrder = 0;
           markDepth(planet);
           scene.add(planet);
-          cloudMat = createTexturedCloudMaterial(loadedTextures.clouds, lightDir);
+          cloudMat = createTexturedCloudMaterial(loadedTextures.clouds, loadedTextures.night, lightDir);
           cloudMat.depthWrite = false;
           clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 128, 128), cloudMat);
           clouds.renderOrder = 1;
@@ -1233,12 +1344,16 @@ export function LivingPlanet({
       scene.add(atmosphere);
       console.log("[debug] step 4 — atmosphere visible: true (fresnel fixed to rim-only)");
 
+      /** @type {{ mesh: THREE.Mesh, texture: THREE.Texture, material: THREE.Material } | null} */
+      let milkySky = null;
       if (USE_REAL_SKY) {
-        console.warn("[sky] USE_REAL_SKY is enabled but sky textures are removed — using procedural stars");
+        milkySky = await loadMilkyWaySky(scene, renderer);
+        if (!milkySky) {
+          console.warn("[sky] USE_REAL_SKY: no valid milkyway.jpg — procedural Points only");
+        }
       }
-      console.log("[sky] procedural starfield (USE_REAL_SKY = false)");
 
-      const starData = buildStars(3200);
+      const starData = buildStars(2500);
       const starGeo = new THREE.BufferGeometry();
       starGeo.setAttribute("position", new THREE.BufferAttribute(starData.positions, 3));
       starGeo.setAttribute("color", new THREE.BufferAttribute(starData.colors, 3));
@@ -1360,12 +1475,15 @@ export function LivingPlanet({
 
         currentProsperityRef.current += (targetProsperityRef.current - currentProsperityRef.current) * 0.02;
         currentRevolutionRef.current += (targetRevolutionRef.current - currentRevolutionRef.current) * 0.02;
+        currentPopulationRef.current += (targetPopulationRef.current - currentPopulationRef.current) * 0.02;
         const p = currentProsperityRef.current;
         const revNorm = currentRevolutionRef.current / 100;
+        const pop = currentPopulationRef.current;
 
         if (useTexturedPlanet && planetMat.userData.shader) {
           planetMat.userData.shader.uniforms.uProsperity.value = p;
           planetMat.userData.shader.uniforms.uRevolution.value = revNorm;
+          planetMat.userData.shader.uniforms.uPopulation.value = pop;
           planetMat.userData.shader.uniforms.uTime.value = t;
           planetMat.userData.shader.uniforms.uLightDir.value.copy(lightDir);
         } else if (planetMat.uniforms) {
@@ -1486,6 +1604,12 @@ export function LivingPlanet({
         if (cloudsHigh) disposeObject(cloudsHigh);
         disposeObject(atmosphere);
         disposeObject(stars);
+        if (milkySky) {
+          milkySky.texture.dispose();
+          milkySky.material.dispose();
+          if (milkySky.mesh.parent) milkySky.mesh.parent.remove(milkySky.mesh);
+          milkySky.mesh.geometry.dispose();
+        }
         satellites.forEach(disposeObject);
         spaceFx.dispose();
         cometVfx.dispose();

@@ -8,9 +8,9 @@ const COMET_HEAD_SCALE = 0.07;
 const COMET_SPAWN_MIN = 15;
 const COMET_SPAWN_MAX = 20;
 const COMET_FIRST_SPAWN = 4;
-const COMET_EMIT_RATE = 270;
-const COMET_SPEED = 17.4;
-const COMET_CROSS_TIME = 0.9;
+const COMET_EMIT_RATE = 135;
+const COMET_SPEED = 8.7;
+const COMET_CROSS_TIME = 1.8;
 const HEAD_FADE_IN = 0.22;
 const HEAD_FADE_OUT = 0.38;
 

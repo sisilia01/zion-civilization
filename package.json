@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "fetch-milkyway": "node scripts/validate-milkyway.mjs"
   },
   "dependencies": {
     "@mysten/dapp-kit": "^1.0.6",
