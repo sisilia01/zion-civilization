@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "fetch-milkyway": "node scripts/validate-milkyway.mjs"
   },
   "dependencies": {
     "@mysten/dapp-kit": "^1.0.6",
@@ -15,13 +16,24 @@
     "@mysten/sui": "^2.16.2",
     "@mysten/walrus": "^1.1.7",
     "@mysten/zklogin": "^0.8.1",
+    "@noble/hashes": "^1.8.0",
+    "@noble/secp256k1": "^2.2.3",
+    "@railgun-community/shared-models": "^8.0.1",
+    "@railgun-community/wallet": "^10.8.6",
     "@tanstack/react-query": "^5.100.9",
+    "@types/three": "^0.128.0",
+    "@wormhole-foundation/sdk": "^4.20.0",
+    "@wormhole-foundation/sdk-evm": "^4.20.0",
+    "@wormhole-foundation/sdk-sui": "^4.20.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "three": "^0.128.0",
+    "viem": "^2.50.4",
+    "wagmi": "^3.6.15"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

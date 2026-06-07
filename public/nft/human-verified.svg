@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+<defs>
+<style>
+@keyframes fall1 { 0%{transform:translateY(-400px);opacity:1} 100%{transform:translateY(800px);opacity:0} }
+@keyframes fall2 { 0%{transform:translateY(-400px);opacity:0.7} 100%{transform:translateY(800px);opacity:0} }
+@keyframes fall3 { 0%{transform:translateY(-400px);opacity:0.5} 100%{transform:translateY(800px);opacity:0} }
+@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+@keyframes rotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes glow { 0%,100%{stroke-opacity:0.3} 50%{stroke-opacity:1} }
+
+.col1 { animation: fall1 3s linear infinite; }
+.col2 { animation: fall2 4s linear infinite 0.5s; }
+.col3 { animation: fall3 3.5s linear infinite 1s; }
+.col4 { animation: fall1 2.8s linear infinite 1.5s; }
+.col5 { animation: fall2 3.8s linear infinite 0.3s; }
+.col6 { animation: fall3 3.2s linear infinite 0.8s; }
+.col7 { animation: fall1 4.2s linear infinite 1.2s; }
+.col8 { animation: fall2 3.6s linear infinite 0.6s; }
+.col9 { animation: fall3 2.9s linear infinite 1.8s; }
+.col10 { animation: fall1 3.4s linear infinite 0.9s; }
+.ring { animation: rotate 20s linear infinite; transform-origin: 200px 200px; }
+.pulse { animation: pulse 2s ease-in-out infinite; }
+.glow { animation: glow 2s ease-in-out infinite; }
+</style>
+<clipPath id="clip"><rect width="400" height="400"/></clipPath>
+</defs>
+
+<!-- Background -->
+<rect width="400" height="400" fill="#050e0a"/>
+<rect x="1" y="1" width="398" height="398" fill="none" stroke="#00ff88" stroke-width="1.5" stroke-opacity="0.6"/>
+
+<!-- Matrix columns with katakana/kanji -->
+<g clip-path="url(#clip)" font-family="monospace" font-size="14" fill="#00ff88">
+
+<!-- Column 1 -->
+<g class="col1" transform="translate(20, 0)">
+  <text y="20" fill-opacity="1">刀</text>
+  <text y="40" fill-opacity="0.9">侍</text>
+  <text y="60" fill-opacity="0.8">剣</text>
+  <text y="80" fill-opacity="0.7">武</text>
+  <text y="100" fill-opacity="0.6">道</text>
+  <text y="120" fill-opacity="0.5">力</text>
+  <text y="140" fill-opacity="0.4">士</text>
+  <text y="160" fill-opacity="0.3">勇</text>
+  <text y="180" fill-opacity="0.2">鬼</text>
+  <text y="200" fill-opacity="0.1">神</text>
+</g>
+
+<!-- Column 2 -->
+<g class="col2" transform="translate(55, -80)">
+  <text y="20" fill-opacity="1" fill="#88ffaa">ア</text>
+  <text y="40" fill-opacity="0.9">イ</text>
+  <text y="60" fill-opacity="0.8">ウ</text>
+  <text y="80" fill-opacity="0.7">エ</text>
+  <text y="100" fill-opacity="0.6">オ</text>
+  <text y="120" fill-opacity="0.5">カ</text>
+  <text y="140" fill-opacity="0.4">キ</text>
+  <text y="160" fill-opacity="0.3">ク</text>
+  <text y="180" fill-opacity="0.2">ケ</text>
+  <text y="200" fill-opacity="0.1">コ</text>
+</g>
+
+<!-- Column 3 -->
+<g class="col3" transform="translate(90, -40)">
+  <text y="20" fill-opacity="1">斬</text>
+  <text y="40" fill-opacity="0.9">撃</text>
+  <text y="60" fill-opacity="0.8">闘</text>
+  <text y="80" fill-opacity="0.7">魂</text>
+  <text y="100" fill-opacity="0.6">霊</text>
+  <text y="120" fill-opacity="0.5">影</text>
+  <text y="140" fill-opacity="0.4">忍</text>
+  <text y="160" fill-opacity="0.3">術</text>
+  <text y="180" fill-opacity="0.2">気</text>
+  <text y="200" fill-opacity="0.1">炎</text>
+</g>
+
+<!-- Column 4 -->
+<g class="col4" transform="translate(125, -120)">
+  <text y="20" fill-opacity="1" fill="#00cc66">サ</text>
+  <text y="40" fill-opacity="0.9">シ</text>
+  <text y="60" fill-opacity="0.8">ス</text>
+  <text y="80" fill-opacity="0.7">セ</text>
+  <text y="100" fill-opacity="0.6">ソ</text>
+  <text y="120" fill-opacity="0.5">タ</text>
+  <text y="140" fill-opacity="0.4">チ</text>
+  <text y="160" fill-opacity="0.3">ツ</text>
+  <text y="180" fill-opacity="0.2">テ</text>
+  <text y="200" fill-opacity="0.1">ト</text>
+</g>
+
+<!-- Column 5 -->
+<g class="col5" transform="translate(160, -60)">
+  <text y="20" fill-opacity="1">龍</text>
+  <text y="40" fill-opacity="0.9">虎</text>
+  <text y="60" fill-opacity="0.8">鷹</text>
+  <text y="80" fill-opacity="0.7">狼</text>
+  <text y="100" fill-opacity="0.6">蛇</text>
+  <text y="120" fill-opacity="0.5">鬼</text>
+  <text y="140" fill-opacity="0.4">天</text>
+  <text y="160" fill-opacity="0.3">地</text>
+  <text y="180" fill-opacity="0.2">人</text>
+  <text y="200" fill-opacity="0.1">空</text>
+</g>
+
+<!-- Column 6 -->
+<g class="col6" transform="translate(215, -100)">
+  <text y="20" fill-opacity="1" fill="#88ffaa">ナ</text>
+  <text y="40" fill-opacity="0.9">ニ</text>
+  <text y="60" fill-opacity="0.8">ヌ</text>
+  <text y="80" fill-opacity="0.7">ネ</text>
+  <text y="100" fill-opacity="0.6">ノ</text>
+  <text y="120" fill-opacity="0.5">ハ</text>
+  <text y="140" fill-opacity="0.4">ヒ</text>
+  <text y="160" fill-opacity="0.3">フ</text>
+  <text y="180" fill-opacity="0.2">ヘ</text>
+  <text y="200" fill-opacity="0.1">ホ</text>
+</g>
+
+<!-- Column 7 -->
+<g class="col7" transform="translate(250, -20)">
+  <text y="20" fill-opacity="1">零</text>
+  <text y="40" fill-opacity="0.9">識</text>
+  <text y="60" fill-opacity="0.8">証</text>
+  <text y="80" fill-opacity="0.7">明</text>
+  <text y="100" fill-opacity="0.6">真</text>
+  <text y="120" fill-opacity="0.5">実</text>
+  <text y="140" fill-opacity="0.4">幻</text>
+  <text y="160" fill-opacity="0.3">夢</text>
+  <text y="180" fill-opacity="0.2">現</text>
+  <text y="200" fill-opacity="0.1">世</text>
+</g>
+
+<!-- Column 8 -->
+<g class="col8" transform="translate(285, -140)">
+  <text y="20" fill-opacity="1" fill="#00cc66">マ</text>
+  <text y="40" fill-opacity="0.9">ミ</text>
+  <text y="60" fill-opacity="0.8">ム</text>
+  <text y="80" fill-opacity="0.7">メ</text>
+  <text y="100" fill-opacity="0.6">モ</text>
+  <text y="120" fill-opacity="0.5">ヤ</text>
+  <text y="140" fill-opacity="0.4">ユ</text>
+  <text y="160" fill-opacity="0.3">ヨ</text>
+  <text y="180" fill-opacity="0.2">ラ</text>
+  <text y="200" fill-opacity="0.1">リ</text>
+</g>
+
+<!-- Column 9 -->
+<g class="col9" transform="translate(320, -70)">
+  <text y="20" fill-opacity="1">匿</text>
+  <text y="40" fill-opacity="0.9">名</text>
+  <text y="60" fill-opacity="0.8">秘</text>
+  <text y="80" fill-opacity="0.7">密</text>
+  <text y="100" fill-opacity="0.6">暗</text>
+  <text y="120" fill-opacity="0.5">号</text>
+  <text y="140" fill-opacity="0.4">鍵</text>
+  <text y="160" fill-opacity="0.3">錠</text>
+  <text y="180" fill-opacity="0.2">閉</text>
+  <text y="200" fill-opacity="0.1">開</text>
+</g>
+
+<!-- Column 10 -->
+<g class="col10" transform="translate(355, -160)">
+  <text y="20" fill-opacity="1" fill="#88ffaa">ル</text>
+  <text y="40" fill-opacity="0.9">レ</text>
+  <text y="60" fill-opacity="0.8">ロ</text>
+  <text y="80" fill-opacity="0.7">ワ</text>
+  <text y="100" fill-opacity="0.6">ヲ</text>
+  <text y="120" fill-opacity="0.5">ン</text>
+  <text y="140" fill-opacity="0.4">零</text>
+  <text y="160" fill-opacity="0.3">式</text>
+  <text y="180" fill-opacity="0.2">知</text>
+  <text y="200" fill-opacity="0.1">覚</text>
+</g>
+</g>
+
+<!-- Dark overlay center для читаемости -->
+<rect x="60" y="100" width="280" height="200" fill="#050e0a" fill-opacity="0.85" rx="8"/>
+
+<!-- Rotating ring -->
+<g class="ring">
+  <circle cx="200" cy="200" r="90" fill="none" stroke="#00ff88" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="3 6"/>
+</g>
+
+<!-- Shield -->
+<polygon points="200,120 260,155 260,235 200,270 140,235 140,155"
+         fill="rgba(0,255,136,0.05)" stroke="#00ff88" stroke-width="1.5" stroke-opacity="0.7" class="glow"/>
+<polygon points="200,138 244,162 244,226 200,250 156,226 156,162"
+         fill="rgba(0,255,136,0.03)" stroke="#00ff88" stroke-width="0.5" stroke-opacity="0.3"/>
+
+<!-- Checkmark -->
+<path d="M 178 195 L 196 213 L 224 180"
+      stroke="#00ff88" stroke-width="3.5" fill="none"
+      stroke-linecap="round" stroke-linejoin="round" class="pulse"/>
+
+<!-- Corner brackets -->
+<rect x="10" y="10" width="25" height="2" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="10" y="10" width="2" height="25" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="365" y="10" width="25" height="2" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="388" y="10" width="2" height="25" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="10" y="368" width="2" height="25" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="10" y="388" width="25" height="2" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="365" y="388" width="25" height="2" fill="#00ff88" fill-opacity="0.7"/>
+<rect x="388" y="368" width="2" height="25" fill="#00ff88" fill-opacity="0.7"/>
+
+<!-- Text -->
+<text x="200" y="308" text-anchor="middle" font-family="monospace" font-size="18" fill="#00ff88" font-weight="bold" letter-spacing="4">ZION HUMAN</text>
+<text x="200" y="328" text-anchor="middle" font-family="monospace" font-size="9" fill="#00ff88" fill-opacity="0.5" letter-spacing="3">VERIFIED IDENTITY</text>
+<text x="200" y="350" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff88" fill-opacity="0.25" letter-spacing="2">ZERO-KNOWLEDGE PROOF</text>
+
+<!-- Version -->
+<text x="380" y="390" text-anchor="end" font-family="monospace" font-size="8" fill="#00ff88" fill-opacity="0.2">v1.0</text>
+<text x="20" y="390" font-family="monospace" font-size="8" fill="#00ff88" fill-opacity="0.2">ZION</text>
+</svg>
