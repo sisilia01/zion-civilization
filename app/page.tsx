@@ -976,6 +976,7 @@ function DistrictMapPanel() {
         <LivingPlanet
           prosperity={prosperity}
           revolution={civilizationData.revolution ?? 0}
+          population={civilizationData.population ?? 0}
           civilizationData={civilizationData}
           height={400}
         />
