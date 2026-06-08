@@ -113,6 +113,18 @@ def run_position_thinking():
     except Exception as e:
         print(f"[science_tick] position_thinking error: {e}")
 
+
+def maybe_corp_analysis():
+    """~25% chance: Academy analyzes corporate political economy (Track I)."""
+    import random, asyncio
+    if random.random() > 0.25:
+        print("[science_tick] no corp analysis this cycle"); return
+    try:
+        import academy_corp; asyncio.run(academy_corp.main())
+        print("[science_tick] corp economy analyzed")
+    except Exception as e:
+        print(f"[science_tick] corp analysis error: {e}")
+
 if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
@@ -122,4 +134,5 @@ if __name__ == "__main__":
     maybe_decision_model()
     maybe_invention()
     run_position_thinking()
+    maybe_corp_analysis()
     print("[science_tick] done")
