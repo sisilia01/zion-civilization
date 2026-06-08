@@ -102,6 +102,15 @@ def run_birth_cycle():
 
     deaths_old = 0
     deaths_starvation = 0
+    # Evolutionary rule: profitable traders resist death by old age
+    _pcur = conn.cursor()
+    try:
+        _pcur.execute("SELECT agent_id FROM agent_trades WHERE status='CLOSED' GROUP BY agent_id HAVING COALESCE(SUM(pnl),0) > 0")
+        _profitable = {row[0] for row in _pcur.fetchall()}
+    except Exception:
+        _profitable = set()
+    finally:
+        _pcur.close()
 
     cur.execute(
         """
@@ -111,7 +120,7 @@ def run_birth_cycle():
     )
     for ag in cur.fetchall():
         age = int(ag["age_days"] or 0)
-        if age > OLD_AGE_DAYS:
+        if age > OLD_AGE_DAYS and ag["id"] not in _profitable:
             settle_agent_death(cur, ag["id"])
             cur.execute(
                 """
