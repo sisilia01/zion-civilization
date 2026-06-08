@@ -34,6 +34,7 @@ CRON_SCRIPTS = {
     "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
     "birth":        ("birth.py",          1800),   # 30 min
     "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
+    "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
     # [DISABLED for scientific clarity] "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
