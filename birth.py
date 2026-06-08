@@ -161,6 +161,19 @@ def run_birth_cycle():
     parents = cur.fetchall()
     random.shuffle(parents)
 
+    _icur = conn.cursor()
+    _icur.execute("SELECT a.id, a.charisma, a.aggression, a.faith, a.intelligence, a.strength, a.loyalty, COALESCE(t.net_pnl,0) FROM agents a LEFT JOIN (SELECT agent_id, SUM(pnl) net_pnl FROM agent_trades WHERE status='CLOSED' GROUP BY agent_id) t ON t.agent_id=a.id WHERE a.is_alive=true")
+    _ptraits = {}
+    for _row in _icur.fetchall():
+        _ptraits[_row[0]] = {"charisma":_row[1] or 5,"aggression":_row[2] or 5,"faith":_row[3] or 5,"intelligence":_row[4] or 5,"strength":_row[5] or 5,"loyalty":_row[6] or 5,"net_pnl":float(_row[7] or 0)}
+    _icur.close()
+    def _inherit(pid):
+        p = _ptraits.get(pid)
+        if not p:
+            return (random.randint(1,15),random.randint(1,15),random.randint(1,20),random.randint(1,15),random.randint(1,15),random.randint(1,15))
+        def mut(v, lo=1, hi=100): return max(lo, min(hi, int(v) + random.randint(-3,3)))
+        bonus = 5 if p["net_pnl"] > 0 else 0
+        return (mut(p["charisma"]), mut(p["aggression"]), mut(p["faith"]), mut(p["intelligence"]+bonus), mut(p["strength"]), mut(p["loyalty"]))
     births = 0
     for parent in parents:
         if births >= max_births:
@@ -188,12 +201,7 @@ def run_birth_cycle():
                 0,
                 parent["id"],
                 gender,
-                random.randint(1, 15),
-                random.randint(1, 15),
-                random.randint(1, 20),
-                random.randint(1, 15),
-                random.randint(1, 15),
-                random.randint(1, 15),
+                *(_inh := _inherit(parent["id"])),
             ),
         )
         child_id = cur.fetchone()["id"]
