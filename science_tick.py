@@ -90,6 +90,18 @@ def maybe_decision_model():
     except Exception as e:
         print(f"[science_tick] track4 error: {e}")
 
+
+def maybe_invention():
+    """~15% chance: an experienced agent invents a named strategy. Costs LLM calls."""
+    import random, asyncio
+    if random.random() > 0.15:
+        print("[science_tick] no invention this cycle"); return
+    try:
+        import agent_inventions; asyncio.run(agent_inventions.main())
+        print("[science_tick] agent invention created")
+    except Exception as e:
+        print(f"[science_tick] invention error: {e}")
+
 if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
@@ -97,4 +109,5 @@ if __name__ == "__main__":
     maybe_chronicle()
     maybe_hypothesis()
     maybe_decision_model()
+    maybe_invention()
     print("[science_tick] done")
