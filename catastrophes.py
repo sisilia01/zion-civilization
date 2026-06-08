@@ -24,7 +24,6 @@ CATASTROPHES = [
     {"name": "Great Flood", "type": "flood", "damage": 0.45, "emoji": "🌊"},
     {"name": "Meteor Strike", "type": "meteor", "damage": 0.60, "emoji": "☄️"},
     {"name": "Ice Age", "type": "ice", "damage": 0.30, "emoji": "❄️"},
-    {"name": "Dragon Attack", "type": "dragon", "damage": 0.55, "emoji": "🐉"},
     {"name": "Black Death", "type": "death", "damage": 0.45, "emoji": "💀"},
     {"name": "Civil War", "type": "war", "damage": 0.35, "emoji": "⚔️"},
 ]

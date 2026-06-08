@@ -59,7 +59,8 @@ CRON_SCRIPTS = {
     "market":       ("market.py",         1800),
     # [DISABLED for scientific clarity] "espionage":    ("espionage.py",      3600),
     # [DISABLED for scientific clarity] "casino":       ("casino.py",         1800),
-    # [DISABLED for scientific clarity] "catastrophes": ("catastrophes.py",   7200),
+    "catastrophes": ("catastrophes.py",   10800),  # 3h — exogenous shocks (institutional stress test)
+    "crisis_response": ("crisis_response.py", 3600),   # 1h — govt reacts to catastrophes
     "zionwork":     ("zionwork.py",       1800),
     # Retired - replaced by senate.py + president.py + political_parties.py
     "walrus":       ("walrus.py",         3600),
