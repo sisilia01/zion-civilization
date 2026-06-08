@@ -35,27 +35,27 @@ CRON_SCRIPTS = {
     "birth":        ("birth.py",          1800),   # 30 min
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
-    "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
-    "clans":        ("clans.py",          3600),   # 1 hour
-    "police":       ("police.py",         1800),   # 30 min — population sync
+    # [DISABLED for scientific clarity] "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
+    # [DISABLED for scientific clarity] "clans":        ("clans.py",          3600),   # 1 hour
+    "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
     # president/senate/sheriff governance handled by governance_tick.py only
-    "political_parties": ("political_parties.py", 3600),
-    "disasters": ("disasters.py", 2700),  # 45 min average
-    "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
+    # [DISABLED for scientific clarity] "political_parties": ("political_parties.py", 3600),
+    # [DISABLED for scientific clarity] "disasters": ("disasters.py", 2700),  # 45 min average
+    # [DISABLED for scientific clarity] "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day
-    "neo":          ("neo.py",            3600),   # 1 hour
+    # [DISABLED for scientific clarity] "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
     "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
-    "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
-    "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
+    # [DISABLED for scientific clarity] "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
+    # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
     # Other civilization modules (unchanged intervals)
-    "epidemics":    ("epidemics.py",      7200),
-    "marriages":    ("marriages.py",      3600),
+    # [DISABLED for scientific clarity] "epidemics":    ("epidemics.py",      7200),
+    # [DISABLED for scientific clarity] "marriages":    ("marriages.py",      3600),
     "market":       ("market.py",         1800),
-    "espionage":    ("espionage.py",      3600),
-    "casino":       ("casino.py",         1800),
-    "catastrophes": ("catastrophes.py",   7200),
+    # [DISABLED for scientific clarity] "espionage":    ("espionage.py",      3600),
+    # [DISABLED for scientific clarity] "casino":       ("casino.py",         1800),
+    # [DISABLED for scientific clarity] "catastrophes": ("catastrophes.py",   7200),
     "zionwork":     ("zionwork.py",       1800),
     # Retired - replaced by senate.py + president.py + political_parties.py
     "walrus":       ("walrus.py",         3600),
@@ -76,9 +76,9 @@ def get_random_interval(min_sec=900, max_sec=2700):
 
 # Per-script random scheduling windows (seconds)
 RANDOM_INTERVAL_RANGES = {
-    "political_parties": (1200, 3600), # 20-60 min
-    "disasters": (2700, 5400),        # 45-90 min
-    "faction_engine": (900, 1800),    # 15-30 мин
+    # [DISABLED for scientific clarity] "political_parties": (1200, 3600), # 20-60 min
+    # [DISABLED for scientific clarity] "disasters": (2700, 5400),        # 45-90 min
+    # [DISABLED for scientific clarity] "faction_engine": (900, 1800),    # 15-30 мин
 }
 
 last_run = {name: 0 for name in CRON_SCRIPTS}
