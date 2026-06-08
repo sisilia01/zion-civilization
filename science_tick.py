@@ -73,10 +73,28 @@ def maybe_hypothesis():
     except Exception as e:
         print(f"[science_tick] track3 error: {e}")
 
+
+def maybe_decision_model():
+    """Weekly: evolve the Synthetic Decision Model from accumulated data (Track IV)."""
+    import psycopg2, asyncio
+    from datetime import timedelta
+    try:
+        conn=psycopg2.connect(host="localhost",database="zion_db",user="zion_user",password="zion2026")
+        cur=conn.cursor(); cur.execute("SELECT MAX(created_at) FROM decision_model"); last=cur.fetchone()[0]
+        cur.close(); conn.close()
+        if last is None or (datetime.now()-last.replace(tzinfo=None))>timedelta(days=7):
+            import academy_track4; asyncio.run(academy_track4.main())
+            print("[science_tick] SDM evolved (Track IV)")
+        else:
+            print("[science_tick] SDM not due")
+    except Exception as e:
+        print(f"[science_tick] track4 error: {e}")
+
 if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
     run_academy()
     maybe_chronicle()
     maybe_hypothesis()
+    maybe_decision_model()
     print("[science_tick] done")
