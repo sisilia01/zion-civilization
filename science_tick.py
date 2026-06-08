@@ -102,6 +102,17 @@ def maybe_invention():
     except Exception as e:
         print(f"[science_tick] invention error: {e}")
 
+
+def run_position_thinking():
+    """Agents revisit and reconsider their open predictions (cognitive activity)."""
+    import asyncio
+    try:
+        import position_thinking
+        asyncio.run(position_thinking.run_cycle(llm_count=8))
+        print("[science_tick] position reconsideration done")
+    except Exception as e:
+        print(f"[science_tick] position_thinking error: {e}")
+
 if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
@@ -110,4 +121,5 @@ if __name__ == "__main__":
     maybe_hypothesis()
     maybe_decision_model()
     maybe_invention()
+    run_position_thinking()
     print("[science_tick] done")
