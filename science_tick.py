@@ -59,9 +59,24 @@ def maybe_chronicle():
     except Exception as e:
         print(f"[science_tick] chronicle error: {e}")
 
+
+def maybe_hypothesis():
+    """~20% chance: an agent proposes an open hypothesis (Track III). Costs LLM calls."""
+    import random, asyncio
+    if random.random() > 0.20:
+        print("[science_tick] no hypothesis this cycle")
+        return
+    try:
+        import academy_track3
+        asyncio.run(academy_track3.main())
+        print("[science_tick] Track III hypothesis generated")
+    except Exception as e:
+        print(f"[science_tick] track3 error: {e}")
+
 if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
     run_academy()
     maybe_chronicle()
+    maybe_hypothesis()
     print("[science_tick] done")
