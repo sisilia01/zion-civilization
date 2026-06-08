@@ -37,7 +37,7 @@ def store_blob(data: dict, blob_type: str = "events") -> dict | None:
     try:
         payload = json.dumps(data, default=str, ensure_ascii=False)
         resp = requests.put(
-            f"{WALRUS_PUBLISHER}/v1/blobs?epochs=2",
+            f"{WALRUS_PUBLISHER}/v1/blobs?epochs=53",
             data=payload.encode('utf-8'),
             headers={"Content-Type": "application/json"},
             timeout=30
