@@ -35,6 +35,8 @@ CRON_SCRIPTS = {
     "birth":        ("birth.py",          1800),   # 30 min
     "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
     "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)
+    "corp_economy": ("corp_economy.py",    3600),   # 1 hour — corporate hiring/poaching/credit/bankruptcy
+    "corp_court":   ("corp_court.py",      7200),   # 2 hours — corporate lawsuits (AI judges)
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
     # [DISABLED for scientific clarity] "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
