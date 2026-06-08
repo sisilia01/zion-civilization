@@ -842,6 +842,9 @@ def generate_signal(
     else:
         strength = "neutral"
 
+    # ZION Knowledge Feedback: SDM found agents over-favor SHORT despite worse outcomes.
+    # Apply a small honest correction to weak SHORT signals (does not override strong ones).
+    score = civ_knowledge_adjustment(score)
     if score >= 3:
         direction = "LONG"
     elif score <= -3:
@@ -856,6 +859,26 @@ def generate_signal(
         "reasons": reasons[:5],
     }
 
+
+
+_CIV_KNOWLEDGE_CACHE = {"active": None}
+def civ_knowledge_adjustment(score):
+    """Honest knowledge feedback: if the civilization has validated that agents
+    over-short to their detriment, nudge weak short signals toward neutral.
+    Only affects borderline scores (-3..-5); strong signals are untouched."""
+    try:
+        if _CIV_KNOWLEDGE_CACHE["active"] is None:
+            import psycopg2
+            c=psycopg2.connect(host="localhost",database="zion_db",user="zion_user",password="zion2026")
+            cu=c.cursor(); cu.execute("SELECT COUNT(*) FROM knowledge_propagation"); 
+            _CIV_KNOWLEDGE_CACHE["active"] = cu.fetchone()[0] > 0
+            cu.close(); c.close()
+        if _CIV_KNOWLEDGE_CACHE["active"] and -5 <= score <= -3:
+            # weak short: knowledge says reconsider -> soften toward neutral
+            return score + 1
+    except Exception:
+        pass
+    return score
 
 def _empty_market_analysis() -> dict:
     return {
@@ -1109,12 +1132,14 @@ async def init_portfolios():
     print(f"Initialized {count} new agent portfolios", flush=True)
 
 
-def calculate_trade_pnl(direction: str, entry_price: float, exit_price: float, size_usd: float):
-    """PnL from market exit vs entry (LONG and SHORT)."""
+def calculate_trade_pnl(direction: str, entry_price: float, exit_price: float, size_usd: float, leverage: float = 1.0):
+    """PnL from market exit vs entry (LONG and SHORT), amplified by leverage.
+    pnl_percent is the LEVERAGED return on the position (real perps behavior)."""
     if direction == "LONG":
-        pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+        raw_percent = ((exit_price - entry_price) / entry_price) * 100
     else:
-        pnl_percent = ((entry_price - exit_price) / entry_price) * 100
+        raw_percent = ((entry_price - exit_price) / entry_price) * 100
+    pnl_percent = raw_percent * leverage
     pnl = size_usd * (pnl_percent / 100)
     return pnl, pnl_percent
 
@@ -1129,7 +1154,8 @@ async def check_and_close_positions(prices):
         SELECT pos.agent_id, pos.pair, pos.direction, pos.size_usd,
                pos.entry_price, pos.stop_loss, pos.take_profit,
                ap.agent_name,
-               EXTRACT(EPOCH FROM (NOW() - pos.opened_at))/60 as age_minutes
+               EXTRACT(EPOCH FROM (NOW() - pos.opened_at))/60 as age_minutes,
+               COALESCE(pos.leverage, 1) as leverage_db
         FROM agent_positions pos
         JOIN agent_portfolio ap ON ap.agent_id = pos.agent_id
         """
@@ -1139,7 +1165,7 @@ async def check_and_close_positions(prices):
     conn.close()
 
     for pos in positions:
-        agent_id, pair, direction, size_usd, entry_price, stop_loss, take_profit, agent_name, age_minutes = pos
+        agent_id, pair, direction, size_usd, entry_price, stop_loss, take_profit, agent_name, age_minutes, leverage_db = pos
         if pair not in prices:
             continue
 
@@ -1158,7 +1184,7 @@ async def check_and_close_positions(prices):
 
         if force_close:
             should_close = True
-            pnl, pnl_percent = calculate_trade_pnl(direction, entry, exit_price, size)
+            pnl, pnl_percent = calculate_trade_pnl(direction, entry, exit_price, size, float(leverage_db))
             print(
                 f"Force closing {direction} {pair} for agent {agent_id} "
                 f"after {float(age_minutes):.0f} min "
@@ -1375,6 +1401,7 @@ async def open_new_trades(prices):
                 "pairs": ["BTC", "ETH"],
                 "min_strength": "strong",
                 "size_range": (0.40, 0.65),
+                "leverage_range": (2, 5),
                 "sl": 0.97,
                 "tp": 1.08,
                 "max_trades_day": 1,
@@ -1384,6 +1411,7 @@ async def open_new_trades(prices):
                 "pairs": ["BTC", "ETH", "SUI"],
                 "min_strength": "weak",
                 "size_range": (0.30, 0.50),
+                "leverage_range": (3, 8),
                 "sl": 0.975,
                 "tp": 1.05,
                 "max_trades_day": 2,
@@ -1393,6 +1421,7 @@ async def open_new_trades(prices):
                 "pairs": ["BTC", "ETH", "SUI", "SOL", "BNB"],
                 "min_strength": "weak",
                 "size_range": (0.20, 0.35),
+                "leverage_range": (5, 12),
                 "sl": 0.985,
                 "tp": 1.025,
                 "max_trades_day": 5,
@@ -1402,6 +1431,7 @@ async def open_new_trades(prices):
                 "pairs": ["SUI", "SOL", "BNB", "DOGE", "AVAX"],
                 "min_strength": None,
                 "size_range": (0.15, 0.25),
+                "leverage_range": (5, 15),
                 "sl": 0.993,
                 "tp": 1.012,
                 "max_trades_day": 10,
@@ -1411,6 +1441,7 @@ async def open_new_trades(prices):
                 "pairs": ["DOGE", "SOL", "SUI", "ARB", "OP"],
                 "min_strength": None,
                 "size_range": (0.30, 0.50),
+                "leverage_range": (10, 20),
                 "sl": 0.985,
                 "tp": 1.025,
                 "max_trades_day": 15,
@@ -1420,6 +1451,7 @@ async def open_new_trades(prices):
                 "pairs": PAIRS,
                 "min_strength": None,
                 "size_range": (0.50, 0.80),
+                "leverage_range": (10, 25),
                 "sl": 0.970,
                 "tp": 1.040,
                 "max_trades_day": 20,
@@ -1556,6 +1588,12 @@ async def open_new_trades(prices):
             size_usd = round(size_usd * 0.7, 2)
 
         size_usd = max(8.0, min(size_usd, balance * 0.85))
+        # Leverage: chosen from class range, nudged by agent aggression (honest, real perps)
+        lev_lo, lev_hi = cfg.get("leverage_range", (1, 1))
+        aggr = locals().get("agent_aggression", 50) or 50
+        lev_bias = (aggr - 50) / 50.0  # -1..+1
+        leverage = int(round(lev_lo + (lev_hi - lev_lo) * (0.5 + 0.5*lev_bias) * random.uniform(0.7, 1.0)))
+        leverage = max(lev_lo, min(lev_hi, leverage))
 
         sl_pct = cfg["sl"]
         tp_pct = cfg["tp"]
@@ -1584,8 +1622,8 @@ async def open_new_trades(prices):
                 """
                 INSERT INTO agent_positions
                 (agent_id, pair, direction, size_usd, entry_price,
-                 current_price, stop_loss, take_profit)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                 current_price, stop_loss, take_profit, leverage)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
                 (
                     agent_id,
@@ -1596,6 +1634,7 @@ async def open_new_trades(prices):
                     entry_price,
                     stop_loss,
                     take_profit,
+                    leverage,
                 ),
             )
 

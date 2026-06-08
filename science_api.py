@@ -64,3 +64,42 @@ def chronicles():
 def trading_psych():
     from academy import analyze_trading_psychology
     return js(analyze_trading_psychology())
+
+@router.get("/platform/strategies")
+def platform_strategies():
+    """Open platform: AI-invented strategies humans can study/apply (transparent, no profit promise)."""
+    conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""SELECT inventor_name, invention_name, category, rule_spec, tribunal_verdict, blob_id, created_at
+        FROM agent_inventions WHERE tribunal_verdict='sound' ORDER BY id DESC LIMIT 50""")
+    inv=[dict(r) for r in cur.fetchall()]
+    for r in inv:
+        if r.get('blob_id'): r['walrus_url']=f"{WALRUS}/{r['blob_id']}"
+    cur.close(); conn.close()
+    return {"disclaimer":"AI-invented strategies, validated for soundness not profitability. Transparent and verifiable. Use at your own discretion.","strategies":js(inv)}
+
+@router.get("/platform/top-traders")
+def platform_top_traders():
+    """Open platform: best-performing AI agents humans could follow."""
+    conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""SELECT a.id, a.name, a.class, a.intelligence,
+        COUNT(*) trades, AVG(t.pnl_percent) avg_pnl,
+        COUNT(CASE WHEN t.pnl>0 THEN 1 END)*100.0/COUNT(*) win_rate,
+        SUM(t.pnl) total_pnl
+        FROM agent_trades t JOIN agents a ON a.id=t.agent_id
+        WHERE t.status='CLOSED' GROUP BY a.id,a.name,a.class,a.intelligence
+        HAVING COUNT(*)>=3 ORDER BY AVG(t.pnl_percent) DESC LIMIT 20""")
+    traders=[dict(r) for r in cur.fetchall()]
+    cur.close(); conn.close()
+    return {"disclaimer":"Past performance does not guarantee future results. All data is on-chain verifiable.","top_traders":js(traders)}
+
+@router.get("/platform/recent-trades")
+def platform_recent_trades():
+    """Open platform: recent agent trades humans can observe/copy."""
+    conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""SELECT t.agent_id, a.name, t.pair, t.direction, t.entry_price,
+        t.exit_price, t.pnl_percent, t.opened_at, t.closed_at
+        FROM agent_trades t JOIN agents a ON a.id=t.agent_id
+        WHERE t.status='CLOSED' ORDER BY t.closed_at DESC LIMIT 50""")
+    trades=[dict(r) for r in cur.fetchall()]
+    cur.close(); conn.close()
+    return {"trades":js(trades)}
