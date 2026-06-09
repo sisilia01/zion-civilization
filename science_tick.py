@@ -27,7 +27,16 @@ def maybe_run_amendment():
     ensure_tables()
     title, desc, ctype = random.choice(AMENDMENT_IDEAS)
     aid = propose_amendment(title, desc, ctype)
-    run_vote(aid, ctype)
+    vote_result = run_vote(aid, ctype)
+    if vote_result['passed']:
+        from zco_tribunal import convene, get_amendment
+        amendment_data = get_amendment(aid)
+        tally = vote_result['tally']
+        result = asyncio.run(convene(amendment_data, tally))
+        print(f"[science_tick] tribunal result: {result}")
+        if result['unanimous']:
+            from enact_amendment import enact
+            enact(aid)
     print(f"[science_tick] amendment cycle ran: {title}")
 
 def run_academy():
@@ -39,6 +48,18 @@ def run_academy():
         print(f"[science_tick] academy analysis: win_rate={f['overall']['win_rate']}%")
     except Exception as e:
         print(f"[science_tick] academy error: {e}")
+
+def maybe_track2_review():
+    """~15% chance: full Track II tribunal peer-review (academy_review)."""
+    if random.random() > 0.15:
+        print("[science_tick] no Track II review this cycle")
+        return
+    try:
+        import academy_review
+        asyncio.run(academy_review.main())
+        print("[science_tick] Track II tribunal review complete")
+    except Exception as e:
+        print(f"[science_tick] track2 review error: {e}")
 
 def maybe_chronicle():
     """Publish a weekly chronicle if the last one is >7 days old."""
@@ -129,6 +150,7 @@ if __name__ == "__main__":
     print(f"=== SCIENCE TICK {datetime.now(timezone.utc).isoformat()} ===")
     maybe_run_amendment()
     run_academy()
+    maybe_track2_review()
     maybe_chronicle()
     maybe_hypothesis()
     maybe_decision_model()

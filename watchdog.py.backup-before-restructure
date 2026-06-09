@@ -33,35 +33,29 @@ CRON_SCRIPTS = {
     "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
     "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
     "birth":        ("birth.py",          1800),   # 30 min
-    "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
-    "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)
-    "corp_economy": ("corp_economy.py",    3600),   # 1 hour — corporate hiring/poaching/credit/bankruptcy
-    "corp_court":   ("corp_court.py",      7200),   # 2 hours — corporate lawsuits (AI judges)
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
-    # [DISABLED for scientific clarity] "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
-    # [DISABLED for scientific clarity] "clans":        ("clans.py",          3600),   # 1 hour
-    "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
+    "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
+    "clans":        ("clans.py",          3600),   # 1 hour
+    "police":       ("police.py",         1800),   # 30 min — population sync
     # president/senate/sheriff governance handled by governance_tick.py only
-    # [DISABLED for scientific clarity] "political_parties": ("political_parties.py", 3600),
-    # [DISABLED for scientific clarity] "disasters": ("disasters.py", 2700),  # 45 min average
-    # [DISABLED for scientific clarity] "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
+    "political_parties": ("political_parties.py", 3600),
+    "disasters": ("disasters.py", 2700),  # 45 min average
+    "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day
-    # [DISABLED for scientific clarity] "neo":          ("neo.py",            3600),   # 1 hour
+    "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
-    "knowledge_loop": ("knowledge_loop.py", 86400),  # 1x/day — feedback loop: science findings → agent memory
     "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
-    # [DISABLED for scientific clarity] "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
-    # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
+    "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
+    "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
     # Other civilization modules (unchanged intervals)
-    # [DISABLED for scientific clarity] "epidemics":    ("epidemics.py",      7200),
-    # [DISABLED for scientific clarity] "marriages":    ("marriages.py",      3600),
+    "epidemics":    ("epidemics.py",      7200),
+    "marriages":    ("marriages.py",      3600),
     "market":       ("market.py",         1800),
-    # [DISABLED for scientific clarity] "espionage":    ("espionage.py",      3600),
-    # [DISABLED for scientific clarity] "casino":       ("casino.py",         1800),
-    "catastrophes": ("catastrophes.py",   10800),  # 3h — exogenous shocks (institutional stress test)
-    "crisis_response": ("crisis_response.py", 3600),   # 1h — govt reacts to catastrophes
+    "espionage":    ("espionage.py",      3600),
+    "casino":       ("casino.py",         1800),
+    "catastrophes": ("catastrophes.py",   7200),
     "zionwork":     ("zionwork.py",       1800),
     # Retired - replaced by senate.py + president.py + political_parties.py
     "walrus":       ("walrus.py",         3600),
@@ -82,9 +76,9 @@ def get_random_interval(min_sec=900, max_sec=2700):
 
 # Per-script random scheduling windows (seconds)
 RANDOM_INTERVAL_RANGES = {
-    # [DISABLED for scientific clarity] "political_parties": (1200, 3600), # 20-60 min
-    # [DISABLED for scientific clarity] "disasters": (2700, 5400),        # 45-90 min
-    # [DISABLED for scientific clarity] "faction_engine": (900, 1800),    # 15-30 мин
+    "political_parties": (1200, 3600), # 20-60 min
+    "disasters": (2700, 5400),        # 45-90 min
+    "faction_engine": (900, 1800),    # 15-30 мин
 }
 
 last_run = {name: 0 for name in CRON_SCRIPTS}

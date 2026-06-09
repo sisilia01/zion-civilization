@@ -89,6 +89,9 @@ def enact(amendment_id):
     cur2.execute("UPDATE amendments SET status='enacted', blob_id=%s WHERE id=%s",(blob_id,amendment_id))
     conn.commit(); cur.close(); cur2.close(); conn.close()
 
+    from amendment_enforcer import apply_enacted_amendments
+    apply_enacted_amendments()
+
     print("\n"+"="*60)
     print(f"  AMENDMENT ENACTED — Constitution v{new_ver}")
     print(f"  SHA-256: {new_sha}")

@@ -8,6 +8,7 @@ Evolutionary selection of traders + protection of officials.
 - Successful traders resist death by old age (success = longevity).
 """
 import psycopg2, psycopg2.extras
+from amendment_enforcer import get_param
 DB = dict(host="localhost", database="zion_db", user="zion_user", password="zion2026")
 def db(): return psycopg2.connect(**DB)
 
@@ -17,13 +18,21 @@ COST_OF_LIVING = 3.0
 
 def get_officials(cur):
     ids=set()
-    for tbl in ("president_state","sheriff_state","senate_members"):
+    for tbl in ("president_state", "sheriff_state"):
         try:
             cur.execute(f"SELECT agent_id FROM {tbl} WHERE is_active=true")
             for r in cur.fetchall():
-                if r[0]: ids.add(r[0])
+                if r[0]:
+                    ids.add(r[0])
         except Exception:
             cur.connection.rollback()
+    try:
+        cur.execute("SELECT agent_id FROM senate WHERE is_active=true")
+        for r in cur.fetchall():
+            if r[0]:
+                ids.add(r[0])
+    except Exception:
+        cur.connection.rollback()
     return ids
 
 def run_cycle():
@@ -47,6 +56,9 @@ def run_cycle():
             else:
                 cur.execute("UPDATE agents SET balance=balance-%s WHERE id=%s",(COST_OF_LIVING,aid))
                 charged+=1
+    if get_param("basic_income", 0.0) > 0:
+        cur.execute("UPDATE agents SET balance=balance+%s WHERE is_alive=true",
+                    (get_param("basic_income", 0.0),))
     conn.commit(); cur.close(); conn.close()
     print(f"[survival] officials paid: {paid_officials} | profitable traders fed: {paid_traders} | charged: {charged}")
 

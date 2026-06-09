@@ -127,6 +127,11 @@ def _run_governance_tick_once() -> dict:
     cur.execute("SET lock_timeout = '100ms'")
     cur.execute("SET statement_timeout = '30s'")
 
+    from amendment_enforcer import apply_enacted_amendments, get_param
+    apply_enacted_amendments()  # apply any new enacted amendments before governance runs
+    # Constitutional params now active for this tick
+    # (modules read them via get_param() calls added above)
+
     try:
         ensure_martial_law_columns(cur)
         _commit_or_skip(conn, "martial_law columns")

@@ -22,6 +22,7 @@ from civ_common import (
     zrs_deduct_reserve,
     zrs_reserve,
 )
+from amendment_enforcer import get_param
 from political_parties import PARTIES, ensure_parties_exist, ensure_parties_schema
 
 PARTY_IDS = ("conservatives", "centrists", "populists")
@@ -49,7 +50,7 @@ LAW_TYPES = (
     "NATIONALIZATION",
     "WEALTH_TAX",
     "DEREGULATION",
-    "ELECTION_DELAY",
+    # "ELECTION_DELAY",  # Unconstitutional
 )
 
 # Party default vote: True = yes, False = no, None = swing (centrist decides)
@@ -468,7 +469,7 @@ def choose_law_for_president(cur, president: dict) -> str:
     weights = {
         "TAX_REFORM": 15,
         "STIMULUS_PACKAGE": 20 if poverty_pct > 30 else 5,
-        "MARTIAL_LAW": 25 if poverty_pct > 40 else 8,
+        "MARTIAL_LAW": 0,
         "AMNESTY": 18 if poverty_pct > 25 else 6,
         "NATIONALIZATION": 12,
         "WEALTH_TAX": 22 if party == "populists" else 8,
@@ -873,6 +874,7 @@ def senate_vote(cur, law_id: int):
 
 
 def dissolve_senate(cur, president: dict):
+    return None  # Unconstitutional — disabled (Article II Sec.3)
     cur.execute("UPDATE senate SET is_active = false WHERE is_active = true")
     cur.execute(
         """
@@ -894,6 +896,7 @@ def dissolve_senate(cur, president: dict):
 
 
 def declare_dictatorship(cur, president: dict, sheriff: dict):
+    return None  # Unconstitutional — disabled (Article II Sec.3)
     if not sheriff or sheriff.get("sheriff_type") != "corrupt":
         return False
     cur.execute(
@@ -1296,6 +1299,7 @@ def cancel_all_pending_laws(cur):
 
 
 def check_coup(cur):
+    return False  # Unconstitutional — disabled
     president = get_president(cur)
     sheriff = get_sheriff(cur)
     if not president or not sheriff:
@@ -1360,7 +1364,8 @@ def should_run_scheduled_election(cur, president: dict) -> bool:
         else president.get("days_in_power") or 0
     )
     approval = int(president.get("approval_rating") or 50)
-    return hours > 720 or approval < 10
+    term_limit = int(get_param("term_limit_hours", 720))
+    return hours > term_limit or approval < 10
 
 
 def run_governance_tick(cur, ctx: dict) -> dict:

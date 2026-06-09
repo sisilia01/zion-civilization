@@ -605,6 +605,7 @@ def sheriff_actions(sheriff):
             print(f"⚔️ Junta seized {seized:.0f} from {clan_target['name']}")
         
         if approval < 30 or random.random() < 0.1:
+            return None  # Unconstitutional — disabled
             print("Sheriff tick: junta — coup attempt branch...", flush=True)
             cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
             president = cur.fetchone()

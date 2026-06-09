@@ -21,15 +21,46 @@ from civ_common import (
     ZRS_RESERVE_FLOOR,
 )
 from civ_economics import (
-    calculate_agent_tax,
     get_population_food_multiplier,
     get_population_tax_multiplier,
     population_pressure_label,
+    progressive_bracket_tax,
 )
+from amendment_enforcer import get_param
 
 DEBT_DEATH_THRESHOLD = 50.0
 STARVATION_BALANCE_THRESHOLD = 10.0
 ZRS_EMERGENCY_AID = 10.0
+
+
+def _sync_constitutional_tax_rates():
+    """Apply constitutional_params to in-memory tax brackets and corp rate."""
+    import civ_economics as ce
+    import corporations
+
+    min_rate = float(get_param("min_tax_rate", 0.05))
+    top_rate = float(get_param("top_tax_rate", 0.35))
+    span = max(0.0, top_rate - min_rate)
+    ce.AGENT_TAX_BRACKETS = [
+        (100.0, min_rate),
+        (500.0, round(min_rate + span * 0.25, 6)),
+        (2000.0, round(min_rate + span * 0.65, 6)),
+        (float("inf"), top_rate),
+    ]
+    corp_rate = float(get_param("corporate_tax_rate", 0.10))
+    ce.CORP_TAX_RATE = corp_rate
+    corporations.CORP_TAX_RATE = corp_rate
+
+
+def constitutional_agent_tax(agent, population, reserve, zrs_modifier_pct):
+    """Agent tax using constitutional bracket rates and top-rate cap."""
+    balance = float(agent.get("balance") or 0)
+    if balance <= 0:
+        return 0.0
+    base = progressive_bracket_tax(balance)
+    modifier = base * max(0.0, zrs_modifier_pct)
+    top_rate = float(get_param("top_tax_rate", 0.35))
+    return round(min(base + modifier, balance * top_rate), 4)
 
 
 def hunger_check(cur, pop: int) -> tuple[int, int, float, set[int]]:
@@ -194,6 +225,14 @@ def apply_tax_cycle():
         f"Pop tax×{pop_mult} | Gini policy reserve {reserve:,.0f}\n"
     )
 
+    _sync_constitutional_tax_rates()
+    top_rate = get_param("top_tax_rate", 0.35)
+    min_rate = get_param("min_tax_rate", 0.05)
+    corp_rate = get_param("corporate_tax_rate", 0.10)
+    print(
+        f"Constitutional tax rates — min={min_rate:.2f} top={top_rate:.2f} corp={corp_rate:.2f}"
+    )
+
     total_tax = 0.0
 
     if tax_relief_active:
@@ -209,7 +248,7 @@ def apply_tax_cycle():
     for ag in agents:
         balance = float(ag["balance"] or 0)
         debt = float(ag["debt"] or 0)
-        tax_amount = calculate_agent_tax(ag, alive_count, reserve, tax_modifier_pct)
+        tax_amount = constitutional_agent_tax(ag, alive_count, reserve, tax_modifier_pct)
         if tax_relief_active and (ag.get("class") in ("poor", "critical")):
             tax_amount = round(tax_amount * 0.5, 4)
         if int(ag["id"]) in hungry_ids:
@@ -257,8 +296,7 @@ def apply_tax_cycle():
         )
         total_tax += paid
 
-    # Corp tax (15% net profit) is collected in corporations.run_cycle() only.
-    # Do not double-tax here.
+    # Corp tax rate synced via _sync_constitutional_tax_rates() for corporations.run_cycle().
 
     if total_food > 0:
         route_food_spending(cur, total_food)

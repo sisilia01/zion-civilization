@@ -83,12 +83,12 @@ def calibration_report():
     conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""SELECT COUNT(*) n,
         COUNT(CASE WHEN prediction=outcome THEN 1 END)*100.0/NULLIF(COUNT(*),0) accuracy
-        FROM bets WHERE settled=true""")
+        FROM bets WHERE settled=true AND outcome IS NOT NULL AND COALESCE(closed_early,false)=false""")
     r=dict(cur.fetchone())
     # accuracy by agent intelligence tier
     cur.execute("""SELECT CASE WHEN a.intelligence>=50 THEN 'high_int' ELSE 'low_int' END tier,
         COUNT(*) n, COUNT(CASE WHEN b.prediction=b.outcome THEN 1 END)*100.0/NULLIF(COUNT(*),0) acc
-        FROM bets b JOIN agents a ON a.id=b.agent_id WHERE b.settled=true GROUP BY tier""")
+        FROM bets b JOIN agents a ON a.id=b.agent_id WHERE b.settled=true AND b.outcome IS NOT NULL AND COALESCE(b.closed_early,false)=false GROUP BY tier""")
     tiers=[dict(x) for x in cur.fetchall()]
     cur.close(); conn.close()
     print("="*50); print("  PREDICT MARKET — CALIBRATION"); print("="*50)

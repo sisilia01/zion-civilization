@@ -85,6 +85,90 @@ def poach_talent():
     conn.commit(); cur.close(); cur2.close(); conn.close()
     print(f"[corp] poached {poached} traders between corporations")
 
+def pay_corporate_salaries():
+    """Pay corp_salary from corporation treasury to employed agents."""
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """
+        SELECT a.id AS agent_id, a.employer_corp_id, a.corp_salary,
+               c.treasury, c.name AS corp_name
+        FROM agents a
+        INNER JOIN corporations c ON c.id = a.employer_corp_id AND c.is_active = true
+        WHERE a.is_alive = true
+          AND a.employer_corp_id IS NOT NULL
+          AND a.corp_salary > 0
+        ORDER BY a.employer_corp_id, a.id
+        """
+    )
+    rows = cur.fetchall()
+    cur2 = conn.cursor()
+    corp_treasury: dict[int, float] = {}
+    paid = 0
+    total_paid = 0.0
+    bankrupt = 0
+
+    for row in rows:
+        cid = int(row["employer_corp_id"])
+        if cid not in corp_treasury:
+            corp_treasury[cid] = float(row["treasury"] or 0)
+        salary = round(float(row["corp_salary"] or 0), 2)
+        if salary <= 0:
+            continue
+        corp_treasury[cid] = round(corp_treasury[cid] - salary, 2)
+        cur2.execute(
+            "UPDATE agents SET balance = balance + %s WHERE id = %s",
+            (salary, row["agent_id"]),
+        )
+        paid += 1
+        total_paid += salary
+
+    for cid, treasury in corp_treasury.items():
+        cur2.execute(
+            "UPDATE corporations SET treasury = %s WHERE id = %s",
+            (treasury, cid),
+        )
+        if treasury < 0:
+            cur.execute(
+                "SELECT name FROM corporations WHERE id = %s",
+                (cid,),
+            )
+            name_row = cur.fetchone()
+            corp_name = (name_row or {}).get("name") or f"corp #{cid}"
+            cur2.execute(
+                "UPDATE corporations SET is_active = false WHERE id = %s",
+                (cid,),
+            )
+            cur2.execute(
+                """
+                UPDATE agents SET employer_corp_id = NULL, corp_salary = 0
+                WHERE employer_corp_id = %s
+                """,
+                (cid,),
+            )
+            cur2.execute(
+                """
+                INSERT INTO corp_events (corp_id, event_type, detail, amount)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (
+                    cid,
+                    "bankruptcy",
+                    f"{corp_name} bankrupt after payroll — treasury {treasury:.1f}",
+                    abs(treasury),
+                ),
+            )
+            bankrupt += 1
+
+    conn.commit()
+    cur.close()
+    cur2.close()
+    conn.close()
+    print(
+        f"[corp] payroll: {paid} salaries paid ({total_paid:.0f} ZION) | "
+        f"{bankrupt} corps bankrupt after payroll"
+    )
+
 def service_credit_and_bankruptcy():
     """Corps pay interest on ZION credit; insolvent corps go bankrupt."""
     conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -115,6 +199,7 @@ def run_cycle():
     ensure_schema()
     hire_top_traders()
     poach_talent()
+    pay_corporate_salaries()
     service_credit_and_bankruptcy()
     print("[corp] corporate political economy cycle complete")
 
