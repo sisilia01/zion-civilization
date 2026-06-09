@@ -341,7 +341,7 @@ def execute_decision(cur, data: dict):
             cur,
             pid,
             "president",
-            f"BREAKING: MARTIAL LAW DECLARED: All resources to police! Crime -40%, food ×2",
+            f"BREAKING: Emergency Police Funding — additional officers and budget deployed",
             0,
             priority="breaking",
         )

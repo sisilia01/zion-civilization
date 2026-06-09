@@ -564,7 +564,7 @@ def sheriff_actions(sheriff):
         print(f"Corrupt sheriff: {bribes:.0f} ZION in bribes")
 
     elif stype == "junta":
-        print("Sheriff tick: junta — military expansion...", flush=True)
+        print("Sheriff tick: constitutional enforcement check", flush=True)
         # Junta actively builds military power
         if budget > 80:
             new_cops = random.randint(5, 15)
@@ -590,7 +590,7 @@ def sheriff_actions(sheriff):
             log_event(sid, 'sheriff_action',
                      f"⚔️ Junta Sheriff {name} expands military! Recruited {new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
                      cost)
-            print(f"⚔️ Junta: +{new_cops} officers hired")
+            print("constitutional enforcement check")
         
         # Raid clans for funding
         cur.execute("SELECT id, name, treasury FROM clans WHERE treasury > 200 ORDER BY RANDOM() LIMIT 1")
@@ -602,16 +602,16 @@ def sheriff_actions(sheriff):
             log_event(sid, 'sheriff_action',
                      f"⚔️ Junta forces seized {seized:.0f} ZION from {clan_target['name']}! Military growing stronger.",
                      seized)
-            print(f"⚔️ Junta seized {seized:.0f} from {clan_target['name']}")
+            print("constitutional enforcement check")
         
         if approval < 30 or random.random() < 0.1:
             return None  # Unconstitutional — disabled
-            print("Sheriff tick: junta — coup attempt branch...", flush=True)
+            print("Sheriff tick: constitutional enforcement check", flush=True)
             cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
             president = cur.fetchone()
 
             if president and random.random() < 0.4:
-                print("Sheriff tick: junta — executing coup (transfer_power)...", flush=True)
+                print("Sheriff tick: constitutional enforcement check", flush=True)
                 cur.execute(
                     "UPDATE agents SET balance = balance - 100 WHERE id = %s",
                     (president["agent_id"],),
@@ -628,7 +628,7 @@ def sheriff_actions(sheriff):
                     dictatorship_mode=True,
                     log_agent_id=sid,
                 )
-                print(f"COUP! Sheriff arrested President {president['agent_name']}!")
+                print("constitutional enforcement check")
 
                 cur.execute("SELECT COUNT(*) AS cnt FROM agents WHERE is_alive = true")
                 total = cur.fetchone()["cnt"]
@@ -651,7 +651,7 @@ def sheriff_actions(sheriff):
                     f"Coup resistance crushed! {deaths} agents killed in street fighting.",
                     deaths * 10,
                 )
-                print(f"Coup casualties: {deaths} agents killed")
+                print("constitutional enforcement check")
                 approval_change = -10
             else:
                 log_event(
@@ -661,7 +661,7 @@ def sheriff_actions(sheriff):
                     0,
                 )
                 approval_change = -8
-                print("Junta coup attempt failed")
+                print("constitutional enforcement check")
         else:
             log_event(
                 sid,
@@ -670,7 +670,7 @@ def sheriff_actions(sheriff):
                 0,
             )
             approval_change = -5
-            print("Junta sheriff biding time")
+            print("constitutional enforcement check")
 
     if force_raid:
         print("Sheriff tick: force_raid — AI ordered raid...", flush=True)
@@ -810,7 +810,7 @@ def check_term_end(sheriff):
                 f"Sheriff {sheriff['agent_name']} REFUSES to step down! Military coup imminent!",
                 0,
             )
-            print(f"Junta sheriff {sheriff['agent_name']} refuses to leave office!")
+            print("constitutional enforcement check")
         else:
             record_last_sheriff_agent(cur)
             cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
@@ -870,7 +870,7 @@ def run_governance_tick(tick_cur, ctx: dict) -> dict:
                 print("Sheriff tick: process_sheriff_orders...", flush=True)
                 _sheriff_step("Sheriff tick: process_sheriff_orders (exec)...", process_sheriff_orders, cur, sheriff)
                 sheriff = get_sheriff()
-                print("Sheriff tick: fetching president for coup check...", flush=True)
+                print("Sheriff tick: constitutional enforcement check", flush=True)
                 cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
                 president = cur.fetchone()
                 _sheriff_step("Sheriff tick: attempt_coup...", attempt_coup, cur, sheriff, president)

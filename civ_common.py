@@ -577,6 +577,7 @@ def ensure_schema(cur):
         ],
     )
 
+    # Legacy table — clans used instead
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS gangs (

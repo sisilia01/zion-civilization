@@ -414,54 +414,6 @@ def run_power_struggles(cur, scores: dict[str, float]) -> str | None:
     )
     laws_blocked = int((cur.fetchone() or {}).get("b") or 0)
 
-    # Sheriff coup
-    if False:  # Sheriff coup disabled — unconstitutional
-        if (
-            scores["sheriff_power"] > scores["president_power"] * 1.5
-            and int(sheriff.get("crime_cleared") or 0) > 100
-            and random.random() < 0.05
-        ):
-            desc = f"🗡️ Sheriff {sname} attempts to seize power!"
-            _log_power_event(cur, "COUP_ATTEMPT", desc, scores, "COUP_SUCCESS")
-            _economic_shock(cur, -20)
-            cur.execute("UPDATE senate SET is_active = false WHERE is_active = true")
-            cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
-            transfer_power(
-                cur,
-                f"COUP SUCCESS: Sheriff {sname} becomes President — {pname} ousted!",
-                new_agent_id=sid,
-                new_agent_name=sname,
-                new_party="junta",
-                phase="crisis",  # coup disabled
-                is_dictator=False,
-                dictatorship_mode=True,
-                log_agent_id=sid,
-            )
-            return "COUP_SUCCESS"
-
-    # President dictatorship
-    if False:  # President dictatorship disabled — unconstitutional
-        if (
-            scores["president_power"] > scores["senate_power"] * 2
-            and approval > 70
-            and random.random() < 0.03
-        ):
-            desc = f"👑 President {pname} declares dictatorship — Senate dissolved!"
-            _log_power_event(cur, "DICTATORSHIP", desc, scores, "DICTATORSHIP")
-            cur.execute(
-                """
-                UPDATE president_state SET
-                    dictatorship_mode = true,
-                    dissolved_until = NOW() + INTERVAL '720 hours'
-                WHERE is_active = true
-                """
-            )
-            cur.execute("UPDATE senate SET is_active = false WHERE is_active = true")
-            cur.execute(
-                "UPDATE crisis_state SET revolution_pressure = revolution_pressure + 5 WHERE id = 1"
-            )
-            return "DICTATORSHIP"
-
     # Alliance president + sheriff vs senate
     if (
         scores["president_power"] + scores["sheriff_power"]

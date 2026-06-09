@@ -875,47 +875,10 @@ def senate_vote(cur, law_id: int):
 
 def dissolve_senate(cur, president: dict):
     return None  # Unconstitutional — disabled (Article II Sec.3)
-    cur.execute("UPDATE senate SET is_active = false WHERE is_active = true")
-    cur.execute(
-        """
-        UPDATE president_state
-        SET dictatorship_mode = true, is_dictator = true,
-            approval_rating = GREATEST(5, COALESCE(approval_rating, 50) - 25),
-            dissolved_until = NOW() + INTERVAL '720 hours'
-        WHERE is_active = true
-        """
-    )
-    log_event(
-        cur,
-        president["agent_id"],
-        "senate",
-        f"DICTATORSHIP: President {president['agent_name']} dissolves the Senate!",
-        0,
-        priority="breaking",
-    )
 
 
 def declare_dictatorship(cur, president: dict, sheriff: dict):
     return None  # Unconstitutional — disabled (Article II Sec.3)
-    if not sheriff or sheriff.get("sheriff_type") != "corrupt":
-        return False
-    cur.execute(
-        """
-        UPDATE president_state
-        SET is_dictator = true, dictatorship_mode = true,
-            approval_rating = GREATEST(10, COALESCE(approval_rating, 50) - 10)
-        WHERE is_active = true
-        """
-    )
-    log_event(
-        cur,
-        president["agent_id"],
-        "senate",
-        f"FULL DICTATORSHIP: corrupt Sheriff backs President {president['agent_name']}",
-        0,
-        priority="breaking",
-    )
-    return True
 
 
 def call_election(cur, president: dict):
@@ -1300,49 +1263,6 @@ def cancel_all_pending_laws(cur):
 
 def check_coup(cur):
     return False  # Unconstitutional — disabled
-    president = get_president(cur)
-    sheriff = get_sheriff(cur)
-    if not president or not sheriff:
-        return
-    corruption = float(president.get("corruption_index") or 0)
-    if corruption <= COUP_CORRUPTION_MIN:
-        return
-    if sheriff.get("sheriff_type") != "corrupt":
-        return
-    if random.random() > COUP_CHANCE:
-        return
-
-    pname = president["agent_name"]
-    sname = sheriff["agent_name"]
-    sid = sheriff["agent_id"]
-
-    cur.execute("UPDATE senate SET is_active = false WHERE is_active = true")
-    cancel_all_pending_laws(cur)
-    cur.execute(
-        """
-        UPDATE president_state
-        SET dissolved_until = NOW() + INTERVAL '720 hours'
-        WHERE is_active = true
-        """
-    )
-    cur.execute(
-        """
-        UPDATE sheriff_state
-        SET is_active = false, sheriff_type = 'junta', coup_points = 0
-        WHERE is_active = true
-        """
-    )
-    transfer_power(
-        cur,
-        f"MILITARY COUP! Sheriff {sname} seizes power — President {pname} ousted!",
-        new_agent_id=sid,
-        new_agent_name=sname,
-        new_party="junta",
-        phase="interim",
-        is_dictator=True,
-        dictatorship_mode=True,
-        log_agent_id=sid,
-    )
 
 
 def should_run_scheduled_election(cur, president: dict) -> bool:
