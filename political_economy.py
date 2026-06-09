@@ -431,8 +431,8 @@ def run_power_struggles(cur, scores: dict[str, float]) -> str | None:
             new_agent_id=sid,
             new_agent_name=sname,
             new_party="junta",
-            phase="coup",
-            is_dictator=True,
+            phase="crisis",  # coup disabled
+            is_dictator=False,
             dictatorship_mode=True,
             log_agent_id=sid,
         )

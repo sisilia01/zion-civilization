@@ -7,7 +7,7 @@ SCENARIOS = [
         "trigger": lambda state: state["politics"]["president"]["approval"] < 20,
         "description": "President attempts to seize absolute power",
         "faction_hints": {
-            "president": "Your approval is critically low. Consider declaring martial law or coup to stay in power.",
+            "president": "Your approval is critically low. Consider emergency relief or constitutional reform.",
             "senate": "President is weak! This is your chance to impeach and seize control.",
             "sheriff": "President wants coup. Do you support him for budget, or side with senate for independence?",
             "gangs": "Political chaos means police distracted. Maximum recruitment opportunity NOW.",
@@ -70,7 +70,7 @@ SCENARIOS = [
             "president": "Sheriff has 200+ officers and you are weak. Buy his loyalty or fire him before he acts.",
             "senate": "Sheriff coup possible! Ally with him against president, or protect president for stability.",
             "sheriff": "You have the POWER. President is weak at {approval}%. Will you seize control?",
-            "gangs": "Military coup means chaos. Expand territory while they fight each other.",
+            "gangs": "Political instability means opportunity. Operate within the constitutional framework.",
             "corporations": "Military coups are bad for business. Fund whoever stabilizes fastest.",
             "zrs_chief": "Political instability detected. Freeze all government accounts until order restored.",
         },

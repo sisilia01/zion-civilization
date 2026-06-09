@@ -44,7 +44,7 @@ CLASS_TO_PARTY = {
 LAW_TYPES = (
     "TAX_REFORM",
     "STIMULUS_PACKAGE",
-    "MARTIAL_LAW",
+    # "MARTIAL_LAW",  # Removed — unconstitutional
     "AMNESTY",
     "NATIONALIZATION",
     "WEALTH_TAX",
@@ -57,7 +57,7 @@ PARTY_LAW_STANCE = {
     "conservatives": {
         "TAX_REFORM": None,
         "STIMULUS_PACKAGE": False,
-        "MARTIAL_LAW": True,
+        "MARTIAL_LAW": False,  # Unconstitutional
         "AMNESTY": False,
         "NATIONALIZATION": None,
         "WEALTH_TAX": False,
@@ -89,7 +89,7 @@ PARTY_LAW_STANCE = {
 LAW_TITLES = {
     "TAX_REFORM": "Tax Reform Act",
     "STIMULUS_PACKAGE": "Economic Stimulus Package",
-    "MARTIAL_LAW": "Martial Law Authorization",
+    # "MARTIAL_LAW": "Martial Law Authorization",  # Removed
     "AMNESTY": "National Amnesty Decree",
     "NATIONALIZATION": "Emergency Nationalization Bill",
     "WEALTH_TAX": "Elite Wealth Tax",
@@ -833,7 +833,7 @@ def senate_vote(cur, law_id: int):
     law_type = (law.get("law_type") or "").upper()
     threshold = pass_threshold(cur, law_type)
     requires_supermajority = law_type in {
-        "MARTIAL_LAW",
+        # "MARTIAL_LAW",  # Removed — unconstitutional
         "NATIONALIZE",
         "NATIONALIZATION",
         "DISSOLVE",

@@ -391,6 +391,8 @@ def check_compliance(cur, president):
 
 
 def attempt_coup(cur, sheriff, president):
+    # DISABLED: unconstitutional (Constitution Article II Sec.3 + Article III)
+    return False
     if not sheriff or not president:
         return
 
