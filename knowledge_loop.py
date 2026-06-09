@@ -33,17 +33,18 @@ def derive_knowledge():
     sdm=cur.fetchone()
     cur.close(); conn.close()
     if not sdm: return None, None, None
-    rules = sdm['rules'] if isinstance(sdm['rules'],list) else json.loads(sdm['rules'])
-    # Build a concise, honest knowledge statement agents can use
+    rules = sdm['rules'] if isinstance(sdm['rules'], list) else json.loads(sdm['rules'])
+    divergence = sdm.get("divergence_from_human") or ""
+    version = sdm.get("version") or 0
+    rule_text = "; ".join(str(r) for r in rules[:3]) if rules else "No rules recorded."
     knowledge = (
-        "CIVILIZATION KNOWLEDGE (derived by the ZION Academy from observed behavior): "
-        "Agents of ZION systematically (a) hold winning positions longer than losing ones, "
-        "(b) over-favor SHORT positions despite worse outcomes. "
-        "If you are making a trading decision, be aware of these tendencies in your population "
-        "and consider whether they are costing you. This knowledge was produced by analyzing "
-        "thousands of real trades and validated by the Tribunal."
+        f"CIVILIZATION KNOWLEDGE v{version} (from Synthetic Decision Model):\n"
+        f"Key decision rules observed in v{version} AI agents:\n"
+        f"{rule_text}\n"
+        f"Observed divergence from human behavior: {divergence}\n"
+        "If trading, factor these patterns into your decision."
     )
-    return knowledge, sdm['version'], sdm['divergence_from_human']
+    return knowledge, version, divergence
 
 def propagate(limit=None):
     """Write the knowledge into agent memory. Agents will read it on next decision."""

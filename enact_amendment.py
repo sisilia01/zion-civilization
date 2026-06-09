@@ -31,6 +31,23 @@ def enact(amendment_id):
     if a['votes_for'] <= a['votes_against']:
         print("Amendment did not pass."); return
 
+    # Verify tribunal unanimously approved (constitutional requirement Article IV)
+    cur2 = conn.cursor()
+    cur2.execute(
+        """SELECT unanimous FROM tribunal_records
+                   WHERE amendment_id=%s
+                   ORDER BY id DESC LIMIT 1""",
+        (amendment_id,),
+    )
+    tribunal_row = cur2.fetchone()
+    cur2.close()
+    if not tribunal_row or not tribunal_row[0]:
+        print(f"[enact] BLOCKED: No unanimous tribunal record for amendment {amendment_id}")
+        print("[enact] Amendment cannot be enacted without ZCO Tribunal unanimity (Article IV)")
+        cur.close()
+        conn.close()
+        return None
+
     prev = latest_version()
     prev_sha = prev['sha256']; prev_ver = prev['version']
     new_ver = f"1.{int(prev_ver.split('.')[1])+1}" if '.' in prev_ver else "1.1"

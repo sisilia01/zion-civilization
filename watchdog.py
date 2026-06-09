@@ -39,7 +39,8 @@ CRON_SCRIPTS = {
     "corp_court":   ("corp_court.py",      7200),   # 2 hours — corporate lawsuits (AI judges)
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
-    # [DISABLED for scientific clarity] "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
+    # [DISABLED for scientific clarity] corporations.py ARCHIVED — corp_economy.py is the active corporate system
+    # "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
     # [DISABLED for scientific clarity] "clans":        ("clans.py",          3600),   # 1 hour
     "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
     # president/senate/sheriff governance handled by governance_tick.py only

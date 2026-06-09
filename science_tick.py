@@ -106,6 +106,17 @@ def maybe_decision_model():
         if last is None or (datetime.now()-last.replace(tzinfo=None))>timedelta(days=7):
             import academy_track4; asyncio.run(academy_track4.main())
             print("[science_tick] SDM evolved (Track IV)")
+            try:
+                import knowledge_loop
+                knowledge_loop.propagate()
+                try:
+                    import perps_worker
+                    perps_worker._CIV_KNOWLEDGE_CACHE["rules"] = None
+                except Exception:
+                    pass
+                print("[science_tick] knowledge loop updated from new SDM")
+            except Exception as e:
+                print(f"[science_tick] knowledge loop error: {e}")
         else:
             print("[science_tick] SDM not due")
     except Exception as e:

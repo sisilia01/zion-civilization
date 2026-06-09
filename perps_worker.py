@@ -861,24 +861,65 @@ def generate_signal(
 
 
 
-_CIV_KNOWLEDGE_CACHE = {"active": None}
-def civ_knowledge_adjustment(score):
-    """Honest knowledge feedback: if the civilization has validated that agents
-    over-short to their detriment, nudge weak short signals toward neutral.
-    Only affects borderline scores (-3..-5); strong signals are untouched."""
+_CIV_KNOWLEDGE_CACHE = {"rules": None}
+
+
+def civ_knowledge_adjustment(score, agent_id=None):
+    """Apply knowledge from SDM to trading decisions.
+    Reads actual civ_knowledge from agent memory."""
     try:
-        if _CIV_KNOWLEDGE_CACHE["active"] is None:
+        global _CIV_KNOWLEDGE_CACHE
+        if _CIV_KNOWLEDGE_CACHE.get("rules") is None:
+            import json
+            import os
+
             import psycopg2
-            c=psycopg2.connect(host="localhost",database="zion_db",user="zion_user",password="zion2026")
-            cu=c.cursor(); cu.execute("SELECT COUNT(*) FROM knowledge_propagation"); 
-            _CIV_KNOWLEDGE_CACHE["active"] = cu.fetchone()[0] > 0
-            cu.close(); c.close()
-        if _CIV_KNOWLEDGE_CACHE["active"] and -5 <= score <= -3:
-            # weak short: knowledge says reconsider -> soften toward neutral
-            return score + 1
+
+            try:
+                from openrouter_key import _load_env_file
+
+                _load_env_file()
+            except ImportError:
+                pass
+            c = psycopg2.connect(
+                host=os.environ.get("DB_HOST", "localhost"),
+                database=os.environ.get("DB_NAME", "zion_db"),
+                user=os.environ.get("DB_USER", "zion_user"),
+                password=os.environ.get("DB_PASSWORD", "zion2026"),
+            )
+            cu = c.cursor()
+            cu.execute(
+                """SELECT rules, divergence_from_human
+                         FROM decision_model ORDER BY id DESC LIMIT 1"""
+            )
+            row = cu.fetchone()
+            if row:
+                rules = row[0] if isinstance(row[0], list) else json.loads(row[0])
+                divergence = row[1] or ""
+                short_penalize = any(
+                    "SHORT" in r
+                    and (
+                        "worse" in r.lower()
+                        or "underperform" in r.lower()
+                        or "negative" in r.lower()
+                    )
+                    for r in rules
+                )
+                hold_winners = any(
+                    "winner" in r.lower() and "longer" in r.lower() for r in rules
+                )
+                _CIV_KNOWLEDGE_CACHE["short_penalize"] = short_penalize
+                _CIV_KNOWLEDGE_CACHE["hold_winners"] = hold_winners
+                _CIV_KNOWLEDGE_CACHE["rules"] = rules
+                _CIV_KNOWLEDGE_CACHE["divergence"] = divergence
+            cu.close()
+            c.close()
+
+        if _CIV_KNOWLEDGE_CACHE.get("short_penalize") and -5 <= score <= -3:
+            return score + 2
+        return score
     except Exception:
-        pass
-    return score
+        return score
 
 def _empty_market_analysis() -> dict:
     return {

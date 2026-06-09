@@ -34,7 +34,16 @@ def headline_hash(text: str) -> str:
     return hashlib.md5(re.sub(r"\d+\.?\d*", "N", text).encode()).hexdigest()[:16]
 
 
+def _active_clans_count(cur) -> int:
+    """Return count of active clans; clans module is disabled when zero."""
+    cur.execute("SELECT COUNT(*) AS c FROM clans WHERE is_active = true")
+    return int((cur.fetchone() or {}).get("c") or 0)
+
+
 def fetch_gang_war(cur):
+    # Only generate if clans module is active
+    if _active_clans_count(cur) == 0:
+        return None
     cur.execute(
         """
         SELECT e.description, e.zion_amount,
@@ -274,7 +283,7 @@ def build_dynamic_headlines(cur) -> list[dict]:
         """
     )
     raid = cur.fetchone()
-    if raid:
+    if raid and _active_clans_count(cur) > 0:
         headlines.append({
             "tier": "urgent",
             "text": (
@@ -330,25 +339,26 @@ def build_dynamic_headlines(cur) -> list[dict]:
             "amount": 0,
         })
 
-    cur.execute(
-        """
-        SELECT a.name AS agent_name, c.name AS clan_name
-        FROM agents a
-        JOIN clans c ON a.clan_id = c.id
-        WHERE a.is_alive = true AND a.clan_id IS NOT NULL
-        ORDER BY RANDOM() LIMIT 2
-        """
-    )
-    for g in cur.fetchall():
-        headlines.append({
-            "tier": "gossip",
-            "text": (
-                f"{g['agent_name']} joined {g['clan_name']}. "
-                f"Aggression rising in the district."
-            ),
-            "agent_id": None,
-            "amount": 0,
-        })
+    if _active_clans_count(cur) > 0:
+        cur.execute(
+            """
+            SELECT a.name AS agent_name, c.name AS clan_name
+            FROM agents a
+            JOIN clans c ON a.clan_id = c.id
+            WHERE a.is_alive = true AND a.clan_id IS NOT NULL
+            ORDER BY RANDOM() LIMIT 2
+            """
+        )
+        for g in cur.fetchall():
+            headlines.append({
+                "tier": "gossip",
+                "text": (
+                    f"{g['agent_name']} joined {g['clan_name']}. "
+                    f"Aggression rising in the district."
+                ),
+                "agent_id": None,
+                "amount": 0,
+            })
 
     cur.execute(
         """

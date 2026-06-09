@@ -73,7 +73,42 @@ async def convene(amendment, tally):
         print("  >>> ERROR from a judge. Escalate / retry.")
     else:
         print("  >>> NOT UNANIMOUS. Amendment returned for reconsideration (Article IV Sec.4).")
-    return {"results": results, "unanimous": unanimous_approve, "verdicts": verdicts}
+
+    amendment_id = amendment.get("id")
+    blob_id = None
+    try:
+        conn = db()
+        cur = conn.cursor()
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS tribunal_records (
+            id SERIAL PRIMARY KEY,
+            amendment_id INTEGER,
+            verdicts JSONB,
+            unanimous BOOLEAN,
+            blob_id VARCHAR(100),
+            recorded_at TIMESTAMP DEFAULT NOW()
+        )"""
+        )
+        cur.execute(
+            """INSERT INTO tribunal_records
+            (amendment_id, verdicts, unanimous, blob_id)
+            VALUES (%s, %s, %s, %s)""",
+            (amendment_id, json.dumps(results), unanimous_approve, blob_id),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        db_recorded = True
+    except Exception as e:
+        print(f"  >>> WARNING: tribunal DB record failed: {e}")
+        db_recorded = False
+
+    return {
+        "results": results,
+        "unanimous": unanimous_approve,
+        "verdicts": verdicts,
+        "db_recorded": db_recorded,
+    }
 
 def get_amendment(amendment_id):
     conn = db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

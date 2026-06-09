@@ -322,7 +322,7 @@ def main():
     s = PopState()
     start = s.total_money()
     bal = 130.0
-    bal, _ = simulate_tax_agent(bal, 0, 6.0)
+    bal, _ = simulate_tax_agent(bal, 0, s.pop)
     tax_paid = 130.0 - bal
     pres = tax_paid * 0.4
     zrs = tax_paid * 0.4

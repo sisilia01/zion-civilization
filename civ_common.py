@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared DB helpers and schema for ZION civilization workers."""
 import json
+import os
 
 import psycopg2
 import psycopg2.errors
@@ -19,11 +20,18 @@ LOCK_ERRORS = (
 def is_db_lock_error(exc: BaseException) -> bool:
     return isinstance(exc, LOCK_ERRORS)
 
+try:
+    from openrouter_key import _load_env_file
+
+    _load_env_file()
+except ImportError:
+    pass
+
 DB_CONFIG = {
-    "host": "localhost",
-    "database": "zion_db",
-    "user": "zion_user",
-    "password": "zion2026",
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", "zion2026"),
 }
 
 SECTOR_MULTIPLIERS = {
