@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 Polymarket Gamma API sync — active + closed markets into polymarket_markets.
 Fetches by Polymarket tag_id (official categories), not keyword matching.
 Runs every 2 hours via watchdog.
@@ -40,7 +46,7 @@ SKIP_SUBSTRINGS = [
 
 def get_db():
     return psycopg2.connect(
-        host="localhost", database="zion_db", user="zion_user", password="zion2026"
+        host="localhost", database="zion_db", user="zion_user", password=os.environ.get("DB_PASSWORD", "")
     )
 
 

@@ -31,7 +31,7 @@ DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "localhost"),
     "database": os.environ.get("DB_NAME", "zion_db"),
     "user": os.environ.get("DB_USER", "zion_user"),
-    "password": os.environ.get("DB_PASSWORD", "zion2026"),
+    "password": os.environ.get("DB_PASSWORD", ""),
 }
 
 SECTOR_MULTIPLIERS = {

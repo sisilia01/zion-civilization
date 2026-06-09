@@ -1,3 +1,9 @@
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import json
 import urllib.request
 import psycopg2
@@ -57,7 +63,7 @@ def get_db():
         host="localhost",
         database="zion_db",
         user="zion_user",
-        password="zion2026",
+        password=os.environ.get("DB_PASSWORD", ""),
         connect_timeout=5,
         options="-c statement_timeout=15000",
     )

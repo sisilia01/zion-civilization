@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 ZION Walrus Integration — Real decentralized storage
 Stores civilization events as blobs on Walrus testnet
 """
@@ -14,7 +20,7 @@ WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space"
 
 conn = psycopg2.connect(
     host="localhost", database="zion_db",
-    user="zion_user", password="zion2026"
+    user="zion_user", password=os.environ.get("DB_PASSWORD", "")
 )
 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
@@ -172,4 +178,3 @@ if __name__ == "__main__":
         handle_store_receipt()
     else:
         main()
-

@@ -22,18 +22,17 @@ from civ_common import (
 from civ_economics import fetch_economic_indicators
 from scenarios import get_active_scenarios, get_scenario_hint
 
+from openrouter_key import get_openrouter_key
+
 DB_CONFIG = {
-    "host": "localhost",
+    "host": os.environ.get("DB_HOST", "localhost"),
     "port": 5432,
-    "database": "zion_db",
-    "user": "zion_user",
-    "password": "zion2026",
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
 }
 
-OPENROUTER_KEY = os.getenv(
-    "OPENROUTER_KEY",
-    "REDACTED_KEY",
-)
+OPENROUTER_KEY = get_openrouter_key()
 
 MODELS = {
     "president": "openai/gpt-4o-mini",

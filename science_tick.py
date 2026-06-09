@@ -66,7 +66,7 @@ def maybe_chronicle():
     try:
         import psycopg2
         from chronicle import publish
-        conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password="zion2026")
+        conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password=os.environ.get("DB_PASSWORD", ""))
         cur = conn.cursor()
         cur.execute("SELECT MAX(created_at) FROM chronicles WHERE period='weekly'")
         last = cur.fetchone()[0]
@@ -100,7 +100,7 @@ def maybe_decision_model():
     import psycopg2, asyncio
     from datetime import timedelta
     try:
-        conn=psycopg2.connect(host="localhost",database="zion_db",user="zion_user",password="zion2026")
+        conn=psycopg2.connect(host="localhost",database="zion_db",user="zion_user",password=os.environ.get("DB_PASSWORD", ""))
         cur=conn.cursor(); cur.execute("SELECT MAX(created_at) FROM decision_model"); last=cur.fetchone()[0]
         cur.close(); conn.close()
         if last is None or (datetime.now()-last.replace(tzinfo=None))>timedelta(days=7):

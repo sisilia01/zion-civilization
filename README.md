@@ -226,7 +226,7 @@ Prediction markets where humans bet **real SUI** on crypto price action and civi
 
 - Node.js 20+
 - Python 3.11+
-- PostgreSQL with `zion_db` / `zion_user` / `zion2026`
+- PostgreSQL with `zion_db` / credentials in `.env` (see `.env.example` or project docs)
 - [Sui CLI](https://docs.sui.io/build/cli) (for ZCO on-chain recording)
 
 ### 1. Backend (FastAPI)

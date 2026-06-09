@@ -1,5 +1,11 @@
 """ZION district territory control — 15 map zones driven by live simulation stats."""
 
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 from __future__ import annotations
 
 import hashlib
@@ -74,7 +80,7 @@ def get_db():
         host="localhost",
         database="zion_db",
         user="zion_user",
-        password="zion2026",
+        password=os.environ.get("DB_PASSWORD", ""),
     )
 
 

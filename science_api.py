@@ -9,7 +9,19 @@ from decimal import Decimal
 from datetime import datetime
 from fastapi import APIRouter
 
-DB = dict(host="localhost", database="zion_db", user="zion_user", password="zion2026")
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
+
+DB = {
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+}
 WALRUS = "https://aggregator.walrus-testnet.walrus.space/v1/blobs"
 PACKAGE = "0xcb6f3abdca6468fc90cd90dabe87b29eab7cacf739a65a318243d0cad78c543d"
 REGISTRY = "0x812b757d84605d6655343e19e683d4990a27cb42afa10881897d0716f17e82f2"

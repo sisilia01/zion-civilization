@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import random
 from datetime import datetime, timedelta
 
@@ -39,7 +44,7 @@ def get_db():
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "zion_db"),
         user=os.getenv("DB_USER", "zion_user"),
-        password=os.getenv("DB_PASSWORD", "zion2026"),
+        password=os.getenv("DB_PASSWORD", ""),
     )
 
 

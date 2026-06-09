@@ -12,7 +12,19 @@ from openrouter_key import get_openrouter_key
 from walrus import store_blob, WALRUS_AGGREGATOR
 
 KEY=get_openrouter_key()
-DB=dict(host="localhost",database="zion_db",user="zion_user",password="zion2026")
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
+
+DB = {
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+}
 TRIBUNAL={"judge_1":"deepseek/deepseek-chat-v3-0324","judge_2":"google/gemini-2.5-flash","judge_3":"meta-llama/llama-3.3-70b-instruct"}
 def db(): return psycopg2.connect(**DB)
 def jsafe(o):

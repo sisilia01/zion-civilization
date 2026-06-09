@@ -9,12 +9,19 @@ import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
+try:
+    from openrouter_key import _load_env_file
+
+    _load_env_file()
+except ImportError:
+    pass
+
 DB_CONFIG = {
-    "host": "localhost",
+    "host": os.environ.get("DB_HOST", "localhost"),
     "port": 5432,
-    "database": "zion_db",
-    "user": "zion_user",
-    "password": "zion2026",
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
 }
 
 HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
@@ -885,7 +892,7 @@ def civ_knowledge_adjustment(score, agent_id=None):
                 host=os.environ.get("DB_HOST", "localhost"),
                 database=os.environ.get("DB_NAME", "zion_db"),
                 user=os.environ.get("DB_USER", "zion_user"),
-                password=os.environ.get("DB_PASSWORD", "zion2026"),
+                password=os.environ.get("DB_PASSWORD", ""),
             )
             cu = c.cursor()
             cu.execute(

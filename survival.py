@@ -9,7 +9,19 @@ Evolutionary selection of traders + protection of officials.
 """
 import psycopg2, psycopg2.extras
 from amendment_enforcer import get_param
-DB = dict(host="localhost", database="zion_db", user="zion_user", password="zion2026")
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
+
+DB = {
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+}
 def db(): return psycopg2.connect(**DB)
 
 LIVING_STIPEND = 5.0

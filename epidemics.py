@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 ZION Epidemics — болезни в цивилизации
 Распространяются между агентами, богатые лечатся, бедные умирают
 """
@@ -12,7 +18,7 @@ conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
     user="zion_user",
-    password="zion2026"
+    password=os.environ.get("DB_PASSWORD", "")
 )
 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
