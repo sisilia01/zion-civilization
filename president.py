@@ -133,7 +133,7 @@ def decide_action(cur, data: dict) -> str:
     elif ai_action == "stimulate_economy":
         weights["STIMULUS"] = weights.get("STIMULUS", 1) * 3
     elif ai_action == "declare_emergency":
-        weights["MARTIAL_LAW"] = weights.get("MARTIAL_LAW", 1) * 2
+        weights["FUND_POLICE"] = weights.get("FUND_POLICE", 1) * 2
     elif ai_action == "tax_change":
         weights["TAX_RELIEF"] = weights.get("TAX_RELIEF", 1) * 2
 
@@ -144,7 +144,7 @@ def decide_action(cur, data: dict) -> str:
         )
 
     if gang_overrun:
-        weights["MARTIAL_LAW"] = 20
+        weights["FUND_POLICE"] = 25
     if poverty > 30:
         weights["GIVE_MONEY_TO_POOR"] = max(weights["GIVE_MONEY_TO_POOR"], 40)
     if data["treasury"] <= 0:
@@ -323,25 +323,13 @@ def execute_decision(cur, data: dict):
             priority="urgent",
         )
     elif action == "MARTIAL_LAW":
-        cur.execute(
-            """
-            UPDATE president_state SET
-                approval_rating = GREATEST(0, approval_rating - 15),
-                martial_law_until = NOW() + INTERVAL '48 hours'
-            WHERE is_active = true
-            """
-        )
-        insert_active_effect(
-            cur, "martial_law", 48, crime_modifier=-0.40,
-            metadata={"source": "president", "action": "MARTIAL_LAW", "food_x2": True},
-        )
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_count = police_count + 10
-            WHERE is_active = true
-            """
-        )
-        apply_martial_law_divisions(cur)
+        # Redirected: martial law is unconstitutional (Article II Sec.3)
+        # President funds police instead — constitutional emergency response
+        cur.execute("""UPDATE sheriff_state SET police_count = police_count + 20
+            WHERE is_active = true""")
+        cur.execute("""UPDATE president_state SET
+            approval_rating = LEAST(100, approval_rating + 5)
+            WHERE is_active = true""")
         log_event(
             cur,
             pid,
@@ -701,11 +689,8 @@ def main():
         sheriff_row = cur.fetchone()
 
         if president and sheriff_row:
-            is_dictator = check_dictator_mode(cur, president, sheriff_row)
-            if is_dictator:
-                check_anti_dictator_coup(cur, president, sheriff_row)
-            else:
-                check_sheriff_self_coup(cur, sheriff_row, president)
+            # Dictator mode disabled — unconstitutional (Article II Sec.3)
+            check_sheriff_self_coup(cur, sheriff_row, president)
 
         conn.commit()
         print("\n✅ President cycle complete!")
