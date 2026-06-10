@@ -57,7 +57,7 @@ export default function BackgroundGrid() {
             c.beginPath()
             c.moveTo(a.sx, a.sy)
             c.lineTo(b.sx, b.sy)
-            c.strokeStyle = `hsla(${hue},70%,55%,${(1 - dist / 130) * 0.15})`
+            c.strokeStyle = `hsla(${hue},70%,55%,${(1 - dist / 130) * 0.5})`
             c.lineWidth = 0.5
             c.stroke()
           }
@@ -67,7 +67,7 @@ export default function BackgroundGrid() {
         if (p.sy < minScreenY || p.sy > cv.height) return
         c.beginPath()
         c.arc(p.sx, p.sy, 1.2, 0, Math.PI * 2)
-        c.fillStyle = `hsla(${hue},75%,65%,0.35)`
+        c.fillStyle = `hsla(${hue},85%,70%,0.6)`
         c.fill()
       })
     }
