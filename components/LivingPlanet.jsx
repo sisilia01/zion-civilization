@@ -262,6 +262,11 @@ void main() {
   color += vec3(1.0, 0.48, 0.14) * twilight * 0.08;
   color += cityMask * vec3(1.0, 0.65, 0.28) * twilight * 0.03 * uProsperity;
 
+  float auroraBand = smoothstep(0.68, 0.92, lat) * nightSide;
+  float auroraWave = 0.5 + 0.5 * sin(uTime * 0.85 + dot(vPosition.xz, vec2(9.0, 6.0)));
+  vec3 auroraCol = mix(vec3(0.08, 0.82, 0.48), vec3(0.28, 0.72, 1.0), sin(uTime * 0.35 + lat * 5.0) * 0.5 + 0.5);
+  color += auroraCol * auroraBand * auroraWave * 0.28;
+
   float limbFog = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5);
   vec3 limbHaze = mix(vec3(0.02, 0.05, 0.1), vec3(0.04, 0.08, 0.14), uProsperity);
   color = mix(color, color * 0.82 + limbHaze, limbFog * 0.32);
@@ -394,9 +399,18 @@ void main() {
   float sunFacing = dot(N, normalize(uLightDir));
   float dayMask = smoothstep(-0.05, 0.45, sunFacing);
 
-  vec3 col = atmoColor * fres * 0.58;
-  col *= dayMask;
-  float alpha = fres * 0.19 * dayMask;
+  vec3 col = atmoColor * fres * 0.72;
+  col *= mix(0.45, 1.0, dayMask);
+  float alpha = fres * 0.28 * mix(0.35, 1.0, dayMask);
+
+  float poleLat = abs(N.y);
+  float auroraBand = smoothstep(0.7, 0.94, poleLat);
+  float nightSide = 1.0 - smoothstep(-0.02, 0.22, sunFacing);
+  float auroraPulse = 0.55 + 0.45 * sin(uTime * 0.9 + N.x * 10.0 + N.z * 7.0);
+  vec3 aurora = mix(vec3(0.12, 0.9, 0.55), vec3(0.35, 0.7, 1.0), sin(uTime * 0.4 + poleLat * 6.0) * 0.5 + 0.5);
+  col += aurora * auroraBand * nightSide * auroraPulse * fres * 0.42;
+  alpha += auroraBand * nightSide * fres * 0.12;
+
   gl_FragColor = vec4(col, alpha);
 }
 `;
@@ -517,6 +531,7 @@ function createFoilNormalMap() {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(4, 2);
+  tex.colorSpace = THREE.NoColorSpace;
   tex.anisotropy = 16;
   return tex;
 }
@@ -596,6 +611,7 @@ function createSolarCellGridTexture() {
     ctx.fillRect(0, 0, size, size);
   }
   solarCellGridTexCache = new THREE.CanvasTexture(canvas);
+  solarCellGridTexCache.colorSpace = THREE.SRGBColorSpace;
   solarCellGridTexCache.wrapS = solarCellGridTexCache.wrapT = THREE.RepeatWrapping;
   solarCellGridTexCache.repeat.set(2, 1);
   solarCellGridTexCache.anisotropy = 8;
@@ -620,6 +636,7 @@ function createZionDecalTexture() {
     ctx.fillText("ZION", w / 2, h / 2 + 2);
   }
   zionDecalTexCache = new THREE.CanvasTexture(canvas);
+  zionDecalTexCache.colorSpace = THREE.SRGBColorSpace;
   zionDecalTexCache.anisotropy = 8;
   return zionDecalTexCache;
 }
@@ -656,6 +673,7 @@ function createFlagDecalTexture() {
     }
   }
   flagDecalTexCache = new THREE.CanvasTexture(canvas);
+  flagDecalTexCache.colorSpace = THREE.SRGBColorSpace;
   flagDecalTexCache.anisotropy = 8;
   return flagDecalTexCache;
 }
@@ -723,6 +741,117 @@ function createHeroSolarPanel(side) {
   panelGroup.userData.panelDirX = side;
   panelGroup.userData.panelDirY = 0;
   return panelGroup;
+}
+
+/** @param {Date} date */
+function getDayOfYear(date) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const now = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.floor((now - start) / 86400000);
+}
+
+/** Real-world subsolar direction for current UTC (Y = north pole). @param {THREE.Vector3} out */
+function updateRealtimeSunDirection(out) {
+  const now = new Date();
+  const dayOfYear = getDayOfYear(now);
+  const declination = ((23.45 * Math.PI) / 180) * Math.sin((2 * Math.PI * (284 + dayOfYear)) / 365.25);
+  const utcHours =
+    now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600 + now.getUTCMilliseconds() / 3600000;
+  const subsolarLon = ((utcHours * 15 - 180) * Math.PI) / 180;
+  const cosDec = Math.cos(declination);
+  const sunX = cosDec * Math.cos(subsolarLon);
+  const sunY = Math.sin(declination);
+  const sunZ = cosDec * Math.sin(subsolarLon);
+  // Sun position vector from Earth center (matches shader dot(N, sunDir) convention).
+  return out.set(sunX, sunY, sunZ).normalize();
+}
+
+function createIssModel() {
+  const issGroup = new THREE.Group();
+
+  const trussMat = new THREE.MeshStandardMaterial({
+    color: 0xccccdd,
+    metalness: 0.8,
+    roughness: 0.2,
+  });
+  const panelMatProto = {
+    color: 0xffaa33,
+    emissive: 0xffaa33,
+    emissiveIntensity: 0.3,
+    metalness: 0.3,
+    roughness: 0.4,
+  };
+  const habitatMat = new THREE.MeshStandardMaterial({
+    color: 0xeeeeee,
+    metalness: 0.5,
+    roughness: 0.35,
+  });
+  const portMat = new THREE.MeshStandardMaterial({
+    color: 0xaaaaaa,
+    metalness: 0.7,
+    roughness: 0.3,
+  });
+  const nodeMat = new THREE.MeshStandardMaterial({
+    color: 0xdddddd,
+    metalness: 0.6,
+    roughness: 0.28,
+  });
+
+  const truss = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.004, 0.004), trussMat);
+  markShadows(truss);
+  issGroup.add(truss);
+
+  const panelMats = [];
+  const panelXs = [-0.03, -0.02, 0.02, 0.03];
+  const panelSides = [1, -1];
+  panelXs.forEach((x) => {
+    panelSides.forEach((side) => {
+      const mat = new THREE.MeshStandardMaterial(panelMatProto);
+      panelMats.push(mat);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.001, 0.008), mat);
+      panel.position.set(x, side * 0.006, 0);
+      markShadows(panel);
+      issGroup.add(panel);
+    });
+  });
+
+  const habitat = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.02, 8), habitatMat);
+  habitat.rotation.z = Math.PI / 2;
+  markShadows(habitat);
+  issGroup.add(habitat);
+
+  const node = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.008, 8), nodeMat);
+  node.rotation.z = Math.PI / 2;
+  node.position.set(0.012, 0, 0.003);
+  markShadows(node);
+  issGroup.add(node);
+
+  [-1, 1].forEach((sign) => {
+    const port = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.004, 6), portMat);
+    port.rotation.z = Math.PI / 2;
+    port.position.set(sign * 0.042, 0, 0);
+    markShadows(port);
+    issGroup.add(port);
+  });
+
+  const radiator = new THREE.Mesh(
+    new THREE.BoxGeometry(0.012, 0.003, 0.006),
+    new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.5, roughness: 0.45 })
+  );
+  radiator.position.set(-0.01, 0, -0.005);
+  markShadows(radiator);
+  issGroup.add(radiator);
+
+  const issLight = new THREE.PointLight(0xffdd88, 0.4, 0.3);
+  issLight.position.set(0, 0, 0);
+  issGroup.add(issLight);
+
+  issGroup.scale.setScalar(2.4);
+
+  issGroup.userData.isIss = true;
+  issGroup.userData.panelMats = panelMats;
+  issGroup.userData.issLight = issLight;
+  return issGroup;
 }
 
 function createHeroSatellite() {
@@ -1347,10 +1476,10 @@ const EARTH_TEXTURE_CANDIDATES = {
 
 /** @param {THREE.Texture} tex @param {THREE.WebGLRenderer} renderer @param {{ srgb?: boolean }} [opts] */
 function configureGlobeTexture(tex, renderer, opts = {}) {
-  if (opts.srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.colorSpace = opts.srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
@@ -1414,6 +1543,96 @@ function createNoisePlanetMaterial(lightDir, prosperity) {
   });
 }
 
+const TEXTURED_PLANET_SURFACE_FRAG = `
+{
+  vec3 N = normalize(vWorldPos);
+  vec3 L = normalize(uLightDir);
+  vec3 V = normalize(uCameraPos - vWorldPos);
+  vec3 H = normalize(L + V);
+  float sunDot = dot(N, L);
+  float dayAmount = smoothstep(-0.1, 0.4, sunDot);
+
+  vec3 dayColor = texture2D(map, vMapUv).rgb;
+  float sunFacing = max(sunDot, 0.0);
+  vec3 dayLit = dayColor * (1.0 + sunFacing * 0.65);
+
+  float specMask = texture2D(uSpecularMap, vMapUv).r;
+  float oceanSheen = pow(max(dot(N, H), 0.0), 24.0) * specMask * sunFacing;
+  dayLit += vec3(0.85, 0.92, 1.0) * oceanSheen * 0.38;
+
+  float daySideMask = smoothstep(0.05, 0.55, sunDot);
+  float viewRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
+  float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
+  dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.28;
+
+  float poleLat = abs(N.y);
+  float poleMask = smoothstep(0.58, 0.9, poleLat);
+  dayLit += vec3(0.16, 0.18, 0.2) * poleMask * sunFacing * 0.32;
+
+  vec3 nightTex = texture2D(uNightMap, vMapUv).rgb;
+  float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
+  float thr = mix(0.28, 0.08, uPopulation);
+  float cityMask = smoothstep(thr, thr + 0.15, cityLum);
+
+  vec3 warmColor = vec3(1.0, 0.82, 0.48);
+  vec3 redColor = vec3(1.0, 0.35, 0.12);
+  vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
+  float cityBright = mix(2.0, 6.0, uPopulation);
+  vec3 cityGlow = nightTex * cityMask * cityTint * cityBright;
+
+  float nightSide = 1.0 - dayAmount;
+  vec3 nightBase = dayColor * 0.03;
+  vec3 nightColor = nightBase + cityGlow * nightSide;
+
+  vec3 surface = mix(nightColor, dayLit, dayAmount);
+
+  float auroraBand = smoothstep(0.72, 0.95, poleLat) * nightSide;
+  float auroraWave = 0.55 + 0.45 * sin(uTime * 0.9 + N.x * 12.0 + N.z * 8.0);
+  vec3 auroraColor = mix(vec3(0.1, 0.85, 0.55), vec3(0.35, 0.75, 1.0), sin(uTime * 0.4 + poleLat * 6.0) * 0.5 + 0.5);
+  surface += auroraColor * auroraBand * auroraWave * 0.32;
+
+  gl_FragColor = vec4(surface, 1.0);
+}`;
+
+function patchTexturedPlanetShader(shader) {
+  shader.uniforms.uLightDir = { value: new THREE.Vector3(5, 0.35, 1.2).normalize() };
+  shader.uniforms.uProsperity = { value: 0.5 };
+  shader.uniforms.uRevolution = { value: 0 };
+  shader.uniforms.uPopulation = { value: 0.5 };
+  shader.uniforms.uTime = { value: 0 };
+  shader.uniforms.uNightMap = { value: null };
+  shader.uniforms.uSpecularMap = { value: null };
+  shader.uniforms.uCameraPos = { value: new THREE.Vector3(0, 0, 4.2) };
+
+  if (!shader.vertexShader.includes("varying vec3 vWorldNormal")) {
+    shader.vertexShader = "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n" + shader.vertexShader;
+  }
+  if (!shader.fragmentShader.includes("uniform sampler2D uNightMap")) {
+    shader.fragmentShader =
+      "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\nuniform vec3 uLightDir;\nuniform vec3 uCameraPos;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\nuniform sampler2D uSpecularMap;\n" +
+      shader.fragmentShader;
+  }
+
+  shader.vertexShader = shader.vertexShader.replace(
+    "#include <defaultnormal_vertex>",
+    `#include <defaultnormal_vertex>
+    vWorldNormal = normalize(mat3(modelMatrix) * transformedNormal);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
+  );
+
+  if (shader.fragmentShader.includes("#include <opaque_fragment>")) {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <opaque_fragment>",
+      TEXTURED_PLANET_SURFACE_FRAG
+    );
+  } else {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "gl_FragColor = vec4( outgoingLight, diffuseColor.a );",
+      TEXTURED_PLANET_SURFACE_FRAG
+    );
+  }
+}
+
 function createTexturedPlanetMaterial(textures, lightDir) {
   const mat = new THREE.MeshStandardMaterial({
     map: textures.day,
@@ -1424,81 +1643,18 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     transparent: false,
     opacity: 1,
     depthWrite: true,
+    envMapIntensity: 0,
   });
 
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uLightDir = { value: lightDir.clone() };
-    shader.uniforms.uProsperity = { value: 0.5 };
-    shader.uniforms.uRevolution = { value: 0 };
-    shader.uniforms.uPopulation = { value: 0.5 };
-    shader.uniforms.uTime = { value: 0 };
-    shader.uniforms.uNightMap = { value: textures.night };
-    shader.uniforms.uSpecularMap = { value: textures.specular };
-    shader.uniforms.uCameraPos = { value: new THREE.Vector3(0, 0, 4.2) };
-
-    shader.vertexShader = "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n" + shader.vertexShader;
-    shader.fragmentShader =
-      "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\nuniform vec3 uLightDir;\nuniform vec3 uCameraPos;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\nuniform sampler2D uSpecularMap;\n" +
-      shader.fragmentShader;
-
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <defaultnormal_vertex>",
-      `#include <defaultnormal_vertex>
-      vWorldNormal = normalize(mat3(modelMatrix) * normal);
-      vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
-    );
-
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "gl_FragColor = vec4( outgoingLight, diffuseColor.a );",
-      `{
-        vec3 N = normalize(vWorldNormal);
-        vec3 L = normalize(uLightDir);
-        vec3 V = normalize(uCameraPos - vWorldPos);
-        vec3 H = normalize(L + V);
-        float sunDot = dot(N, L);
-        float dayAmount = smoothstep(-0.15, 0.15, sunDot);
-
-        vec3 dayColor = texture2D(map, vUv).rgb;
-        float sunFacing = max(sunDot, 0.0);
-        vec3 dayLit = dayColor * (0.90 + sunFacing * 0.12);
-
-        float specMask = texture2D(uSpecularMap, vUv).r;
-        float oceanSheen = pow(max(dot(N, H), 0.0), 20.0) * specMask * sunFacing;
-        dayLit += vec3(0.85, 0.90, 0.95) * oceanSheen * 0.26;
-
-        float daySideMask = smoothstep(0.05, 0.55, sunDot);
-        float viewRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
-        float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
-        dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.2;
-
-        float poleLat = abs(N.y);
-        float poleMask = smoothstep(0.58, 0.9, poleLat);
-        dayLit += vec3(0.16, 0.18, 0.2) * poleMask * sunFacing * 0.32;
-
-        vec3 nightTex = texture2D(uNightMap, vUv).rgb;
-        float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
-        float thr = mix(0.30, 0.10, uPopulation);
-        float cityMask = smoothstep(thr, thr + 0.18, cityLum);
-
-        vec3 warmColor = vec3(1.0, 0.82, 0.48);
-        vec3 redColor = vec3(1.0, 0.35, 0.12);
-        vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
-        float cityBright = mix(1.8, 5.5, uPopulation);
-        vec3 cityGlow = nightTex * cityMask * cityTint * cityBright;
-
-        vec3 nightBase = dayColor * 0.04;
-        vec3 nightColor = nightBase + cityGlow;
-
-        vec3 surface = mix(nightColor, dayLit, dayAmount);
-
-        gl_FragColor = vec4(surface, 1.0);
-      }`
-    );
-
+    patchTexturedPlanetShader(shader);
+    shader.uniforms.uLightDir.value.copy(lightDir);
+    shader.uniforms.uNightMap.value = textures.night;
+    shader.uniforms.uSpecularMap.value = textures.specular;
     mat.userData.shader = shader;
   };
 
-  mat.customProgramCacheKey = () => "textured-planet-zion-v15";
+  mat.customProgramCacheKey = () => "textured-planet-zion-v20-daynight-fix";
   return mat;
 }
 
@@ -1526,10 +1682,10 @@ void main() {
 
   vec3 N = normalize(vWorldNormal);
   vec3 L = normalize(uLightDir);
-  float dayAmount = smoothstep(-0.15, 0.15, dot(N, L));
+  float dayAmount = smoothstep(-0.1, 0.4, dot(N, L));
 
   vec3 dayCloud = tex.rgb;
-  vec3 nightCloud = tex.rgb * 0.06;
+  vec3 nightCloud = tex.rgb * 0.05;
 
   vec3 nightTex = texture2D(uNightMap, vUv).rgb;
   float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
@@ -1714,7 +1870,7 @@ export function LivingPlanet({
       renderer.setPixelRatio(getPixelRatio());
       renderer.setSize(w, h, false);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.15;
+      renderer.toneMappingExposure = 1.4;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
@@ -1744,15 +1900,16 @@ export function LivingPlanet({
         "match", renderer.domElement.width === expectedW && renderer.domElement.height === expectedH
       );
 
-      const lightDir = new THREE.Vector3(3, 2, 5).normalize();
-      const ambientLight = new THREE.AmbientLight(0x0a1020, 0.05);
+      const lightDir = new THREE.Vector3();
+      updateRealtimeSunDirection(lightDir);
+      const ambientLight = new THREE.AmbientLight(0x1a2840, 0.25);
       scene.add(ambientLight);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-      dirLight.position.set(3, 2, 5);
+      const dirLight = new THREE.DirectionalLight(0xfff5e0, 4.0);
+      dirLight.position.set(lightDir.x * 12, lightDir.y * 12, lightDir.z * 12);
       dirLight.target.position.set(0, 0, 0);
       scene.add(dirLight);
       scene.add(dirLight.target);
-      const earthFill = new THREE.HemisphereLight(0x1a2840, 0x020306, 0.1);
+      const earthFill = new THREE.HemisphereLight(0x3a5880, 0x080a10, 0.12);
       scene.add(earthFill);
       console.log("sun pos:", dirLight.position.x, dirLight.position.y, dirLight.position.z, "intensity:", dirLight.intensity);
       console.log("camera pos:", camera.position.x, camera.position.y, camera.position.z);
@@ -1791,6 +1948,10 @@ export function LivingPlanet({
           planet.renderOrder = 0;
           markDepth(planet);
           scene.add(planet);
+          renderer.compile(scene, camera);
+          if (!planetMat.userData.shader) {
+            console.warn("[textures] planet shader patch missing after compile");
+          }
           cloudMat = createTexturedCloudMaterial(loadedTextures.clouds, loadedTextures.night, lightDir);
           cloudMat.depthWrite = false;
           clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 128, 128), cloudMat);
@@ -1849,8 +2010,8 @@ export function LivingPlanet({
 
       const starfield = createLayeredStarfield(scene);
 
-      const heroSat = createHeroSatellite();
-      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800, isHero: true };
+      const heroSat = createIssModel();
+      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800, isHero: true, isIss: true };
       scene.add(heroSat);
 
       const distantSat2 = createDistantSatellite();
@@ -1907,8 +2068,14 @@ export function LivingPlanet({
           const bw = Math.max(container.clientWidth, 1) || 800;
           const bh = Math.max(container.clientHeight, 1) || 600;
           composer = new EffectComposer(renderer);
+          if (composer.renderTarget1?.texture) {
+            composer.renderTarget1.texture.colorSpace = THREE.SRGBColorSpace;
+          }
+          if (composer.renderTarget2?.texture) {
+            composer.renderTarget2.texture.colorSpace = THREE.SRGBColorSpace;
+          }
           composer.addPass(new RenderPass(scene, camera));
-          bloomPass = new UnrealBloomPass(new THREE.Vector2(bw, bh), 0.45, 0.3, 0.88);
+          bloomPass = new UnrealBloomPass(new THREE.Vector2(bw, bh), 0.32, 0.5, 0.65);
           bloomPass.renderToScreen = false;
           composer.addPass(bloomPass);
           fxaaPass = new ShaderPass(FXAAShader);
@@ -1937,6 +2104,9 @@ export function LivingPlanet({
       const orbitPos = new THREE.Vector3();
       const orbitAxisX = new THREE.Vector3(1, 0, 0);
       const orbitAxisY = new THREE.Vector3(0, 1, 0);
+      const issTangent = new THREE.Vector3();
+      const issLookTarget = new THREE.Vector3();
+      const trussAxis = new THREE.Vector3(1, 0, 0);
       const isInPlanetShadow = (satPos) => {
         const dotL = satPos.dot(lightDir);
         if (dotL >= 0) return false;
@@ -1982,6 +2152,10 @@ export function LivingPlanet({
         const revNorm = currentRevolutionRef.current / 100;
         const pop = currentPopulationRef.current;
 
+        updateRealtimeSunDirection(lightDir);
+        dirLight.position.set(lightDir.x * 12, lightDir.y * 12, lightDir.z * 12);
+        atmosMat.uniforms.uLightDir.value.copy(lightDir);
+
         if (useTexturedPlanet && planetMat.userData.shader) {
           planetMat.userData.shader.uniforms.uProsperity.value = p;
           planetMat.userData.shader.uniforms.uRevolution.value = revNorm;
@@ -1992,6 +2166,7 @@ export function LivingPlanet({
         } else if (planetMat.uniforms) {
           planetMat.uniforms.uProsperity.value = p;
           planetMat.uniforms.uTime.value = t;
+          planetMat.uniforms.uLightDir.value.copy(lightDir);
           planetMat.uniforms.uCameraPos.value.copy(camera.position);
         }
         if (cloudMat) {
@@ -2002,10 +2177,12 @@ export function LivingPlanet({
         if (cloudLowMat) {
           cloudLowMat.uniforms.uProsperity.value = p;
           cloudLowMat.uniforms.uTime.value = t;
+          cloudLowMat.uniforms.uLightDir.value.copy(lightDir);
         }
         if (cloudHighMat) {
           cloudHighMat.uniforms.uProsperity.value = p;
           cloudHighMat.uniforms.uTime.value = t;
+          cloudHighMat.uniforms.uLightDir.value.copy(lightDir);
         }
         atmosMat.uniforms.uProsperity.value = p;
         atmosMat.uniforms.uTime.value = t;
@@ -2057,6 +2234,29 @@ export function LivingPlanet({
             );
           }
 
+          const ud = sat.userData;
+          if (cfg.isIss) {
+            const eps = 0.012;
+            const a1 = angle + eps;
+            issLookTarget.set(
+              Math.cos(a1) * radius,
+              Math.sin(a1 * 0.5) * radius * 0.3,
+              Math.sin(a1) * radius
+            );
+            issTangent.subVectors(issLookTarget, sat.position);
+            if (issTangent.lengthSq() > 1e-8) {
+              issTangent.normalize();
+              issLookTarget.copy(sat.position).add(issTangent);
+              sat.quaternion.setFromUnitVectors(trussAxis, issTangent);
+            }
+            const solarPulse = 0.28 + Math.sin(t * 1.4) * 0.14;
+            ud.panelMats?.forEach((mat) => {
+              mat.emissiveIntensity = solarPulse;
+            });
+            if (ud.issLight) ud.issLight.intensity = 0.3 + Math.sin(t * 1.4) * 0.14;
+            return;
+          }
+
           sat.lookAt(0, 0, 0);
 
           if (cfg.isDistant) return;
@@ -2065,7 +2265,6 @@ export function LivingPlanet({
           sat.rotation.x += Math.cos(t * 0.17) * 0.0005 * frameScale;
           satWorldPos.copy(sat.position);
           const inPlanetShadow = isInPlanetShadow(satWorldPos);
-          const ud = sat.userData;
           if (ud.beaconMat) {
             const cycle = 1.5;
             const onTime = 0.3;
@@ -2198,46 +2397,61 @@ export function LivingPlanet({
         onMouseLeave={() => setFsBtnHover(false)}
         style={{
           position: "absolute",
-          bottom: 10,
+          top: showHud ? 36 : 10,
           right: 10,
           zIndex: 20,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          width: 24,
+          width: 28,
           height: 24,
           padding: 0,
-          borderRadius: 2,
-          border: `1px solid rgba(255, 255, 255, ${fsBtnHover ? 0.5 : 0.3})`,
-          background: fsBtnHover ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.35)",
-          color: `rgba(255, 255, 255, ${fsBtnHover ? 0.55 : 0.3})`,
-          fontSize: 12,
-          lineHeight: 1,
+          borderRadius: 4,
+          border: `1px solid rgba(0, 255, 136, ${fsBtnHover ? 0.75 : 0.45})`,
+          background: fsBtnHover ? "rgba(0, 20, 16, 0.82)" : "rgba(0, 0, 0, 0.55)",
+          color: fsBtnHover ? "#00ffaa" : "rgba(0, 255, 136, 0.85)",
           cursor: "pointer",
           transition: "background 0.15s, border-color 0.15s, color 0.15s",
+          boxShadow: fsBtnHover ? "0 0 8px rgba(0, 255, 136, 0.25)" : "none",
         }}
       >
-        {isFullscreen ? "⛶" : "⛶"}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {isFullscreen ? (
+            <>
+              <path d="M4 14h6v6" />
+              <path d="M14 14h6v6" />
+              <path d="M4 10h6V4" />
+              <path d="M14 10h6V4" />
+            </>
+          ) : (
+            <>
+              <path d="M8 3H3v5" />
+              <path d="M16 3h5v5" />
+              <path d="M8 21H3v-5" />
+              <path d="M16 21h5v-5" />
+            </>
+          )}
+        </svg>
       </button>
       {showHud && civilizationData && (
         <>
-          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "Inter, system-ui, sans-serif", fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: 1, pointerEvents: "none" }}>
-            PROSPERITY INDEX {hudProsperity}%
+          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "monospace", fontSize: 10, color: "rgba(0,255,136,0.85)", letterSpacing: 1, pointerEvents: "none" }}>
+            PROSPERITY {hudProsperity}%
           </div>
-          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "Inter, system-ui, sans-serif", fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.85)", letterSpacing: 2, pointerEvents: "none" }}>
-            OBSERVATION MAP
+          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "monospace", fontSize: 11, color: "#00ff88", letterSpacing: 2, pointerEvents: "none" }}>
+            LIVE MAP
           </div>
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(0,0,0,0.75)", borderTop: "1px solid rgba(255,255,255,0.08)", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(0,0,0,0.45)", borderTop: "1px solid rgba(0,255,136,0.2)", pointerEvents: "none" }}>
             {[
-              { label: "TOTAL", value: civilizationData.total },
-              { label: "ELITE", value: civilizationData.elite },
-              { label: "MIDDLE", value: civilizationData.middle },
-              { label: "POOR", value: civilizationData.poor },
-              { label: "CRITICAL", value: civilizationData.critical },
-            ].map(({ label, value }) => (
+              { label: "TOTAL", value: civilizationData.total, color: "#00ff88" },
+              { label: "ELITE", value: civilizationData.elite, color: "#ffd700" },
+              { label: "MIDDLE", value: civilizationData.middle, color: "#00aaff" },
+              { label: "POOR", value: civilizationData.poor, color: "#ff8800" },
+              { label: "CRITICAL", value: civilizationData.critical, color: "#ff2244" },
+            ].map(({ label, value, color }) => (
               <div key={label} style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9, color: "#475569" }}>{label}</div>
-                <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{value ?? "—"}</div>
+                <div style={{ fontFamily: "monospace", fontSize: 9, color: "rgba(255,255,255,0.4)" }}>{label}</div>
+                <div style={{ fontFamily: "monospace", fontSize: 13, color, fontWeight: 700 }}>{value ?? "—"}</div>
               </div>
             ))}
           </div>
