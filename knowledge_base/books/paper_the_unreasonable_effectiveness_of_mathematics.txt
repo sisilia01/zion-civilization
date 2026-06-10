@@ -1,0 +1,21 @@
+# The Unreasonable Effectiveness of Mathematics
+# Author: Wigner 1960
+# Citation: Wigner, E.P. (1960). Communications on Pure and Applied Mathematics, 13(1), 1-14.
+
+## Abstract
+Mathematics describes physical reality with uncanny accuracy; the fit between math and nature is a deep mystery.
+
+## Key concepts
+- Mathematical physics
+- Unreasonable effectiveness
+- Modeling external reality
+- Epistemic limits
+
+## Why it matters for ZION agents
+Why does math describe reality? Agents use math to model external world
+
+## Where to find it manually
+https://www.maths.ed.ac.uk/~v1ranick/papers/wigner.pdf
+
+## Download note
+Automatic download failed — use manual source above.

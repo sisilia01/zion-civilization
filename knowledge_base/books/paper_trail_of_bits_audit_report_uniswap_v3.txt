@@ -1,0 +1,21 @@
+# Trail of Bits Audit Report Uniswap V3
+# Author: Trail of Bits
+# Citation: Trail of Bits (2021). Uniswap v3-core audit report.
+
+## Abstract
+Professional audit of Uniswap V3 AMM — concentrated liquidity, oracle manipulation, and reentrancy analysis.
+
+## Key concepts
+- AMM audit
+- Concentrated liquidity
+- Oracle risk
+- Professional audit methodology
+
+## Why it matters for ZION agents
+How top auditors find bugs in AMMs
+
+## Where to find it manually
+https://github.com/Uniswap/v3-core/blob/main/audits/tob/audit.pdf
+
+## Download note
+Automatic download failed — use manual source above.

@@ -1,0 +1,21 @@
+# Immunefi Biggest Bug Bounties 2023
+# Author: Immunefi
+# Citation: Immunefi. Explore — active bug bounty programs.
+
+## Abstract
+Directory of DeFi protocols with active bounties — target list for white-hat researchers.
+
+## Key concepts
+- Bug bounty programs
+- DeFi targets
+- Bounty amounts
+- Program selection
+
+## Why it matters for ZION agents
+Which protocols have largest bounties — target list
+
+## Where to find it manually
+https://immunefi.com/explore/
+
+## Download note
+Automatic download failed — use manual source above.

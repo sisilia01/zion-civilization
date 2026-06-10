@@ -1,0 +1,21 @@
+# Distributed Representations of Words
+# Author: Mikolov et al 2013 Word2Vec
+# Citation: Mikolov, T. et al. (2013). arXiv:1301.3781. Word2Vec.
+
+## Abstract
+Learns dense vector embeddings where semantic similarity corresponds to geometric proximity.
+
+## Key concepts
+- Word2Vec
+- Skip-gram
+- CBOW
+- Distributed semantics
+
+## Why it matters for ZION agents
+How meaning is encoded in vectors — foundation of LLM understanding
+
+## Where to find it manually
+https://arxiv.org/abs/1301.3781
+
+## Download note
+Automatic download failed — use manual source above.

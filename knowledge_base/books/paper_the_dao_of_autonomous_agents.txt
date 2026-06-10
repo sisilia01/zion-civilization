@@ -1,0 +1,21 @@
+# The Dao of Autonomous Agents
+# Author: Shoham 1993
+# Citation: Shoham, Y. (1993). AAAI-93 invited talk / agent foundations literature.
+
+## Abstract
+Foundational framing of autonomous agents — beliefs, desires, intentions, and multi-agent systems.
+
+## Key concepts
+- BDI architecture
+- Autonomous agents
+- Multi-agent systems
+- Agent communication
+
+## Why it matters for ZION agents
+Foundation paper on autonomous agents — what ZION agents are
+
+## Where to find it manually
+Search Shoham (1993) autonomous agents — AAAI proceedings
+
+## Download note
+Automatic download failed — use manual source above.

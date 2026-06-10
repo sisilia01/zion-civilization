@@ -1,0 +1,14 @@
+# Euler Finance Hack 2023
+# Amount lost: $197 million
+# Vulnerability: Donation attack + flash loan
+
+Euler is a lending protocol.
+Attack combined:
+1. Flash loan to borrow large amount
+2. Donate borrowed funds to protocol (manipulating accounting)
+3. Protocol's health check now saw attacker as solvent
+4. Borrow more than allowed → liquidate self at profit
+5. Repay flash loan, keep profit
+Twist: hacker returned all funds after on-chain negotiation.
+Lesson: Donation vectors in lending protocols — 
+any function that accepts value without strict accounting is dangerous.

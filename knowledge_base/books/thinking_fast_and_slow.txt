@@ -1,0 +1,419 @@
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MQL5REGQNN" type="fdc990d09770e70f1ca18128-text/javascript"></script>
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-MQL5REGQNN');
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer type="fdc990d09770e70f1ca18128-text/javascript"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Google tag (gtag.js) -->
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2T4G61HVJT" type="fdc990d09770e70f1ca18128-text/javascript"></script>
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-2T4G61HVJT');
+</script>
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+    navigator.sayswho = (function(){
+        var ua= navigator.userAgent, tem,
+        M= ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+        if(/trident/i.test(M[1])){
+            tem=  /\brv[ :]+(\d+)/g.exec(ua) || [];
+            return 'IE '+(tem[1] || '');
+        }
+        if(M[1]=== 'Chrome'){
+            tem= ua.match(/\b(OPR|Edge)\/(\d+)/);
+            if(tem!= null) return tem.slice(1).join(' ').replace('OPR', 'Opera');
+        }
+        M= M[2]? [M[1], M[2]]: [navigator.appName, navigator.appVersion, '-?'];
+        if((tem= ua.match(/version\/(\d+)/i))!= null) M.splice(1, 1, tem[1]);
+        return M.join(' ');
+    })();
+
+</script>
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+    window.__authStatusBootstrap = {"authenticated":false,"csrf_token":"uT4bc4j0S4XVhNQsdVJCjaQPPGrQPYdOJn8Ehknk","user":null};
+</script>
+<script data-cfasync="false" type="text/javascript">
+(function () {
+  var bootstrapData = window.__authStatusBootstrap || null;
+  var resolvedData = null;
+  var pendingPromise = null;
+
+  function ensureCsrfMeta(data) {
+    if (!data || !data.csrf_token) {
+      return;
+    }
+
+    if (!document.querySelector('meta[name="csrf_token"]')) {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf_token';
+      meta.content = data.csrf_token;
+      document.head.appendChild(meta);
+    }
+  }
+  function storeAuthUser(data) {
+    if (data && typeof data === 'object') {
+      window.authUser = data.user;
+    }
+  }
+
+  function resolveAndCache(data) {
+    if (!data) {
+      return null;
+    }
+
+    resolvedData = data;
+    ensureCsrfMeta(resolvedData);
+    storeAuthUser(resolvedData);
+    return resolvedData;
+  }
+
+  if (bootstrapData) {
+    resolveAndCache(bootstrapData);
+    bootstrapData = null;
+    delete window.__authStatusBootstrap;
+  }
+
+  window.__authStatusPromise = null;
+
+  window.__fetchAuthStatus = function () {
+    if (resolvedData) {
+      return Promise.resolve(resolvedData);
+    }
+
+    if (!pendingPromise) {
+      pendingPromise = fetch('/api/auth-status', { credentials: 'same-origin' })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          window.__authStatusPromise = null;
+          return resolveAndCache(data);
+        })
+        .catch(function (error) {
+          window.__authStatusPromise = null;
+          console.error('Failed to load auth status', error);
+          throw error;
+        });
+
+      window.__authStatusPromise = pendingPromise;
+    }
+
+    return pendingPromise;
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    window.__fetchAuthStatus().catch(function () {
+      // Errors are logged above; swallow here so page rendering continues.
+    });
+
+  });
+})();
+</script>
+
+<title>Z-Library Login - Single Login</title>
+<base href="/">
+<meta charset="utf-8">                             
+<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="title" content="Z-Library Login - Single Login | Z-Library Project">
+<meta name="description" content="Z-Library single login and Z-Library login page. Sign in to your account to find books, manage your library, and continue reading.">
+<meta name="keywords" content="z-library single login, z library single login, z-lib single login, zlibrary login, z-library login, z lib login, z-library sign in, single login">
+<meta name="robots" content="index,follow">
+<meta name="distribution" content="global">
+<link rel="canonical" href="https://z-lib.id/login">
+<meta property="og:url" content="https://z-lib.id/login">
+
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=1">
+<link rel="icon" href="favicon.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon-32x32.svg?v=2" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="/favicon-16x16.svg?v=2" sizes="16x16">
+<link rel="manifest" href="/manifest.json?v=1">
+<link rel="mask-icon" href="/safari-pinned-tab.svg?v=1" color="#5bbad5">
+<meta name="apple-mobile-web-app-title" content="Z-Library">
+<meta name= "apple-mobile-web-app-capable" content="yes">
+<meta name="application-name" content="Z-Library">
+<meta name="theme-color" content="#ffffff">
+<meta name="format-detection" content="telephone=no">
+
+    
+<!-- CSS SET -->
+<!-- JS SET --> 
+<link REL="SHORTCUT ICON" HREF="/favicon.ico?v=1">
+
+
+<link rel="stylesheet" type="text/css" href="/css/global.css" />
+<script type="fdc990d09770e70f1ca18128-text/javascript" src="/js/global.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "WebSite",
+  "name": "Z-Library",
+  "url": "https://z-lib.id",
+  "sameAs": [
+    "https://twitter.com/thezlibrary"
+  ],
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://z-lib.id/s?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+
+<style>
+    div#colorBoxes
+    {
+        text-transform: capitalize;
+    }
+
+    div#colorBoxes ul li.active:nth-child(1)
+    {
+        border: 1px solid #378096;
+        box-shadow: 0 0 6px #7DBCCF;
+        border-top: 0px;
+    }
+
+    div#colorBoxes ul li.active:nth-child(2)
+    {
+        border: 1px solid #6e9b41;
+        box-shadow: 0 0 6px #a4e861;
+        border-top: 0px;
+    }
+</style>
+
+<style type="text/css">
+    .main-menu-item img {
+        opacity: 0.7;
+    }
+    .main-menu-item img:hover {
+        opacity: 1;
+    }
+</style>
+
+<style>
+    .see-more-btn {
+        text-align: right;
+        font-size: 100%;
+        margin: 20px 0 0 0;
+    }
+</style>
+           
+
+    <style>
+        .bMosaicBox { min-height: 100vh }
+        #booksMosaicBoxContainer #bMosaicBox {
+            display: none;
+        }
+        #booksMosaicBoxContainer #bMosaicBox .brick a {
+            display: block;
+            text-decoration: none;
+        }
+        #booksMosaicBoxContainer #bMosaicBox .bMosaicCover {
+            width: 100%;
+        }
+
+        .book-loading { position: relative }
+
+        .book-loading > div:nth-child(2) {
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #bMosaicBox .c-book-title {
+            max-height: 60px;
+        }
+
+        @keyframes toggleOpacity {
+            from { opacity: 1 }
+            to { opacity: 0 }
+        }
+    </style>
+
+    <style>
+        /* comments */
+
+.media{
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: start;
+    -ms-flex-align: start;
+    align-items: flex-start;
+}   
+.media-body{
+    -webkit-box-flex: 1;
+    -ms-flex: 1;
+    flex: 1;
+    box-sizing: border-box;
+    width: unset !important;
+}
+.media img{
+width: 64px;
+height: 64px;
+margin-right: 1rem !important;    
+border-radius: 50%;
+}    
+.text-danger{
+    color: red;
+}
+</style>
+<style>
+#searchModeTabs li:nth-child(3){
+    display:none;
+} 
+</style>
+
+<link rel="stylesheet" href="/css/login.css">
+
+  <script type="fdc990d09770e70f1ca18128-text/javascript">
+            window != top ? window.stop() : null;
+            
+            const Config = {"domainHost":"z-lib.id","BRegion":null,"Country":"undefined","accessByIp":false};
+            const CurrentUser = new User(null);
+            const CurrentClientIP = "127.0.0.1";
+            const CurrentSiteMode = 'books';
+            const proxiesToCheck = []; //for google verification
+
+
+
+            $(document).ready(function() {
+                $('.tooltip-init').tooltip({html: true})
+
+            })
+        </script>
+    
+</head>
+
+<body style="margin:0px;padding:0px;" class="subprojects/singlelogin/index singlelogin">
+        <table class="super-puper-main-container" border="0" cellpadding="0" cellspacing="0">
+            <tbody>
+                                <tr>
+                    <td class="g-page-content" style="vertical-align:top;padding-top: 10rem;">
+                        <div class="container">
+                            <div class="row">
+                                <div class="col-md-12 itemFullText">
+                                    
+<div class="row" style="margin: auto auto;">
+    <div class="well login">
+        <a href="/"><img style="width:75%;max-width:268px;display:block;margin:0 auto 32px auto;" src="/img/logo.png" alt="Z-Library"></a>
+        <legend>Single Sign In</legend>
+                <form data-action="login" method="POST" action="https://z-lib.id/login" accept-charset="UTF-8">
+            <input type="hidden" name="_token" value="uT4bc4j0S4XVhNQsdVJCjaQPPGrQPYdOJn8Ehknk">            <div class="form-group">
+                <input type="text" class="form-control validation-field" name="email" placeholder="Email">
+            </div>
+            <div class="form-group" style="position: relative;">
+                <input type="password" class="form-control form-control-password validation-field" name="password" placeholder="Password">
+                <span class="glyphicon glyphicon-eye-close btn-show-password"></span>
+                <span class="glyphicon glyphicon-eye-open btn-hide-password hidden"></span>
+            </div>
+                <div class="form-group">
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAAADsratohGL5cwWg" data-callback="enableSubmit"></div>
+            </div>
+                
+    <a class="password-recovery-btn" style="padding-top: 4px; padding-bottom: 8px; display: block; color: #8C8C8C; font-size: 12px;" data-auth_modal_toggle="passwordrecovery" href="https://z-lib.id/forgot-password">
+        <span>Forgot your password?</span>
+    </a>
+    
+     <div class="form-group" style="margin-bottom: 1rem;">
+<div class="g-recaptcha" data-sitekey=""></div>
+</div>
+              
+<button type="submit" name="submit" class="btn btn-info btn-block" id="submit-btn" disabled>Sign In</button>
+<p id="captcha-warning" style="color: red; display: none;">Please fill out the captcha</p>
+
+    
+</form>
+
+    <div class="bottom-block">
+        <div class="left">Don&#039;t have an account?</div>
+        <div class="right">
+            <a href="https://z-lib.id/register">Sign Up</a>
+        </div>
+    </div>
+
+
+    </div>
+
+</div>                                                                    </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+$('.btn-show-password').on('click', function(event) {
+    event.preventDefault();
+    $('.btn-hide-password').removeClass('hidden');
+    $('.btn-show-password').addClass('hidden');
+
+    $('[name="password"]').attr('type', 'text');
+}); 
+
+$('.btn-hide-password').on('click', function(event) {
+    event.preventDefault();
+    $('.btn-hide-password').addClass('hidden');
+    $('.btn-show-password').removeClass('hidden');
+
+    $('[name="password"]').attr('type', 'password');
+});    
+</script>    
+<script type="fdc990d09770e70f1ca18128-text/javascript">
+    function enableSubmit(token) {
+        document.getElementById('submit-btn').removeAttribute('disabled');
+        document.getElementById('captcha-warning').style.display = 'none';
+    }
+
+    window.onload = function() {
+        document.getElementById('submit-btn').addEventListener('click', function(e) {
+            var captchaResponse = document.getElementsByName('cf-turnstile-response')[0];
+            if (!captchaResponse || captchaResponse.value == '') {
+                document.getElementById('captcha-warning').style.display = 'block';
+                e.preventDefault();
+            }
+        });
+    }
+</script>
+
+                <tr style="height:60px">
+                    <td id="footer" valign="top">
+                        <div class="container-fluid"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- icons preload hack -->
+        <i class="zlibicon-check" style="font-size: 1px; visibility: hidden; position: absolute; top: 0; left: 0;"></i>
+     
+<script src="https://www.google.com/recaptcha/api.js" async defer type="fdc990d09770e70f1ca18128-text/javascript"></script>
+
+    <script src="/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js" data-cf-settings="fdc990d09770e70f1ca18128-|49" defer></script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a09712b92abe7a96',t:'MTc4MTA4MDg0Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
+

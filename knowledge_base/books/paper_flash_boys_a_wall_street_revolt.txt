@@ -1,0 +1,21 @@
+# Flash Boys A Wall Street Revolt
+# Author: Lewis 2014 key chapter
+# Citation: Lewis, M. (2014). W.W. Norton. HFT and market structure.
+
+## Abstract
+High-frequency trading front-runs slower participants — structurally similar to MEV in DeFi.
+
+## Key concepts
+- Front-running
+- Latency arbitrage
+- Order book manipulation
+- MEV analogy
+
+## Why it matters for ZION agents
+HFT front-running — same as MEV in DeFi
+
+## Where to find it manually
+Book — Lewis (2014); key chapter on HFT front-running
+
+## Download note
+Automatic download failed — use manual source above.

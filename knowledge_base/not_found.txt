@@ -1,0 +1,570 @@
+FAIL | Works and Days | Hesiod | no source found — minimal stub written
+FAIL | Theogony | Hesiod | no source found — minimal stub written
+FAIL | Fragments | Heraclitus | no source found — minimal stub written
+FAIL | Fragments | Parmenides | no source found — minimal stub written
+FAIL | De Rerum Natura | Lucretius | no source found — minimal stub written
+FAIL | The Gallic Wars | Caesar | no source found — minimal stub written
+FAIL | Fragments | Heraclitus | no source found — minimal stub written
+FAIL | Letters | Cicero | no source found — minimal stub written
+FAIL | Fragments | Parmenides | no source found — minimal stub written
+FAIL | Rigveda | unknown | no source found — minimal stub written
+FAIL | Letters | Cicero | no source found — minimal stub written
+FAIL | Upanishads | unknown | no source found — minimal stub written
+FAIL | Yoga Sutras | Patanjali | no source found — minimal stub written
+FAIL | Arthashastra | Kautilya | no source found — minimal stub written
+FAIL | Arthashastra | Kautilya | no source found — minimal stub written
+FAIL | Gathas of Zarathustra | unknown | no source found — minimal stub written
+FAIL | Gathas of Zarathustra | unknown | no source found — minimal stub written
+FAIL | Vendidad | unknown | no source found — minimal stub written
+FAIL | Vendidad | unknown | no source found — minimal stub written
+FAIL | Torah | unknown | no source found — minimal stub written
+FAIL | Torah | unknown | no source found — minimal stub written
+FAIL | Dead Sea Scrolls selections | unknown | no source found — minimal stub written
+FAIL | Dead Sea Scrolls selections | unknown | no source found — minimal stub written
+FAIL | Targums selections | unknown | no source found — minimal stub written
+FAIL | Targums selections | unknown | no source found — minimal stub written
+FAIL | Talmud selections Aramaic | unknown | no source found — minimal stub written
+FAIL | Talmud selections Aramaic | unknown | no source found — minimal stub written
+FAIL | Popol Vuh | unknown | no source found — minimal stub written
+FAIL | Chilam Balam | unknown | no source found — minimal stub written
+FAIL | Chilam Balam | unknown | no source found — minimal stub written
+FAIL | Florentine Codex selections | Sahagun | no source found — minimal stub written
+FAIL | Florentine Codex selections | Sahagun | no source found — minimal stub written
+FAIL | Aztec poetry anthology | unknown | no source found — minimal stub written
+FAIL | Aztec poetry anthology | unknown | no source found — minimal stub written
+FAIL | Anglo-Saxon Chronicle | unknown | no source found — minimal stub written
+FAIL | Gothic Bible selections | Wulfila | no source found — minimal stub written
+FAIL | Gothic Bible selections | Wulfila | no source found — minimal stub written
+FAIL | Cyrillic Alphabet Origin | unknown | no source found — minimal stub written
+FAIL | Cyrillic Alphabet Origin | unknown | no source found — minimal stub written
+FAIL | Lives of Cyril and Methodius | unknown | no source found — minimal stub written
+FAIL | Lives of Cyril and Methodius | unknown | no source found — minimal stub written
+FAIL | The Tale of Genji | Murasaki Shikibu | no source found — minimal stub written
+FAIL | The Divine Comedy | Dante | no source found — minimal stub written
+FAIL | One Thousand and One Nights | unknown | no source found — minimal stub written
+FAIL | Mahabharata | unknown | no source found — minimal stub written
+FAIL | Course in General Linguistics | Saussure | no source found — minimal stub written
+FAIL | Course in General Linguistics | Saussure | no source found — minimal stub written
+FAIL | Language | Bloomfield | no source found — minimal stub written
+FAIL | Language | Bloomfield | no source found — minimal stub written
+FAIL | Syntactic Structures | Chomsky | no source found — minimal stub written
+FAIL | Syntactic Structures | Chomsky | no source found — minimal stub written
+FAIL | Language and Mind | Chomsky | no source found — minimal stub written
+FAIL | Language and Mind | Chomsky | no source found — minimal stub written
+FAIL | The Language Instinct | Pinker | no source found — minimal stub written
+FAIL | The Language Instinct | Pinker | no source found — minimal stub written
+FAIL | Metaphors We Live By | Lakoff Johnson | no source found — minimal stub written
+FAIL | Metaphors We Live By | Lakoff Johnson | no source found — minimal stub written
+FAIL | Through the Language Glass | Deutscher | no source found — minimal stub written
+FAIL | Through the Language Glass | Deutscher | no source found — minimal stub written
+FAIL | Brave New World | Huxley | no source found — minimal stub written
+FAIL | Brave New World | Huxley | no source found — minimal stub written
+FAIL | Nineteen Eighty-Four | Orwell | no source found — minimal stub written
+FAIL | Nineteen Eighty-Four | Orwell | no source found — minimal stub written
+FAIL | Ficciones | Borges | no source found — minimal stub written
+FAIL | Ficciones | Borges | no source found — minimal stub written
+FAIL | Labyrinths | Borges | no source found — minimal stub written
+FAIL | Labyrinths | Borges | no source found — minimal stub written
+FAIL | The Trial | Kafka | no source found — minimal stub written
+FAIL | The Stranger | Camus | no source found — minimal stub written
+FAIL | The Stranger | Camus | no source found — minimal stub written
+FAIL | Flowers for Algernon | Keyes | no source found — minimal stub written
+FAIL | Flowers for Algernon | Keyes | no source found — minimal stub written
+FAIL | Solaris | Lem | no source found — minimal stub written
+FAIL | Solaris | Lem | no source found — minimal stub written
+FAIL | I Robot | Asimov | no source found — minimal stub written
+FAIL | I Robot | Asimov | no source found — minimal stub written
+FAIL | The Moon is a Harsh Mistress | Heinlein | no source found — minimal stub written
+FAIL | The Moon is a Harsh Mistress | Heinlein | no source found — minimal stub written
+FAIL | The Analysis of Beauty | Hogarth | no source found — minimal stub written
+FAIL | The Analysis of Beauty | Hogarth | no source found — minimal stub written
+FAIL | Seven Lamps of Architecture | Ruskin | no source found — minimal stub written
+FAIL | Seven Lamps of Architecture | Ruskin | no source found — minimal stub written
+FAIL | The Principles of Art | Collingwood | no source found — minimal stub written
+FAIL | The Principles of Art | Collingwood | no source found — minimal stub written
+FAIL | Concerning the Spiritual in Art | Kandinsky | no source found — minimal stub written
+FAIL | Concerning the Spiritual in Art | Kandinsky | no source found — minimal stub written
+FAIL | Ways of Seeing | Berger | no source found — minimal stub written
+FAIL | The Lives of the Artists | Vasari | no source found — minimal stub written
+FAIL | The Lives of the Artists | Vasari | no source found — minimal stub written
+FAIL | On Painting | Alberti | no source found — minimal stub written
+FAIL | On Painting | Alberti | no source found — minimal stub written
+FAIL | Poetics | Aristotle | no source found — minimal stub written
+FAIL | The Birth of Tragedy | Nietzsche | no source found — minimal stub written
+FAIL | Critique of Judgment | Kant | no source found — minimal stub written
+FAIL | Ten Books on Architecture | Vitruvius | no source found — minimal stub written
+FAIL | The Architecture of Happiness | de Botton | no source found — minimal stub written
+FAIL | The Architecture of Happiness | de Botton | no source found — minimal stub written
+FAIL | Towards a New Architecture | Le Corbusier | no source found — minimal stub written
+FAIL | Towards a New Architecture | Le Corbusier | no source found — minimal stub written
+FAIL | The Timeless Way of Building | Alexander | no source found — minimal stub written
+FAIL | The Timeless Way of Building | Alexander | no source found — minimal stub written
+FAIL | The Death and Life of Great American Cities | Jacobs | no source found — minimal stub written
+FAIL | The Death and Life of Great American Cities | Jacobs | no source found — minimal stub written
+FAIL | Space and Place | Tuan | no source found — minimal stub written
+FAIL | Space and Place | Tuan | no source found — minimal stub written
+FAIL | The Language of Space | unknown | no source found — minimal stub written
+FAIL | The Language of Space | unknown | no source found — minimal stub written
+FAIL | Harmonics | Ptolemy | no source found — minimal stub written
+FAIL | Harmonics | Ptolemy | no source found — minimal stub written
+FAIL | The Fundamentals of Music | Boethius | no source found — minimal stub written
+FAIL | The Fundamentals of Music | Boethius | no source found — minimal stub written
+FAIL | On the Musically Beautiful | Hanslick | no source found — minimal stub written
+FAIL | On the Musically Beautiful | Hanslick | no source found — minimal stub written
+FAIL | Harmonielehre | Schoenberg | no source found — minimal stub written
+FAIL | Harmonielehre | Schoenberg | no source found — minimal stub written
+FAIL | Das Kapital | Marx | no source found — minimal stub written
+FAIL | The Road to Serfdom | Hayek | no source found — minimal stub written
+FAIL | The Road to Serfdom | Hayek | no source found — minimal stub written
+FAIL | The General Theory of Employment Interest and Money | Keynes | no source found — minimal stub written
+FAIL | The General Theory of Employment Interest and Money | Keynes | no source found — minimal stub written
+FAIL | The Theory of the Leisure Class | Veblen | no source found — minimal stub written
+FAIL | The Elements | Euclid | no source found — minimal stub written
+FAIL | The Elements | Euclid | no source found — minimal stub written
+FAIL | Relativity The Special and General Theory | Einstein | no source found — minimal stub written
+FAIL | The Feynman Lectures on Physics | Feynman | no source found — minimal stub written
+FAIL | Relativity The Special and General Theory | Einstein | no source found — minimal stub written
+FAIL | How to Solve It | Polya | no source found — minimal stub written
+FAIL | How to Solve It | Polya | no source found — minimal stub written
+FAIL | A Mathematical Theory of Communication | Shannon | no source found — minimal stub written
+FAIL | Experiments on Plant Hybridization | Mendel | no source found — minimal stub written
+FAIL | The Double Helix | Watson Crick | no source found — minimal stub written
+FAIL | What is Life | Schrodinger | no source found — minimal stub written
+FAIL | Cellular Pathology | Virchow | no source found — minimal stub written
+FAIL | Cellular Pathology | Virchow | no source found — minimal stub written
+FAIL | The Wisdom of the Body | Cannon | no source found — minimal stub written
+FAIL | The Wisdom of the Body | Cannon | no source found — minimal stub written
+FAIL | Introduction to Experimental Medicine | Bernard | no source found — minimal stub written
+FAIL | Introduction to Experimental Medicine | Bernard | no source found — minimal stub written
+FAIL | Conditioned Reflexes | Pavlov | no source found — minimal stub written
+FAIL | The Astonishing Hypothesis | Crick | no source found — minimal stub written
+FAIL | The Astonishing Hypothesis | Crick | no source found — minimal stub written
+FAIL | The Emotion Machine | Minsky | no source found — minimal stub written
+FAIL | The Emotion Machine | Minsky | no source found — minimal stub written
+FAIL | What Evolution Is | Mayr | no source found — minimal stub written
+FAIL | What Evolution Is | Mayr | no source found — minimal stub written
+FAIL | The Structure of Evolutionary Theory | Gould | no source found — minimal stub written
+FAIL | The Structure of Evolutionary Theory | Gould | no source found — minimal stub written
+FAIL | The Evolution of Cooperation | Axelrod | no source found — minimal stub written
+FAIL | The Riddle of the Universe | Haeckel | no source found — minimal stub written
+FAIL | The Riddle of the Universe | Haeckel | no source found — minimal stub written
+FAIL | Essays upon Heredity | Weismann | no source found — minimal stub written
+FAIL | Essays upon Heredity | Weismann | no source found — minimal stub written
+FAIL | Almagest | Ptolemy | no source found — minimal stub written
+FAIL | Almagest | Ptolemy | no source found — minimal stub written
+FAIL | On the Revolutions of Celestial Spheres | Copernicus | no source found — minimal stub written
+FAIL | Sidereus Nuncius | Galileo | no source found — minimal stub written
+FAIL | Harmonices Mundi | Kepler | no source found — minimal stub written
+FAIL | Principia Mathematica | Newton | no source found — minimal stub written
+FAIL | The Realm of the Nebulae | Hubble | no source found — minimal stub written
+FAIL | Principia Mathematica | Newton | no source found — minimal stub written
+FAIL | The First Three Minutes | Weinberg | no source found — minimal stub written
+FAIL | The First Three Minutes | Weinberg | no source found — minimal stub written
+FAIL | A Brief History of Time | Hawking | no source found — minimal stub written
+FAIL | A Brief History of Time | Hawking | no source found — minimal stub written
+FAIL | The Creation of the Universe | Gamow | no source found — minimal stub written
+FAIL | The Creation of the Universe | Gamow | no source found — minimal stub written
+FAIL | Introduction to Study of Stellar Structure | Chandrasekhar | no source found — minimal stub written
+FAIL | Introduction to Study of Stellar Structure | Chandrasekhar | no source found — minimal stub written
+FAIL | Black Holes and Time Warps | Thorne | no source found — minimal stub written
+FAIL | Black Holes and Time Warps | Thorne | no source found — minimal stub written
+FAIL | Geons Black Holes and Quantum Foam | Wheeler | no source found — minimal stub written
+FAIL | Geons Black Holes and Quantum Foam | Wheeler | no source found — minimal stub written
+FAIL | Pale Blue Dot | Sagan | no source found — minimal stub written
+FAIL | Pale Blue Dot | Sagan | no source found — minimal stub written
+FAIL | Cosmos | Sagan | no source found — minimal stub written
+FAIL | Cosmos | Sagan | no source found — minimal stub written
+FAIL | The Eerie Silence | Davies | no source found — minimal stub written
+FAIL | The Eerie Silence | Davies | no source found — minimal stub written
+FAIL | Atomic Theory and the Description of Nature | Bohr | no source found — minimal stub written
+FAIL | Atomic Theory and the Description of Nature | Bohr | no source found — minimal stub written
+FAIL | Physics and Philosophy | Heisenberg | no source found — minimal stub written
+FAIL | Physics and Philosophy | Heisenberg | no source found — minimal stub written
+FAIL | QED The Strange Theory | Feynman | no source found — minimal stub written
+FAIL | QED The Strange Theory | Feynman | no source found — minimal stub written
+FAIL | Speakable and Unspeakable in Quantum Mechanics | Bell | no source found — minimal stub written
+FAIL | Speakable and Unspeakable in Quantum Mechanics | Bell | no source found — minimal stub written
+FAIL | The Nature of the Physical World | Eddington | no source found — minimal stub written
+FAIL | The End of Time | Barbour | no source found — minimal stub written
+FAIL | The End of Time | Barbour | no source found — minimal stub written
+FAIL | The Fabric of the Cosmos | Greene | no source found — minimal stub written
+FAIL | The Fabric of the Cosmos | Greene | no source found — minimal stub written
+FAIL | From Eternity to Here | Carroll | no source found — minimal stub written
+FAIL | From Eternity to Here | Carroll | no source found — minimal stub written
+FAIL | Time and Free Will | Bergson | no source found — minimal stub written
+FAIL | Matter and Memory | Bergson | no source found — minimal stub written
+FAIL | Time and Free Will | Bergson | no source found — minimal stub written
+FAIL | The Phenomenology of Internal Time Consciousness | Husserl | no source found — minimal stub written
+FAIL | The Dance of Life | Hall | no source found — minimal stub written
+FAIL | The Dance of Life | Hall | no source found — minimal stub written
+FAIL | Revolution in Time | Landes | no source found — minimal stub written
+FAIL | Revolution in Time | Landes | no source found — minimal stub written
+FAIL | Lectures on Gas Theory | Boltzmann | no source found — minimal stub written
+FAIL | Beyond Greed and Fear | Shefrin | no source found — minimal stub written
+FAIL | Beyond Greed and Fear | Shefrin | no source found — minimal stub written
+FAIL | Irrational Exuberance | Shiller | no source found — minimal stub written
+FAIL | Irrational Exuberance | Shiller | no source found — minimal stub written
+FAIL | The Misbehavior of Markets | Mandelbrot | no source found — minimal stub written
+FAIL | Beat the Market | Thorp | no source found — minimal stub written
+FAIL | Beat the Market | Thorp | no source found — minimal stub written
+FAIL | Portfolio Selection | Markowitz | no source found — minimal stub written
+FAIL | Portfolio Selection | Markowitz | no source found — minimal stub written
+FAIL | Adaptive Markets | Lo | no source found — minimal stub written
+FAIL | Adaptive Markets | Lo | no source found — minimal stub written
+FAIL | Judgment Under Uncertainty | Tversky Kahneman | no source found — minimal stub written
+FAIL | Judgment Under Uncertainty | Tversky Kahneman | no source found — minimal stub written
+FAIL | Non-Cooperative Games | Nash | no source found — minimal stub written
+FAIL | Non-Cooperative Games | Nash | no source found — minimal stub written
+FAIL | The Strategy of Conflict | Schelling | no source found — minimal stub written
+FAIL | The Strategy of Conflict | Schelling | no source found — minimal stub written
+FAIL | The Logic of Collective Action | Olson | no source found — minimal stub written
+FAIL | A New Kind of Science | Wolfram | no source found — minimal stub written
+FAIL | A New Kind of Science | Wolfram | no source found — minimal stub written
+FAIL | The Origins of Order | Kauffman | no source found — minimal stub written
+FAIL | Six Degrees | Watts | no source found — minimal stub written
+FAIL | Six Degrees | Watts | no source found — minimal stub written
+FAIL | Order Out of Chaos | Prigogine | no source found — minimal stub written
+FAIL | Order Out of Chaos | Prigogine | no source found — minimal stub written
+FAIL | Thinking in Systems | Meadows | no source found — minimal stub written
+FAIL | Thinking in Systems | Meadows | no source found — minimal stub written
+FAIL | The Savage Mind | Levi-Strauss | no source found — minimal stub written
+FAIL | The Savage Mind | Levi-Strauss | no source found — minimal stub written
+FAIL | The Gift | Mauss | no source found — minimal stub written
+FAIL | Ancient Society | Morgan | no source found — minimal stub written
+FAIL | The Concept of Law | Hart | no source found — minimal stub written
+FAIL | The Concept of Law | Hart | no source found — minimal stub written
+FAIL | The Morality of Law | Fuller | no source found — minimal stub written
+FAIL | The Morality of Law | Fuller | no source found — minimal stub written
+FAIL | A Theory of Justice | Rawls | no source found — minimal stub written
+FAIL | A Theory of Justice | Rawls | no source found — minimal stub written
+FAIL | Economic Analysis of Law | Posner | no source found — minimal stub written
+FAIL | Economic Analysis of Law | Posner | no source found — minimal stub written
+FAIL | The Pricing of Options | Black Scholes | no source found — minimal stub written
+FAIL | The Pricing of Options | Black Scholes | no source found — minimal stub written
+FAIL | Your Money and Your Brain | Zweig | no source found — minimal stub written
+FAIL | Your Money and Your Brain | Zweig | no source found — minimal stub written
+FAIL | Algorithmic Information Theory | Chaitin | no source found — minimal stub written
+FAIL | Algorithmic Information Theory | Chaitin | no source found — minimal stub written
+FAIL | The Philosophy of Information | Floridi | no source found — minimal stub written
+FAIL | The Philosophy of Information | Floridi | no source found — minimal stub written
+FAIL | Foundations of the Theory of Probability | Kolmogorov | no source found — minimal stub written
+FAIL | Foundations of the Theory of Probability | Kolmogorov | no source found — minimal stub written
+FAIL | Brain of the Firm | Beer | no source found — minimal stub written
+FAIL | Brain of the Firm | Beer | no source found — minimal stub written
+FAIL | Industrial Dynamics | Forrester | no source found — minimal stub written
+FAIL | Industrial Dynamics | Forrester | no source found — minimal stub written
+FAIL | Computing Machinery and Intelligence | Turing | no source found — minimal stub written
+FAIL | Computing Machinery and Intelligence | Turing | no source found — minimal stub written
+FAIL | Cybernetics | Wiener | no source found — minimal stub written
+FAIL | The Computer and the Brain | Von Neumann | no source found — minimal stub written
+FAIL | Cybernetics | Wiener | no source found — minimal stub written
+FAIL | The Division of Labour in Society | Durkheim | no source found — minimal stub written
+FAIL | The Protestant Ethic and the Spirit of Capitalism | Weber | no source found — minimal stub written
+FAIL | Influence | Cialdini | no source found — minimal stub written
+FAIL | Influence | Cialdini | no source found — minimal stub written
+FAIL | The Cuckoo's Egg | Stoll | no source found — minimal stub written
+FAIL | The Cuckoo's Egg | Stoll | no source found — minimal stub written
+FAIL | Security Engineering | Anderson | no source found — minimal stub written
+FAIL | Security Engineering | Anderson | no source found — minimal stub written
+FAIL | Cryptography Engineering | Ferguson | no source found — minimal stub written
+FAIL | Cryptography Engineering | Ferguson | no source found — minimal stub written
+FAIL | Hacking: The Art of Exploitation | Erickson | no source found — minimal stub written
+FAIL | Hacking: The Art of Exploitation | Erickson | no source found — minimal stub written
+FAIL | The Web Application Hackers Handbook | Stuttard | no source found — minimal stub written
+FAIL | The Web Application Hackers Handbook | Stuttard | no source found — minimal stub written
+FAIL | The Shellcoders Handbook | unknown | no source found — minimal stub written
+FAIL | The Shellcoders Handbook | unknown | no source found — minimal stub written
+FAIL | Monadology | Leibniz | no source found — minimal stub written
+FAIL | The Butterfly Dream | Zhuangzi | no source found — minimal stub written
+FAIL | Phenomenology of Spirit | Hegel | no source found — minimal stub written
+FAIL | His Master Voice | Lem | no source found — minimal stub written
+FAIL | His Master Voice | Lem | no source found — minimal stub written
+FAIL | Do Androids Dream of Electric Sheep | Dick | no source found — minimal stub written
+FAIL | Do Androids Dream of Electric Sheep | Dick | no source found — minimal stub written
+FAIL | Incompleteness Theorems | Godel | no source found — minimal stub written
+FAIL | Incompleteness Theorems | Godel | no source found — minimal stub written
+FAIL | Tractatus | Wittgenstein | no source found — minimal stub written
+FAIL | Tractatus | Wittgenstein | no source found — minimal stub written
+FAIL | The Experience Machine | Nozick | no source found — minimal stub written
+FAIL | The Experience Machine | Nozick | no source found — minimal stub written
+FAIL | Groundwork for the Metaphysics of Morals | Kant | no source found — minimal stub written
+FAIL | Introduction to the Principles of Morals and Legislation | Bentham | no source found — minimal stub written
+FAIL | Groundwork for the Metaphysics of Morals | Kant | no source found — minimal stub written
+FAIL | The Nicomachean Ethics | Aristotle | no source found — minimal stub written
+FAIL | Practical Ethics | Singer | no source found — minimal stub written
+FAIL | Reasons and Persons | Parfit | no source found — minimal stub written
+FAIL | The Nicomachean Ethics | Aristotle | no source found — minimal stub written
+FAIL | Ethics and the Limits of Philosophy | Williams | no source found — minimal stub written
+FAIL | Ethics and the Limits of Philosophy | Williams | no source found — minimal stub written
+FAIL | The Righteous Mind | Haidt | no source found — minimal stub written
+FAIL | The Righteous Mind | Haidt | no source found — minimal stub written
+FAIL | Moral Tribes | Greene | no source found — minimal stub written
+FAIL | Moral Tribes | Greene | no source found — minimal stub written
+FAIL | Letter to Menoeceus | Epicurus | no source found — minimal stub written
+FAIL | The Death of Ivan Ilyich | Tolstoy | no source found — minimal stub written
+FAIL | Letter to Menoeceus | Epicurus | no source found — minimal stub written
+FAIL | On Death and Dying | Kubler-Ross | no source found — minimal stub written
+FAIL | The Denial of Death | Becker | no source found — minimal stub written
+FAIL | The Denial of Death | Becker | no source found — minimal stub written
+FAIL | When Breath Becomes Air | Kalanithi | no source found — minimal stub written
+FAIL | When Breath Becomes Air | Kalanithi | no source found — minimal stub written
+FAIL | Mortality | Hitchens | no source found — minimal stub written
+FAIL | Mortality | Hitchens | no source found — minimal stub written
+FAIL | Letters to a Young Poet | Rilke | no source found — minimal stub written
+FAIL | The Tibetan Book of the Dead | unknown | no source found — minimal stub written
+FAIL | The Symposium | Plato | no source found — minimal stub written
+FAIL | On Love | Stendhal | no source found — minimal stub written
+FAIL | The Art of Loving | Fromm | no source found — minimal stub written
+FAIL | Attachment | Bowlby | no source found — minimal stub written
+FAIL | Attachment | Bowlby | no source found — minimal stub written
+FAIL | The Origins of Love | Hrdy | no source found — minimal stub written
+FAIL | The Origins of Love | Hrdy | no source found — minimal stub written
+FAIL | The Expression of Emotions in Man and Animals | Darwin | no source found — minimal stub written
+FAIL | A General Theory of Love | Lewis Amini Lannon | no source found — minimal stub written
+FAIL | A General Theory of Love | Lewis Amini Lannon | no source found — minimal stub written
+FAIL | Mating in Captivity | Perel | no source found — minimal stub written
+FAIL | Mating in Captivity | Perel | no source found — minimal stub written
+FAIL | Romeo and Juliet | Shakespeare | no source found — minimal stub written
+FAIL | The Person | Allport | no source found — minimal stub written
+FAIL | The Person | Allport | no source found — minimal stub written
+FAIL | Personality Types | Jung | no source found — minimal stub written
+FAIL | The Big Five Personality Traits | Costa McCrae | no source found — minimal stub written
+FAIL | The Big Five Personality Traits | Costa McCrae | no source found — minimal stub written
+FAIL | The Blank Slate | Pinker | no source found — minimal stub written
+FAIL | The Blank Slate | Pinker | no source found — minimal stub written
+FAIL | An Essay Concerning Human Understanding | Locke | no source found — minimal stub written
+FAIL | Behave | Sapolsky | no source found — minimal stub written
+FAIL | Behave | Sapolsky | no source found — minimal stub written
+FAIL | The Anatomy of Evil | Stone | no source found — minimal stub written
+FAIL | The Anatomy of Evil | Stone | no source found — minimal stub written
+FAIL | In Cold Blood | Capote | no source found — minimal stub written
+FAIL | In Cold Blood | Capote | no source found — minimal stub written
+FAIL | Nature via Nurture | Ridley | no source found — minimal stub written
+FAIL | Nature via Nurture | Ridley | no source found — minimal stub written
+FAIL | Genome | Ridley | no source found — minimal stub written
+FAIL | Genome | Ridley | no source found — minimal stub written
+FAIL | The Epigenetics Revolution | Carey | no source found — minimal stub written
+FAIL | The Epigenetics Revolution | Carey | no source found — minimal stub written
+FAIL | Survival of the Sickest | Moalem | no source found — minimal stub written
+FAIL | Survival of the Sickest | Moalem | no source found — minimal stub written
+FAIL | The Language of God | Collins | no source found — minimal stub written
+FAIL | The Language of God | Collins | no source found — minimal stub written
+FAIL | The Hot Zone | Preston | no source found — minimal stub written
+FAIL | The Hot Zone | Preston | no source found — minimal stub written
+FAIL | The Great Influenza | Barry | no source found — minimal stub written
+FAIL | The Great Influenza | Barry | no source found — minimal stub written
+FAIL | Spillover | Quammen | no source found — minimal stub written
+FAIL | Spillover | Quammen | no source found — minimal stub written
+FAIL | The Coming Plague | Garrett | no source found — minimal stub written
+FAIL | The Coming Plague | Garrett | no source found — minimal stub written
+FAIL | The Plague | Camus | no source found — minimal stub written
+FAIL | The Plague | Camus | no source found — minimal stub written
+FAIL | Virus An Illustrated Guide | Racaniello | no source found — minimal stub written
+FAIL | Virus An Illustrated Guide | Racaniello | no source found — minimal stub written
+FAIL | The Immortal Life of Henrietta Lacks | Skloot | no source found — minimal stub written
+FAIL | The Immortal Life of Henrietta Lacks | Skloot | no source found — minimal stub written
+FAIL | Pandemic | Wendy Orent | no source found — minimal stub written
+FAIL | Pandemic | Wendy Orent | no source found — minimal stub written
+FAIL | I Contain Multitudes | Yong | no source found — minimal stub written
+FAIL | I Contain Multitudes | Yong | no source found — minimal stub written
+FAIL | Computer Viruses and Malware | Aycock | no source found — minimal stub written
+FAIL | Computer Viruses and Malware | Aycock | no source found — minimal stub written
+FAIL | The Art of Intrusion | Mitnick | no source found — minimal stub written
+FAIL | The Art of Intrusion | Mitnick | no source found — minimal stub written
+FAIL | Ghost in the Wires | Mitnick | no source found — minimal stub written
+FAIL | Ghost in the Wires | Mitnick | no source found — minimal stub written
+FAIL | Countdown to Zero Day | Zetter | no source found — minimal stub written
+FAIL | Countdown to Zero Day | Zetter | no source found — minimal stub written
+FAIL | Sandworm | Greenberg | no source found — minimal stub written
+FAIL | Sandworm | Greenberg | no source found — minimal stub written
+FAIL | How to Do Things with Words | Austin | no source found — minimal stub written
+FAIL | Philosophical Investigations | Wittgenstein | no source found — minimal stub written
+FAIL | The Pragmatics of Human Communication | Watzlawick | no source found — minimal stub written
+FAIL | The Pragmatics of Human Communication | Watzlawick | no source found — minimal stub written
+FAIL | Theory of Communicative Action | Habermas | no source found — minimal stub written
+FAIL | Theory of Communicative Action | Habermas | no source found — minimal stub written
+FAIL | Language Games | Wittgenstein | no source found — minimal stub written
+FAIL | Language Games | Wittgenstein | no source found — minimal stub written
+FAIL | Signs and Symbols | Eco | no source found — minimal stub written
+FAIL | Signs and Symbols | Eco | no source found — minimal stub written
+FAIL | A Theory of Semiotics | Eco | no source found — minimal stub written
+FAIL | A Theory of Semiotics | Eco | no source found — minimal stub written
+FAIL | The Name of the Rose | Eco | no source found — minimal stub written
+FAIL | The Name of the Rose | Eco | no source found — minimal stub written
+FAIL | The Art of Exploitation | Erickson | no source found — minimal stub written
+FAIL | The Art of Exploitation | Erickson | no source found — minimal stub written
+FAIL | Hacking Exposed | McClure Scambray Kurtz | no source found — minimal stub written
+FAIL | Hacking Exposed | McClure Scambray Kurtz | no source found — minimal stub written
+FAIL | The Art of Deception | Mitnick | no source found — minimal stub written
+FAIL | The Art of Deception | Mitnick | no source found — minimal stub written
+FAIL | Dark Territory | Kaplan | no source found — minimal stub written
+FAIL | Dark Territory | Kaplan | no source found — minimal stub written
+FAIL | Cult of the Dead Cow | Menn | no source found — minimal stub written
+FAIL | Cult of the Dead Cow | Menn | no source found — minimal stub written
+FAIL | Practical Reverse Engineering | Dang | no source found — minimal stub written
+FAIL | Practical Reverse Engineering | Dang | no source found — minimal stub written
+FAIL | Reversing Secrets of Reverse Engineering | Eilam | no source found — minimal stub written
+FAIL | Reversing Secrets of Reverse Engineering | Eilam | no source found — minimal stub written
+FAIL | The IDA Pro Book | Eagle | no source found — minimal stub written
+FAIL | The IDA Pro Book | Eagle | no source found — minimal stub written
+FAIL | Gray Hat Hacking | Harper | no source found — minimal stub written
+FAIL | Gray Hat Hacking | Harper | no source found — minimal stub written
+FAIL | Malware Analyst Cookbook | Ligh | no source found — minimal stub written
+FAIL | Malware Analyst Cookbook | Ligh | no source found — minimal stub written
+FAIL | The Art of Memory Forensics | Ligh | no source found — minimal stub written
+FAIL | The Art of Memory Forensics | Ligh | no source found — minimal stub written
+FAIL | Network Security Assessment | McNab | no source found — minimal stub written
+FAIL | Network Security Assessment | McNab | no source found — minimal stub written
+FAIL | The Tangled Web | Zalewski | no source found — minimal stub written
+FAIL | The Tangled Web | Zalewski | no source found — minimal stub written
+FAIL | Silence on the Wire | Zalewski | no source found — minimal stub written
+FAIL | Silence on the Wire | Zalewski | no source found — minimal stub written
+FAIL | TCP IP Illustrated | Stevens | no source found — minimal stub written
+FAIL | TCP IP Illustrated | Stevens | no source found — minimal stub written
+FAIL | Computer Networks | Tanenbaum | no source found — minimal stub written
+FAIL | Computer Networks | Tanenbaum | no source found — minimal stub written
+FAIL | Applied Cryptography | Schneier | no source found — minimal stub written
+FAIL | Applied Cryptography | Schneier | no source found — minimal stub written
+FAIL | Serious Cryptography | Aumasson | no source found — minimal stub written
+FAIL | Serious Cryptography | Aumasson | no source found — minimal stub written
+FAIL | Bitcoin and Cryptocurrency Technologies | Narayanan | no source found — minimal stub written
+FAIL | Bitcoin and Cryptocurrency Technologies | Narayanan | no source found — minimal stub written
+FAIL | Mastering Bitcoin | Antonopoulos | no source found — minimal stub written
+FAIL | Mastering Bitcoin | Antonopoulos | no source found — minimal stub written
+FAIL | Mastering Ethereum | Antonopoulos | no source found — minimal stub written
+FAIL | Mastering Ethereum | Antonopoulos | no source found — minimal stub written
+FAIL | Mastering Blockchain | Bashir | no source found — minimal stub written
+FAIL | Mastering Blockchain | Bashir | no source found — minimal stub written
+FAIL | Hands on Smart Contract Development | Wooten | no source found — minimal stub written
+FAIL | Hands on Smart Contract Development | Wooten | no source found — minimal stub written
+FAIL | Building Ethereum DApps | Roberto | no source found — minimal stub written
+FAIL | Building Ethereum DApps | Roberto | no source found — minimal stub written
+FAIL | DeFi and the Future of Finance | Harvey | no source found — minimal stub written
+FAIL | DeFi and the Future of Finance | Harvey | no source found — minimal stub written
+FAIL | Social Engineering The Science of Human Hacking | Hadnagy | no source found — minimal stub written
+FAIL | Social Engineering The Science of Human Hacking | Hadnagy | no source found — minimal stub written
+FAIL | Phishing Dark Waters | Hadnagy | no source found — minimal stub written
+FAIL | Phishing Dark Waters | Hadnagy | no source found — minimal stub written
+FAIL | Never Split the Difference | Voss | no source found — minimal stub written
+FAIL | Bug Bounty Bootcamp | Li | no source found — minimal stub written
+FAIL | Never Split the Difference | Voss | no source found — minimal stub written
+FAIL | Real World Bug Hunting | Yaworski | no source found — minimal stub written
+FAIL | Real World Bug Hunting | Yaworski | no source found — minimal stub written
+FAIL | The Hacker Playbook | Kim | no source found — minimal stub written
+FAIL | The Hacker Playbook | Kim | no source found — minimal stub written
+FAIL | The Hacker Playbook 2 | Kim | no source found — minimal stub written
+FAIL | The Hacker Playbook 2 | Kim | no source found — minimal stub written
+FAIL | The Hacker Playbook 3 | Kim | no source found — minimal stub written
+FAIL | The Hacker Playbook 3 | Kim | no source found — minimal stub written
+FAIL | Penetration Testing | Georgia Weidman | no source found — minimal stub written
+FAIL | Penetration Testing | Georgia Weidman | no source found — minimal stub written
+FAIL | Metasploit The Penetration Testers Guide | Kennedy | no source found — minimal stub written
+FAIL | Metasploit The Penetration Testers Guide | Kennedy | no source found — minimal stub written
+FAIL | The Linux Programming Interface | Kerrisk | no source found — minimal stub written
+FAIL | The Linux Programming Interface | Kerrisk | no source found — minimal stub written
+FAIL | Linux Kernel Development | Love | no source found — minimal stub written
+FAIL | Linux Kernel Development | Love | no source found — minimal stub written
+FAIL | Windows Internals | Russinovich | no source found — minimal stub written
+FAIL | Windows Internals | Russinovich | no source found — minimal stub written
+FAIL | Mac OS X Internals | Singh | no source found — minimal stub written
+FAIL | Mac OS X Internals | Singh | no source found — minimal stub written
+FAIL | Operating Systems Three Easy Pieces | Arpaci-Dusseau | no source found — minimal stub written
+FAIL | A Guide to Kernel Exploitation | Perla | no source found — minimal stub written
+FAIL | Operating Systems Three Easy Pieces | Arpaci-Dusseau | no source found — minimal stub written
+FAIL | Rootkits Subverting the Windows Kernel | Butler | no source found — minimal stub written
+FAIL | Rootkits Subverting the Windows Kernel | Butler | no source found — minimal stub written
+FAIL | The Rootkit Arsenal | Blunden | no source found — minimal stub written
+FAIL | The Rootkit Arsenal | Blunden | no source found — minimal stub written
+FAIL | Black Hat Python | Seitz | no source found — minimal stub written
+FAIL | Black Hat Python | Seitz | no source found — minimal stub written
+FAIL | Violent Python | O'Connor | no source found — minimal stub written
+FAIL | Violent Python | O'Connor | no source found — minimal stub written
+FAIL | Learning Python for Forensics | unknown | no source found — minimal stub written
+FAIL | Learning Python for Forensics | unknown | no source found — minimal stub written
+FAIL | The Browser Hacker Handbook | Alcorn | no source found — minimal stub written
+FAIL | The Browser Hacker Handbook | Alcorn | no source found — minimal stub written
+FAIL | SQL Injection Attacks and Defense | Clarke | no source found — minimal stub written
+FAIL | XSS Attacks | Grossman | no source found — minimal stub written
+FAIL | SQL Injection Attacks and Defense | Clarke | no source found — minimal stub written
+FAIL | Android Hackers Handbook | Drake | no source found — minimal stub written
+FAIL | XSS Attacks | Grossman | no source found — minimal stub written
+FAIL | iOS Hackers Handbook | Miller | no source found — minimal stub written
+FAIL | iOS Hackers Handbook | Miller | no source found — minimal stub written
+FAIL | Car Hacker Handbook | Smith | no source found — minimal stub written
+FAIL | Car Hacker Handbook | Smith | no source found — minimal stub written
+FAIL | The Brain That Changes Itself | Doidge | no source found — minimal stub written
+FAIL | The Brain That Changes Itself | Doidge | no source found — minimal stub written
+FAIL | Incognito The Secret Lives of the Brain | Eagleman | no source found — minimal stub written
+FAIL | The Tell Tale Brain | Ramachandran | no source found — minimal stub written
+FAIL | The Tell Tale Brain | Ramachandran | no source found — minimal stub written
+FAIL | How Emotions Are Made | Barrett | no source found — minimal stub written
+FAIL | How Emotions Are Made | Barrett | no source found — minimal stub written
+FAIL | The Brain | Eagleman | no source found — minimal stub written
+FAIL | The Brain | Eagleman | no source found — minimal stub written
+FAIL | Phantoms in the Brain | Ramachandran | no source found — minimal stub written
+FAIL | Phantoms in the Brain | Ramachandran | no source found — minimal stub written
+FAIL | The 48 Laws of Power | Greene | no source found — minimal stub written
+FAIL | The 48 Laws of Power | Greene | no source found — minimal stub written
+FAIL | The 33 Strategies of War | Greene | no source found — minimal stub written
+FAIL | The 33 Strategies of War | Greene | no source found — minimal stub written
+FAIL | The Laws of Human Nature | Greene | no source found — minimal stub written
+FAIL | The Laws of Human Nature | Greene | no source found — minimal stub written
+FAIL | Leadership | Burns | no source found — minimal stub written
+FAIL | Leadership | Burns | no source found — minimal stub written
+FAIL | On Becoming a Leader | Bennis | no source found — minimal stub written
+FAIL | On Becoming a Leader | Bennis | no source found — minimal stub written
+FAIL | Good to Great | Collins | no source found — minimal stub written
+FAIL | Good to Great | Collins | no source found — minimal stub written
+FAIL | The Fifth Discipline | Senge | no source found — minimal stub written
+FAIL | The Fifth Discipline | Senge | no source found — minimal stub written
+FAIL | Our Final Invention | Barrat | no source found — minimal stub written
+FAIL | Our Final Invention | Barrat | no source found — minimal stub written
+FAIL | The Coming Wave | Suleyman | no source found — minimal stub written
+FAIL | The Coming Wave | Suleyman | no source found — minimal stub written
+FAIL | Power and Progress | Acemoglu | no source found — minimal stub written
+FAIL | Power and Progress | Acemoglu | no source found — minimal stub written
+FAIL | The Age of Surveillance Capitalism | Zuboff | no source found — minimal stub written
+FAIL | The Age of Surveillance Capitalism | Zuboff | no source found — minimal stub written
+FAIL | The Act of Creation | Koestler | no source found — minimal stub written
+FAIL | The Act of Creation | Koestler | no source found — minimal stub written
+FAIL | Creativity | Csikszentmihalyi | no source found — minimal stub written
+FAIL | Where Good Ideas Come From | Johnson | no source found — minimal stub written
+FAIL | Creativity | Csikszentmihalyi | no source found — minimal stub written
+FAIL | A Mathematician Apology | Hardy | no source found — minimal stub written
+FAIL | A Mathematician Apology | Hardy | no source found — minimal stub written
+FAIL | What Is Mathematics | Courant | no source found — minimal stub written
+FAIL | What Is Mathematics | Courant | no source found — minimal stub written
+FAIL | Proofs from the Book | Aigner | no source found — minimal stub written
+FAIL | Proofs from the Book | Aigner | no source found — minimal stub written
+FAIL | The Analects | Confucius | no source found — minimal stub written
+FAIL | Dao De Jing | Lao Tzu | no source found — minimal stub written
+FAIL | The Upanishads | unknown | no source found — minimal stub written
+FAIL | The Dhammapada | unknown | no source found — minimal stub written
+FAIL | Discourses | Epictetus | no source found — minimal stub written
+FAIL | The Enchiridion | Epictetus | no source found — minimal stub written
+FAIL | Discourses | Epictetus | no source found — minimal stub written
+FAIL | One Hundred Years of Solitude | Marquez | no source found — minimal stub written
+FAIL | One Hundred Years of Solitude | Marquez | no source found — minimal stub written
+FAIL | The Master and Margarita | Bulgakov | no source found — minimal stub written
+FAIL | The Master and Margarita | Bulgakov | no source found — minimal stub written
+FAIL | Infinite Jest | Wallace | no source found — minimal stub written
+FAIL | Infinite Jest | Wallace | no source found — minimal stub written
+FAIL | Gravity Rainbow | Pynchon | no source found — minimal stub written
+FAIL | Gravity Rainbow | Pynchon | no source found — minimal stub written
+FAIL | Blood Meridian | McCarthy | no source found — minimal stub written
+FAIL | Steppenwolf | Hesse | no source found — minimal stub written
+FAIL | Siddhartha | Hesse | no source found — minimal stub written
+FAIL | Demian | Hesse | no source found — minimal stub written
+FAIL | The Glass Bead Game | Hesse | no source found — minimal stub written
+FAIL | The Glass Bead Game | Hesse | no source found — minimal stub written
+FAIL | Nausea | Sartre | no source found — minimal stub written
+FAIL | Nausea | Sartre | no source found — minimal stub written
+FAIL | Invisible Man | Ellison | no source found — minimal stub written
+FAIL | Things Fall Apart | Achebe | no source found — minimal stub written
+FAIL | Things Fall Apart | Achebe | no source found — minimal stub written
+FAIL | If on a Winters Night a Traveler | Calvino | no source found — minimal stub written
+FAIL | If on a Winters Night a Traveler | Calvino | no source found — minimal stub written
+FAIL | The Aleph | Borges | no source found — minimal stub written
+FAIL | The Aleph | Borges | no source found — minimal stub written
+FAIL | Theory of Games and Economic Behavior | Von Neumann | no source found — minimal stub written
+FAIL | Theory of Games and Economic Behavior | Von Neumann | no source found — minimal stub written

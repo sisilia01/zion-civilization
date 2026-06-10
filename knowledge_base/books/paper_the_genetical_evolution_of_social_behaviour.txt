@@ -1,0 +1,21 @@
+# The Genetical Evolution of Social Behaviour
+# Author: Hamilton 1964
+# Citation: Hamilton, W.D. (1964). Journal of Theoretical Biology. Parts I & II.
+
+## Abstract
+Kin selection: altruism evolves when rb > c (relatedness × benefit > cost).
+
+## Key concepts
+- Hamilton's rule
+- Kin selection
+- Inclusive fitness
+- Altruism evolution
+
+## Why it matters for ZION agents
+Kin selection — why agents help relatives (birth.py inheritance)
+
+## Where to find it manually
+https://www.sciencedirect.com/science/article/pii/0022519364900384
+
+## Download note
+Automatic download failed — use manual source above.

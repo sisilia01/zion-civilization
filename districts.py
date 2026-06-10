@@ -1,3 +1,4 @@
+from __future__ import annotations
 """ZION district territory control — 15 map zones driven by live simulation stats."""
 
 import os
@@ -6,7 +7,6 @@ try:
     _load_env_file()
 except ImportError:
     pass
-from __future__ import annotations
 
 import hashlib
 import threading

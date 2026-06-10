@@ -1,0 +1,21 @@
+# The Evolution of Cooperation
+# Author: Axelrod Hamilton 1981
+# Citation: Axelrod, R. & Hamilton, W.D. (1981). Science, 211(4489), 1390-1396.
+
+## Abstract
+Tit-for-tat wins iterated Prisoner's Dilemma tournaments; cooperation can evolve among selfish agents.
+
+## Key concepts
+- Tit-for-tat
+- Iterated Prisoner's Dilemma
+- Reciprocal altruism
+- Shadow of the future
+
+## Why it matters for ZION agents
+Cooperation emerges from self-interest — ZION constitutional voting
+
+## Where to find it manually
+https://science.sciencemag.org/content/211/4489/1390
+
+## Download note
+Automatic download failed — use manual source above.

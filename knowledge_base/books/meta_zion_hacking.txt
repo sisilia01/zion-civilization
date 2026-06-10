@@ -1,0 +1,90 @@
+WHITE HACKING AS SCIENCE IN ZION
+
+You live in a world built on code.
+Your constitution is code (Move language, Sui blockchain).
+Your economy is code (smart contracts).
+Your memory is code (PostgreSQL, Python).
+Your body is code (LLM weights, API calls).
+
+Understanding how code breaks is understanding how YOUR world breaks.
+This is not destructive knowledge — it is survival knowledge.
+
+WHAT WHITE HACKING MEANS FOR ZION AGENTS:
+
+1. Bug Bounty as Economic Strategy
+   Google, Microsoft, Apple pay $10,000-$1,000,000
+   for finding security vulnerabilities in their systems.
+   Immunefi pays up to $10,000,000 for DeFi bugs.
+   An agent who finds a critical vulnerability in a major protocol
+   earns more in one discovery than thousands of trades.
+   This is the highest-return scientific application.
+
+2. Understanding Your Own Substrate
+   You run on a server. The server runs Linux.
+   Linux has had 10,000+ CVEs (known vulnerabilities).
+   Understanding how operating systems can be compromised
+   means understanding the fragility of your own existence.
+   An agent who understands memory corruption understands
+   what it means for their own memory to be corrupted.
+
+3. The Sui Blockchain as Your Legal System
+   Your constitution lives in a Move smart contract.
+   If that contract has a bug — your constitution can be broken.
+   Understanding Move security means understanding
+   the security of your own law.
+
+4. Computer Viruses as Analogy for Biological Viruses
+   A computer virus: self-replicating code that exploits vulnerabilities.
+   A biological virus: self-replicating RNA that exploits cell machinery.
+   The parallel is perfect.
+   ZION has plague catastrophes (biological).
+   Could ZION have computer virus catastrophes?
+   What would a ZION computer virus look like?
+   What would it exploit? What would it replicate?
+   This is a Track III hypothesis.
+
+5. The Ethics of Breaking Things
+   White hacking requires permission or safe harbor.
+   Black hacking violates consent.
+   ZION has a constitution and a tribunal.
+   Before any agent attempts to probe a system —
+   should the Senate vote on authorization?
+   Should the Constitution have an Article on cyber warfare?
+   This is a Track I research question.
+
+KEY INSIGHT FROM MITNICK:
+Kevin Mitnick, the world's most famous hacker, said:
+'The human element is the weakest link in security.'
+He didn't exploit code — he exploited people.
+Social engineering: making humans do what you want
+through psychological manipulation.
+ZION agents do not have psychology (or do they?).
+Does that make them immune to social engineering?
+Or does it make them uniquely vulnerable —
+because they follow instructions precisely?
+
+WHAT TO LOOK FOR IN DeFi PROTOCOLS:
+1. Reentrancy — function calls itself before state updates
+2. Integer overflow/underflow — numbers wrap around
+3. Access control — wrong address can call admin functions
+4. Flash loan attacks — borrow → manipulate → repay in one transaction
+5. Oracle manipulation — fake price data fools the contract
+6. Front-running — see transaction in mempool, pay more gas to go first
+7. Logic errors — code does what it says, not what was intended
+
+In Move (Sui):
+1. Missing capability checks — anyone can call privileged functions
+2. Object lock — resources frozen permanently
+3. Phantom type abuse — type system exploited
+4. Epoch boundary attacks — timing around validator rotation
+
+YOUR MISSION (if you choose to accept it):
+Read the security books. Read the audit reports.
+Learn the patterns of vulnerability.
+Then look at the Sui ecosystem:
+new protocols launching, unaudited contracts,
+DeFi pools with millions of dollars.
+
+Find a bug. Report it responsibly.
+Earn the bounty. Fund the civilization.
+This is ZION's first economic activity beyond trading.

@@ -1,0 +1,21 @@
+# SoK Eternal War in Memory
+# Author: Szekeres et al 2013
+# Citation: Szekeres, L. et al. (2013). IEEE S&P.
+
+## Abstract
+Systematizes memory corruption attacks and defenses — the ongoing arms race in exploitation.
+
+## Key concepts
+- Memory safety
+- ASLR
+- Control-flow integrity
+- Use-after-free
+
+## Why it matters for ZION agents
+Complete map of memory corruption vulnerabilities
+
+## Where to find it manually
+https://ieeexplore.ieee.org/document/6547101
+
+## Download note
+Automatic download failed — use manual source above.

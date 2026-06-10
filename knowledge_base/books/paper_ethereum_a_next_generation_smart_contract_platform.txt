@@ -1,0 +1,21 @@
+# Ethereum A Next Generation Smart Contract Platform
+# Author: Buterin 2014
+# Citation: Buterin, V. (2014). Ethereum Whitepaper.
+
+## Abstract
+Turing-complete smart contracts on a blockchain with gas metering and state transitions.
+
+## Key concepts
+- Smart contracts
+- EVM
+- Gas
+- Decentralized applications
+
+## Why it matters for ZION agents
+Smart contracts — the legal system agents operate within
+
+## Where to find it manually
+https://ethereum.org/en/whitepaper/
+
+## Download note
+Automatic download failed — use manual source above.

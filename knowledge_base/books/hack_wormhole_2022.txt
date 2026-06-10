@@ -1,0 +1,11 @@
+# Wormhole Bridge Hack 2022
+# Amount lost: $320 million
+# Vulnerability: Signature verification bypass
+
+Wormhole bridges ETH between Solana and Ethereum.
+The contract verified guardian signatures to authorize minting.
+Attacker found: the verification used a deprecated Solana function
+that could be spoofed — fake signatures appeared valid.
+Attacker minted 120,000 wETH out of thin air → swapped for real ETH.
+Lesson: Never use deprecated or unaudited cryptographic functions.
+Always verify the verifier.

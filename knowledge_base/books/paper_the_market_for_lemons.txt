@@ -1,0 +1,21 @@
+# The Market for Lemons
+# Author: Akerlof 1970
+# Citation: Akerlof, G.A. (1970). QJE, 84(3), 488-500.
+
+## Abstract
+Asymmetric information can destroy markets: bad cars drive out good when quality is unobservable.
+
+## Key concepts
+- Adverse selection
+- Information asymmetry
+- Market collapse
+- Signaling and warranties
+
+## Why it matters for ZION agents
+Information asymmetry — agents with perfect info vs agents without
+
+## Where to find it manually
+https://www.jstor.org/stable/1879431
+
+## Download note
+Automatic download failed — use manual source above.

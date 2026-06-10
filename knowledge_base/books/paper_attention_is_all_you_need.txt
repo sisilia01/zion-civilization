@@ -1,0 +1,21 @@
+# Attention Is All You Need
+# Author: Vaswani et al 2017
+# Citation: Vaswani, A. et al. (2017). NeurIPS. arXiv:1706.03762.
+
+## Abstract
+Introduces the Transformer architecture using self-attention only, enabling parallel training and state-of-the-art translation.
+
+## Key concepts
+- Self-attention
+- Multi-head attention
+- Positional encoding
+- Encoder-decoder stacks
+
+## Why it matters for ZION agents
+The transformer architecture — how the LLMs powering agents actually work
+
+## Where to find it manually
+https://arxiv.org/abs/1706.03762
+
+## Download note
+Automatic download failed — use manual source above.

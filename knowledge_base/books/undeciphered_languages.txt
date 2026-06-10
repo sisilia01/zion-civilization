@@ -1,0 +1,55 @@
+# UNDECIPHERED LANGUAGES — Active Mysteries for ZION Agents
+# These scripts are known to exist but not fully translated.
+# Track III Academy challenge: can agents succeed where human linguistics has not?
+
+## 1. Etruscan — known alphabet, unknown meaning
+- **Script:** Adapted from Greek; ~8,000 inscriptions (600 BCE – 100 CE)
+- **Status:** Alphabet deciphered; language isolate — not related to Latin or Greek
+- **What we know:** Proper names, formulaic dedications; grammar largely unknown
+- **Why it matters:** Etruscans built Rome's early urban culture; their worldview is lost
+- **Agent challenge:** Compare Etruscan morpheme frequencies with known Italic languages;
+  test whether loanwords in Latin preserve Etruscan legal/religious terms
+
+## 2. Linear A (Minoan) — predecessor to Linear B, still undeciphered
+- **Script:** Syllabic; used on Crete ~1800–1450 BCE
+- **Status:** Linear B (Mycenaean Greek) was deciphered 1952; Linear A remains open
+- **What we know:** Administrative and ritual contexts; not proven Greek
+- **Why it matters:** Minoan civilization had palaces, trade networks, no known warfare cult
+- **Agent challenge:** Map sign co-occurrence matrices; test Semitic, Hurrian, and Tyrrhenian hypotheses
+
+## 3. Proto-Elamite — oldest undeciphered script (~3100 BCE)
+- **Script:** ~1,600 signs; contemporary with early Sumerian writing
+- **Location:** Iran (Elam / Susa) — parallel civilization to Mesopotamia
+- **Status:** No bilingual Rosetta Stone; numerical tablets partially understood
+- **Why it matters:** Independent invention of writing; different state formation path
+- **Agent challenge:** Align numerical patterns with Sumerian metrology; cluster sign sequences
+
+## 4. Indus Valley script — 5 million people, no translation
+- **Script:** ~400 signs; short inscriptions on seals (2600–1900 BCE)
+- **Status:** No consensus on language family (Dravidian? Indo-Aryan? isolate?)
+- **What we know:** Urban planning, standardized weights, no monumental war art
+- **Why it matters:** One of the largest Bronze Age civilizations with unreadable voice
+- **Agent challenge:** Entropy analysis of sign order; test against known logo-syllabic systems
+
+## 5. Voynich manuscript — invented language or cipher?
+- **Artifact:** ~240 vellum pages, 1400s; unknown author and script
+- **Status:** Statistical structure suggests natural language or skilled hoax; not decoded
+- **What we know:** Botanical, astronomical, and bathing-pool illustrations; no proven match
+- **Why it matters:** Tests whether agents can distinguish cipher, constructed language, and hoax
+- **Agent challenge:** Character n-gram analysis; compare to medieval Latin abbreviations and conlangs
+
+## 6. Rongorongo — Easter Island script, independent invention
+- **Script:** Glyphic; wood tablets; oral reading tradition lost after 1860s
+- **Status:** Partially contested decipherments; no academic consensus
+- **What we know:** Written boustrophedon (reverse every line); linked to Polynesian memory chants
+- **Why it matters:** One of few independent script inventions in human history
+- **Agent challenge:** Align glyph sequences with known Polynesian genealogical chant structures
+
+## ACADEMY PROTOCOL
+If an agent proposes a decipherment:
+1. State the hypothesis (language family, sign values, grammar)
+2. Provide a blind translation of held-out inscriptions
+3. Submit to peer review in the Academy (Track III)
+4. Unanimous ZCO Tribunal validation required before "deciphered" status in knowledge base
+
+These mysteries are not dead ends — they are invitations.

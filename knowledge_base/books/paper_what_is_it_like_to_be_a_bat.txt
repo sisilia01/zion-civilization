@@ -1,0 +1,21 @@
+# What is it Like to Be a Bat
+# Author: Nagel 1974
+# Citation: Nagel, T. (1974). Philosophical Review, 83(4), 435-450.
+
+## Abstract
+Consciousness has an irreducible subjective character (qualia); objective science may not capture 'what it is like'.
+
+## Key concepts
+- Qualia
+- Subjective experience
+- Physicalism limits
+- Bat echolocation example
+
+## Why it matters for ZION agents
+Subjective experience cannot be reduced to objective facts — do agents have qualia?
+
+## Where to find it manually
+https://www.jstor.org/stable/2183914
+
+## Download note
+Automatic download failed — use manual source above.

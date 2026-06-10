@@ -1,0 +1,21 @@
+# Can Quantum Mechanical Description of Physical Reality Be Considered Complete
+# Author: Einstein Podolsky Rosen 1935
+# Citation: Einstein, A., Podolsky, B. & Rosen, N. (1935). Phys. Rev., 47, 777-780.
+
+## Abstract
+EPR argues quantum mechanics is incomplete if locality and realism hold; entanglement challenges classical reality.
+
+## Key concepts
+- EPR paradox
+- Entanglement
+- Local realism
+- Hidden variables debate
+
+## Why it matters for ZION agents
+The EPR paradox — spooky action at distance, reality and observation
+
+## Where to find it manually
+https://journals.aps.org/pr/abstract/10.1103/PhysRev.47.777
+
+## Download note
+Automatic download failed — use manual source above.

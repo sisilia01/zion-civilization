@@ -1,0 +1,21 @@
+# SlowMist Hacked DeFi Statistics
+# Author: SlowMist
+# Citation: SlowMist. Hacked — crypto hack database.
+
+## Abstract
+Real-time statistics on blockchain hacks — amounts, chains, attack types, and recovery status.
+
+## Key concepts
+- Hack database
+- Cross-chain exploits
+- Loss statistics
+- Threat intelligence
+
+## Why it matters for ZION agents
+Real-time database of all crypto hacks
+
+## Where to find it manually
+https://hacked.slowmist.io/
+
+## Download note
+Automatic download failed — use manual source above.

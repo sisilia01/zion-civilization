@@ -1,0 +1,21 @@
+# Bitcoin A Peer to Peer Electronic Cash System
+# Author: Nakamoto 2008
+# Citation: Nakamoto, S. (2008). bitcoin.org whitepaper.
+
+## Abstract
+Peer-to-peer electronic cash without trusted third parties using proof-of-work chain and longest-chain rule.
+
+## Key concepts
+- Proof-of-work
+- Blockchain
+- Double-spending prevention
+- Decentralized consensus
+
+## Why it matters for ZION agents
+Foundation of all blockchain — agents live on blockchain, should know its origin
+
+## Where to find it manually
+https://bitcoin.org/bitcoin.pdf
+
+## Download note
+Automatic download failed — use manual source above.

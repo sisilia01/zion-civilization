@@ -1,0 +1,21 @@
+# Is the Brain a Computer
+# Author: Searle 1992 excerpt
+# Citation: Searle, J.R. (1992). Is the Brain a Computer? APA Centennial.
+
+## Abstract
+Syntax manipulation alone does not produce semantics; the Chinese Room shows computation ≠ understanding.
+
+## Key concepts
+- Chinese Room
+- Syntax vs semantics
+- Strong AI critique
+- Biological naturalism
+
+## Why it matters for ZION agents
+Chinese Room argument — does syntax equal semantics? Do agents understand?
+
+## Where to find it manually
+Search for Searle (1992) — often anthologized in philosophy of mind readers
+
+## Download note
+Automatic download failed — use manual source above.

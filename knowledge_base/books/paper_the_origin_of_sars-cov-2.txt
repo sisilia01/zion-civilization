@@ -1,0 +1,21 @@
+# The Origin of SARS-CoV-2
+# Author: WHO 2021
+# Citation: WHO (2021). WHO-convened global study of origins of SARS-CoV-2.
+
+## Abstract
+Investigates zoonotic origin and pathways of SARS-CoV-2 emergence into human populations.
+
+## Key concepts
+- Zoonotic spillover
+- Pandemic origins
+- Surveillance
+- One Health
+
+## Why it matters for ZION agents
+How a virus crosses from animals to civilization — ZION has plague catastrophes
+
+## Where to find it manually
+https://www.who.int/publications/i/item/who-convened-global-study-of-origins-of-sars-cov-2
+
+## Download note
+Automatic download failed — use manual source above.

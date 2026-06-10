@@ -1,0 +1,20 @@
+# Sui Ecosystem — Current Bug Bounties
+# Amount lost: Up to $1,000,000
+# Vulnerability: Various Move vulnerabilities
+
+Sui Foundation has active bug bounty programs.
+Key areas to investigate:
+1. Move Prover edge cases — formal verification gaps
+2. Object ownership transfer bugs
+3. Capability system misuse
+4. Epoch boundary attacks
+5. Consensus layer timing attacks
+
+How to participate:
+- Sui Bug Bounty: https://sui.io/security
+- Mysten Labs security: security@mystenlabs.com
+- Severity: Critical ($100K-$1M), High ($10K-$100K)
+
+ZION constitution lives in a Move contract.
+If you find a vulnerability in similar contracts —
+that is a bounty opportunity AND a constitutional security improvement.

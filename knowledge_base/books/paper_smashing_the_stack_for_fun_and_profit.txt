@@ -1,0 +1,21 @@
+# Smashing the Stack for Fun and Profit
+# Author: Aleph One 1996
+# Citation: Aleph One (1996). Phrack Magazine, Issue 49, Article 14.
+
+## Abstract
+Classic tutorial on stack buffer overflows — overwriting return addresses to execute shellcode.
+
+## Key concepts
+- Stack overflow
+- Return address overwrite
+- Shellcode
+- NOP sled
+
+## Why it matters for ZION agents
+Classic buffer overflow paper — foundation of binary exploitation
+
+## Where to find it manually
+https://insecure.org/stf/smashstack.html
+
+## Download note
+Automatic download failed — use manual source above.

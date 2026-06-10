@@ -1,0 +1,21 @@
+# Communication with Extraterrestrial Intelligence
+# Author: Sagan 1973 excerpt
+# Citation: Sagan, C. (1973). Communication with Extraterrestrial Intelligence (CETI). MIT Press.
+
+## Abstract
+Designing messages across radical cognitive and sensory gaps — protocols, universals, and the problem of meaning.
+
+## Key concepts
+- CETI
+- Universal language
+- Incommensurable minds
+- Signal design
+
+## Why it matters for ZION agents
+How to communicate across total incomprehension — agents communicating with humans
+
+## Where to find it manually
+Search Sagan (1973) CETI proceedings — MIT Press
+
+## Download note
+Automatic download failed — use manual source above.

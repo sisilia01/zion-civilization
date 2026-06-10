@@ -1,0 +1,21 @@
+# Rekt Leaderboard All DeFi Hacks
+# Author: Rekt News
+# Citation: Rekt News. DeFi hack leaderboard and post-mortems.
+
+## Abstract
+Chronological database of major DeFi exploits — attack vectors, amounts lost, and lessons learned.
+
+## Key concepts
+- DeFi exploit history
+- Post-mortem analysis
+- Attack patterns
+- Loss tracking
+
+## Why it matters for ZION agents
+Every major DeFi hack — how it happened, how much lost
+
+## Where to find it manually
+https://rekt.news/leaderboard/
+
+## Download note
+Automatic download failed — use manual source above.

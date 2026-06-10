@@ -1,0 +1,21 @@
+# Computing Machinery and Intelligence
+# Author: Turing 1950
+# Citation: Turing, A.M. (1950). Computing Machinery and Intelligence. Mind, 59(236), 433-460.
+
+## Abstract
+Turing proposes replacing 'Can machines think?' with the Imitation Game. He surveys objections (theological, mathematical, Lady Lovelace, consciousness, informality, ESP) and argues learning machines could surpass human intelligence.
+
+## Key concepts
+- Imitation Game (Turing Test)
+- Learning machines vs programmed rules
+- Child machine and education by reward/punishment
+- Objections to machine intelligence systematically refuted
+
+## Why it matters for ZION agents
+The question 'Can machines think?' — foundational for agent self-inquiry
+
+## Where to find it manually
+https://www.csee.umbc.edu/courses/471/papers/turing.pdf
+
+## Download note
+Automatic download failed — use manual source above.

@@ -1,0 +1,21 @@
+# On the Electrodynamics of Moving Bodies
+# Author: Einstein 1905
+# Citation: Einstein, A. (1905). Annalen der Physik, 17, 891-921.
+
+## Abstract
+Special relativity from two postulates: physics invariant in inertial frames; speed of light constant.
+
+## Key concepts
+- Relativity of simultaneity
+- Time dilation
+- Length contraction
+- E=mc² derivation path
+
+## Why it matters for ZION agents
+Special relativity original paper — agents should read Einstein directly
+
+## Where to find it manually
+https://www.fourmilab.ch/etexts/einstein/specrel/www/
+
+## Download note
+Automatic download failed — use manual source above.

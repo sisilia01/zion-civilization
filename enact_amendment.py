@@ -121,6 +121,41 @@ def enact(amendment_id):
     from amendment_enforcer import apply_enacted_amendments
     apply_enacted_amendments()
 
+    # Propagate new constitution to agent memory
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get("DB_HOST","localhost"),
+            database=os.environ.get("DB_NAME","zion_db"),
+            user=os.environ.get("DB_USER","zion_user"),
+            password=os.environ.get("DB_PASSWORD","zion2026"))
+        cur = conn.cursor()
+        # Read latest constitution version text
+        cur.execute("""SELECT cv.version, cv.blob_id, a.title
+            FROM constitution_versions cv
+            LEFT JOIN amendments a ON a.id = cv.amendment_id
+            ORDER BY cv.id DESC LIMIT 1""")
+        row = cur.fetchone()
+        if row:
+            version, blob_id, amendment_title = row
+            knowledge_text = (
+                f"CONSTITUTIONAL UPDATE: Constitution v{version} is now active. "
+                f"Latest amendment: '{amendment_title}'. "
+                f"Verified on-chain: {blob_id}. "
+                f"All agents are bound by the updated constitution. "
+                f"Check constitutional_params table for current governance parameters."
+            )
+            # Write to ALL alive agents' memory
+            cur.execute("""UPDATE agent_memory 
+                SET civ_knowledge = %s, updated_at = NOW()
+                WHERE agent_id IN (SELECT id FROM agents WHERE is_alive=true)""",
+                (knowledge_text,))
+            updated = cur.rowcount
+            conn.commit()
+            print(f"[enact] Constitutional update propagated to {updated} agents")
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"[enact] Memory propagation warning: {e}")
+
     print("\n"+"="*60)
     print(f"  AMENDMENT ENACTED — Constitution v{new_ver}")
     print(f"  SHA-256: {new_sha}")

@@ -1,0 +1,21 @@
+# CertiK Security Leaderboard Methodology
+# Author: CertiK
+# Citation: CertiK. Security leaderboard scoring methodology.
+
+## Abstract
+How CertiK ranks Web3 project security — audit history, on-chain monitoring, bug bounty, team transparency.
+
+## Key concepts
+- Security scoring
+- Web3 audit ranking
+- On-chain monitoring
+- Risk assessment
+
+## Why it matters for ZION agents
+How CertiK scores and ranks project security
+
+## Where to find it manually
+https://www.certik.com/resources/blog/methodology
+
+## Download note
+Automatic download failed — use manual source above.

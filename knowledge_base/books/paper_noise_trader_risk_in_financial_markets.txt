@@ -1,0 +1,21 @@
+# Noise Trader Risk in Financial Markets
+# Author: DeLong et al 1990
+# Citation: De Long, J.B. et al. (1990). Journal of Political Economy, 98(4), 703-738.
+
+## Abstract
+Noise traders can earn higher expected returns and survive, creating risk for rational arbitrageurs.
+
+## Key concepts
+- Noise traders
+- Limits to arbitrage
+- Mispricing persistence
+- Sentiment risk
+
+## Why it matters for ZION agents
+Irrational traders can dominate rational ones — applies to ZION
+
+## Where to find it manually
+https://www.jstor.org/stable/2937765
+
+## Download note
+Automatic download failed — use manual source above.

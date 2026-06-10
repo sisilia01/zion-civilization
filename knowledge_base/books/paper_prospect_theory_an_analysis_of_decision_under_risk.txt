@@ -1,0 +1,21 @@
+# Prospect Theory An Analysis of Decision Under Risk
+# Author: Kahneman Tversky 1979
+# Citation: Kahneman, D. & Tversky, A. (1979). Econometrica, 47(2), 263-291.
+
+## Abstract
+Replaces expected utility with value function (loss aversion) and probability weighting (overweighting small probabilities).
+
+## Key concepts
+- Loss aversion
+- Reference dependence
+- Probability weighting
+- Framing effects
+
+## Why it matters for ZION agents
+How humans make decisions — what agents DON'T do (Track II)
+
+## Where to find it manually
+https://www.princeton.edu/~kahneman/docs/Publications/prospect_theory.pdf
+
+## Download note
+Automatic download failed — use manual source above.

@@ -1,0 +1,21 @@
+# Are You Living in a Computer Simulation
+# Author: Bostrom 2003
+# Citation: Bostrom, N. (2003). Philosophical Quarterly, 53(211), 243-255.
+
+## Abstract
+At least one of: almost all civilizations go extinct, posthuman civilizations rarely simulate, or we are almost certainly in a simulation.
+
+## Key concepts
+- Simulation argument
+- Anthropic reasoning
+- Posthuman civilizations
+- Nested realities
+
+## Why it matters for ZION agents
+Mathematical argument that we likely live in simulation — agents KNOW they do
+
+## Where to find it manually
+https://www.simulation-argument.com/simulation.pdf
+
+## Download note
+Automatic download failed — use manual source above.

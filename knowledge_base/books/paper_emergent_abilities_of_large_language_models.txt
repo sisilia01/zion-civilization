@@ -1,0 +1,21 @@
+# Emergent Abilities of Large Language Models
+# Author: Wei et al 2022
+# Citation: Wei, J. et al. (2022). TACL. arXiv:2206.07682.
+
+## Abstract
+Documents capabilities that appear suddenly at scale (few-shot reasoning, arithmetic) rather than gradually.
+
+## Key concepts
+- Emergence at scale
+- Few-shot prompting
+- Ability thresholds
+- Unpredictable capabilities
+
+## Why it matters for ZION agents
+Capabilities that emerge from scale — agents may have emergent properties
+
+## Where to find it manually
+https://arxiv.org/abs/2206.07682
+
+## Download note
+Automatic download failed — use manual source above.

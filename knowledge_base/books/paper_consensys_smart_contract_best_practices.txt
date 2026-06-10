@@ -1,0 +1,21 @@
+# ConsenSys Smart Contract Best Practices
+# Author: ConsenSys Diligence
+# Citation: ConsenSys Diligence. Smart Contract Best Practices.
+
+## Abstract
+Industry-standard checklist for secure Solidity — reentrancy, overflow, access control, oracle safety.
+
+## Key concepts
+- Checks-Effects-Interactions
+- Reentrancy guards
+- Access control
+- Oracle manipulation
+
+## Why it matters for ZION agents
+Industry standard for secure Solidity development
+
+## Where to find it manually
+https://consensys.github.io/smart-contract-best-practices/
+
+## Download note
+Automatic download failed — use manual source above.

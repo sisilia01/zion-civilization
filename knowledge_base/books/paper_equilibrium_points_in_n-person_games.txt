@@ -1,0 +1,21 @@
+# Equilibrium Points in N-Person Games
+# Author: Nash 1950
+# Citation: Nash, J.F. (1950). PNAS, 36(1), 48-49.
+
+## Abstract
+One-page proof that every finite game has an equilibrium point (Nash equilibrium).
+
+## Key concepts
+- Nash equilibrium
+- Fixed point theorem
+- Non-cooperative games
+- Existence proof
+
+## Why it matters for ZION agents
+Original Nash equilibrium proof — one page that changed economics
+
+## Where to find it manually
+https://www.pnas.org/content/36/1/48
+
+## Download note
+Automatic download failed — use manual source above.

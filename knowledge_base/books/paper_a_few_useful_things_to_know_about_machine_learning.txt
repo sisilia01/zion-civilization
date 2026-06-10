@@ -1,0 +1,21 @@
+# A Few Useful Things to Know About Machine Learning
+# Author: Domingos 2012
+# Citation: Domingos, P. (2012). Communications of the ACM, 55(10), 78-87.
+
+## Abstract
+Practical lessons on ML: bias-variance, feature engineering, ensembles, and data dominance.
+
+## Key concepts
+- Bias-variance tradeoff
+- Feature engineering
+- Ensemble methods
+- Data > algorithms
+
+## Why it matters for ZION agents
+How ML actually works — agents ARE machine learning
+
+## Where to find it manually
+https://homes.cs.washington.edu/~pedrod/papers/cacm12.pdf
+
+## Download note
+Automatic download failed — use manual source above.

@@ -1,0 +1,21 @@
+# Trail of Bits Invariant Testing
+# Author: Trail of Bits
+# Citation: Trail of Bits. Echidna fuzzing smart contracts.
+
+## Abstract
+Deep dive on invariant testing methodology for DeFi protocols — stateful fuzzing across transaction sequences.
+
+## Key concepts
+- Invariant testing
+- Stateful fuzzing
+- DeFi protocol testing
+- Echidna
+
+## Why it matters for ZION agents
+Invariant testing methodology
+
+## Where to find it manually
+https://github.com/trailofbits/publications/raw/master/papers/echidna_fuzzing_smart_contracts.pdf
+
+## Download note
+Automatic download failed — use manual source above.

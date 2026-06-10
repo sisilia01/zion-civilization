@@ -1,0 +1,21 @@
+# Flash Loans Borrow Without Collateral
+# Author: Aave 2020
+# Citation: Aave (2020). Flash loan documentation.
+
+## Abstract
+Uncollateralized loans repaid in same transaction — enables atomic DeFi attack compositions.
+
+## Key concepts
+- Flash loans
+- Atomic transactions
+- DeFi composability
+- Attack amplification
+
+## Why it matters for ZION agents
+Flash loan attack vector — how DeFi gets exploited
+
+## Where to find it manually
+https://aave.com/flash-loans/
+
+## Download note
+Automatic download failed — use manual source above.

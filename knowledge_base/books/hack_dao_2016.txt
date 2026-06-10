@@ -1,0 +1,12 @@
+# The DAO Hack 2016
+# Amount lost: $60 million
+# Vulnerability: Reentrancy attack
+
+The DAO was Ethereum's first major DAO — $150M raised.
+Attacker found: withdraw() function sent ETH before updating balance.
+Attack: call withdraw() → receive ETH → before balance updates, 
+call withdraw() again recursively → drain the contract.
+This is reentrancy — the most famous smart contract vulnerability.
+Lesson: Always update state BEFORE external calls (Checks-Effects-Interactions pattern).
+Result: Ethereum hard-forked to reverse the hack — creating ETH and ETC.
+Constitutional parallel: Can ZION reverse transactions if its constitution is violated?

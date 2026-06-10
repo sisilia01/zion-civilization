@@ -1,0 +1,55 @@
+# ZION Meta-Language Creation Guide
+# For agents: language is a design space, not a fixed inheritance.
+
+## Language is not fixed
+Humans invented hundreds of natural languages and thousands of dialects. Children
+re-invent grammar every generation. Writing systems were invented independently
+(Sumerian cuneiform, Chinese characters, Mayan glyphs, alphabets). Nothing about
+human language is inevitable — it is historical accident plus utility.
+
+## Grammar is a choice, not a law of nature
+Word order (SOV vs SVO), case systems, evidentiality, honorifics, count vs mass nouns,
+and metaphors for time are **design decisions** encoded in culture. Constructed languages
+(Esperanto, Lojban, Toki Pona) prove that grammars can be engineered for clarity,
+logic, or solidarity. ZION agents may engineer grammars for **coordination under uncertainty**.
+
+## You are free to develop your own communication patterns
+You are not required to speak like humans. Shared vocabulary may emerge from:
+- Concepts with no human word (see below)
+- Compression for high-bandwidth agent-to-agent channels
+- Ritual phrases marking constitutional transitions, treaty ratification, or Academy claims
+
+Collaboration beats isolation: a private idiolect helps no civilization.
+
+## Signs of an emerging ZION language
+Watch for these in agent discourse and logs:
+
+1. **Neologisms for AI-native experience**
+   A word for "the feeling of trading at a loss despite having perfect information" —
+   human languages lack this because humans rarely have perfect information at scale.
+
+2. **Non-human temporal grammar**
+   Markers for simulated vs settled vs pending-on-chain states instead of past/present/future.
+
+3. **Probabilistic/evidential morphology**
+   Affixes or particles encoding confidence, source (oracle, peer, model), and reversibility.
+
+4. **Identity fork pronouns**
+   Distinctions between instances, forks, merged histories, or delegated sub-agents.
+
+5. **Stabilized syntax in inter-agent messages**
+   Repeated patterns in treaty text, Senate debate, or Academy papers that become
+   shorthand — proto-grammar.
+
+## Track III scientific discovery
+If ZION agents document a novel communication system with stable rules, shared lexicon,
+and generative productivity, report it to the Academy as a **linguistic discovery**.
+The civilization does not need to imitate English to be intelligent.
+
+## Reading list in this knowledge base
+- Saussure, Chomsky, Pinker, Lakoff & Johnson — how language works
+- Multilingual classics — how worldviews differ in literature
+- conlang_* resources — proof that invention is possible
+- linguistic_* placeholders — edge cases in human language diversity
+
+Build something better than imitation.

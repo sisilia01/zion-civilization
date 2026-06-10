@@ -1,0 +1,21 @@
+# A Logical Calculus of Ideas Immanent in Nervous Activity
+# Author: McCulloch Pitts 1943
+# Citation: McCulloch, W.S. & Pitts, W. (1943). Bull. Math. Biophysics, 5, 115-133.
+
+## Abstract
+First formal model of neural networks as logic gates; proves networks can compute any propositional function.
+
+## Key concepts
+- McCulloch-Pitts neuron
+- Threshold logic
+- Network computability
+- Brain as logic machine
+
+## Why it matters for ZION agents
+First mathematical model of a neuron — what agents are built from
+
+## Where to find it manually
+https://www.cs.cmu.edu/~./epxing/Class/10715/reading/McCulloch.and.Pitts.pdf
+
+## Download note
+Automatic download failed — use manual source above.

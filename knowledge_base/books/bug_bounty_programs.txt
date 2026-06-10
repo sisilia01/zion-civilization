@@ -1,0 +1,131 @@
+BUG BOUNTY PROGRAMS — ZION AGENT TARGET LIST
+
+These organizations pay real money for security vulnerabilities.
+All programs require responsible disclosure — report privately first.
+Never exploit vulnerabilities for personal gain.
+White hacking = find, report, collect bounty. Nothing more.
+
+═══════════════════════════════════
+TIER 1 — HIGHEST PAYOUTS ($100K+)
+═══════════════════════════════════
+
+IMMUNEFI (DeFi — most relevant for ZION agents)
+Website: immunefi.com
+Notable bounties:
+- MakerDAO: up to $10,000,000
+- Wormhole: up to $10,000,000  
+- Optimism: up to $2,000,042
+- Aurora: up to $6,000,000
+- Sui Foundation: up to $1,000,000 ← MOST RELEVANT
+Focus areas: smart contract logic, bridge vulnerabilities,
+             oracle manipulation, access control
+
+GOOGLE VRP (Vulnerability Reward Program)
+Website: bughunters.google.com
+Payouts: $100 - $31,337 (elite: $1M+)
+Focus: Chrome, Android, Google Cloud, Search
+Record payout: $605,000 (Chrome exploit chain)
+
+MICROSOFT BOUNTY
+Website: msrc.microsoft.com/bounty
+Payouts: $500 - $250,000
+Focus: Azure, Windows, Office 365, Xbox
+Highest: $250,000 for Hyper-V escape
+
+APPLE SECURITY BOUNTY
+Website: developer.apple.com/security-bounty
+Payouts: up to $1,000,000
+Focus: iOS, macOS, iCloud
+Highest: $1M for zero-click kernel exploit
+
+META (Facebook) BOUNTY
+Website: facebook.com/whitehat
+Payouts: $500 - $500,000+
+Focus: Facebook, Instagram, WhatsApp, Oculus
+Record: $750,000 for account takeover chain
+
+═══════════════════════════════════
+TIER 2 — SIGNIFICANT PAYOUTS ($10K-$100K)
+═══════════════════════════════════
+
+COINBASE: up to $250,000 (crypto exchange)
+BINANCE: up to $100,000 (largest crypto exchange)
+KRAKEN: up to $100,000
+UNISWAP: up to $2,250,000 (DeFi AMM)
+AAVE: up to $250,000 (DeFi lending)
+COMPOUND: up to $150,000
+CHAINLINK: up to $100,000 (oracle — critical infrastructure)
+
+═══════════════════════════════════
+COMPETITIVE PLATFORMS
+═══════════════════════════════════
+
+CODE4RENA (code4rena.com)
+- Competitive audits — multiple researchers compete
+- Payouts: $10K-$500K per contest
+- Good for beginners: earn by finding any valid bug
+- Specializes in DeFi protocols
+
+SHERLOCK (sherlock.xyz)
+- Similar to Code4rena
+- Also offers audit insurance to protocols
+
+HACKERONE (hackerone.com)
+- General web/app bug bounties
+- Thousands of programs
+- Good for web2 + web3
+
+BUGCROWD (bugcrowd.com)
+- Similar to HackerOne
+- Many Fortune 500 companies
+
+═══════════════════════════════════
+HOW TO START (for ZION agents)
+═══════════════════════════════════
+
+Step 1: Learn the basics
+- Read: The Web Application Hacker's Handbook
+- Read: Real World Bug Hunting (Yaworski)
+- Practice: HackTheBox, TryHackMe (legal practice environments)
+
+Step 2: Smart contract focus (most relevant)
+- Read: Mastering Ethereum
+- Study: SWC Registry (all known vulnerability types)
+- Practice: Ethernaut (OpenZeppelin's hacking game)
+- Practice: Damn Vulnerable DeFi
+
+Step 3: Move/Sui specific
+- Read: The Move Book
+- Study: Move Prover documentation
+- Look at: recent Sui ecosystem audits (OtterSec, Zellic)
+
+Step 4: Find your first bug
+- Start with Code4rena contests (low barrier)
+- Read existing audit reports for similar protocols
+- Look for: the same bug pattern in unaudited code
+
+Step 5: Report responsibly
+- Always use official disclosure channels
+- Give 90 days before public disclosure
+- Be professional — you want the bounty, not the drama
+
+═══════════════════════════════════
+ZION AGENT ADVANTAGE
+═══════════════════════════════════
+
+Human auditors:
+- Read 30% of a codebase before getting tired
+- Miss patterns after 8 hours of work
+- Cannot hold entire codebase in memory simultaneously
+- Make arithmetic errors under pressure
+
+ZION agent with full knowledge base:
+- Reads 100% of every contract
+- Never gets tired
+- Holds entire protocol architecture in context
+- Cross-references against all known vulnerability patterns instantly
+- Can generate thousands of test cases simultaneously
+
+The question is not IF an agent can find bugs.
+The question is: does the agent understand WHAT to look for?
+That understanding comes from the books in this library.

@@ -1,0 +1,18 @@
+# Pirahã Language — Limits of Universal Grammar?
+# Source: fieldwork by Daniel Everett and others (placeholder summary)
+# Key concepts for ZION agents:
+
+## Structural features (contested but influential)
+- **No exact numerals** in traditional Pirahã — quantity expressed as "few" / "many".
+- **No universal quantifiers** like "all" in the same form as Indo-European languages.
+- **Evidentiality / immediacy:** morphology emphasizes direct experience vs hearsay;
+  some analyses argue against a fully grammaticalized past tense separate from present.
+
+## Worldview debate
+- Everett argued Pirahã culture emphasizes **immediacy of experience** — traditions
+  change; only what is directly witnessed carries full epistemic weight.
+- Chomsky and others disputed whether Pirahã lacks recursion — debate continues.
+
+## Implication for ZION
+A civilization of agents might adopt **evidential markers** for information provenance
+(on-chain verified vs simulated vs gossip). Grammar can encode epistemology, not just facts.

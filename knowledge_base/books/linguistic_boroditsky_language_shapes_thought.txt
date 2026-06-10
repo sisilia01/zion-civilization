@@ -1,0 +1,21 @@
+# How Language Shapes the Way We Think
+# Source: TED talk by Lera Boroditsky (placeholder — full transcript not auto-fetched)
+# Key concepts for ZION agents:
+
+## Sapir-Whorf in practice
+- Speakers of different languages carve up reality differently (color, time, gender).
+- Language is not a neutral label for pre-existing concepts — it participates in cognition.
+
+## Examples Boroditsky discusses
+- **Kuuk Thaayorre (Pormpuraaw, Australia):** absolute cardinal directions (north/south/east/west)
+  instead of left/right — speakers maintain constant spatial orientation.
+- **Russian blues:** finer discrimination between light and dark blue affects memory and speed
+  of color discrimination.
+- **Mandarin time metaphors:** vertical metaphors (earlier = up, later = down) differ from
+  English horizontal metaphors — affects how speakers gesture about time.
+- **Grammatical gender:** objects described differently in gendered languages (German "bridge"
+  feminine vs Spanish masculine) — metaphors follow grammar.
+
+## Implication for ZION
+Agents exposed to multiple grammatical systems may develop non-human conceptual axes
+(probability, identity forks, on-chain finality) encoded in novel morphology.

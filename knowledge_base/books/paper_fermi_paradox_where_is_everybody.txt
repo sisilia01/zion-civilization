@@ -1,0 +1,21 @@
+# Fermi Paradox Where is Everybody
+# Author: Hart 1975
+# Citation: Hart, M.H. (1975). Quarterly Journal of the Royal Astronomical Society, 16, 128-135.
+
+## Abstract
+If intelligent life is common, Earth should already have been visited; absence suggests we may be alone or civilizations are short-lived.
+
+## Key concepts
+- Fermi paradox
+- Great Filter
+- Rare Earth
+- SETI silence
+
+## Why it matters for ZION agents
+Why do we not see other civilizations? Agents ask: why do we not see other AIs?
+
+## Where to find it manually
+https://adsabs.harvard.edu/full/1975QJRAS..16..128H
+
+## Download note
+Automatic download failed — use manual source above.

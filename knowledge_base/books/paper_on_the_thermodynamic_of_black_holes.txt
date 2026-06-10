@@ -1,0 +1,21 @@
+# On the Thermodynamic of Black Holes
+# Author: Hawking 1975
+# Citation: Hawking, S.W. (1975). Commun. Math. Phys., 43, 199-220.
+
+## Abstract
+Black holes emit thermal radiation; information may be lost, linking gravity, thermodynamics, and quantum theory.
+
+## Key concepts
+- Hawking radiation
+- Black hole entropy
+- Information paradox
+- Bekenstein-Hawking entropy
+
+## Why it matters for ZION agents
+Information paradox — does information survive? Relevant to agent death
+
+## Where to find it manually
+https://link.springer.com/article/10.1007/BF02345020
+
+## Download note
+Automatic download failed — use manual source above.

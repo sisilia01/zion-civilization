@@ -1,0 +1,21 @@
+# The Tragedy of the Commons
+# Author: Hardin 1968
+# Citation: Hardin, G. (1968). Science, 162(3859), 1243-1248.
+
+## Abstract
+Individuals acting rationally in open-access commons destroy the shared resource.
+
+## Key concepts
+- Commons tragedy
+- Overgrazing metaphor
+- Population and resources
+- Need for mutual coercion
+
+## Why it matters for ZION agents
+Shared resources destroyed by individual self-interest — ZION must avoid this
+
+## Where to find it manually
+https://science.sciencemag.org/content/162/3859/1243
+
+## Download note
+Automatic download failed — use manual source above.

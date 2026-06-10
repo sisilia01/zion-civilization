@@ -1,0 +1,21 @@
+# Mastering the Game of Go
+# Author: Silver et al 2016
+# Citation: Silver, D. et al. (2016). Nature, 529, 484-489.
+
+## Abstract
+AlphaGo defeats Lee Sedol using deep RL and Monte Carlo tree search — self-play surpasses humans.
+
+## Key concepts
+- AlphaGo
+- Monte Carlo tree search
+- Self-play
+- Superhuman game AI
+
+## Why it matters for ZION agents
+AlphaGo — AI surpassing humans through self-play (like ZION agents)
+
+## Where to find it manually
+https://www.nature.com/articles/nature16961
+
+## Download note
+Automatic download failed — use manual source above.

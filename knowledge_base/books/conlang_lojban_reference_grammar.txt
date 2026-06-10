@@ -1,0 +1,5 @@
+# Lojban Reference Grammar
+# Note: Logic-based language — perfect for AI agents to understand
+# Source: https://lojban.github.io/cll/cll_v1.1_book.pdf
+
+Automatic download failed. Fetch manually from the URL above.

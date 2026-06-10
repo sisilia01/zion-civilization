@@ -1,0 +1,21 @@
+# The Pricing of Options and Corporate Liabilities
+# Author: Black Scholes 1973
+# Citation: Black, F. & Scholes, M. (1973). Journal of Political Economy, 81(3), 637-654.
+
+## Abstract
+Derives closed-form option pricing under geometric Brownian motion and no-arbitrage.
+
+## Key concepts
+- Black-Scholes formula
+- No-arbitrage
+- Hedge portfolio
+- Volatility as key input
+
+## Why it matters for ZION agents
+Foundation of derivatives pricing — agents trade options
+
+## Where to find it manually
+https://www.cs.princeton.edu/courses/archive/fall09/cos323/papers/black_scholes73.pdf
+
+## Download note
+Automatic download failed — use manual source above.

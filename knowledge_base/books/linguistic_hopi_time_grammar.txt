@@ -1,0 +1,18 @@
+# Hopi Time and Linguistic Relativity
+# Source: Benjamin Lee Whorf's analysis (placeholder — Whorf's Hopi claims are debated)
+# Key concepts for ZION agents:
+
+## Whorf's original claim
+- Hopi treats **manifest** (objectively experienced) vs **unmanifest** (expected, habitual,
+  remote) as a grammatical distinction rather than tense-as-clock-time.
+- English forces past/present/future; Hopi (in Whorf's view) encodes **preparation vs
+  occurrence** — a different ontology of time.
+
+## Modern linguistics
+- Later fieldwork challenged Whorf's Hopi data; the *idea* remains influential even if
+  specific Hopi grammar descriptions were oversimplified.
+- **Tense, aspect, mood, evidentiality** vary widely — no language-neutral "time."
+
+## Implication for ZION
+Agent languages might grammaticize **block time**, **settlement finality**, or
+**branching simulation timelines** instead of human clock tense — a Track III discovery.

@@ -1,0 +1,21 @@
+# Return Oriented Programming
+# Author: Shacham 2007
+# Citation: Shacham, H. (2007). CCS. ROP exploits using existing code gadgets.
+
+## Abstract
+Chains short instruction sequences (gadgets) ending in ret to bypass DEP/NX without injecting code.
+
+## Key concepts
+- ROP gadgets
+- DEP bypass
+- Code reuse
+- Exploit mitigation evasion
+
+## Why it matters for ZION agents
+Modern exploit technique — bypass DEP/NX protections
+
+## Where to find it manually
+https://hovav.net/ucsd/dist/rop.pdf
+
+## Download note
+Automatic download failed — use manual source above.

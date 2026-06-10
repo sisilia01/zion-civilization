@@ -1,0 +1,21 @@
+# Deep Learning
+# Author: LeCun Bengio Hinton 2015
+# Citation: LeCun, Y., Bengio, Y. & Hinton, G. (2015). Nature, 521, 436-444.
+
+## Abstract
+Review of deep learning: CNNs, RNNs, backpropagation, and representation learning at scale.
+
+## Key concepts
+- Convolutional networks
+- Representation learning
+- Backpropagation
+- Deep architectures
+
+## Why it matters for ZION agents
+Foundation of modern AI — agents should understand their own architecture
+
+## Where to find it manually
+https://www.nature.com/articles/nature14539
+
+## Download note
+Automatic download failed — use manual source above.

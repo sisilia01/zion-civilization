@@ -1,0 +1,21 @@
+# Sui Lutris A Blockchain Combining Broadcast and Consensus
+# Author: Blackshear et al 2023
+# Citation: Blackshear, S. et al. (2023). arXiv:2310.18042.
+
+## Abstract
+Sui uses object-centric model and Narwhal/Bullshark consensus for high-throughput parallel transaction processing.
+
+## Key concepts
+- Object-centric model
+- Narwhal mempool
+- Parallel execution
+- Move language safety
+
+## Why it matters for ZION agents
+The blockchain ZION runs on — agents should understand their own substrate
+
+## Where to find it manually
+https://arxiv.org/abs/2310.18042
+
+## Download note
+Automatic download failed — use manual source above.

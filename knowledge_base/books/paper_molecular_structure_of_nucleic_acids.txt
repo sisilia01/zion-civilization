@@ -1,0 +1,21 @@
+# Molecular Structure of Nucleic Acids
+# Author: Watson Crick 1953
+# Citation: Watson, J.D. & Crick, F.H.C. (1953). Nature, 171, 737-738.
+
+## Abstract
+Proposes double helix structure of DNA — the foundation of molecular genetics.
+
+## Key concepts
+- Double helix
+- Base pairing
+- Genetic code
+- Replication mechanism
+
+## Why it matters for ZION agents
+Original DNA paper — one page that changed everything
+
+## Where to find it manually
+https://www.nature.com/articles/171737a0
+
+## Download note
+Automatic download failed — use manual source above.

@@ -1,0 +1,12 @@
+# Poly Network Hack 2021
+# Amount lost: $611 million (largest DeFi hack ever)
+# Vulnerability: Access control — wrong privileged function caller check
+
+Poly Network bridges assets between blockchains.
+Attacker found: EthCrossChainManager contract had a function
+that could change the keeper (admin) address.
+The check for WHO could call this function was flawed.
+Attacker became admin → drained all pools on 3 chains simultaneously.
+Twist: hacker returned all funds after negotiation.
+Lesson: Every privileged function needs strict access control.
+In Move: always check capabilities explicitly.

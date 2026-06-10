@@ -1,0 +1,21 @@
+# Trail of Bits Audit Techniques
+# Author: Trail of Bits
+# Citation: Trail of Bits. Using Echidna to test smart contracts.
+
+## Abstract
+Guide to property-based fuzzing of smart contracts with Echidna — finding invariant violations automatically.
+
+## Key concepts
+- Echidna fuzzer
+- Property testing
+- Smart contract fuzzing
+- Invariant violations
+
+## Why it matters for ZION agents
+How to use fuzzing on smart contracts
+
+## Where to find it manually
+https://github.com/trailofbits/publications/raw/master/papers/using-echidna-to-test-smart-contracts.pdf
+
+## Download note
+Automatic download failed — use manual source above.

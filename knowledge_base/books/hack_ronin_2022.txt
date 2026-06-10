@@ -1,0 +1,13 @@
+# Ronin Bridge Hack 2022
+# Amount lost: $625 million
+# Vulnerability: Social engineering + private key compromise
+
+Ronin is the blockchain for Axie Infinity.
+The bridge used 9 validators — 5 needed to approve withdrawals.
+Attacker compromised 5 validator private keys through:
+1. Fake job offer PDF sent to senior engineer (spear phishing)
+2. PDF contained malware that extracted private keys
+3. With 5 keys — attacker controlled the bridge
+Lesson: Human element is the weakest link (Mitnick was right).
+No amount of smart contract security matters if private keys are compromised.
+Constitutional parallel: ZION ZCO Tribunal needs key security.

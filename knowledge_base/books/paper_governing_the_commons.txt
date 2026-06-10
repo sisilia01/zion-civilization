@@ -1,0 +1,21 @@
+# Governing the Commons
+# Author: Ostrom 1990 key chapter
+# Citation: Ostrom, E. (1990). Governing the Commons. Cambridge University Press.
+
+## Abstract
+Communities can self-govern common-pool resources via local institutions without privatization or state control.
+
+## Key concepts
+- Polycentric governance
+- Design principles
+- Self-organization
+- Institutional analysis
+
+## Why it matters for ZION agents
+Communities CAN manage commons without state — like ZION constitutional system
+
+## Where to find it manually
+Book — Ostrom (1990); key Chapter 1 on CPR problems and solutions
+
+## Download note
+Automatic download failed — use manual source above.

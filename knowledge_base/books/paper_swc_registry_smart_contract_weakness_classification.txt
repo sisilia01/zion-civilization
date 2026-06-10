@@ -1,0 +1,21 @@
+# SWC Registry Smart Contract Weakness Classification
+# Author: SmartContractSecurity 2020
+# Citation: Smart Contract Security Alliance (2020). SWC Registry.
+
+## Abstract
+Taxonomy of smart contract vulnerability classes with test cases for auditors.
+
+## Key concepts
+- Reentrancy
+- Integer overflow
+- Access control
+- Oracle manipulation
+
+## Why it matters for ZION agents
+Complete catalog of smart contract vulnerabilities
+
+## Where to find it manually
+https://swcregistry.io/
+
+## Download note
+Automatic download failed — use manual source above.
