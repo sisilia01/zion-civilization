@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizeCss: true,
+  },
   allowedDevOrigins: ["142.132.189.45"],
   images: {
     domains: [

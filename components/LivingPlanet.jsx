@@ -973,7 +973,7 @@ function getSoftStarTexture() {
     ctx.fillRect(0, 0, size, size);
   }
   softStarTextureCache = new THREE.CanvasTexture(canvas);
-  softStarTextureCache.encoding = THREE.sRGBEncoding;
+  softStarTextureCache.colorSpace = THREE.SRGBColorSpace;
   return softStarTextureCache;
 }
 
@@ -1185,7 +1185,7 @@ function loadMilkyWaySky(scene, renderer) {
           resolve(null);
           return;
         }
-        texture.encoding = THREE.sRGBEncoding;
+        texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
         texture.generateMipmaps = true;
         texture.minFilter = THREE.LinearMipmapLinearFilter;
@@ -1347,7 +1347,7 @@ const EARTH_TEXTURE_CANDIDATES = {
 
 /** @param {THREE.Texture} tex @param {THREE.WebGLRenderer} renderer @param {{ srgb?: boolean }} [opts] */
 function configureGlobeTexture(tex, renderer, opts = {}) {
-  if (opts.srgb) tex.encoding = THREE.sRGBEncoding;
+  if (opts.srgb) tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -1715,7 +1715,7 @@ export function LivingPlanet({
       renderer.setSize(w, h, false);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.15;
-      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
       renderer.domElement.style.display = "block";
@@ -2198,51 +2198,36 @@ export function LivingPlanet({
         onMouseLeave={() => setFsBtnHover(false)}
         style={{
           position: "absolute",
-          top: showHud ? 36 : 10,
+          bottom: 10,
           right: 10,
           zIndex: 20,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          width: 28,
+          width: 24,
           height: 24,
           padding: 0,
-          borderRadius: 4,
-          border: `1px solid rgba(0, 255, 136, ${fsBtnHover ? 0.75 : 0.45})`,
-          background: fsBtnHover ? "rgba(0, 20, 16, 0.82)" : "rgba(0, 0, 0, 0.55)",
-          color: fsBtnHover ? "#00ffaa" : "rgba(0, 255, 136, 0.85)",
+          borderRadius: 2,
+          border: `1px solid rgba(255, 255, 255, ${fsBtnHover ? 0.5 : 0.3})`,
+          background: fsBtnHover ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.35)",
+          color: `rgba(255, 255, 255, ${fsBtnHover ? 0.55 : 0.3})`,
+          fontSize: 12,
+          lineHeight: 1,
           cursor: "pointer",
           transition: "background 0.15s, border-color 0.15s, color 0.15s",
-          boxShadow: fsBtnHover ? "0 0 8px rgba(0, 255, 136, 0.25)" : "none",
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          {isFullscreen ? (
-            <>
-              <path d="M4 14h6v6" />
-              <path d="M14 14h6v6" />
-              <path d="M4 10h6V4" />
-              <path d="M14 10h6V4" />
-            </>
-          ) : (
-            <>
-              <path d="M8 3H3v5" />
-              <path d="M16 3h5v5" />
-              <path d="M8 21H3v-5" />
-              <path d="M16 21h5v-5" />
-            </>
-          )}
-        </svg>
+        {isFullscreen ? "⛶" : "⛶"}
       </button>
       {showHud && civilizationData && (
         <>
-          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: "#94a3b8", letterSpacing: 1, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "Inter, system-ui, sans-serif", fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: 1, pointerEvents: "none" }}>
             PROSPERITY INDEX {hudProsperity}%
           </div>
-          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: "#00b4d8", letterSpacing: 2, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "Inter, system-ui, sans-serif", fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.85)", letterSpacing: 2, pointerEvents: "none" }}>
             OBSERVATION MAP
           </div>
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(5,13,26,0.85)", borderTop: "1px solid #1e3a5f", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(0,0,0,0.75)", borderTop: "1px solid rgba(255,255,255,0.08)", pointerEvents: "none" }}>
             {[
               { label: "TOTAL", value: civilizationData.total },
               { label: "ELITE", value: civilizationData.elite },

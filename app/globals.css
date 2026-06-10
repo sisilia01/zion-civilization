@@ -1,22 +1,22 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg-primary: #050d1a;
-  --bg-secondary: #0a1628;
-  --bg-card: #0d1f3c;
-  --border: #1e3a5f;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #111111;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --text-mono: #a0a0a0;
+  --text-muted: rgba(255, 255, 255, 0.32);
+
   --accent: #00b4d8;
-  --accent-dim: #0891b2;
-  --danger: #ef4444;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --hero-space-image: url('/images/space-bg.jpg');
-  --star-field-image: url('/images/space-bg.jpg');
 }
 
 * {
@@ -25,36 +25,65 @@
   box-sizing: border-box;
 }
 
+html {
+  background: #000000;
+}
+
 body {
-  background: var(--bg-primary);
+  background: #000000;
   color: var(--text-primary);
   font-family: var(--font-sans);
+  font-weight: 300;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Legacy class hooks — lab palette */
-.elite-card { border: 1px solid var(--border); }
-.middle-card { border: 1px solid var(--border); }
-.poor-card { border: 1px solid var(--border); }
-.dying-card { border: 1px solid var(--border); color: var(--text-secondary); }
-
-/* Scientific instrument panels — shared across tabs */
-.instrument-panel {
+/* Scientific data card */
+.science-card {
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
-  background: var(--bg-secondary);
   border-radius: 2px;
+  padding: 20px 24px;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
-.instrument-label {
+
+.science-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-hover);
+}
+
+.science-label {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
+
+.science-value {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.instrument-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.instrument-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
 .instrument-value {
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 500;
   color: var(--text-primary);
 }

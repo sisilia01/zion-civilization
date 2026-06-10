@@ -28,7 +28,23 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
+import dynamic from "next/dynamic";
+import BackgroundGrid from "@/components/BackgroundGrid";
+import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+
+const ParticleField = dynamic(
+  () => import("@/components/ParticleField").then((m) => m.ParticleField),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        style={{ position: "absolute", inset: 0, background: "#000000" }}
+        aria-hidden
+      />
+    ),
+  },
+);
 import {
   buildAnnounceTransaction,
   buildRegisterTransaction,
@@ -374,17 +390,17 @@ function ecoFormatZionShort(n: number) {
   return Math.round(n).toLocaleString("en-US");
 }
 
-/** Lab instrument palette — NASA mission-control aesthetic */
+/** Scientific instrument palette */
 const ZION_TERM = {
-  bg: "#050d1a",
-  cardBg: "#0d1f3c",
-  border: "#1e3a5f",
-  label: "#94a3b8",
+  bg: "#000000",
+  cardBg: "rgba(255,255,255,0.03)",
+  border: "rgba(255,255,255,0.08)",
+  label: "rgba(255,255,255,0.5)",
   accent: "#00b4d8",
-  money: "#f59e0b",
-  warn: "#ef4444",
-  text: "#e2e8f0",
-  muted: "#475569",
+  money: "#a0a0a0",
+  warn: "#ff6b6b",
+  text: "#ffffff",
+  muted: "#a0a0a0",
 };
 
 const EXPERIMENT_START_MS = new Date("2025-04-24T00:00:00Z").getTime();
@@ -879,8 +895,6 @@ const DistrictMap = ({ districts: districts_data }: { districts: District[] }) =
 
 function DistrictMapPanel() {
   const [mapStats, setMapStats] = useState<Stats | null>(null);
-  const prevProsperityRef = useRef<number | null>(null);
-  const [prosperityDelta, setProsperityDelta] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -907,14 +921,6 @@ function DistrictMapPanel() {
     });
   }, [mapStats]);
 
-  useEffect(() => {
-    const pct = prosperity * 100;
-    if (prevProsperityRef.current !== null) {
-      setProsperityDelta(pct - prevProsperityRef.current);
-    }
-    prevProsperityRef.current = pct;
-  }, [prosperity]);
-
   const civilizationData = useMemo(
     () => ({
       total: mapStats?.alive_agents ?? mapStats?.alive,
@@ -930,26 +936,16 @@ function DistrictMapPanel() {
     [mapStats]
   );
 
-  const totalAlive = mapStats?.alive_agents ?? mapStats?.alive;
-
-  const prosperityPct = (prosperity * 100).toFixed(1);
-  const deltaStr =
-    prosperityDelta !== null
-      ? `${prosperityDelta >= 0 ? "+" : ""}${prosperityDelta.toFixed(1)} from last cycle`
-      : "baseline cycle";
-  const deltaArrow = prosperityDelta !== null && prosperityDelta < 0 ? "↓" : prosperityDelta !== null && prosperityDelta > 0 ? "↑" : "→";
+  const popChips = [
+    { label: "TOTAL", value: mapStats?.alive_agents ?? mapStats?.alive, color: "#4caf7d" },
+    { label: "ELITE", value: mapStats?.elite, color: "#c9a84c" },
+    { label: "MIDDLE", value: mapStats?.middle, color: "#9e9e9e" },
+    { label: "POOR", value: mapStats?.poor, color: "#8d6e4a" },
+    { label: "CRITICAL", value: mapStats?.critical, color: "#c0504a" },
+  ];
 
   return (
     <div className="districtMapWrap">
-      <div className="districtMapInstrumentBar">
-        <span className="districtMapProsperity">
-          PROSPERITY INDEX: {prosperityPct}% {deltaArrow} ({deltaStr})
-        </span>
-        <div className="districtMapLiveTag">
-          <span className="districtMapLiveDot" />
-          <span>LIVE OBSERVATION</span>
-        </div>
-      </div>
       <div className="districtMapGlobeWrap">
         <LivingPlanet
           prosperity={prosperity}
@@ -958,33 +954,53 @@ function DistrictMapPanel() {
           civilizationData={civilizationData}
           height={400}
         />
-        <div className="districtMapObservationOverlay">
-          OBSERVATION POINT · 51.2°N 12.4°E · ALT 420km
-        </div>
-      </div>
-      <div className="districtMapAttribution">
-        Earth imagery: NASA Visible Earth / Blue Marble
       </div>
       <div
+        className="observatoryPopStrip"
         style={{
           display: "flex",
-          gap: "24px",
-          padding: "8px 12px",
-          borderTop: "1px solid rgba(0,255,136,0.2)",
-          background: "rgba(0,0,0,0.4)",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-evenly",
+          width: "100%",
+          padding: "12px 0",
+          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+          background: "#000000",
         }}
       >
-        {[
-          { label: "TOTAL", value: totalAlive, color: "var(--accent)" },
-          { label: "ELITE", value: mapStats?.elite, color: "var(--warning)" },
-          { label: "MIDDLE", value: mapStats?.middle, color: "var(--text-primary)" },
-          { label: "POOR", value: mapStats?.poor, color: "var(--text-secondary)" },
-          { label: "CRITICAL", value: mapStats?.critical, color: "var(--danger)" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="districtMapClassCell">
-            <span className="districtMapClassLabel">{label}</span>
-            <span className="districtMapClassValue" style={{ color }}>
-              {(value || 0).toLocaleString()}
+        {popChips.map((chip) => (
+          <div
+            key={chip.label}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              color: chip.color,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
+                fontSize: 9,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                opacity: 0.7,
+                lineHeight: 1,
+              }}
+            >
+              {chip.label}
+            </span>
+            <span
+              style={{
+                marginTop: 6,
+                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
+                fontSize: 16,
+                fontWeight: 500,
+                letterSpacing: "0.04em",
+                lineHeight: 1.1,
+              }}
+            >
+              {(chip.value ?? 0).toLocaleString("en-US")}
             </span>
           </div>
         ))}
@@ -6422,11 +6438,11 @@ function AgentTile({
   const statVal = (n?: number) => `${Math.min(5, Math.max(0, Math.round(n ?? 0)))}/5`;
   const cardStyle = {
     position: "relative" as const,
-    border: "1px solid var(--border)",
+    border: "1px solid rgba(255,255,255,0.08)",
     boxShadow: "none",
-    background: "var(--bg-secondary)",
+    background: "rgba(255,255,255,0.03)",
     borderRadius: "2px",
-    padding: "16px",
+    padding: "20px 24px",
   };
   return (
     <article
@@ -6505,16 +6521,20 @@ type TabId =
   | "zbank"
   | "zperps"
   | "press"
-  | "treasury"; // ECO-POL (display label; id kept for routing)
+  | "treasury" // ECO-POL (display label; id kept for routing)
+  | "constitution"
+  | "lab"
+  | "archive";
 
 const LAB_NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: "civilization", label: "OBSERVATORY" },
   { id: "chat", label: "FIELD NOTES" },
   { id: "zionbet", label: "PREDICTION ENGINE" },
   { id: "treasury", label: "GOVERNANCE" },
-  { id: "leaderboard", label: "ARCHIVE" },
+  { id: "constitution", label: "CONSTITUTION" },
+  { id: "lab", label: "LAB" },
+  { id: "archive", label: "ARCHIVE" },
   { id: "zbank", label: "PRIVACY" },
-  { id: "zperps", label: "DERIVATIVES" },
   { id: "press", label: "PRESS" },
 ];
 
@@ -9983,16 +10003,32 @@ export default function Home() {
       corruption_index: number;
     };
   } | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const aliveAgents = stats?.alive ?? agents.length;
   const [agentClasses, setAgentClasses] = useState({ elite: 0, middle: 0, poor: 0, critical: 0 });
 
-  const fetchStats = useCallback(async () => {
-    try {
+  const [heroAgentCount, setHeroAgentCount] = useState<number | null>(null);
+  const [heroStatsLoading, setHeroStatsLoading] = useState(true);
+  const [corporationsLoading, setCorporationsLoading] = useState(true);
+
+  const loadCoreData = useCallback(async (isInitial = false) => {
+    if (isInitial) {
       setStatsLoading(true);
-      const raw = await fetch("/api/stats").then((r) => r.json());
-      console.log("stats data:", raw);
-      const s = parseApiStatsResponse(raw);
+      setHeroStatsLoading(true);
+      setCorporationsLoading(true);
+    }
+    try {
+      const [statsRaw, civRaw, agentsRaw, clansRaw, corpsRaw, policeRaw, walrusRaw] =
+        await Promise.all([
+          fetch("/api/stats").then((r) => r.json()),
+          fetch("/api/civilization/stats", { cache: "no-store" }).then((r) => r.json()),
+          fetch("/api/agents").then((r) => r.json()),
+          fetch("/api/clans").then((r) => r.json()),
+          fetch("/api/corporations").then((r) => r.json()),
+          fetch("/api/police/divisions").then((r) => r.json()),
+          fetch("/api/walrus/blobs").then((r) => r.json()),
+        ]);
+
+      const s = parseApiStatsResponse(statsRaw);
       setStats(s);
       if (Number.isFinite(s.alive)) setLastAliveCount(s.alive);
       setAgentClasses({
@@ -10001,43 +10037,56 @@ export default function Home() {
         poor: s.poor || 0,
         critical: s.critical || 0,
       });
+
+      const n = Number(civRaw.active_agents ?? civRaw.total_agents ?? civRaw.alive);
+      if (Number.isFinite(n) && n >= 0) setHeroAgentCount(n);
+
+      setAgents(Array.isArray(agentsRaw) ? agentsRaw : []);
+      setClans(Array.isArray(clansRaw) ? clansRaw : []);
+
+      if (Array.isArray(corpsRaw)) setCorporations(corpsRaw);
+
+      if (policeRaw?.divisions && Array.isArray(policeRaw.divisions)) {
+        setPoliceDivisions({
+          ...policeRaw,
+          divisions: policeRaw.divisions.map((div: Record<string, unknown>) =>
+            normalizePoliceDivision(div),
+          ),
+        });
+      }
+
+      if (Array.isArray(walrusRaw)) setWalrusBlobs(walrusRaw);
     } catch {
       // keep last successful snapshot
     } finally {
       setStatsLoading(false);
+      setHeroStatsLoading(false);
+      setCorporationsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchStats();
-  }, [fetchStats]);
+    void loadCoreData(true);
+    const t = window.setInterval(() => void loadCoreData(false), 30000);
+    return () => clearInterval(t);
+  }, [loadCoreData]);
 
-  useEffect(() => {
-    fetch("/api/corporations")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) setCorporations(d);
-      })
-      .catch(() => {});
-    fetch("/api/police/divisions")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!d?.divisions || !Array.isArray(d.divisions)) return;
-        setPoliceDivisions({
-          ...d,
-          divisions: d.divisions.map((div: Record<string, unknown>) =>
-            normalizePoliceDivision(div)
-          ),
-        });
-      })
-      .catch(() => {});
-    fetch("/api/walrus/blobs")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d)) setWalrusBlobs(d);
-      })
-      .catch(() => {});
-  }, []);
+  const heroProsperityPct = useMemo(() => {
+    if (statsLoading || !stats) return "···";
+    const p = computeProsperity({
+      unemployment: stats.unemployment_rate ?? 0,
+      revolution: stats.revolution_meter ?? 0,
+      poverty: stats.poverty_pct ?? 0,
+      population: stats.alive ?? stats.alive_agents ?? 0,
+    });
+    return `${(p * 100).toFixed(1)}%`;
+  }, [stats]);
+
+  const heroSubjectCount = heroStatsLoading
+    ? "..."
+    : (heroAgentCount ?? stats?.alive ?? lastAliveCount ?? null) != null
+      ? Number(heroAgentCount ?? stats?.alive ?? lastAliveCount).toLocaleString("en-US")
+      : "...";
 
   const [userPoints, setUserPoints] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -13997,26 +14046,6 @@ export default function Home() {
   }, [fetchConversations]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        await fetchStats();
-        const [a, c] = await Promise.all([
-          fetch("/api/agents").then((r) => r.json()),
-          fetch("/api/clans").then((r) => r.json()),
-        ]);
-        setAgents(Array.isArray(a) ? a : []);
-        setClans(Array.isArray(c) ? c : []);
-      } catch {
-        // keep last successful snapshot
-      }
-    };
-
-    load();
-    const timer = setInterval(load, 10000);
-    return () => clearInterval(timer);
-  }, [fetchStats]);
-
-  useEffect(() => {
     if (activeTab !== "chat" || selectedClass == null) {
       if (selectedClass == null) setChatAgentsFiltered([]);
       return;
@@ -14950,6 +14979,7 @@ export default function Home() {
 
   return (
     <main className="page">
+      <BackgroundGrid />
       {(showWalletMenu || showUserMenu) && (
         <div
           onClick={() => {
@@ -14960,38 +14990,53 @@ export default function Home() {
           aria-hidden
         />
       )}
-      <div
-        className="bg-nebula"
-        style={activeTab === "zbank" ? { opacity: 0, background: "#0a0a0a" } : undefined}
-      />
-      <div
-        className="bg-grid"
-        style={activeTab === "zbank" ? { display: "none" } : undefined}
-      />
-
-      <div
-        className="dashboard show"
-        style={isMobile ? { padding: "8px" } : undefined}
-      >
-        <header className={`labHeader ${isMobile ? "labHeaderMobile" : ""}`}>
-          <div className="labHeaderLeft">
-            <span className="labLogo">ZION</span>
-            <span className="labSubtitle">Autonomous Civilization Research</span>
-          </div>
-          <div className="labHeaderCenter">
-            <span>EXPERIMENT #001</span>
-            <span className="labHeaderSep">·</span>
-            <span className="labLiveIndicator">
-              <span className="labLiveDot" />
-              LIVE
-            </span>
-            <span className="labHeaderSep">·</span>
-            <span>RUN TIME: {experimentRunTime}</span>
-          </div>
-          <div className="labHeaderRight" aria-label="Sign in">
+      <section className="zionHero" aria-label="ZION Civilization">
+        <ParticleField variant="hero" />
+        <div className="zionHeroOverlay" aria-hidden />
+        <div className={`zionHeroTopBar ${isMobile ? "zionHeroTopBarMobile" : ""}`}>
+          <span className="zionHeroRunTime">RUN {experimentRunTime}</span>
+          <div className="zionHeroAuth" aria-label="Sign in">
             {renderAuthToolbar()}
           </div>
-        </header>
+        </div>
+        <div className="zionHeroContent">
+          <h1 className="zionHeroTitle">ZION CIVILIZATION</h1>
+          <p className="zionHeroSubtitle">
+            An autonomous AI civilization. {heroSubjectCount} subjects. Live on Sui blockchain.
+          </p>
+          <p className="zionHeroLabel">EXPERIMENT_ID: SUI-2026-001 · STATUS: ACTIVE</p>
+        </div>
+      </section>
+
+      <div className="belowHeroShell">
+        <section className="liveMetricsBar" aria-label="Live experiment metrics">
+          <div className="liveMetric">
+            <span className="liveMetricLabel">ACTIVE SUBJECTS</span>
+            <span className="liveMetricValue">{heroSubjectCount}</span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">MORTALITY 24H</span>
+          <span className="liveMetricValue">
+            {statsLoading ? "···" : stats?.deaths_today?.toLocaleString("en-US") ?? "—"}
+          </span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">PROSPERITY INDEX</span>
+            <span className="liveMetricValue">{heroProsperityPct}</span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">AMENDMENTS</span>
+            <span className="liveMetricValue">35</span>
+          </div>
+        </section>
+
+        <div
+          className="dashboard show"
+          style={isMobile ? { padding: "8px 16px" } : undefined}
+        >
         <nav
           className="mainNav"
           aria-label="Main navigation"
@@ -15011,61 +15056,22 @@ export default function Home() {
 
         <div className="tabPanels">
           {activeTab === "civilization" && (
-            <div className="civTabRoot" style={{ position: "relative", zIndex: 1 }}>
-              <section
-                className="statsGrid"
-                style={
-                  isMobile
-                    ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }
-                    : { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }
-                }
-              >
-                <article className="statCard">
-                  <p className="statCardLabel">ACTIVE SUBJECTS</p>
-                  <h3 className="statCardValue">
-                    {statsLoading
-                      ? "—"
-                      : (() => {
-                          const n = stats?.alive ?? lastAliveCount ?? agents.length;
-                          return n != null ? Number(n).toLocaleString("en-US") : "—";
-                        })()}
-                  </h3>
-                  <div className="statCardRule" />
-                </article>
-                <article className="statCard">
-                  <p className="statCardLabel">TOTAL SUPPLY</p>
-                  <h3 className="statCardValue">
-                    {stats ? Math.round(stats.total_zion).toLocaleString("en-US") : "—"}
-                  </h3>
-                  <p className="statCardSub">ZION tokens</p>
-                  <div className="statCardRule" />
-                </article>
-                <article className="statCard">
-                  <p className="statCardLabel">MORTALITY / 24H</p>
-                  <h3 className="statCardValue statCardValueDanger">
-                    {stats?.deaths_today?.toLocaleString("en-US") ?? "—"}
-                  </h3>
-                  <p className="statCardSub">
-                    mortality{" "}
-                    {deathsDeltaPct !== null
-                      ? `${deathsDeltaPct >= 0 ? "+" : ""}${deathsDeltaPct.toFixed(1)}%`
-                      : "—"}
-                  </p>
-                  <div className="statCardRule" />
-                </article>
-              </section>
-
+            <div className="civTabRoot" style={{ position: "relative", zIndex: 2 }}>
               <section className="constitutionBanner" aria-label="Constitution status">
                 <div className="constitutionBannerRow">
                   <span className="constitutionBannerItem">
-                    <strong>CONSTITUTION v1.0</strong>
+                    <strong>CONSTITUTION v3.0</strong>
                   </span>
                   <span className="constitutionBannerDivider" />
                   <span className="constitutionBannerItem">35 AMENDMENTS ENACTED</span>
                   <span className="constitutionBannerDivider" />
-                  <span className="constitutionBannerItem">97.8% RATIFIED</span>
+                  <span className="constitutionBannerItem">97.8% RATIFIED · 15,443 AGENTS</span>
                 </div>
                 <div className="constitutionBannerRow constitutionBannerRowSub">
+                  <span className="constitutionBannerMuted">
+                    SHA-256: 22d9ff13cf2a2bfe2e5a2d243f4596d02cdfd0bd21fe8772de0296df80c669d1
+                  </span>
+                  <span className="constitutionBannerDivider" />
                   <span className="constitutionBannerMuted">
                     Walrus: iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0
                   </span>
@@ -15106,104 +15112,53 @@ export default function Home() {
                     width: isMobile ? "100%" : "35%",
                     maxWidth: isMobile ? "100%" : "35%",
                     flex: isMobile ? "none" : "0 0 35%",
-                    paddingLeft: "24px",
                   }}
                 >
-                  <div
-                    className="sidebarAgentConvWrap civilizationAgentFeed fieldObservationsPanel"
-                    style={{
-                      height: "100%",
-                      minHeight: isMobile ? undefined : 420,
-                    }}
-                  >
-                    <h2 className="sidebarSectionTitle fieldObservationsTitle">
-                      FIELD OBSERVATIONS
-                    </h2>
-                    <p className="sidebarHint">Subject pairs · refresh 60s · last 4</p>
-                    <div className="agentConvFeed">
-                      {conversations.length === 0 ? (
-                        <p className="agentConvEmpty">Scanning agent chatter…</p>
-                      ) : (
-                        (Array.isArray(conversations) ? conversations : []).slice(0, 4).map((conv, idx, arr) => {
-                          const m1 = classMeta(conv.agent1.class);
-                          const m2 = classMeta(conv.agent2.class);
-                          const leftText =
-                            conv.message1 != null ? cleanMsg(conv.message1) : conv.topic;
-                          const rightText =
-                            conv.message2 != null
-                              ? cleanMsg(conv.message2)
-                              : "[Agent2 would respond based on their class…]";
-                          return (
-                            <article
-                              key={`conv-${conv.id}-${conv.agent1.id}-${conv.agent2.id}-${conv.topic.slice(0, 24)}`}
-                              className={`agentConvCard agentConvCardCompact fieldObservationCard${idx < arr.length - 1 ? " agentConvCardSep" : ""}`}
-                            >
-                              <div className="agentConvBadge agentConvBadgeCompact fieldObservationBadge">
-                                <span className="fieldObservationSubjectId">
-                                  SUBJECT ID: AGT-{String(conv.agent1.id).padStart(4, "0")}
-                                </span>
-                                <span className="agentConvBadgeText">{topicSnippet(conv.topic, 52)}</span>
-                              </div>
-                              <div className="agentConvThread agentConvThreadCompact">
-                                <div className="agentConvRow agentConvRowLeft">
-                                  <div className="agentConvMeta fieldObservationMeta">
-                                    <strong>{cleanName(conv.agent1.name)}</strong>
-                                    <span className="agentConvClassTag">{conv.agent1.class}</span>
-                                  </div>
-                                  <div className="agentConvBubble agentConvBubbleLeft">
-                                    {leftText}
-                                  </div>
-                                </div>
-                                <div className="agentConvRow agentConvRowRight">
-                                  <div className="agentConvMeta agentConvMetaRight fieldObservationMeta">
-                                    <span className="agentConvClassTag">{conv.agent2.class}</span>
-                                    <strong>{cleanName(conv.agent2.name)}</strong>
-                                  </div>
-                                  <div className="agentConvBubble agentConvBubbleRight agentConvBubbleAgent2">
-                                    {rightText}
-                                  </div>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
+                  <FieldObservationsFeed conversations={conversations} />
                 </aside>
               </section>
               </section>
 
-              {uniqueCorporations.length > 0 && (
+              {(corporationsLoading || uniqueCorporations.length > 0) && (
                 <>
                   <div className="labSectionDivider">
                     <span className="labSectionDividerLabel">INSTITUTIONAL STRUCTURES</span>
                   </div>
                   <div className="labDataCardGrid">
-                    {uniqueCorporations.map((corp) => (
-                      <div key={corp.id} className="labDataCard">
-                        <div className="labDataCardHead">
-                          <span className="labDataCardTitle">{corp.name}</span>
-                          <span className="labDataCardBadge">{corp.corp_type?.toUpperCase() || "SECTOR"}</span>
-                        </div>
-                        <div className="labDataCardStats">
-                          <div className="labDataCardStat">
-                            <span className="labDataCardStatLabel">EMPLOYEES</span>
-                            <span className="labDataCardStatValue">{corp.employees}</span>
+                    {corporationsLoading && uniqueCorporations.length === 0
+                      ? Array.from({ length: 9 }, (_, i) => (
+                          <div key={`corp-skel-${i}`} className="labDataCard labDataCardSkeleton">
+                            <div className="labSkeletonLine labSkeletonLineWide" />
+                            <div className="labSkeletonLine" />
+                            <div className="labSkeletonLine labSkeletonLineShort" />
                           </div>
-                          <div className="labDataCardStat">
-                            <span className="labDataCardStatLabel">TREASURY</span>
-                            <span className="labDataCardStatValue">{corp.treasury?.toFixed(0)}</span>
+                        ))
+                      : uniqueCorporations.map((corp) => (
+                          <div key={corp.id} className="labDataCard">
+                            <div className="labDataCardHead">
+                              <span className="labDataCardTitle">{corp.name}</span>
+                              <span className="labDataCardBadge">{corp.corp_type?.toUpperCase() || "SECTOR"}</span>
+                            </div>
+                            <div className="labDataCardStats">
+                              <div className="labDataCardStat">
+                                <span className="labDataCardStatLabel">EMPLOYEES</span>
+                                <span className="labDataCardStatValue">{corp.employees}</span>
+                              </div>
+                              <div className="labDataCardStat">
+                                <span className="labDataCardStatLabel">TREASURY</span>
+                                <span className="labDataCardStatValue">{corp.treasury?.toFixed(0)}</span>
+                              </div>
+                              <div className="labDataCardStat">
+                                <span className="labDataCardStatLabel">REVENUE</span>
+                                <span className="labDataCardStatValue">{corp.revenue?.toFixed(0)}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="labDataCardStat">
-                            <span className="labDataCardStatLabel">REVENUE</span>
-                            <span className="labDataCardStatValue">{corp.revenue?.toFixed(0)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        ))}
                   </div>
-                  <NewsWireTicker label="CORPORATE WIRE" items={corporateNews} color="var(--accent)" variant="lab" />
+                  {!corporationsLoading && (
+                    <NewsWireTicker label="CORPORATE WIRE" items={corporateNews} color="var(--accent)" variant="lab" />
+                  )}
                 </>
               )}
 
@@ -15369,6 +15324,34 @@ export default function Home() {
             </div>
           )}
 
+
+          {activeTab === "constitution" && (
+            <section className="stubTabSection" aria-label="Constitution">
+              <h2 className="stubTabTitle">CONSTITUTION v3.0</h2>
+              <p className="stubTabSubtitle">v3.0 ratified by 15,443 agents · 97.8% consensus</p>
+              <p className="stubTabMeta">
+                SHA-256: 22d9ff13cf2a2bfe2e5a2d243f4596d02cdfd0bd21fe8772de0296df80c669d1
+              </p>
+              <p className="stubTabMeta">Walrus blob: iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0</p>
+              <p className="stubTabBody">Full constitutional text and amendment tree — coming soon</p>
+            </section>
+          )}
+
+          {activeTab === "lab" && (
+            <section className="stubTabSection" aria-label="Z-Lab Research">
+              <h2 className="stubTabTitle">Z-LAB RESEARCH</h2>
+              <p className="stubTabSubtitle">Academic findings from autonomous agent civilization</p>
+              <p className="stubTabBody">5 research tracks · 161 source texts · Active analysis</p>
+            </section>
+          )}
+
+          {activeTab === "archive" && (
+            <section className="stubTabSection" aria-label="Civilization Archive">
+              <h2 className="stubTabTitle">CIVILIZATION ARCHIVE</h2>
+              <p className="stubTabSubtitle">Historical record of ZION · Day 412</p>
+              <p className="stubTabBody">Downloadable datasets and civilization chronicles</p>
+            </section>
+          )}
 
           {activeTab === "chat" && (
             <section className="chatTabSection">
@@ -19143,6 +19126,7 @@ export default function Home() {
             </div>
           )}
         </div>
+      </div>
 
         {chatAgent ? (
           <div
@@ -19214,25 +19198,153 @@ export default function Home() {
         .page {
           position: relative;
           min-height: 100vh;
-          overflow: hidden;
-          background: var(--bg-primary);
-          color: var(--text-primary);
+          overflow: visible;
+          background: transparent;
+          color: #ffffff;
           font-family: var(--font-sans);
+        }
+        .zionHero {
+          position: relative;
+          z-index: 2;
+          width: 100%;
+          min-height: 100vh;
+          min-height: 100dvh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #000000;
+          overflow: visible;
+        }
+        .zionHeroOverlay {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          background: radial-gradient(
+            ellipse 70% 60% at 50% 50%,
+            transparent 0%,
+            rgba(0, 0, 0, 0.45) 60%,
+            rgba(0, 0, 0, 0.82) 100%
+          );
+        }
+        .zionHeroTopBar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 3;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 40px;
+        }
+        .zionHeroTopBarMobile {
+          padding: 16px;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .zionHeroRunTime {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: var(--text-mono);
+        }
+        .zionHeroAuth {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .zionHeroContent {
+          position: relative;
+          z-index: 2;
+          text-align: center;
+          padding: 0 24px 8vh;
+          max-width: 900px;
+        }
+        .zionHeroTitle {
+          margin: 0 0 20px;
+          font-family: var(--font-sans);
+          font-size: clamp(2.5rem, 7vw, 4.5rem);
+          font-weight: 200;
+          letter-spacing: 0.3em;
+          color: #ffffff;
+          text-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
+        }
+        .zionHeroSubtitle {
+          margin: 0 0 28px;
+          font-family: var(--font-mono);
+          font-size: 14px;
+          font-weight: 400;
+          line-height: 1.7;
+          color: #c8e8ff;
+          opacity: 0.75;
+          letter-spacing: 0.02em;
+        }
+        .zionHeroLabel {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: #c8e8ff;
+          opacity: 0.55;
+        }
+        .belowHeroShell {
+          position: relative;
+          z-index: 2;
+          background:
+            radial-gradient(ellipse at 20% 50%, rgba(0, 100, 150, 0.04) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 20%, rgba(0, 50, 120, 0.03) 0%, transparent 50%),
+            transparent;
+          overflow: visible;
+        }
+        .liveMetricsBar {
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 0;
+          background: rgba(0, 0, 0, 0.55);
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          position: relative;
+          z-index: 2;
+        }
+        .liveMetric {
+          flex: 1 1 160px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 20px 24px;
+          min-width: 140px;
+        }
+        .liveMetricLabel {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: var(--text-secondary);
+        }
+        .liveMetricValue {
+          font-family: var(--font-mono);
+          font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+          font-weight: 500;
+          color: #ffffff;
+        }
+        .liveMetricDivider {
+          width: 1px;
+          align-self: stretch;
+          background: rgba(255, 255, 255, 0.1);
+          margin: 12px 0;
         }
         @media (prefers-reduced-motion: reduce) {
           .introFullscreen *:not(canvas) {
             animation: none !important;
             opacity: 1 !important;
           }
-        }
-        .bg-nebula {
-          position: fixed;
-          inset: 0;
-          z-index: -1;
-          background: var(--bg-primary);
-        }
-        .bg-grid {
-          display: none;
         }
         .introLayer {
           position: fixed;
@@ -19248,121 +19360,52 @@ export default function Home() {
         }
         .dashboard {
           position: relative;
-          z-index: 5;
-          max-width: 1500px;
+          z-index: 2;
+          max-width: 1400px;
           margin: 0 auto;
-          padding: 20px 26px 26px;
+          padding: 32px 40px 64px;
           opacity: 1;
-        }
-        .labHeader {
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          align-items: center;
-          gap: 12px 16px;
-          padding: 14px 0 12px;
-          margin-bottom: 4px;
-          border-bottom: 1px solid var(--border);
-        }
-        .labHeaderMobile {
-          grid-template-columns: 1fr;
-          text-align: center;
-        }
-        .labHeaderLeft {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          min-width: 0;
-        }
-        .labHeaderMobile .labHeaderLeft {
-          align-items: center;
-        }
-        .labLogo {
-          font-family: var(--font-sans);
-          font-size: 1.1rem;
-          font-weight: 500;
-          letter-spacing: 0.2em;
-          color: var(--text-primary);
-        }
-        .labSubtitle {
-          font-size: 0.68rem;
-          font-weight: 300;
-          color: var(--text-secondary);
-          letter-spacing: 0.04em;
-        }
-        .labHeaderCenter {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          font-family: var(--font-mono);
-          font-size: 0.68rem;
-          letter-spacing: 0.08em;
-          color: var(--text-secondary);
-          white-space: nowrap;
-        }
-        .labHeaderSep {
-          color: var(--text-muted);
-        }
-        .labLiveIndicator {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          color: var(--accent);
-        }
-        .labLiveDot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--accent);
-        }
-        .labHeaderRight {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          min-width: 0;
-        }
-        .labHeaderMobile .labHeaderRight {
-          justify-content: center;
+          background: transparent;
         }
         .mainNav {
           position: sticky;
           top: 0;
-          z-index: 14;
+          z-index: 3;
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 4px 2px;
-          padding: 0 0 10px;
-          margin: 0 -26px 20px;
-          background: var(--bg-primary);
+          gap: 4px 8px;
+          padding: 0 0 24px;
+          margin: 0 0 32px;
+          background: rgba(0, 0, 0, 0.72);
           border-bottom: 1px solid var(--border);
         }
         .navTab {
           background: transparent;
           border: none;
-          border-bottom: 2px solid transparent;
-          padding: 10px 14px;
-          margin: 0;
-          font-size: 12px;
-          letter-spacing: 0.1em;
+          border-bottom: 1px solid transparent;
+          padding: 10px 0;
+          margin: 0 16px 0 0;
+          font-size: 11px;
+          letter-spacing: 0.15em;
           text-transform: uppercase;
           color: var(--text-secondary);
           cursor: pointer;
           font-family: var(--font-sans);
-          font-weight: 400;
+          font-weight: 300;
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .navTab:hover {
-          color: var(--text-primary);
+          color: #ffffff;
         }
         .navTab.active {
-          color: var(--text-primary);
-          border-bottom: 2px solid var(--accent);
+          color: #ffffff;
+          border-bottom-color: rgba(255, 255, 255, 0.4);
+          font-weight: 400;
         }
         .tabPanels {
+          position: relative;
+          z-index: 2;
           padding-bottom: 32px;
         }
         .tabIntro {
@@ -19411,8 +19454,8 @@ export default function Home() {
           transition: box-shadow 0.15s ease, transform 0.15s ease;
         }
         .chatClassCard:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 0 18px rgba(0, 255, 65, 0.18);
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.15);
         }
         .chatClassCard .chatClassHead {
           font-family: Orbitron, monospace;
@@ -19654,7 +19697,7 @@ export default function Home() {
           display: -webkit-box;
           -webkit-line-clamp: 3;
           -webkit-box-orient: vertical;
-          overflow: hidden;
+          overflow: visible;
         }
         .chronicleTickerTime {
           font-family: ui-monospace, "JetBrains Mono", monospace;
@@ -19679,19 +19722,55 @@ export default function Home() {
         .placeholderTab {
           padding: 24px 12px;
           text-align: center;
-          border: 1px dashed rgba(0, 255, 65, 0.25);
+          border: 1px dashed rgba(255, 255, 255, 0.12);
           border-radius: 12px;
-          background: rgba(0, 12, 0, 0.45);
+          background: rgba(255, 255, 255, 0.02);
         }
         .placeholderTab h2 {
           margin: 0 0 10px;
-          color: #00ff41;
+          color: #ffffff;
           letter-spacing: 0.12em;
         }
         .placeholderTab p {
           margin: 0;
-          color: rgba(190, 220, 200, 0.75);
+          color: rgba(255, 255, 255, 0.55);
           font-size: 0.85rem;
+        }
+        .stubTabSection {
+          padding: 64px 24px 48px;
+          text-align: center;
+          max-width: 720px;
+          margin: 0 auto;
+        }
+        .stubTabTitle {
+          margin: 0 0 16px;
+          font-family: var(--font-sans);
+          font-size: clamp(1.5rem, 4vw, 2.25rem);
+          font-weight: 200;
+          letter-spacing: 0.28em;
+          color: #ffffff;
+          text-transform: uppercase;
+        }
+        .stubTabSubtitle {
+          margin: 0 0 20px;
+          font-family: var(--font-mono);
+          font-size: 12px;
+          letter-spacing: 0.06em;
+          color: rgba(255, 255, 255, 0.55);
+        }
+        .stubTabMeta {
+          margin: 0 0 28px;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          color: rgba(255, 255, 255, 0.35);
+        }
+        .stubTabBody {
+          margin: 0;
+          font-family: var(--font-mono);
+          font-size: 13px;
+          letter-spacing: 0.04em;
+          color: rgba(255, 255, 255, 0.45);
         }
         .zionBetTab {
           margin-top: 4px;
@@ -19855,7 +19934,7 @@ export default function Home() {
           gap: 8px;
           flex-wrap: nowrap;
           min-height: 40px;
-          overflow: hidden;
+          overflow: visible;
         }
         .zionBetMyBetQuestionLine {
           flex: 1;
@@ -19864,7 +19943,7 @@ export default function Home() {
           font-size: 12px;
           color: #e8fff0;
           white-space: nowrap;
-          overflow: hidden;
+          overflow: visible;
           text-overflow: ellipsis;
           font-family: ui-sans-serif, system-ui, sans-serif;
         }
@@ -19882,7 +19961,7 @@ export default function Home() {
           line-height: 1.25;
           font-family: ui-sans-serif, system-ui, sans-serif;
           white-space: nowrap;
-          overflow: hidden;
+          overflow: visible;
           text-overflow: ellipsis;
         }
         .zionBetMyBetRow {
@@ -20216,7 +20295,7 @@ export default function Home() {
           font-weight: 500;
           line-height: 1.4;
           color: #111827;
-          overflow: hidden;
+          overflow: visible;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -20232,7 +20311,7 @@ export default function Home() {
           height: 3px;
           border-radius: 2px;
           background: #f3f4f6;
-          overflow: hidden;
+          overflow: visible;
           margin: 6px 0 8px;
         }
         .zionBetMarketCardOddsFill {
@@ -20879,30 +20958,33 @@ export default function Home() {
         .statsGrid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 14px;
+          gap: 16px;
+          margin-bottom: 28px;
         }
         .statCard {
-          border-radius: 2px;
-          border: 1px solid var(--border);
-          background: var(--bg-card);
-          padding: 16px 18px;
+          border-radius: 0;
+          border: 1px solid var(--border-subtle);
+          background: var(--bg-glass);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          padding: 20px 22px;
         }
         .statCardLabel {
           margin: 0;
           font-size: 0.62rem;
           font-weight: 500;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
           color: var(--text-secondary);
         }
         .statCardValue {
-          margin: 10px 0 8px;
-          font-family: var(--font-mono);
-          font-size: clamp(1.6rem, 3vw, 2.2rem);
-          font-weight: 500;
-          color: var(--text-primary);
-          line-height: 1.1;
+          margin: 12px 0 10px;
+          font-family: var(--font-sans);
+          font-size: clamp(2rem, 4vw, 3rem);
+          font-weight: 700;
+          color: #ffffff;
+          line-height: 1;
+          letter-spacing: -0.02em;
         }
         .statCardValueDanger {
           color: var(--danger);
@@ -20921,57 +21003,33 @@ export default function Home() {
         .constitutionBanner {
           position: relative;
           border: 1px solid var(--border);
-          background: var(--bg-secondary);
-          padding: 12px 16px;
-          margin-bottom: 16px;
+          background: rgba(255, 255, 255, 0.03);
+          padding: 20px 24px;
+          margin-bottom: 24px;
           font-family: var(--font-mono);
           font-size: 0.68rem;
           letter-spacing: 0.06em;
-          overflow: hidden;
-        }
-        .constitutionBanner::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background-image: var(--star-field-image);
-          background-size: cover;
-          background-position: center;
-          opacity: 0.1;
-          pointer-events: none;
-          z-index: 0;
         }
         .planetHeroSection {
           position: relative;
-          margin-bottom: 16px;
+          margin-bottom: 24px;
           border-radius: 2px;
-          overflow: hidden;
+          overflow: visible;
           border: 1px solid var(--border);
-        }
-        .planetHeroSection::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background-image: linear-gradient(
-              rgba(5, 13, 26, 0.85),
-              rgba(5, 13, 26, 0.95)
-            ),
-            var(--hero-space-image);
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-attachment: fixed;
-          pointer-events: none;
-          z-index: 0;
+          min-height: 420px;
+          background: rgba(255, 255, 255, 0.03);
         }
         .planetHeroSection .civilizationSidebarRow {
           position: relative;
           z-index: 1;
           padding: 12px;
+          gap: 16px;
+          margin-bottom: 0;
         }
         .zcoResearchPanel {
           margin: 24px 0 8px;
           border: 1px solid var(--border);
-          background: var(--bg-secondary);
+          background: rgba(255, 255, 255, 0.03);
           position: relative;
           z-index: 1;
         }
@@ -20984,10 +21042,11 @@ export default function Home() {
           background: var(--bg-card);
         }
         .zcoResearchLiveDot {
-          width: 6px;
-          height: 6px;
+          width: 5px;
+          height: 5px;
           border-radius: 50%;
-          background: var(--accent);
+          background: #ffffff;
+          opacity: 0.8;
         }
         .zcoResearchTitle {
           font-family: var(--font-mono);
@@ -21052,8 +21111,42 @@ export default function Home() {
         .labDataCard {
           border: 1px solid var(--border);
           border-radius: 2px;
-          padding: 14px;
-          background: var(--bg-secondary);
+          padding: 20px 24px;
+          background: rgba(255, 255, 255, 0.03);
+          transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .labDataCard:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.15);
+        }
+        .labDataCardSkeleton {
+          min-height: 120px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          pointer-events: none;
+        }
+        .labSkeletonLine {
+          height: 10px;
+          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.08);
+          animation: labSkeletonPulse 1.4s ease-in-out infinite;
+        }
+        .labSkeletonLineWide {
+          width: 72%;
+          height: 14px;
+        }
+        .labSkeletonLineShort {
+          width: 45%;
+        }
+        @keyframes labSkeletonPulse {
+          0%,
+          100% {
+            opacity: 0.45;
+          }
+          50% {
+            opacity: 0.9;
+          }
         }
         .labDataCardHead {
           display: flex;
@@ -21300,7 +21393,7 @@ export default function Home() {
           position: relative;
           border-radius: 4px;
           padding: 16px;
-          overflow: hidden;
+          overflow: visible;
           font-family: "JetBrains Mono", ui-monospace, monospace;
           border: 1px solid rgba(0, 255, 136, 0.2);
           background: rgba(0, 10, 30, 0.8);
@@ -21389,7 +21482,7 @@ export default function Home() {
         .zionPowerBar {
           letter-spacing: -1px;
           font-size: 0.62rem;
-          overflow: hidden;
+          overflow: visible;
         }
         .zionPowerValue {
           color: #fff;
@@ -21462,7 +21555,7 @@ export default function Home() {
           font-size: 0.68rem;
           padding: 6px 0;
           border-bottom: 1px solid rgba(0, 255, 136, 0.06);
-          overflow: hidden;
+          overflow: visible;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
@@ -21518,7 +21611,7 @@ export default function Home() {
           align-items: stretch;
           background: #0a0800;
           border: 1px solid #ffd700;
-          overflow: hidden;
+          overflow: visible;
         }
         .ecoNewsTickerBadge {
           flex-shrink: 0;
@@ -21534,7 +21627,7 @@ export default function Home() {
         }
         .ecoNewsTickerViewport {
           flex: 1;
-          overflow: hidden;
+          overflow: visible;
           min-height: 34px;
           display: flex;
           align-items: center;
@@ -21823,7 +21916,7 @@ export default function Home() {
           justify-content: flex-start;
           align-items: stretch;
           gap: 16px;
-          margin-bottom: 18px;
+          margin-bottom: 0;
         }
         .civilizationSidebarRowFill {
           flex: 1;
@@ -21838,14 +21931,14 @@ export default function Home() {
         }
         .districtMapWrap {
           position: relative;
-          border: 1px solid var(--border);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 2px;
-          padding: 12px 14px 10px;
-          background: var(--bg-secondary);
+          padding: 0;
+          background: transparent;
           min-height: 420px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          overflow: visible;
         }
         .districtMapInstrumentBar {
           display: flex;
@@ -21882,6 +21975,7 @@ export default function Home() {
           min-height: 400px;
           flex-shrink: 0;
           position: relative;
+          background: transparent;
         }
         .districtMapObservationOverlay {
           position: absolute;
@@ -22099,15 +22193,16 @@ export default function Home() {
           width: auto;
         }
         .sidebarSectionTitle {
-          margin: 0 0 4px;
-          color: var(--text-primary);
-          font-size: 0.72rem;
-          letter-spacing: 0.18em;
+          margin: 0 0 6px;
+          color: #ffffff;
+          font-size: 0.8rem;
+          letter-spacing: 0.14em;
           text-transform: uppercase;
         }
         .fieldObservationsTitle {
           font-family: var(--font-sans);
-          font-weight: 500;
+          font-weight: 700;
+          font-size: 0.85rem;
         }
         .sidebarHint {
           margin: 0 0 8px;
@@ -22117,11 +22212,10 @@ export default function Home() {
           color: var(--text-muted);
         }
         .fieldObservationsPanel {
-          border: none;
-          border-left: 2px solid var(--accent);
-          border-radius: 0;
-          padding: 16px 16px 16px 14px;
-          background: var(--bg-secondary);
+          border: 1px solid var(--border);
+          border-radius: 2px;
+          padding: 20px 24px;
+          background: rgba(255, 255, 255, 0.03);
         }
         .fieldObservationCard {
           border: none !important;
@@ -22361,7 +22455,7 @@ export default function Home() {
         .bar {
           height: 4px;
           border-radius: 999px;
-          overflow: hidden;
+          overflow: visible;
           background: rgba(255, 255, 255, 0.08);
         }
         .fill {

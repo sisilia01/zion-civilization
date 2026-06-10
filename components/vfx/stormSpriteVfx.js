@@ -87,7 +87,7 @@ export function createStormSpriteVfx(planet, lightDir) {
       undefined,
       (err) => console.error("[storm sprites] texture load failed:", err)
     );
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
 
     const group = new THREE.Group();
     group.renderOrder = 3;
