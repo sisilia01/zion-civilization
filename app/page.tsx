@@ -1306,26 +1306,24 @@ function zcoAgreementDisplayColor(pct: number): string {
   return "#ef4444";
 }
 
-/** Monochrome lab label — no event-type color coding */
-function labMonoBadge(): { bg: string; border: string; fg: string } {
-  return { bg: "var(--bg-card)", border: "var(--border)", fg: "var(--text-primary)" };
-}
-
 function zcoConsensusShort(d: ZcoDecision): string {
   const c = d.consensus;
+  let votesFor = 0;
+  let totalVotes = 0;
   if (c?.method === "consensus" && c.votes_for != null && c.total_votes != null) {
-    return `${c.votes_for}/${c.total_votes}  ✓`;
+    votesFor = c.votes_for;
+    totalVotes = c.total_votes;
+  } else {
+    const votes = d.votes ?? [];
+    totalVotes = votes.length;
+    votesFor = votes.filter((v) => v.status === "voted").length;
   }
-  const votes = d.votes ?? [];
-  const voted = votes.filter((v) => v.status === "voted").length;
-  if (votes.length > 0) return `${voted}/${votes.length}  —`;
-  return "—";
+  if (totalVotes === 0) return "—";
+  const ratio = `${votesFor}/${totalVotes}`;
+  if (votesFor === totalVotes) return `${ratio}  RATIFIED`;
+  if (votesFor > 0) return `${ratio}  PARTIAL`;
+  return `${ratio}  PENDING`;
 }
-
-const MATRIX_CHARS =
-  "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ";
-
-const bgChars = MATRIX_CHARS;
 
 const classMeta = (agentClass: string) => {
   const c = (agentClass || "").trim().toLowerCase();
@@ -9271,7 +9269,11 @@ function colorWithAlpha(hex: string, alphaSuffix: string): string {
   return hex.length === 7 ? `${hex}${alphaSuffix}` : hex;
 }
 
-function wireItemStyle(accentColor: string, type?: string): CSSProperties {
+function wireItemStyle(accentColor: string, type?: string, lab = false): CSSProperties {
+  if (lab) {
+    if (type === "breaking") return { color: accentColor, fontWeight: 600 };
+    return { color: "var(--text-secondary)" };
+  }
   if (type === "breaking") return { color: "#ff4444", fontWeight: "bold" };
   return { color: accentColor };
 }
@@ -9356,12 +9358,19 @@ function NewsWireTicker({
                   fontFamily: "monospace",
                   fontSize: "0.75rem",
                   whiteSpace: "nowrap",
-                  ...wireItemStyle(color, item.type),
+                  ...wireItemStyle(color, item.type, isLab),
                 }}
               >
                 {item.text}
               </span>
-              <span style={{ color: colorWithAlpha(color, "55"), padding: "0 20px" }}>◆</span>
+              <span
+                style={{
+                  color: isLab ? "var(--text-muted)" : colorWithAlpha(color, "55"),
+                  padding: "0 20px",
+                }}
+              >
+                ◆
+              </span>
             </span>
           ))}
         </div>
@@ -10005,9 +10014,6 @@ export default function Home() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const [showIntro, setShowIntro] = useState(true);
-  const [introFading, setIntroFading] = useState(false);
-  const [dashboardVisible, setDashboardVisible] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastAliveCount, setLastAliveCount] = useState<number | null>(null);
@@ -10065,7 +10071,6 @@ export default function Home() {
     };
   } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const aliveAgents = stats?.alive ?? agents.length;
   const [agentClasses, setAgentClasses] = useState({ elite: 0, middle: 0, poor: 0, critical: 0 });
 
@@ -11063,7 +11068,7 @@ export default function Home() {
   }, [walletAddress]);
 
   useEffect(() => {
-    if (showIntro || activeTab !== "zionbet") return;
+    if (activeTab !== "zionbet") return;
     const load = () => {
       void fetch("https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd")
         .then((r) => r.json())
@@ -11077,7 +11082,7 @@ export default function Home() {
     load();
     const id = window.setInterval(load, 60000);
     return () => clearInterval(id);
-  }, [showIntro, activeTab]);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "zionbet") setZionBetSelectedMarket(null);
@@ -14079,92 +14084,6 @@ export default function Home() {
   }, [fetchConversations]);
 
   useEffect(() => {
-    if (showIntro && !dashboardVisible) return;
-    const canvas = bgCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let raf = 0;
-    let last = performance.now();
-    let acc = 0;
-    const stepMs = 50;
-    const size = 14;
-    let drops: number[] = [];
-
-    const setup = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const cols = Math.floor(window.innerWidth / size);
-      drops = Array(cols).fill(0).map(() => Math.floor(Math.random() * -50));
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-    };
-
-    const loop = (now: number) => {
-      acc += now - last;
-      last = now;
-      if (acc >= stepMs) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
-        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-        ctx.fillStyle = "#00ff41";
-        ctx.font = `${size}px monospace`;
-        for (let i = 0; i < drops.length; i++) {
-          const ch = bgChars[Math.floor(Math.random() * bgChars.length)]!;
-          const x = i * size;
-          const y = drops[i]! * size;
-          ctx.fillText(ch, x, y);
-          if (y > window.innerHeight + size && Math.random() > 0.98) drops[i] = Math.floor(Math.random() * -20);
-          drops[i]! += 1;
-        }
-        acc = 0;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-
-    setup();
-    window.addEventListener("resize", setup);
-    raf = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", setup);
-    };
-  }, [dashboardVisible, showIntro]);
-
-  useEffect(() => {
-    if (!showIntro) {
-      setDashboardVisible(true);
-    }
-  }, [showIntro]);
-
-  useEffect(() => {
-    const fadeTimer = setTimeout(() => {
-      setIntroFading(true);
-      setDashboardVisible(true);
-    }, 5200);
-    const hideTimer = setTimeout(() => {
-      setDashboardVisible(true);
-      setIntroFading(true);
-      setShowIntro(false);
-    }, 6000);
-    const failsafeTimer = setTimeout(() => {
-      setDashboardVisible(true);
-      setIntroFading(true);
-      setShowIntro(false);
-    }, 12000);
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(hideTimer);
-      clearTimeout(failsafeTimer);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (showIntro) return;
     const load = async () => {
       try {
         await fetchStats();
@@ -14182,10 +14101,10 @@ export default function Home() {
     load();
     const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
-  }, [showIntro, fetchStats]);
+  }, [fetchStats]);
 
   useEffect(() => {
-    if (showIntro || activeTab !== "chat" || selectedClass == null) {
+    if (activeTab !== "chat" || selectedClass == null) {
       if (selectedClass == null) setChatAgentsFiltered([]);
       return;
     }
@@ -14225,10 +14144,10 @@ export default function Home() {
     };
     void load();
     return () => ac.abort();
-  }, [showIntro, activeTab, selectedClass]);
+  }, [activeTab, selectedClass]);
 
   useEffect(() => {
-    if (showIntro || !walletAddress.trim()) {
+    if (!walletAddress.trim()) {
       setUserPoints(0);
       return;
     }
@@ -14246,10 +14165,9 @@ export default function Home() {
       }
     };
     loadUser();
-  }, [showIntro, walletAddress]);
+  }, [walletAddress]);
 
   useEffect(() => {
-    if (showIntro) return;
     const loadLb = async () => {
       try {
         const r = await fetch("/api/leaderboard");
@@ -14269,7 +14187,7 @@ export default function Home() {
     loadLb();
     const t = setInterval(loadLb, 30000);
     return () => clearInterval(t);
-  }, [showIntro]);
+  }, []);
 
   const maxBalance = useMemo(
     () => Math.max(1, ...(Array.isArray(agents) ? agents : []).map((a) => a.balance)),
@@ -14827,10 +14745,10 @@ export default function Home() {
           }}
           style={{
             background: "transparent",
-            border: "1px solid #00ff41",
-            color: "#00ff41",
+            border: "1px solid var(--border)",
+            color: "var(--text-primary)",
             padding: "6px 10px 6px 6px",
-            borderRadius: "6px",
+            borderRadius: "2px",
             cursor: "pointer",
             fontFamily: "monospace",
             fontSize: "0.78rem",
@@ -15129,17 +15047,6 @@ export default function Home() {
           aria-hidden
         />
       )}
-      <canvas
-        ref={bgCanvasRef}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 0,
-          opacity: activeTab === "zbank" || activeTab === "civilization" ? 0 : 0.22,
-          pointerEvents: "none",
-        }}
-        aria-hidden
-      />
       <div
         className="bg-nebula"
         style={activeTab === "zbank" ? { opacity: 0, background: "#0a0a0a" } : undefined}
@@ -15149,157 +15056,8 @@ export default function Home() {
         style={activeTab === "zbank" ? { display: "none" } : undefined}
       />
 
-      {showIntro && (
-        <div
-          className="introFullscreen"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "#000",
-            zIndex: 10002,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            overflow: "hidden",
-            opacity: introFading ? 0 : 1,
-            transition: "opacity 0.8s ease",
-            pointerEvents: introFading ? "none" : "auto",
-          }}
-        >
-          <canvas
-            ref={(canvas) => {
-              if (!canvas) return;
-              const ctx = canvas.getContext("2d");
-              if (!ctx) return;
-              canvas.width = window.innerWidth;
-              canvas.height = window.innerHeight;
-              const cx = canvas.width / 2;
-              const cy = canvas.height / 2;
-
-              const introColors = ["#00ff41", "#00ff41", "#ffd700", "#ff6600", "#ffffff"];
-              const particles = Array.from({ length: 800 }, () => ({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                targetAngle: Math.random() * Math.PI * 2,
-                targetRadius: 20 + Math.pow(Math.random(), 0.5) * 280,
-                color: introColors[Math.floor(Math.random() * introColors.length)],
-                size: 0.5 + Math.random() * 1.5,
-                speed: 0.001 + Math.random() * 0.002,
-                angle: Math.random() * Math.PI * 2,
-                progress: 0,
-              }));
-
-              let frame = 0;
-              const animate = () => {
-                ctx.fillStyle = "rgba(0,0,0,0.12)";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                frame++;
-                const convergence = Math.min(frame / 120, 1);
-
-                particles.forEach((p) => {
-                  const tx = cx + Math.cos(p.targetAngle) * p.targetRadius;
-                  const ty = cy + Math.sin(p.targetAngle) * p.targetRadius * 0.4;
-
-                  p.x += (tx - p.x) * 0.02 * convergence;
-                  p.y += (ty - p.y) * 0.02 * convergence;
-
-                  if (convergence > 0.5) {
-                    p.targetAngle += p.speed;
-                  }
-
-                  ctx.beginPath();
-                  ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                  ctx.fillStyle = p.color;
-                  ctx.globalAlpha = 0.4 + Math.random() * 0.6;
-                  ctx.fill();
-                  ctx.globalAlpha = 1;
-                });
-
-                requestAnimationFrame(animate);
-              };
-              animate();
-            }}
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-          />
-
-          <div style={{ position: "relative", zIndex: 2, textAlign: "center" }}>
-            <div
-              style={{
-                fontSize: isMobile ? "2.5rem" : "4rem",
-                fontWeight: 900,
-                fontFamily: "monospace",
-                color: "#00ff41",
-                letterSpacing: "0.15em",
-                textShadow: "0 0 30px rgba(0,255,65,0.8), 0 0 60px rgba(0,255,65,0.4)",
-                animation: "fadeInUp 0.8s ease forwards",
-                marginBottom: "8px",
-                opacity: 0,
-                animationDelay: "0.5s",
-                animationFillMode: "forwards",
-              }}
-            >
-              ZION
-            </div>
-
-            <div
-              style={{
-                fontSize: "1rem",
-                color: "#ffd700",
-                letterSpacing: "0.4em",
-                fontFamily: "monospace",
-                animation: "fadeInUp 0.8s ease forwards",
-                animationDelay: "1s",
-                opacity: 0,
-                animationFillMode: "forwards",
-                marginBottom: "32px",
-              }}
-            >
-              CIVILIZATION
-            </div>
-
-            <div
-              style={{
-                animation: "fadeInUp 0.8s ease forwards",
-                animationDelay: "1.8s",
-                opacity: 0,
-                animationFillMode: "forwards",
-                fontFamily: "monospace",
-                fontSize: "0.75rem",
-                color: "#333",
-                lineHeight: 2,
-              }}
-            >
-              <div style={{ color: "#00ff41" }}>✓ Connected to Sui testnet</div>
-              <div style={{ color: "#00ff41" }}>
-                {stats?.alive ? `✓ ${stats.alive.toLocaleString()} agents online` : "Loading agents..."}
-              </div>
-              <div style={{ color: "#ffd700" }}>✓ ZionBet prediction markets ready</div>
-              <div style={{ color: "#00ff41" }}>✓ Walrus · DeepBook · Seal online</div>
-            </div>
-
-            <div
-              style={{
-                marginTop: "24px",
-                animation: "fadeInUpSemi 0.8s ease forwards",
-                animationDelay: "2.5s",
-                opacity: 0,
-                animationFillMode: "forwards",
-                color: "#00ff41",
-                fontSize: "0.7rem",
-                letterSpacing: "0.2em",
-                fontFamily: "monospace",
-              }}
-            >
-              WORLD&apos;S FIRST AUTONOMOUS AI CIVILIZATION ON SUI
-            </div>
-          </div>
-        </div>
-      )}
-
       <div
-        className={`dashboard ${dashboardVisible ? "show" : ""}`}
+        className="dashboard show"
         style={isMobile ? { padding: "8px" } : undefined}
       >
         <header className={`labHeader ${isMobile ? "labHeaderMobile" : ""}`}>
@@ -15508,50 +15266,25 @@ export default function Home() {
                   <div className="labSectionDivider">
                     <span className="labSectionDividerLabel">CORPORATE SECTOR</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
+                  <div className="labDataCardGrid">
                     {uniqueCorporations.map((corp) => (
-                      <div
-                        key={corp.id}
-                        style={{
-                          border: "1px solid #1a3a5c",
-                          borderRadius: "10px",
-                          padding: "14px",
-                          background: "rgba(77,162,255,0.03)",
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                          <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
-                            {corp.name}
-                          </span>
-                          <span
-                            style={{
-                              background: "rgba(77,162,255,0.1)",
-                              color: "#4DA2FF",
-                              fontSize: "0.6rem",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            {sectorEmoji[corp.corp_type] || "🏢"} {corp.corp_type?.toUpperCase()}
-                          </span>
+                      <div key={corp.id} className="labDataCard">
+                        <div className="labDataCardHead">
+                          <span className="labDataCardTitle">{corp.name}</span>
+                          <span className="labDataCardBadge">{corp.corp_type?.toUpperCase() || "SECTOR"}</span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
-                          <div style={{ textAlign: "center" }}>
-                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>EMPLOYEES</div>
-                            <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{corp.employees}</div>
+                        <div className="labDataCardStats">
+                          <div className="labDataCardStat">
+                            <span className="labDataCardStatLabel">EMPLOYEES</span>
+                            <span className="labDataCardStatValue">{corp.employees}</span>
                           </div>
-                          <div style={{ textAlign: "center" }}>
-                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
-                            <div style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                              {corp.treasury?.toFixed(0)}
-                            </div>
+                          <div className="labDataCardStat">
+                            <span className="labDataCardStatLabel">TREASURY</span>
+                            <span className="labDataCardStatValue">{corp.treasury?.toFixed(0)}</span>
                           </div>
-                          <div style={{ textAlign: "center" }}>
-                            <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>REVENUE</div>
-                            <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                              {corp.revenue?.toFixed(0)}
-                            </div>
+                          <div className="labDataCardStat">
+                            <span className="labDataCardStatLabel">REVENUE</span>
+                            <span className="labDataCardStatValue">{corp.revenue?.toFixed(0)}</span>
                           </div>
                         </div>
                       </div>
@@ -15566,10 +15299,10 @@ export default function Home() {
                   <div className="labSectionDivider">
                     <span className="labSectionDividerLabel">LAW ENFORCEMENT</span>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
+                  <div className="labDataCardGrid">
                     {policeDivisions.divisions.map((div) => {
                       const divName = div.division_name || div.division || "UNKNOWN";
-                      const roleBadge = POLICE_DIVISION_ROLE_BADGES[divName] || "🚔 PATROL";
+                      const roleBadge = (POLICE_DIVISION_ROLE_BADGES[divName] || "PATROL").replace(/^[^\w]+\s*/, "");
                       const roleDesc =
                         POLICE_DIVISION_DESCRIPTIONS[divName] || "Division operations";
                       const dimmed = Boolean(div.depleted);
@@ -15585,141 +15318,32 @@ export default function Home() {
                             : div.officers > 8
                               ? "MID"
                               : "LOW";
-                      const statusColor = mobilized
-                        ? "#ff8800"
-                        : dimmed
-                          ? "#666"
-                          : div.officers > 15
-                            ? "#00ff41"
-                            : div.officers > 8
-                              ? "#ffaa00"
-                              : "#ff3232";
                       return (
                         <div
                           key={divName}
-                          style={{
-                            border: mobilized ? "1px solid #ff8800" : "1px solid #1a4a4a",
-                            borderRadius: "10px",
-                            padding: "14px",
-                            background: mobilized
-                              ? "rgba(255,120,0,0.06)"
-                              : "rgba(0,200,200,0.03)",
-                            opacity: dimmed && !mobilized ? 0.45 : 1,
-                          }}
+                          className="labDataCard"
+                          style={{ opacity: dimmed && !mobilized ? 0.55 : 1 }}
                         >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: "#00cccc",
-                                fontFamily: "monospace",
-                                fontWeight: "bold",
-                                fontSize: "0.85rem",
-                              }}
-                            >
-                              {divName}
-                            </span>
-                            <span
-                              style={{
-                                background: "rgba(0,200,200,0.1)",
-                                color: "#00cccc",
-                                fontSize: "0.6rem",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontFamily: "monospace",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {roleBadge}
-                            </span>
+                          <div className="labDataCardHead">
+                            <span className="labDataCardTitle">{divName}</span>
+                            <span className="labDataCardBadge">{roleBadge}</span>
                           </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: "#666",
-                                fontFamily: "monospace",
-                                fontSize: "0.6rem",
-                              }}
-                            >
-                              {roleDesc}
-                            </span>
-                            <span
-                              style={{
-                                background: "rgba(0,200,200,0.1)",
-                                color: "#00cccc",
-                                fontSize: "0.6rem",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontFamily: "monospace",
-                              }}
-                            >
-                              {div.effectiveness.toFixed(0)}% EFF
-                            </span>
+                          <div className="labDataCardSubrow">
+                            <span className="labDataCardMeta">{roleDesc}</span>
+                            <span className="labDataCardBadge">{div.effectiveness.toFixed(0)}% EFF</span>
                           </div>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-                              gap: "8px",
-                            }}
-                          >
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
-                                OFFICERS
-                              </div>
-                              <div
-                                style={{
-                                  color: "#fff",
-                                  fontFamily: "monospace",
-                                  fontSize: "0.9rem",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                {div.officers}
-                              </div>
+                          <div className="labDataCardStats">
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">OFFICERS</span>
+                              <span className="labDataCardStatValue">{div.officers}</span>
                             </div>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
-                                BUDGET
-                              </div>
-                              <div
-                                style={{
-                                  color: "#00cccc",
-                                  fontFamily: "monospace",
-                                  fontSize: "0.9rem",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                {div.budget.toFixed(0)}
-                              </div>
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">BUDGET</span>
+                              <span className="labDataCardStatValue">{div.budget.toFixed(0)}</span>
                             </div>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>
-                                STATUS
-                              </div>
-                              <div
-                                style={{
-                                  color: statusColor,
-                                  fontFamily: "monospace",
-                                  fontSize: "0.8rem",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                {statusLabel}
-                              </div>
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">STATUS</span>
+                              <span className="labDataCardStatValue">{statusLabel}</span>
                             </div>
                           </div>
                         </div>
@@ -15777,7 +15401,7 @@ export default function Home() {
                   <span className="zcoResearchTitle">ZION CONSENSUS ORACLE — ZCO v1.0</span>
                   <span className="zcoResearchUpdated">
                     {zcoLastUpdated
-                      ? `Last updated: ${zcoLastUpdated.toLocaleTimeString()}`
+                      ? `${zcoLastUpdated.toLocaleTimeString("en-GB", { timeZone: "UTC", hour12: false })} UTC`
                       : zcoLoading
                         ? "Loading…"
                         : ""}
@@ -15792,8 +15416,8 @@ export default function Home() {
                     <table className="zcoResearchTable">
                       <thead>
                         <tr>
-                          <th>EVENT TYPE</th>
-                          <th>DESCRIPTION</th>
+                          <th>TYPE</th>
+                          <th>EVENT</th>
                           <th>CONSENSUS</th>
                           <th>PROOF</th>
                         </tr>
@@ -15801,50 +15425,25 @@ export default function Home() {
                       <tbody>
                         {(Array.isArray(zcoDecisions) ? zcoDecisions : []).slice(0, 8).map((decision, zidx) => {
                           const eventTypeRaw = (decision.event_type || "").trim();
-                          const eventBadge = eventTypeRaw
+                          const eventType = eventTypeRaw
                             ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
                             : "EVENT";
-                          const mono = labMonoBadge();
                           const hash = decision.consensus_hash || decision.tx_hash || "";
                           const proofHref = zcoProofHref(decision);
                           const desc = (decision.event_description || decision.decision || "—").slice(0, 120);
                           return (
                             <tr key={`zco-row-${hash || decision.agent}-${zidx}`}>
-                              <td>
-                                <span
-                                  className="zcoMonoBadge"
-                                  style={{
-                                    border: `1px solid ${mono.border}`,
-                                    background: mono.bg,
-                                    color: mono.fg,
-                                  }}
-                                >
-                                  {eventBadge}
-                                </span>
-                              </td>
+                              <td className="zcoTypeLabel">{eventType}</td>
                               <td className="zcoResearchDesc">{desc}</td>
                               <td className="zcoResearchConsensus">{zcoConsensusShort(decision)}</td>
                               <td className="zcoResearchProof">
                                 {proofHref ? (
                                   <a href={proofHref} className="zcoResearchLink">
-                                    Explorer
+                                    VIEW IN EXPLORER ↗
                                   </a>
                                 ) : (
                                   <span className="zcoResearchMuted">pending</span>
                                 )}
-                                {decision.sui_url ? (
-                                  <>
-                                    {" · "}
-                                    <a
-                                      href={decision.sui_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="zcoResearchLink"
-                                    >
-                                      Sui TX
-                                    </a>
-                                  </>
-                                ) : null}
                               </td>
                             </tr>
                           );
@@ -19765,10 +19364,6 @@ export default function Home() {
           max-width: 1500px;
           margin: 0 auto;
           padding: 20px 26px 26px;
-          opacity: 0;
-          transition: opacity 0.8s ease;
-        }
-        .dashboard.show {
           opacity: 1;
         }
         .labHeader {
@@ -21485,22 +21080,15 @@ export default function Home() {
           content: "";
           position: absolute;
           inset: 0;
-          background-image: var(--hero-space-image);
+          background-image: linear-gradient(
+              rgba(5, 13, 26, 0.85),
+              rgba(5, 13, 26, 0.95)
+            ),
+            var(--hero-space-image);
           background-size: cover;
           background-position: center;
-          opacity: 0.3;
-          pointer-events: none;
-          z-index: 0;
-        }
-        .planetHeroSection::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            180deg,
-            rgba(5, 13, 26, 0.55) 0%,
-            rgba(5, 13, 26, 0.82) 100%
-          );
+          background-repeat: no-repeat;
+          background-attachment: fixed;
           pointer-events: none;
           z-index: 0;
         }
@@ -21578,14 +21166,78 @@ export default function Home() {
         .zcoResearchTable tr:last-child td {
           border-bottom: none;
         }
-        .zcoMonoBadge {
-          display: inline-block;
-          font-size: 0.58rem;
-          font-weight: 500;
+        .zcoTypeLabel {
+          color: var(--text-secondary);
+          font-size: 0.68rem;
           letter-spacing: 0.1em;
-          padding: 3px 8px;
           text-transform: uppercase;
           white-space: nowrap;
+        }
+        .labDataCardGrid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap: 12px;
+        }
+        .labDataCard {
+          border: 1px solid var(--border);
+          border-radius: 2px;
+          padding: 14px;
+          background: var(--bg-secondary);
+        }
+        .labDataCardHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .labDataCardTitle {
+          font-family: var(--font-mono);
+          font-weight: 500;
+          font-size: 0.85rem;
+          color: var(--text-primary);
+        }
+        .labDataCardBadge {
+          font-family: var(--font-mono);
+          font-size: 0.6rem;
+          color: var(--text-secondary);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .labDataCardSubrow {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .labDataCardMeta {
+          font-family: var(--font-mono);
+          font-size: 0.6rem;
+          color: var(--text-muted);
+        }
+        .labDataCardStats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+        }
+        .labDataCardStat {
+          text-align: center;
+        }
+        .labDataCardStatLabel {
+          display: block;
+          color: var(--text-muted);
+          font-family: var(--font-mono);
+          font-size: 0.6rem;
+          letter-spacing: 0.06em;
+        }
+        .labDataCardStatValue {
+          display: block;
+          color: var(--text-primary);
+          font-family: var(--font-mono);
+          font-size: 0.9rem;
+          font-weight: 500;
         }
         .zcoResearchDesc {
           color: var(--text-secondary);
@@ -21593,8 +21245,9 @@ export default function Home() {
           line-height: 1.4;
         }
         .zcoResearchConsensus {
-          color: var(--accent);
+          color: var(--text-primary);
           white-space: nowrap;
+          letter-spacing: 0.04em;
         }
         .zcoResearchLink {
           color: var(--accent);
