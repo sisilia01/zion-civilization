@@ -108,17 +108,17 @@ const TAB_TYPES: Record<string, string[]> = {
 };
 
 const WALRUS_TICKER_TYPE_COLORS: Record<string, string> = {
-  election: "#ffd700",
-  catastrophe: "#ff4141",
-  clan_war: "#ff6b35",
-  rebellion: "#ff4141",
-  lottery: "#00d4ff",
-  blessing: "#a78bfa",
-  birth: "#00ff41",
-  prayer: "#666",
-  chat: "#00ff41",
-  work: "#888",
-  clan_join: "#4ade80",
+  election: "var(--text-secondary)",
+  catastrophe: "var(--text-secondary)",
+  clan_war: "var(--text-secondary)",
+  rebellion: "var(--text-secondary)",
+  lottery: "var(--text-secondary)",
+  blessing: "var(--text-secondary)",
+  birth: "var(--text-secondary)",
+  prayer: "var(--text-muted)",
+  chat: "var(--text-secondary)",
+  work: "var(--text-muted)",
+  clan_join: "var(--text-secondary)",
 };
 
 const sectorEmoji: Record<string, string> = {
@@ -191,13 +191,13 @@ function renderPoliticalWireText(text: string): ReactNode {
   });
 }
 
-const ECO_GREEN = "#00ff88";
-const ECO_GOLD = "#ffd700";
-const ECO_WARN = "#ffd700";
-const ECO_DANGER = "#ff4444";
-const ECO_PURPLE = "#a78bfa";
-const ECO_BLUE = "#4DA2FF";
-const ECO_ORANGE = "#ff8800";
+const ECO_GREEN = "var(--text-primary)";
+const ECO_GOLD = "var(--text-secondary)";
+const ECO_WARN = "var(--text-secondary)";
+const ECO_DANGER = "var(--danger)";
+const ECO_PURPLE = "var(--text-secondary)";
+const ECO_BLUE = "var(--accent)";
+const ECO_ORANGE = "var(--text-secondary)";
 const ECO_SENATE_SEATS = 9;
 
 const ECO_BG_GOLD = "#0a0800";
@@ -240,10 +240,8 @@ function ecoZrsBorderColor(state: string) {
   return "#ffd700";
 }
 
-function ecoRevMeterColor(meter: number) {
-  if (meter < 30) return ECO_GREEN;
-  if (meter < 60) return ECO_WARN;
-  return ECO_DANGER;
+function ecoRevMeterColor(_meter: number) {
+  return "var(--text-primary)";
 }
 
 function ecoPollBar(pct: number, blocks = 10) {
@@ -283,12 +281,14 @@ function EcoTermDivider() {
   return <div style={{ height: 1, background: "#111111", margin: "8px 0" }} />;
 }
 
-function EcoTermBadge({ text, color }: { text: string; color: string }) {
+function EcoTermBadge({ text }: { text: string; color?: string }) {
   return (
     <span
+      className="instrument-label"
       style={{
-        border: `1px solid ${color}`,
-        color,
+        display: "inline-block",
+        border: "1px solid var(--border)",
+        color: "var(--text-secondary)",
         fontSize: 10,
         padding: "2px 6px",
         letterSpacing: 0.5,
@@ -324,41 +324,36 @@ function EcoPollBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-/** RPG-style power bar for ECO-POL dashboard */
+/** Instrument readout for governance metrics */
 function PowerGameBar({
   label,
   value,
   maxValue,
-  color,
-  emoji,
 }: {
   label: string;
   value: number;
   maxValue: number;
-  color: string;
-  emoji: string;
+  color?: string;
+  emoji?: string;
 }) {
-  const segments = 14;
-  const filled = Math.round(Math.min(1, maxValue > 0 ? value / maxValue : 0) * segments);
-  const bar = `${"█".repeat(filled)}${"░".repeat(Math.max(0, segments - filled))}`;
+  const pct = maxValue > 0 ? Math.round((value / maxValue) * 100) : 0;
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "center",
-        gap: 6,
-        fontFamily: "ui-monospace, monospace",
+        alignItems: "baseline",
+        gap: 8,
+        fontFamily: "var(--font-mono)",
         fontSize: 11,
         marginBottom: 8,
         flexWrap: "wrap",
       }}
     >
-      <span style={{ width: 64, color: "#888", flexShrink: 0 }}>{label}:</span>
-      <span style={{ color, letterSpacing: -1 }}>{bar}</span>
-      <span style={{ color: "#fff", fontWeight: "bold" }}>
+      <span style={{ width: 72, color: "var(--text-muted)", flexShrink: 0 }}>{label}</span>
+      <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
         {Math.round(value).toLocaleString("en-US")}
       </span>
-      <span>{emoji}</span>
+      <span style={{ color: "var(--text-secondary)" }}>({pct}%)</span>
     </div>
   );
 }
@@ -507,16 +502,7 @@ function ZionGovCard({
     <ZionTermCard>
       <div className="zionGovCardHead">
         <span className="zionGovName">{name.toUpperCase()}</span>
-        <span
-          className="zionSectorBadge"
-          style={{
-            color: badgeColor,
-            borderColor: `${badgeColor}55`,
-            background: `${badgeColor}12`,
-          }}
-        >
-          {badge}
-        </span>
+        <span className="zionSectorBadge">{badge}</span>
       </div>
       <ZionMetricGrid metrics={metrics} />
     </ZionTermCard>
@@ -1327,16 +1313,15 @@ function zcoConsensusShort(d: ZcoDecision): string {
 
 const classMeta = (agentClass: string) => {
   const c = (agentClass || "").trim().toLowerCase();
-  if (c === "elite") {
-    return { icon: "👑", border: "#FFD700", tier: "tier-elite" as const };
-  }
-  if (c === "middle") {
-    return { icon: "⚡", border: "#C0C0C0", tier: "tier-middle" as const };
-  }
-  if (c === "critical") {
-    return { icon: "🩸", border: "#cc0000", tier: "tier-critical" as const };
-  }
-  return { icon: "💀", border: "#CD7F32", tier: "tier-poor" as const };
+  const tier =
+    c === "elite"
+      ? ("tier-elite" as const)
+      : c === "middle"
+        ? ("tier-middle" as const)
+        : c === "critical"
+          ? ("tier-critical" as const)
+          : ("tier-poor" as const);
+  return { icon: "", border: "var(--border)", tier };
 };
 
 function chronicleTypeKey(type: string): string {
@@ -1346,39 +1331,8 @@ function chronicleTypeKey(type: string): string {
   return t;
 }
 
-function chronicleMeta(type: string): { icon: string; border: string } {
-  const lower = type.toLowerCase();
-  if (/^(btc|eth|sui|doge)_updown_/.test(lower)) return { icon: "🪙", border: "#FFD700" };
-  if (lower.startsWith("zion_price")) return { icon: "🪙", border: "#00E676" };
-  if (lower.startsWith("sui_price")) return { icon: "◈", border: "#4FC3F7" };
-  if (lower.startsWith("clan_war")) return { icon: "⚔️", border: "#FF8C00" };
-  const key = chronicleTypeKey(type);
-  switch (key) {
-    case "death":
-      return { icon: "💀", border: "#FF0000" };
-    case "birth":
-      return { icon: "👶", border: "#00FF41" };
-    case "clan_war":
-      return { icon: "⚔️", border: "#FF8C00" };
-    case "catastrophe":
-      return { icon: "🌋", border: "#8B00FF" };
-    case "neo":
-      return { icon: "👁️", border: "#00FFFF" };
-    case "prayer":
-      return { icon: "🙏", border: "#FFD700" };
-    case "election":
-      return { icon: "🏛️", border: "#4DA2FF" };
-    case "rebellion":
-      return { icon: "✊", border: "#FF4444" };
-    case "blessing":
-      return { icon: "✨", border: "#FFD700" };
-    case "lottery":
-      return { icon: "🎰", border: "#FFD700" };
-    case "work":
-      return { icon: "⚒️", border: "#888888" };
-    default:
-      return { icon: "◆", border: "#8dffbf" };
-  }
+function chronicleMeta(_type: string): { icon: string; border: string } {
+  return { icon: "", border: "var(--border)" };
 }
 
 /** Canonical key for priority ordering (matches API priority list). */
@@ -1740,14 +1694,14 @@ type ZionbetBetTab =
   | "culture";
 
 const ZIONBET_TAB_LABELS: Record<ZionbetBetTab, string> = {
-  civilization: "🏛 CIVILIZATION",
-  crypto: "₿ CRYPTO",
-  sports: "🏆 SPORTS",
-  politics: "🗳 POLITICS",
-  geopolitics: "🗺️ GEOPOLITICS",
-  finance: "💰 FINANCE",
-  tech: "💻 TECH",
-  culture: "🌍 WORLD",
+  civilization: "CIVILIZATION",
+  crypto: "CRYPTO",
+  sports: "SPORTS",
+  politics: "POLITICS",
+  geopolitics: "GEOPOLITICS",
+  finance: "FINANCE",
+  tech: "TECH",
+  culture: "WORLD",
 };
 
 type ZionMarketRow = {
@@ -1949,8 +1903,8 @@ const POLY_TABS: ZionbetBetTab[] = [
   "culture",
 ];
 
-const ZIONBET_CARD_BORDER = "#00ff41";
-const ZIONBET_CARD_BG = "rgba(0,255,65,0.04)";
+const ZIONBET_CARD_BORDER = "var(--border)";
+const ZIONBET_CARD_BG = "var(--bg-secondary)";
 
 function zionbetApiToMarket(m: ZionbetApiMarket): ZionBetMarket {
   const yes = m.yes_pct ?? m.seed_yes_cents ?? 50;
@@ -2063,9 +2017,9 @@ function zionbetTimeframeEndLabel(tf?: string): string {
 }
 
 function zionbetOddsTrendIndicator(yes: number): { symbol: string; color: string } {
-  if (yes > 60) return { symbol: "↑", color: "#00ff41" };
-  if (yes < 40) return { symbol: "↓", color: "#ff3232" };
-  return { symbol: "—", color: "#888" };
+  if (yes > 60) return { symbol: "↑", color: "var(--text-primary)" };
+  if (yes < 40) return { symbol: "↓", color: "var(--text-secondary)" };
+  return { symbol: "—", color: "var(--text-muted)" };
 }
 
 type ZionPolyMarket = {
@@ -6462,49 +6416,18 @@ function AgentTile({
 }) {
   const pct = Math.max(8, Math.round((agent.balance / maxBalance) * 100));
   const tier = (agent.class || "").trim().toLowerCase();
-  const nameColor = tier === "elite" ? "#FFD700" : tier === "middle" ? "#C0C0C0" : "#CD7F32";
-  const classLabel = tier === "elite" ? "Elite" : tier === "middle" ? "Middle" : "Poor";
-  const tooltip = `${classLabel} Agent - ${Math.round(agent.balance)} ZION balance`;
-  const charismaStars = starsFromStat(agent.charisma);
-  const aggressionStars = starsFromStat(agent.aggression);
-  const faithStars = starsFromStat(agent.faith);
-  const ambitionStars = starsFromStat(agent.ambition);
-  const loyaltyStars = starsFromStat(agent.loyalty);
-  const classIcon =
-    tier === "elite" ? (
-      <span style={{ fontSize: "32px", lineHeight: 1 }}>👑</span>
-    ) : tier === "middle" ? (
-      <span style={{ fontSize: "32px", lineHeight: 1 }}>🪙</span>
-    ) : (
-      <span style={{ fontSize: "32px", lineHeight: 1 }}>⚒️</span>
-    );
-  const cardStyle =
-    tier === "elite"
-      ? {
-          position: "relative" as const,
-          border: "2px solid #FFD700",
-          boxShadow: "0 0 20px rgba(255,215,0,0.5)",
-          background: "rgba(15,12,0,0.98)",
-          borderRadius: "8px",
-          padding: "16px",
-        }
-      : tier === "middle"
-        ? {
-            position: "relative" as const,
-            border: "2px solid #C0C0C0",
-            boxShadow: "0 0 15px rgba(192,192,192,0.4)",
-            background: "rgba(10,10,15,0.98)",
-            borderRadius: "8px",
-            padding: "16px",
-          }
-        : {
-            position: "relative" as const,
-            border: "2px solid #CD7F32",
-            boxShadow: "0 0 10px rgba(205,127,50,0.3)",
-            background: "rgba(12,8,5,0.98)",
-            borderRadius: "8px",
-            padding: "16px",
-          };
+  const classLabel =
+    tier === "elite" ? "ELITE" : tier === "middle" ? "MIDDLE" : tier === "critical" ? "CRITICAL" : "POOR";
+  const tooltip = `Subject ${classLabel} — ${Math.round(agent.balance)} ZION balance`;
+  const statVal = (n?: number) => `${Math.min(5, Math.max(0, Math.round(n ?? 0)))}/5`;
+  const cardStyle = {
+    position: "relative" as const,
+    border: "1px solid var(--border)",
+    boxShadow: "none",
+    background: "var(--bg-secondary)",
+    borderRadius: "2px",
+    padding: "16px",
+  };
   return (
     <article
       className={`agentCard ${onClick ? " clickable" : ""}`}
@@ -6523,39 +6446,51 @@ function AgentTile({
           : undefined
       }
     >
-      <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: 2 }} title={tooltip}>
-        {classIcon}
+      <div
+        style={{
+          position: "absolute",
+          top: "10px",
+          right: "10px",
+          zIndex: 2,
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.55rem",
+          letterSpacing: "0.08em",
+          color: "var(--text-secondary)",
+        }}
+        title={tooltip}
+      >
+        {classLabel}
       </div>
-      <strong className="agentNameTitle" style={{ color: nameColor }}>
+      <strong className="agentNameTitle" style={{ color: "var(--text-primary)" }}>
         {cleanName(agent.name)}
       </strong>
       <p className="small">
         {agent.clan ?? "UNASSIGNED"} · {agent.age_days} days
       </p>
       <div className="bar">
-        <div className="fill" style={{ width: `${pct}%`, background: nameColor }} />
+        <div className="fill" style={{ width: `${pct}%`, background: "var(--accent)" }} />
       </div>
       <p className="small">Balance: {agent.balance.toFixed(2)}</p>
       <div className="traits">
         <div className="traitRow">
           <span>CHARISMA:</span>
-          <span className="traitStars">{charismaStars}</span>
+          <span className="traitStars">{statVal(agent.charisma)}</span>
         </div>
         <div className="traitRow">
           <span>AGGRESSION:</span>
-          <span className="traitStars">{aggressionStars}</span>
+          <span className="traitStars">{statVal(agent.aggression)}</span>
         </div>
         <div className="traitRow">
           <span>FAITH:</span>
-          <span className="traitStars">{faithStars}</span>
+          <span className="traitStars">{statVal(agent.faith)}</span>
         </div>
         <div className="traitRow">
           <span>AMBITION:</span>
-          <span className="traitStars">{ambitionStars}</span>
+          <span className="traitStars">{statVal(agent.ambition)}</span>
         </div>
         <div className="traitRow">
           <span>LOYALTY:</span>
-          <span className="traitStars">{loyaltyStars}</span>
+          <span className="traitStars">{statVal(agent.loyalty)}</span>
         </div>
       </div>
     </article>
@@ -7764,92 +7699,70 @@ function ZionBetTradingControls({
     selectedSide === "yes"
       ? {
           ...outcomeBtnBase,
-          background: "rgba(0,255,65,0.25)",
-          border: "2px solid #00ff41",
-          boxShadow: "0 0 16px rgba(0,255,65,0.5)",
-          color: "#00ff41",
+          background: "var(--bg-card)",
+          border: "1px solid var(--accent)",
+          boxShadow: "none",
+          color: "var(--text-primary)",
           opacity: 1,
         }
       : {
           ...outcomeBtnBase,
-          background: "rgba(0,200,80,0.06)",
-          border: "2px solid rgba(0,200,80,0.22)",
-          color: "rgba(0,200,80,0.42)",
-          opacity: 0.72,
+          background: "transparent",
+          border: "1px solid var(--border)",
+          color: "var(--text-secondary)",
+          opacity: 0.85,
         };
 
   const noBtnStyle: CSSProperties =
     selectedSide === "no"
       ? {
           ...outcomeBtnBase,
-          background: "rgba(255,50,50,0.25)",
-          border: "2px solid #ff3232",
-          boxShadow: "0 0 16px rgba(255,50,50,0.5)",
-          color: "#ff3232",
+          background: "var(--bg-card)",
+          border: "1px solid var(--accent)",
+          boxShadow: "none",
+          color: "var(--text-primary)",
           opacity: 1,
         }
       : {
           ...outcomeBtnBase,
-          background: "rgba(255,50,50,0.06)",
-          border: "2px solid rgba(255,50,50,0.22)",
-          color: "rgba(255,50,50,0.45)",
-          opacity: 0.72,
+          background: "transparent",
+          border: "1px solid var(--border)",
+          color: "var(--text-secondary)",
+          opacity: 0.85,
         };
 
-  const tabActiveGreen: CSSProperties = {
-    padding: "6px 20px",
-    borderRadius: "20px",
+  const tabActiveStyle: CSSProperties = {
+    padding: "6px 14px",
+    borderRadius: "2px",
     cursor: "pointer",
-    fontSize: "0.85rem",
-    background: "rgba(0,255,65,0.2)",
-    border: "1px solid #00ff41",
-    color: "#00ff41",
-  };
-  const tabActiveRed: CSSProperties = {
-    padding: "6px 20px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-    background: "rgba(255,50,50,0.2)",
-    border: "1px solid #FF3232",
-    color: "#FF3232",
-  };
-  const tabActiveCyan: CSSProperties = {
-    padding: "6px 20px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-    background: "rgba(0,150,255,0.2)",
-    border: "1px solid #0096FF",
-    color: "#0096FF",
-  };
-  const tabActiveOrange: CSSProperties = {
-    padding: "6px 20px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "0.85rem",
-    background: "rgba(255,165,0,0.2)",
-    border: "1px solid #FFA500",
-    color: "#FFA500",
+    fontSize: "0.78rem",
+    fontFamily: "var(--font-mono)",
+    letterSpacing: "0.06em",
+    background: "var(--bg-card)",
+    border: "1px solid var(--accent)",
+    color: "var(--text-primary)",
   };
   const tabInactive: CSSProperties = {
-    padding: "6px 20px",
-    borderRadius: "20px",
+    padding: "6px 14px",
+    borderRadius: "2px",
     cursor: "pointer",
-    fontSize: "0.85rem",
+    fontSize: "0.78rem",
+    fontFamily: "var(--font-mono)",
+    letterSpacing: "0.06em",
     background: "transparent",
-    border: "1px solid rgba(255,255,255,0.15)",
-    color: "rgba(255,255,255,0.35)",
+    border: "1px solid var(--border)",
+    color: "var(--text-secondary)",
   };
 
   const presetBtnStyle: CSSProperties = {
     padding: "4px 12px",
-    borderRadius: "20px",
-    border: "1px solid rgba(255,255,255,0.2)",
-    background: "rgba(255,255,255,0.08)",
-    color: "#fff",
+    borderRadius: "2px",
+    border: "1px solid var(--border)",
+    background: "var(--bg-secondary)",
+    color: "var(--text-primary)",
     cursor: "pointer",
-    fontSize: "0.8rem",
+    fontSize: "0.78rem",
+    fontFamily: "var(--font-mono)",
   };
 
   return (
@@ -7881,14 +7794,14 @@ function ZionBetTradingControls({
         <div style={{ display: "flex", gap: "8px", margin: "8px 0" }}>
           <button
             type="button"
-            style={tradeMode === "buy" ? tabActiveGreen : tabInactive}
+            style={tradeMode === "buy" ? tabActiveStyle : tabInactive}
             onClick={() => setTradeMode("buy")}
           >
             Buy
           </button>
           <button
             type="button"
-            style={tradeMode === "sell" ? tabActiveRed : tabInactive}
+            style={tradeMode === "sell" ? tabActiveStyle : tabInactive}
             onClick={() => setTradeMode("sell")}
           >
             Sell
@@ -7897,14 +7810,14 @@ function ZionBetTradingControls({
         <div style={{ display: "flex", gap: "8px", margin: "8px 0" }}>
           <button
             type="button"
-            style={orderType === "market" ? tabActiveCyan : tabInactive}
+            style={orderType === "market" ? tabActiveStyle : tabInactive}
             onClick={() => setOrderType("market")}
           >
             Market
           </button>
           <button
             type="button"
-            style={orderType === "limit" ? tabActiveOrange : tabInactive}
+            style={orderType === "limit" ? tabActiveStyle : tabInactive}
             onClick={() => setOrderType("limit")}
           >
             Limit
@@ -11600,7 +11513,7 @@ export default function Home() {
       if (pressure > 50) {
         political.push({
           type: "revolution",
-          text: `⚠️ Revolution pressure rising: ${Math.round(pressure)}/150`,
+          text: `Civil unrest pressure rising: ${Math.round(pressure)}/150`,
           agent: "ZION System",
         });
       }
@@ -14620,7 +14533,7 @@ export default function Home() {
     );
     if (revPressure > 50) {
       items.push({
-        text: `⚠️ Revolution pressure rising: ${Math.round(revPressure)}/150`,
+        text: `Civil unrest pressure rising: ${Math.round(revPressure)}/150`,
         breaking: revPressure > 100,
       });
     }
@@ -14635,7 +14548,7 @@ export default function Home() {
 
     if (ecoPolData?.uprising?.active) {
       items.push({
-        text: `UPRISING ACTIVE — Revolution meter ${ecoPolData.uprising.meter ?? 0}%`,
+        text: `UPRISING ACTIVE — Civil unrest index ${ecoPolData.uprising.meter ?? 0}%`,
         breaking: true,
       });
     }
@@ -14688,7 +14601,7 @@ export default function Home() {
     const povertyMsg = ecoPolData?.economy.poverty_pct ?? frsStats?.economy.poor_pct ?? 0;
     const aliveMsg = stats?.alive ?? agents.length;
     items.push({
-      text: `🌡️ Revolution meter ${meterMsg}% · Poverty ${Number(povertyMsg).toFixed(1)}% · ${aliveMsg.toLocaleString("en-US")} agents alive`,
+      text: `Civil unrest index ${meterMsg}% · Poverty ${Number(povertyMsg).toFixed(1)}% · ${aliveMsg.toLocaleString("en-US")} active subjects`,
     });
 
     if (senateData) {
@@ -14870,18 +14783,18 @@ export default function Home() {
               }}
               style={{
                 background: "transparent",
-                border: "1px solid #00ff41",
-                color: "#00ff41",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
                 padding: "8px 12px",
-                borderRadius: "6px",
+                borderRadius: "2px",
                 cursor: "pointer",
-                fontFamily: "monospace",
+                fontFamily: "var(--font-mono)",
                 fontSize: "0.78rem",
-                letterSpacing: "0.5px",
+                letterSpacing: "0.04em",
                 height: "36px",
               }}
             >
-              ⚡ {zkLoginUser.email.split("@")[0]} ▾
+              {zkLoginUser.email.split("@")[0]} ▾
             </button>
 
             {showUserMenu ? (
@@ -14891,8 +14804,8 @@ export default function Home() {
                   right: 0,
                   top: "40px",
                   background: "#0a0a0a",
-                  border: "1px solid #00ff41",
-                  borderRadius: "6px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "2px",
                   minWidth: "200px",
                   zIndex: 200,
                 }}
@@ -15108,7 +15021,7 @@ export default function Home() {
                 }
               >
                 <article className="statCard">
-                  <p className="statCardLabel">SUBJECTS ALIVE</p>
+                  <p className="statCardLabel">ACTIVE SUBJECTS</p>
                   <h3 className="statCardValue">
                     {statsLoading
                       ? "—"
@@ -15128,7 +15041,7 @@ export default function Home() {
                   <div className="statCardRule" />
                 </article>
                 <article className="statCard">
-                  <p className="statCardLabel">FATALITIES / 24H</p>
+                  <p className="statCardLabel">MORTALITY / 24H</p>
                   <h3 className="statCardValue statCardValueDanger">
                     {stats?.deaths_today?.toLocaleString("en-US") ?? "—"}
                   </h3>
@@ -15264,7 +15177,7 @@ export default function Home() {
               {uniqueCorporations.length > 0 && (
                 <>
                   <div className="labSectionDivider">
-                    <span className="labSectionDividerLabel">CORPORATE SECTOR</span>
+                    <span className="labSectionDividerLabel">INSTITUTIONAL STRUCTURES</span>
                   </div>
                   <div className="labDataCardGrid">
                     {uniqueCorporations.map((corp) => (
@@ -15297,7 +15210,7 @@ export default function Home() {
               {policeDivisions && policeDivisions.divisions.length > 0 && (
                 <>
                   <div className="labSectionDivider">
-                    <span className="labSectionDividerLabel">LAW ENFORCEMENT</span>
+                    <span className="labSectionDividerLabel">ENFORCEMENT DIVISIONS</span>
                   </div>
                   <div className="labDataCardGrid">
                     {policeDivisions.divisions.map((div) => {
@@ -15460,7 +15373,7 @@ export default function Home() {
           {activeTab === "chat" && (
             <section className="chatTabSection">
               <p className="tabIntro">
-                Speak with agents and earn points. Select an agent — Cost: 1 ZION · Earn: 2 points per message.
+                Direct field interviews with classified subjects. Select cohort — Cost: 1 ZION · Research credit: 2 points per exchange.
               </p>
               {selectedClass == null ? (
                 <div className="chatClassSelector chatClassFilters chatClassFiltersFull">
@@ -15508,11 +15421,11 @@ export default function Home() {
           )}
 
           {activeTab === "zionbet" && (
-            <section className="zionBetTab zionBetLight" aria-label="ZionBet prediction markets">
+            <section className="zionBetTab zionBetInstrument" aria-label="Prediction Engine">
               <header className="zionBetHeader">
-                <h2 className="zionBetTitle">⚡ ZIONBET — Predict the Civilization</h2>
+                <h2 className="zionBetTitle">PREDICTION ENGINE</h2>
                 <p className="zionBetSubtitle">
-                  {zionbetHeaderStats} · Win up to 1.98× stake · +2 points per order
+                  {zionbetHeaderStats} · Civilization outcome forecasts · Peer-verifiable resolution
                 </p>
               </header>
               {zionBetToast ? (
@@ -15573,18 +15486,8 @@ export default function Home() {
                           type="button"
                           role="tab"
                           aria-selected={active}
+                          className={`zionBetCatTab${active ? " zionBetCatTabActive" : ""}`}
                           onClick={() => setBetTab(key)}
-                          style={{
-                            borderRadius: "20px",
-                            fontSize: "12px",
-                            padding: "5px 14px",
-                            cursor: "pointer",
-                            fontWeight: 500,
-                            fontFamily: "ui-sans-serif, system-ui, sans-serif",
-                            ...(active
-                              ? { background: "#4DA2FF", color: "white", border: "none" }
-                              : { background: "#0d1117", color: "#8b9ab1", border: "1px solid #1e2d3d" }),
-                          }}
                         >
                           {label} ({zionbetTabCounts[key]})
                         </button>
@@ -15592,13 +15495,11 @@ export default function Home() {
                     })}
                   </div>
                   <div
+                    className="instrument-panel"
                     style={{
-                      border: vipAccess?.isGold ? "1px solid #ffd700" : "1px solid #1e2d3d",
-                      borderRadius: "12px",
                       padding: "16px",
                       marginBottom: "20px",
-                      background: "#0d1117",
-                      color: "#e6edf3",
+                      color: "var(--text-primary)",
                     }}
                   >
                     <div
@@ -15610,16 +15511,16 @@ export default function Home() {
                     >
                       <div>
                         {vipAccess?.isGold ? (
-                          <span style={{ color: "#ffd700", fontSize: "0.9rem", fontWeight: "bold" }}>
-                            🥇 GOLD VIP — Seal Encrypted
+                          <span className="instrument-label" style={{ fontSize: "0.75rem" }}>
+                            GOLD ACCESS — Seal Encrypted
                           </span>
                         ) : vipAccess?.isSilver ? (
-                          <span style={{ color: "#c0c8d4", fontSize: "0.9rem", fontWeight: "bold" }}>
-                            🥈 SILVER VIP — Seal Encrypted
+                          <span className="instrument-label" style={{ fontSize: "0.75rem" }}>
+                            SILVER ACCESS — Seal Encrypted
                           </span>
                         ) : (
-                          <span style={{ color: "#8b9ab1", fontSize: "0.9rem", fontWeight: "bold" }}>
-                            🔐 VIP ROOM — Seal Encrypted
+                          <span className="instrument-label" style={{ fontSize: "0.75rem" }}>
+                            RESTRICTED ACCESS — Seal Encrypted
                           </span>
                         )}
                         <div style={{ color: "#8b9ab1", fontSize: "0.7rem", marginTop: "2px" }}>
@@ -16231,7 +16132,7 @@ export default function Home() {
                       <th>Points</th>
                       <th>Messages</th>
                       <th>ZION Spent</th>
-                      <th>ZionBet P&L</th>
+                      <th>Prediction P&L</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -16256,13 +16157,8 @@ export default function Home() {
                           <td>{row.zion_spent ?? (row as { zionSpent?: number }).zionSpent ?? "—"}</td>
                           <td
                             style={{
-                              color:
-                                (row.zionbet_pnl ?? 0) > 0
-                                  ? "#00ff41"
-                                  : (row.zionbet_pnl ?? 0) < 0
-                                    ? "#ff3232"
-                                    : undefined,
-                              fontWeight: 600,
+                              color: "var(--text-primary)",
+                              fontFamily: "var(--font-mono)",
                             }}
                           >
                             {row.zionbet_pnl != null
@@ -18730,8 +18626,8 @@ export default function Home() {
             <div className="ecoTermRoot">
               <div className="ecoHudWrap">
                 <header className="ecoHudHeader">
-                  <h2>ZION ECO-POL — GOV MONITOR</h2>
-                  <p>Economics · Politics · Central Bank</p>
+                  <h2>GOVERNANCE INSTRUMENT</h2>
+                  <p>Economic indicators · Political structures · Central bank telemetry</p>
                 </header>
 
                 {(ecoPolData || frsStats || politicalEconomy) && (() => {
@@ -19336,15 +19232,7 @@ export default function Home() {
           background: var(--bg-primary);
         }
         .bg-grid {
-          position: fixed;
-          inset: 0;
-          z-index: 2;
-          opacity: 0.35;
-          background-color: var(--bg-secondary);
-          background-image:
-            linear-gradient(rgba(30, 58, 95, 0.35) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(30, 58, 95, 0.35) 1px, transparent 1px);
-          background-size: 32px 32px;
+          display: none;
         }
         .introLayer {
           position: fixed;
@@ -19479,10 +19367,12 @@ export default function Home() {
         }
         .tabIntro {
           margin: 0 0 16px;
-          font-size: 0.78rem;
-          color: rgba(180, 235, 200, 0.88);
-          line-height: 1.45;
+          font-family: var(--font-mono);
+          font-size: 0.72rem;
+          color: var(--text-secondary);
+          line-height: 1.5;
           max-width: 720px;
+          letter-spacing: 0.02em;
         }
         .walletGateBanner {
           margin: 24px auto;
@@ -19631,48 +19521,36 @@ export default function Home() {
         .chatClassCardBig p {
           letter-spacing: 0.04em;
         }
-        .chatClassCardBig.elite:hover {
-          box-shadow: 0 0 24px rgba(255, 215, 0, 0.35);
-        }
-        .chatClassCardBig.middle:hover {
-          box-shadow: 0 0 22px rgba(192, 192, 192, 0.3);
-        }
+        .chatClassCardBig.elite:hover,
+        .chatClassCardBig.middle:hover,
         .chatClassCardBig.poor:hover {
-          box-shadow: 0 0 20px rgba(205, 127, 50, 0.34);
+          border-color: var(--accent);
+          box-shadow: none;
         }
         .chatClassBackBtn {
           margin: 0 0 14px;
-          border-radius: 8px;
-          border: 1px solid rgba(0, 255, 65, 0.35);
-          background: rgba(0, 0, 0, 0.45);
-          color: #9de8ff;
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          color: var(--text-secondary);
           padding: 10px 14px;
           font-size: 0.72rem;
           letter-spacing: 0.08em;
-          font-family: Orbitron, monospace;
+          font-family: var(--font-mono);
           cursor: pointer;
         }
         .chatClassBackBtn:hover {
-          box-shadow: 0 0 14px rgba(0, 255, 65, 0.2);
+          color: var(--text-primary);
+          border-color: var(--accent);
         }
         .chronicleSection {
           margin-top: 22px;
           width: 100%;
-          padding: 14px 14px 16px;
-          border-radius: 10px;
-          border: 1px solid rgba(0, 255, 65, 0.22);
-          background:
-            linear-gradient(180deg, rgba(0, 14, 8, 0.92) 0%, rgba(0, 0, 0, 0.96) 100%),
-            repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 2px,
-              rgba(0, 255, 65, 0.03) 2px,
-              rgba(0, 255, 65, 0.03) 4px
-            );
-          box-shadow:
-            inset 0 0 60px rgba(0, 0, 0, 0.85),
-            0 0 24px rgba(0, 255, 65, 0.06);
+          padding: 14px;
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          box-shadow: none;
         }
         .chronicleHead {
           display: flex;
@@ -19682,32 +19560,33 @@ export default function Home() {
           gap: 10px 16px;
           margin-bottom: 12px;
           padding-bottom: 10px;
-          border-bottom: 1px solid rgba(0, 255, 65, 0.18);
+          border-bottom: 1px solid var(--border);
         }
         .chronicleTitle {
           margin: 0;
           display: flex;
           align-items: center;
           gap: 10px;
-          font-family: Orbitron, monospace;
-          font-size: clamp(0.85rem, 2vw, 1rem);
-          letter-spacing: 0.22em;
-          color: #c8ffe8;
-          text-shadow: 0 0 12px rgba(0, 255, 65, 0.35);
+          font-family: var(--font-mono);
+          font-size: clamp(0.72rem, 2vw, 0.85rem);
+          letter-spacing: 0.14em;
+          color: var(--text-primary);
+          text-transform: uppercase;
+          text-shadow: none;
         }
         .chronicleLiveDot {
-          width: 10px;
-          height: 10px;
+          width: 6px;
+          height: 6px;
           border-radius: 50%;
-          background: #00ff41;
-          box-shadow: 0 0 12px #00ff41, 0 0 24px rgba(0, 255, 65, 0.55);
-          animation: chronicleLivePulse 1.4s ease-in-out infinite;
+          background: var(--accent);
+          box-shadow: none;
+          animation: none;
         }
         .chronicleFeedHint {
-          font-family: ui-monospace, "JetBrains Mono", monospace;
+          font-family: var(--font-mono);
           font-size: 0.62rem;
-          letter-spacing: 0.14em;
-          color: rgba(130, 220, 170, 0.65);
+          letter-spacing: 0.1em;
+          color: var(--text-muted);
         }
         .chronicleScroll {
           overflow-x: auto;
@@ -19817,36 +19696,37 @@ export default function Home() {
         .zionBetTab {
           margin-top: 4px;
           padding-bottom: 24px;
-          font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-          color: #111827;
+          font-family: var(--font-sans);
+          color: var(--text-primary);
         }
         .zionBetHeader {
           margin: 0 0 20px;
           padding-bottom: 16px;
-          border-bottom: 1px solid #1e2d3d;
+          border-bottom: 1px solid var(--border);
         }
         .zionBetTitle {
           margin: 0 0 8px;
-          font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-          font-size: clamp(1.1rem, 2.2vw, 1.5rem);
-          font-weight: 600;
-          letter-spacing: -0.02em;
-          color: #e6edf3;
+          font-family: var(--font-mono);
+          font-size: clamp(0.85rem, 2vw, 1rem);
+          font-weight: 500;
+          letter-spacing: 0.18em;
+          color: var(--text-primary);
+          text-transform: uppercase;
           text-shadow: none;
         }
         .zionBetSubtitle {
           margin: 0;
-          font-family: ui-sans-serif, system-ui, sans-serif;
-          font-size: 0.8125rem;
-          letter-spacing: 0;
-          color: #8b9ab1;
+          font-family: var(--font-mono);
+          font-size: 0.72rem;
+          letter-spacing: 0.04em;
+          color: var(--text-secondary);
         }
         .zionBetSectionTitle {
-          font-family: ui-sans-serif, system-ui, sans-serif !important;
+          font-family: var(--font-mono) !important;
           font-size: 11px !important;
-          font-weight: 600 !important;
-          letter-spacing: 0.1em !important;
-          color: #4DA2FF !important;
+          font-weight: 500 !important;
+          letter-spacing: 0.12em !important;
+          color: var(--text-secondary) !important;
           text-transform: uppercase !important;
         }
         .zionBetSortLabel {
@@ -20208,26 +20088,15 @@ export default function Home() {
           color: #b8ffd8 !important;
           text-shadow: 0 0 12px rgba(0, 255, 65, 0.35);
         }
-        .zionBetLight {
-          --color-background-primary: #ffffff;
-          --color-background-secondary: #f9fafb;
-          --color-border-tertiary: #e5e7eb;
-          --color-text-primary: #111827;
-          --color-text-secondary: #6b7280;
-          --zb-card-bg: #ffffff;
-          --zb-card-border: #e5e7eb;
-          font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-        }
-        @media (prefers-color-scheme: dark) {
-          .zionBetLight {
-            --color-background-primary: #1a1a1a;
-            --color-background-secondary: #262626;
-            --color-border-tertiary: #374151;
-            --color-text-primary: #f3f4f6;
-            --color-text-secondary: #9ca3af;
-            --zb-card-bg: #1a1a1a;
-            --zb-card-border: #374151;
-          }
+        .zionBetInstrument {
+          --color-background-primary: var(--bg-primary);
+          --color-background-secondary: var(--bg-secondary);
+          --color-border-tertiary: var(--border);
+          --color-text-primary: var(--text-primary);
+          --color-text-secondary: var(--text-secondary);
+          --zb-card-bg: var(--bg-secondary);
+          --zb-card-border: var(--border);
+          font-family: var(--font-sans);
         }
         .zionBetCatTabs {
           display: flex;
@@ -20239,29 +20108,31 @@ export default function Home() {
           border-bottom: none;
         }
         .zionBetCatTab {
-          padding: 5px 14px;
-          border-radius: 20px;
-          border: 1px solid #1e2d3d;
-          background: #0d1117;
-          color: #8b9ab1;
-          font-size: 12px;
+          padding: 6px 12px;
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--text-secondary);
+          font-size: 11px;
           cursor: pointer;
-          font-family: ui-sans-serif, system-ui, sans-serif;
+          font-family: var(--font-mono);
           font-weight: 500;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
         }
         .zionBetCatTab:hover {
-          color: #e6edf3;
-          border-color: #4DA2FF;
+          color: var(--text-primary);
+          border-color: var(--accent);
         }
         .zionBetCatTabActive {
-          background: #4DA2FF;
-          border: none;
-          color: #ffffff;
+          background: var(--bg-card);
+          border: 1px solid var(--accent);
+          color: var(--text-primary);
           box-shadow: none;
         }
         .zionBetCatTabActive.zionBetCatTabActive--zion {
-          background: #4DA2FF;
-          border: none;
+          background: var(--bg-card);
+          border: 1px solid var(--accent);
         }
         .zionBetPmRow {
           width: 100%;
@@ -21352,7 +21223,7 @@ export default function Home() {
           to { width: var(--bar-width); }
         }
         .ecoTermRoot {
-          background: #0a0a1a;
+          background: var(--bg-primary);
         }
         .ecoHudWrap {
           position: relative;
@@ -21382,19 +21253,20 @@ export default function Home() {
         }
         .ecoHudHeader h2 {
           margin: 0;
-          color: #00ff88;
+          color: var(--text-primary);
+          font-family: var(--font-mono);
           font-size: 12px;
-          letter-spacing: 3px;
+          letter-spacing: 0.18em;
           text-transform: uppercase;
-          font-weight: bold;
-          text-shadow: 0 0 12px rgba(0, 255, 136, 0.35);
+          font-weight: 500;
+          text-shadow: none;
         }
         .ecoHudHeader p {
           margin: 4px 0 0;
-          color: #00ffcc;
+          color: var(--text-secondary);
+          font-family: var(--font-mono);
           font-size: 11px;
-          letter-spacing: 1px;
-          opacity: 0.75;
+          letter-spacing: 0.04em;
         }
         .zionSectionHeader {
           display: flex;
@@ -21405,14 +21277,15 @@ export default function Home() {
         .zionSectionLine {
           flex: 1;
           height: 1px;
-          background: linear-gradient(to right, transparent, rgba(0, 255, 136, 0.35), transparent);
+          background: var(--border);
         }
         .zionSectionTitle {
-          color: #00ff88;
-          font-family: "JetBrains Mono", ui-monospace, monospace;
+          color: var(--text-secondary);
+          font-family: var(--font-mono);
           font-size: 0.72rem;
-          letter-spacing: 0.2em;
+          letter-spacing: 0.14em;
           white-space: nowrap;
+          text-transform: uppercase;
         }
         .zionCardGrid {
           display: grid;
@@ -21492,11 +21365,14 @@ export default function Home() {
           flex-shrink: 0;
           font-size: 0.55rem;
           padding: 2px 6px;
-          border-radius: 4px;
-          border: 1px solid;
-          font-family: "JetBrains Mono", ui-monospace, monospace;
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          color: var(--text-secondary);
+          background: var(--bg-card);
+          font-family: var(--font-mono);
           letter-spacing: 0.08em;
           white-space: nowrap;
+          text-transform: uppercase;
         }
         .zionPowerRow {
           display: grid;
@@ -22537,32 +22413,35 @@ export default function Home() {
         }
         .leaderboardWrap {
           overflow-x: auto;
-          border-radius: 10px;
-          border: 1px solid rgba(0, 255, 65, 0.28);
-          background: rgba(0, 8, 0, 0.75);
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
         }
         .leaderboardTable {
           width: 100%;
           border-collapse: collapse;
+          font-family: var(--font-mono);
           font-size: 0.72rem;
         }
         .leaderboardTable th,
         .leaderboardTable td {
           padding: 10px 12px;
           text-align: left;
-          border-bottom: 1px solid rgba(0, 255, 65, 0.12);
+          border-bottom: 1px solid var(--border);
         }
         .leaderboardTable th {
-          color: rgba(160, 255, 190, 0.85);
-          font-size: 0.62rem;
+          color: var(--text-secondary);
+          font-size: 0.6rem;
           letter-spacing: 0.12em;
+          text-transform: uppercase;
+          background: var(--bg-card);
         }
         .leaderboardTable td {
-          color: #c8f5d8;
+          color: var(--text-primary);
         }
         .leaderboardEmpty {
           text-align: center;
-          color: rgba(160, 230, 180, 0.65);
+          color: var(--text-muted);
           padding: 18px !important;
         }
         .chatModalBackdrop {

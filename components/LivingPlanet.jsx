@@ -2236,23 +2236,23 @@ export function LivingPlanet({
       </button>
       {showHud && civilizationData && (
         <>
-          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "monospace", fontSize: 10, color: "rgba(0,255,136,0.85)", letterSpacing: 1, pointerEvents: "none" }}>
-            PROSPERITY {hudProsperity}%
+          <div style={{ position: "absolute", top: 8, left: 12, zIndex: 2, fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: "#94a3b8", letterSpacing: 1, pointerEvents: "none" }}>
+            PROSPERITY INDEX {hudProsperity}%
           </div>
-          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "monospace", fontSize: 11, color: "#00ff88", letterSpacing: 2, pointerEvents: "none" }}>
-            LIVE MAP
+          <div style={{ position: "absolute", top: 8, right: 12, zIndex: 2, fontFamily: "IBM Plex Mono, monospace", fontSize: 10, color: "#00b4d8", letterSpacing: 2, pointerEvents: "none" }}>
+            OBSERVATION MAP
           </div>
-          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(0,0,0,0.45)", borderTop: "1px solid rgba(0,255,136,0.2)", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2, display: "flex", gap: 20, padding: "8px 12px", background: "rgba(5,13,26,0.85)", borderTop: "1px solid #1e3a5f", pointerEvents: "none" }}>
             {[
-              { label: "TOTAL", value: civilizationData.total, color: "#00ff88" },
-              { label: "ELITE", value: civilizationData.elite, color: "#ffd700" },
-              { label: "MIDDLE", value: civilizationData.middle, color: "#00aaff" },
-              { label: "POOR", value: civilizationData.poor, color: "#ff8800" },
-              { label: "CRITICAL", value: civilizationData.critical, color: "#ff2244" },
-            ].map(({ label, value, color }) => (
+              { label: "TOTAL", value: civilizationData.total },
+              { label: "ELITE", value: civilizationData.elite },
+              { label: "MIDDLE", value: civilizationData.middle },
+              { label: "POOR", value: civilizationData.poor },
+              { label: "CRITICAL", value: civilizationData.critical },
+            ].map(({ label, value }) => (
               <div key={label} style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "monospace", fontSize: 9, color: "rgba(255,255,255,0.4)" }}>{label}</div>
-                <div style={{ fontFamily: "monospace", fontSize: 13, color, fontWeight: 700 }}>{value ?? "—"}</div>
+                <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9, color: "#475569" }}>{label}</div>
+                <div style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{value ?? "—"}</div>
               </div>
             ))}
           </div>

@@ -34,7 +34,27 @@ body {
 }
 
 /* Legacy class hooks — lab palette */
-.elite-card { border: 1px solid var(--warning); }
-.middle-card { border: 1px solid var(--text-secondary); }
+.elite-card { border: 1px solid var(--border); }
+.middle-card { border: 1px solid var(--border); }
 .poor-card { border: 1px solid var(--border); }
-.dying-card { border: 1px solid var(--danger); color: var(--danger); }
+.dying-card { border: 1px solid var(--border); color: var(--text-secondary); }
+
+/* Scientific instrument panels — shared across tabs */
+.instrument-panel {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  border-radius: 2px;
+}
+.instrument-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.instrument-value {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
