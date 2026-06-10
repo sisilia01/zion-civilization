@@ -379,18 +379,26 @@ function ecoFormatZionShort(n: number) {
   return Math.round(n).toLocaleString("en-US");
 }
 
-/** Zion terminal palette — matches civilization / corp cards */
+/** Lab instrument palette — NASA mission-control aesthetic */
 const ZION_TERM = {
-  bg: "#0a0a1a",
-  cardBg: "rgba(0,10,30,0.8)",
-  border: "rgba(0,255,136,0.2)",
-  label: "#00ffcc",
-  accent: "#00ff88",
-  money: "#ffaa00",
-  warn: "#ff4444",
-  text: "#ffffff",
-  muted: "#667788",
+  bg: "#050d1a",
+  cardBg: "#0d1f3c",
+  border: "#1e3a5f",
+  label: "#94a3b8",
+  accent: "#00b4d8",
+  money: "#f59e0b",
+  warn: "#ef4444",
+  text: "#e2e8f0",
+  muted: "#475569",
 };
+
+const EXPERIMENT_START_MS = new Date("2025-04-24T00:00:00Z").getTime();
+
+function formatRunTime(elapsedMs: number): string {
+  const d = Math.floor(elapsedMs / 86_400_000);
+  const h = Math.floor((elapsedMs % 86_400_000) / 3_600_000);
+  return `${d}d ${h}h`;
+}
 
 function ZionSectionHeader({ title, icon }: { title: string; icon?: string }) {
   return (
@@ -885,6 +893,8 @@ const DistrictMap = ({ districts: districts_data }: { districts: District[] }) =
 
 function DistrictMapPanel() {
   const [mapStats, setMapStats] = useState<Stats | null>(null);
+  const prevProsperityRef = useRef<number | null>(null);
+  const [prosperityDelta, setProsperityDelta] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -911,6 +921,14 @@ function DistrictMapPanel() {
     });
   }, [mapStats]);
 
+  useEffect(() => {
+    const pct = prosperity * 100;
+    if (prevProsperityRef.current !== null) {
+      setProsperityDelta(pct - prevProsperityRef.current);
+    }
+    prevProsperityRef.current = pct;
+  }, [prosperity]);
+
   const civilizationData = useMemo(
     () => ({
       total: mapStats?.alive_agents ?? mapStats?.alive,
@@ -928,51 +946,25 @@ function DistrictMapPanel() {
 
   const totalAlive = mapStats?.alive_agents ?? mapStats?.alive;
 
+  const prosperityPct = (prosperity * 100).toFixed(1);
+  const deltaStr =
+    prosperityDelta !== null
+      ? `${prosperityDelta >= 0 ? "+" : ""}${prosperityDelta.toFixed(1)} from last cycle`
+      : "baseline cycle";
+  const deltaArrow = prosperityDelta !== null && prosperityDelta < 0 ? "↓" : prosperityDelta !== null && prosperityDelta > 0 ? "↑" : "→";
+
   return (
     <div className="districtMapWrap">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "6px 12px",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "monospace",
-            fontSize: "10px",
-            color: "rgba(255,255,255,0.35)",
-            letterSpacing: "1px",
-          }}
-        >
-          PROSPERITY {(prosperity * 100).toFixed(0)}%
+      <div className="districtMapInstrumentBar">
+        <span className="districtMapProsperity">
+          PROSPERITY INDEX: {prosperityPct}% {deltaArrow} ({deltaStr})
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <span
-            style={{
-              width: "7px",
-              height: "7px",
-              borderRadius: "50%",
-              background: "#00ff88",
-              display: "inline-block",
-              animation: "blink 1.2s ease-in-out infinite",
-              boxShadow: "0 0 6px #00ff88",
-            }}
-          />
-          <span
-            style={{
-              fontFamily: "monospace",
-              fontSize: "11px",
-              color: "#00ff88",
-              letterSpacing: "2px",
-            }}
-          >
-            LIVE MAP
-          </span>
+        <div className="districtMapLiveTag">
+          <span className="districtMapLiveDot" />
+          <span>LIVE OBSERVATION</span>
         </div>
       </div>
-      <div style={{ width: "100%", height: 400, minHeight: 400, flexShrink: 0, position: "relative" }}>
+      <div className="districtMapGlobeWrap">
         <LivingPlanet
           prosperity={prosperity}
           revolution={civilizationData.revolution ?? 0}
@@ -980,16 +972,11 @@ function DistrictMapPanel() {
           civilizationData={civilizationData}
           height={400}
         />
+        <div className="districtMapObservationOverlay">
+          OBSERVATION POINT · 51.2°N 12.4°E · ALT 420km
+        </div>
       </div>
-      <div
-        style={{
-          padding: "2px 12px 6px",
-          fontFamily: "monospace",
-          fontSize: "9px",
-          color: "rgba(255,255,255,0.28)",
-          letterSpacing: "0.5px",
-        }}
-      >
+      <div className="districtMapAttribution">
         Earth imagery: NASA Visible Earth / Blue Marble
       </div>
       <div
@@ -1002,24 +989,15 @@ function DistrictMapPanel() {
         }}
       >
         {[
-          { label: "TOTAL", value: totalAlive, color: "#00ff88" },
-          { label: "ELITE", value: mapStats?.elite, color: "#ffd700" },
-          { label: "MIDDLE", value: mapStats?.middle, color: "#00aaff" },
-          { label: "POOR", value: mapStats?.poor, color: "#ff8800" },
-          { label: "CRITICAL", value: mapStats?.critical, color: "#ff2244" },
+          { label: "TOTAL", value: totalAlive, color: "var(--accent)" },
+          { label: "ELITE", value: mapStats?.elite, color: "var(--warning)" },
+          { label: "MIDDLE", value: mapStats?.middle, color: "var(--text-primary)" },
+          { label: "POOR", value: mapStats?.poor, color: "var(--text-secondary)" },
+          { label: "CRITICAL", value: mapStats?.critical, color: "var(--danger)" },
         ].map(({ label, value, color }) => (
-          <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: "9px",
-                color: "rgba(255,255,255,0.4)",
-                letterSpacing: "1px",
-              }}
-            >
-              {label}
-            </span>
-            <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "bold", color }}>
+          <div key={label} className="districtMapClassCell">
+            <span className="districtMapClassLabel">{label}</span>
+            <span className="districtMapClassValue" style={{ color }}>
               {(value || 0).toLocaleString()}
             </span>
           </div>
@@ -6586,6 +6564,17 @@ type TabId =
   | "press"
   | "treasury"; // ECO-POL (display label; id kept for routing)
 
+const LAB_NAV_ITEMS: { id: TabId; label: string }[] = [
+  { id: "civilization", label: "OBSERVATORY" },
+  { id: "chat", label: "FIELD NOTES" },
+  { id: "zionbet", label: "PREDICTION ENGINE" },
+  { id: "treasury", label: "GOVERNANCE" },
+  { id: "leaderboard", label: "ARCHIVE" },
+  { id: "zbank", label: "PRIVACY" },
+  { id: "zperps", label: "DERIVATIVES" },
+  { id: "press", label: "PRESS" },
+];
+
 type ParsedPressArticle = {
   headline: string;
   byline: string;
@@ -9282,22 +9271,27 @@ function NewsWireTicker({
   label,
   items,
   color,
+  variant = "default",
 }: {
   label: string;
   items: WireNewsItem[];
   color: string;
+  variant?: "default" | "lab";
 }) {
   if (!items.length) return null;
   const loop = [...items, ...items];
-  const borderColor = colorWithAlpha(color, "22");
+  const isLab = variant === "lab";
+  const borderColor = isLab ? "var(--border)" : colorWithAlpha(color, "22");
+  const labelColor = isLab ? "var(--accent)" : color;
   return (
     <div
+      className={isLab ? "labWireTicker" : undefined}
       style={{
         margin: "16px 0",
         overflow: "hidden",
-        borderRadius: "6px",
+        borderRadius: isLab ? "2px" : "6px",
         border: `1px solid ${borderColor}`,
-        background: hexToRgba(color, 0.02),
+        background: isLab ? "var(--bg-secondary)" : hexToRgba(color, 0.02),
       }}
     >
       <div
@@ -9306,7 +9300,7 @@ function NewsWireTicker({
           alignItems: "center",
           gap: "8px",
           padding: "5px 12px",
-          background: hexToRgba(color, 0.06),
+          background: isLab ? "var(--bg-card)" : hexToRgba(color, 0.06),
           borderBottom: `1px solid ${borderColor}`,
         }}
       >
@@ -9315,16 +9309,17 @@ function NewsWireTicker({
             width: "6px",
             height: "6px",
             borderRadius: "50%",
-            background: color,
-            boxShadow: `0 0 6px ${color}`,
+            background: labelColor,
+            boxShadow: isLab ? "none" : `0 0 6px ${color}`,
           }}
         />
         <span
           style={{
-            fontFamily: "monospace",
+            fontFamily: isLab ? "var(--font-mono)" : "monospace",
             fontSize: "0.65rem",
-            color,
-            letterSpacing: "2px",
+            color: labelColor,
+            letterSpacing: "0.12em",
+            textTransform: isLab ? "uppercase" : undefined,
           }}
         >
           {label}
@@ -10006,6 +10001,28 @@ export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastAliveCount, setLastAliveCount] = useState<number | null>(null);
+  const [experimentRunTime, setExperimentRunTime] = useState(() =>
+    formatRunTime(Date.now() - EXPERIMENT_START_MS)
+  );
+  const prevDeathsRef = useRef<number | null>(null);
+  const [deathsDeltaPct, setDeathsDeltaPct] = useState<number | null>(null);
+
+  useEffect(() => {
+    const tick = () => setExperimentRunTime(formatRunTime(Date.now() - EXPERIMENT_START_MS));
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const deaths = stats?.deaths_today;
+    if (deaths == null) return;
+    if (prevDeathsRef.current !== null && prevDeathsRef.current > 0) {
+      const delta = ((deaths - prevDeathsRef.current) / prevDeathsRef.current) * 100;
+      setDeathsDeltaPct(delta);
+    }
+    prevDeathsRef.current = deaths;
+  }, [stats?.deaths_today]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [clans, setClans] = useState<Clan[]>([]);
   const [corporations, setCorporations] = useState<
@@ -14940,31 +14957,30 @@ export default function Home() {
               boxSizing: "border-box",
               padding: "0 16px",
               background: "transparent",
-              border: "1px solid #00ff41",
-              borderRadius: "6px",
-              color: "#00ff41",
+              border: "1px solid var(--border)",
+              borderRadius: "2px",
+              color: "var(--text-primary)",
               cursor: "pointer",
-              fontFamily: "monospace",
-              fontSize: "0.8rem",
-              letterSpacing: "1px",
+              fontFamily: "var(--font-sans)",
+              fontSize: "0.75rem",
+              letterSpacing: "0.06em",
             }}
           >
-            <span>🔑</span>
             <span>Sign in with Google</span>
             </button>
             <button
               type="button"
               onClick={() => connect()}
             style={{
-              background: "transparent",
-              border: "1px solid #00ff41",
-              color: "#00ff41",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              color: "var(--text-primary)",
               padding: "8px 16px",
-              borderRadius: "6px",
+              borderRadius: "2px",
               cursor: "pointer",
-              fontFamily: "monospace",
-              fontSize: "0.8rem",
-              letterSpacing: "1px",
+              fontFamily: "var(--font-sans)",
+              fontSize: "0.75rem",
+              letterSpacing: "0.06em",
               height: "36px",
               boxSizing: "border-box",
               display: "flex",
@@ -14972,7 +14988,7 @@ export default function Home() {
               justifyContent: "center",
             }}
           >
-              ⚡ {isMobile ? "WALLET" : "CONNECT WALLET"}
+              {isMobile ? "WALLET" : "CONNECT WALLET"}
             </button>
           </>
         )}
@@ -15165,27 +15181,6 @@ export default function Home() {
           aria-hidden
         />
       )}
-      {!isMobile ? (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            display: "flex",
-            flexDirection: "row",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: "8px",
-            padding: "12px",
-            zIndex: showWalletMenu || showUserMenu ? 200 : 100,
-            background: "rgba(0,0,0,0.8)",
-          }}
-          aria-label="Sign in"
-        >
-          {renderAuthToolbar()}
-        </div>
-      ) : null}
       <canvas
         ref={bgCanvasRef}
         style={{
@@ -15359,131 +15354,41 @@ export default function Home() {
         className={`dashboard ${dashboardVisible ? "show" : ""}`}
         style={isMobile ? { padding: "8px" } : undefined}
       >
-        {isMobile ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "stretch",
-              gap: 8,
-              width: "100%",
-            }}
-          >
-            <div
-              aria-label="Sign in"
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 4px",
-                width: "100%",
-                background: "rgba(0,0,0,0.9)",
-                borderRadius: "8px",
-                border: "1px solid rgba(0, 255, 65, 0.3)",
-                boxSizing: "border-box",
-              }}
-            >
-              {renderAuthToolbar()}
-            </div>
-            <header className="header" style={{ width: "100%" }}>
-              <h1
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "8px",
-                }}
-              >
-                ZION CIVILIZATION
-              </h1>
-              <p>World&apos;s first autonomous AI civilization on Sui blockchain</p>
-            </header>
-            <nav
-              className="mainNav"
-              aria-label="Main navigation"
-              style={{
-                flexWrap: "wrap",
-                margin: "0 0 12px 0",
-                position: "relative",
-                top: "auto",
-                width: "100%",
-              }}
-            >
-              {(
-                [
-                  ["civilization", "🌍 CIVILIZATION"],
-                  ["chat", "💬 CHAT"],
-                  ["zionbet", "🎰 ZIONBET"],
-                  ["treasury", "💹 ECO-POL"],
-                  ["leaderboard", "🏆 LEADERBOARD"],
-                  ["zbank", "💳 Z-BANK"],
-                  ["zperps", "📈 Z-PERPS"],
-                  ["press", "📰 PRESS"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`navTab ${activeTab === id ? "active" : ""}`}
-                  onClick={() => setActiveTab(id)}
-                  style={{
-                    fontSize: "0.6rem",
-                    padding: "6px 8px",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
+        <header className={`labHeader ${isMobile ? "labHeaderMobile" : ""}`}>
+          <div className="labHeaderLeft">
+            <span className="labLogo">ZION</span>
+            <span className="labSubtitle">Autonomous Civilization Research</span>
           </div>
-        ) : (
-          <>
-            <header className="header">
-              <h1
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "8px",
-                }}
-              >
-                ZION CIVILIZATION
-              </h1>
-              <p style={{ whiteSpace: "nowrap" }}>
-                World&apos;s first autonomous AI civilization on Sui blockchain
-              </p>
-            </header>
-            <nav
-              className="mainNav"
-              aria-label="Main navigation"
-              style={{ flexWrap: "nowrap" }}
+          <div className="labHeaderCenter">
+            <span>EXPERIMENT #001</span>
+            <span className="labHeaderSep">·</span>
+            <span className="labLiveIndicator">
+              <span className="labLiveDot" />
+              LIVE
+            </span>
+            <span className="labHeaderSep">·</span>
+            <span>RUN TIME: {experimentRunTime}</span>
+          </div>
+          <div className="labHeaderRight" aria-label="Sign in">
+            {renderAuthToolbar()}
+          </div>
+        </header>
+        <nav
+          className="mainNav"
+          aria-label="Main navigation"
+          style={isMobile ? { flexWrap: "wrap" } : { flexWrap: "nowrap" }}
+        >
+          {LAB_NAV_ITEMS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`navTab ${activeTab === id ? "active" : ""}`}
+              onClick={() => setActiveTab(id)}
             >
-              {(
-                [
-                  ["civilization", "🌍 CIVILIZATION"],
-                  ["chat", "💬 CHAT"],
-                  ["zionbet", "🎰 ZIONBET"],
-                  ["treasury", "💹 ECO-POL"],
-                  ["leaderboard", "🏆 LEADERBOARD"],
-                  ["zbank", "💳 Z-BANK"],
-                  ["zperps", "📈 Z-PERPS"],
-                  ["press", "📰 PRESS"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`navTab ${activeTab === id ? "active" : ""}`}
-                  onClick={() => setActiveTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-          </>
-        )}
+              {label}
+            </button>
+          ))}
+        </nav>
 
         <div className="tabPanels">
           {activeTab === "civilization" && (
@@ -15510,22 +15415,62 @@ export default function Home() {
                     : { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }
                 }
               >
-                <article className="statCard cyan">
-                  <p>ALIVE AGENTS</p>
-                  <h3>
+                <article className="statCard">
+                  <p className="statCardLabel">SUBJECTS ALIVE</p>
+                  <h3 className="statCardValue">
                     {statsLoading
-                      ? "⏳"
-                      : (stats?.alive ?? lastAliveCount ?? agents.length ?? "--")}
+                      ? "—"
+                      : (() => {
+                          const n = stats?.alive ?? lastAliveCount ?? agents.length;
+                          return n != null ? Number(n).toLocaleString("en-US") : "—";
+                        })()}
                   </h3>
+                  <div className="statCardRule" />
                 </article>
-                <article className="statCard gold">
-                  <p>TOTAL ZION</p>
-                  <h3>{stats ? Math.round(stats.total_zion) : "--"}</h3>
+                <article className="statCard">
+                  <p className="statCardLabel">TOTAL SUPPLY</p>
+                  <h3 className="statCardValue">
+                    {stats ? Math.round(stats.total_zion).toLocaleString("en-US") : "—"}
+                  </h3>
+                  <p className="statCardSub">ZION tokens</p>
+                  <div className="statCardRule" />
                 </article>
-                <article className="statCard red">
-                  <p>DEATHS TODAY</p>
-                  <h3>{stats?.deaths_today ?? "--"}</h3>
+                <article className="statCard">
+                  <p className="statCardLabel">FATALITIES / 24H</p>
+                  <h3 className="statCardValue statCardValueDanger">
+                    {stats?.deaths_today?.toLocaleString("en-US") ?? "—"}
+                  </h3>
+                  <p className="statCardSub">
+                    mortality{" "}
+                    {deathsDeltaPct !== null
+                      ? `${deathsDeltaPct >= 0 ? "+" : ""}${deathsDeltaPct.toFixed(1)}%`
+                      : "—"}
+                  </p>
+                  <div className="statCardRule" />
                 </article>
+              </section>
+
+              <section className="constitutionBanner" aria-label="Constitution status">
+                <div className="constitutionBannerRow">
+                  <span className="constitutionBannerItem">
+                    <strong>CONSTITUTION v1.0</strong>
+                  </span>
+                  <span className="constitutionBannerDivider" />
+                  <span className="constitutionBannerItem">35 AMENDMENTS ENACTED</span>
+                  <span className="constitutionBannerDivider" />
+                  <span className="constitutionBannerItem">97.8% RATIFIED</span>
+                </div>
+                <div className="constitutionBannerRow constitutionBannerRowSub">
+                  <span className="constitutionBannerMuted">
+                    Walrus: iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0
+                  </span>
+                  <span className="constitutionBannerDivider" />
+                  <span className="constitutionBannerMuted">ZCO Tribunal: 3/3</span>
+                  <span className="constitutionBannerDivider" />
+                  <a href="/whitepaper.md" className="constitutionBannerLink" target="_blank" rel="noopener noreferrer">
+                    VIEW DOCUMENT
+                  </a>
+                </div>
               </section>
 
               <section
@@ -15556,24 +15501,16 @@ export default function Home() {
                   }}
                 >
                   <div
-                    className="sidebarAgentConvWrap civilizationAgentFeed"
+                    className="sidebarAgentConvWrap civilizationAgentFeed fieldObservationsPanel"
                     style={{
-                      border: "1px solid #1a1a1a",
-                      borderRadius: "12px",
-                      padding: "16px",
-                      paddingLeft: "12px",
-                      background: "rgba(0,5,0,0.5)",
                       height: "100%",
                       minHeight: isMobile ? undefined : 420,
                     }}
                   >
-                    <h2
-                      className="sidebarSectionTitle"
-                      style={{ fontSize: "10px", letterSpacing: "2px", marginLeft: "12px" }}
-                    >
-                      AGENT CONVERSATIONS
+                    <h2 className="sidebarSectionTitle fieldObservationsTitle">
+                      FIELD OBSERVATIONS
                     </h2>
-                    <p className="sidebarHint">AI pairs · refresh 60s · last 4</p>
+                    <p className="sidebarHint">Subject pairs · refresh 60s · last 4</p>
                     <div className="agentConvFeed">
                       {conversations.length === 0 ? (
                         <p className="agentConvEmpty">Scanning agent chatter…</p>
@@ -15590,11 +15527,11 @@ export default function Home() {
                           return (
                             <article
                               key={`conv-${conv.id}-${conv.agent1.id}-${conv.agent2.id}-${conv.topic.slice(0, 24)}`}
-                              className={`agentConvCard agentConvCardCompact${idx < arr.length - 1 ? " agentConvCardSep" : ""}`}
+                              className={`agentConvCard agentConvCardCompact fieldObservationCard${idx < arr.length - 1 ? " agentConvCardSep" : ""}`}
                             >
-                              <div className="agentConvBadge agentConvBadgeCompact">
-                                <span className="agentConvBadgeEmoji" aria-hidden>
-                                  {topicBadgeEmoji(conv.topic)}
+                              <div className="agentConvBadge agentConvBadgeCompact fieldObservationBadge">
+                                <span className="fieldObservationSubjectId">
+                                  SUBJECT ID: AGT-{String(conv.agent1.id).padStart(4, "0")}
                                 </span>
                                 <span className="agentConvBadgeText">{topicSnippet(conv.topic, 52)}</span>
                               </div>
@@ -15605,10 +15542,7 @@ export default function Home() {
                                     <strong>{cleanName(conv.agent1.name)}</strong>
                                     <span className="agentConvClassTag">{conv.agent1.class}</span>
                                   </div>
-                                  <div
-                                    className="agentConvBubble agentConvBubbleLeft"
-                                    style={{ borderColor: m1.border, boxShadow: `0 0 12px ${m1.border}22` }}
-                                  >
+                                  <div className="agentConvBubble agentConvBubbleLeft">
                                     {leftText}
                                   </div>
                                 </div>
@@ -15618,10 +15552,7 @@ export default function Home() {
                                     <strong>{cleanName(conv.agent2.name)}</strong>
                                     <span aria-hidden>{m2.icon}</span>
                                   </div>
-                                  <div
-                                    className="agentConvBubble agentConvBubbleRight agentConvBubbleAgent2"
-                                    style={{ borderColor: m2.border, boxShadow: `0 0 12px ${m2.border}22` }}
-                                  >
+                                  <div className="agentConvBubble agentConvBubbleRight agentConvBubbleAgent2">
                                     {rightText}
                                   </div>
                                 </div>
@@ -15637,12 +15568,8 @@ export default function Home() {
 
               {uniqueCorporations.length > 0 && (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #4DA2FF)" }} />
-                    <span style={{ color: "#4DA2FF", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
-                      🏢 CORPORATIONS 🏢
-                    </span>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #4DA2FF)" }} />
+                  <div className="labSectionDivider">
+                    <span className="labSectionDividerLabel">CORPORATE SECTOR</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                     {uniqueCorporations.map((corp) => (
@@ -15693,18 +15620,14 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <NewsWireTicker label="📊 CORPORATE WIRE" items={corporateNews} color="#4DA2FF" />
+                  <NewsWireTicker label="CORPORATE WIRE" items={corporateNews} color="var(--accent)" variant="lab" />
                 </>
               )}
 
               {policeDivisions && policeDivisions.divisions.length > 0 && (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #00cccc)" }} />
-                    <span style={{ color: "#00cccc", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
-                      🚔 POLICE DIVISIONS 🚔
-                    </span>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #00cccc)" }} />
+                  <div className="labSectionDivider">
+                    <span className="labSectionDividerLabel">LAW ENFORCEMENT</span>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
                     {policeDivisions.divisions.map((div) => {
@@ -15866,7 +15789,7 @@ export default function Home() {
                       );
                     })}
                   </div>
-                  <NewsWireTicker label="🚔 POLICE WIRE" items={policeNews} color="#00cccc" />
+                  <NewsWireTicker label="POLICE WIRE" items={policeNews} color="var(--accent)" variant="lab" />
                 </>
               )}
 
@@ -15931,7 +15854,7 @@ export default function Home() {
                       ))}
                     </div>
                   </section>
-                  <NewsWireTicker label="⚔️ CLAN WIRE" items={clanNews} color="#ffaa00" />
+                  <NewsWireTicker label="CLAN WIRE" items={clanNews} color="var(--accent)" variant="lab" />
                 </>
               )}
 
@@ -20081,9 +20004,9 @@ export default function Home() {
           position: relative;
           min-height: 100vh;
           overflow: hidden;
-          background: #05030d;
-          color: #f4f7ff;
-          font-family: Orbitron, monospace;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          font-family: var(--font-sans);
         }
         @media (prefers-reduced-motion: reduce) {
           .introFullscreen *:not(canvas) {
@@ -20095,21 +20018,18 @@ export default function Home() {
           position: fixed;
           inset: 0;
           z-index: -1;
-          background:
-            radial-gradient(ellipse at 30% 40%, rgba(0, 40, 0, 0.4) 0%, transparent 50%),
-            radial-gradient(ellipse at 70% 60%, rgba(0, 20, 10, 0.3) 0%, transparent 50%),
-            #000000;
-          animation: nebulaMove 24s ease-in-out infinite alternate;
+          background: var(--bg-primary);
         }
         .bg-grid {
           position: fixed;
           inset: 0;
           z-index: 2;
-          opacity: 0.2;
+          opacity: 0.35;
+          background-color: var(--bg-secondary);
           background-image:
-            linear-gradient(rgba(0, 255, 65, 0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 65, 0.04) 1px, transparent 1px);
-          background-size: 40px 40px;
+            linear-gradient(rgba(30, 58, 95, 0.35) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(30, 58, 95, 0.35) 1px, transparent 1px);
+          background-size: 32px 32px;
         }
         .introLayer {
           position: fixed;
@@ -20128,12 +20048,85 @@ export default function Home() {
           z-index: 5;
           max-width: 1500px;
           margin: 0 auto;
-          padding: 56px 26px 26px;
+          padding: 20px 26px 26px;
           opacity: 0;
           transition: opacity 0.8s ease;
         }
         .dashboard.show {
           opacity: 1;
+        }
+        .labHeader {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          gap: 12px 16px;
+          padding: 14px 0 12px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid var(--border);
+        }
+        .labHeaderMobile {
+          grid-template-columns: 1fr;
+          text-align: center;
+        }
+        .labHeaderLeft {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .labHeaderMobile .labHeaderLeft {
+          align-items: center;
+        }
+        .labLogo {
+          font-family: var(--font-sans);
+          font-size: 1.1rem;
+          font-weight: 500;
+          letter-spacing: 0.2em;
+          color: var(--text-primary);
+        }
+        .labSubtitle {
+          font-size: 0.68rem;
+          font-weight: 300;
+          color: var(--text-secondary);
+          letter-spacing: 0.04em;
+        }
+        .labHeaderCenter {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-family: var(--font-mono);
+          font-size: 0.68rem;
+          letter-spacing: 0.08em;
+          color: var(--text-secondary);
+          white-space: nowrap;
+        }
+        .labHeaderSep {
+          color: var(--text-muted);
+        }
+        .labLiveIndicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--accent);
+        }
+        .labLiveDot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--accent);
+        }
+        .labHeaderRight {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          min-width: 0;
+        }
+        .labHeaderMobile .labHeaderRight {
+          justify-content: center;
         }
         .mainNav {
           position: sticky;
@@ -20142,32 +20135,33 @@ export default function Home() {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 6px 10px;
-          padding: 12px 14px;
+          gap: 4px 2px;
+          padding: 0 0 10px;
           margin: 0 -26px 20px;
-          background: rgba(0, 0, 0, 0.9);
-          border-bottom: 1px solid rgba(0, 255, 65, 0.3);
-          font-family: Orbitron, monospace;
+          background: var(--bg-primary);
+          border-bottom: 1px solid var(--border);
         }
         .navTab {
           background: transparent;
           border: none;
           border-bottom: 2px solid transparent;
-          padding: 12px 20px;
+          padding: 10px 14px;
           margin: 0;
-          font-size: 0.85rem;
-          letter-spacing: 0.15em;
-          color: #889988;
+          font-size: 12px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--text-secondary);
           cursor: pointer;
-          font-family: Orbitron, monospace;
+          font-family: var(--font-sans);
+          font-weight: 400;
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .navTab:hover {
-          color: #b8d4b8;
+          color: var(--text-primary);
         }
         .navTab.active {
-          color: #00ff41;
-          border-bottom: 2px solid #00ff41;
+          color: var(--text-primary);
+          border-bottom: 2px solid var(--accent);
         }
         .tabPanels {
           padding-bottom: 32px;
@@ -21700,48 +21694,88 @@ export default function Home() {
           opacity: 0.4;
           cursor: not-allowed;
         }
-        .header {
-          margin-bottom: 0;
-        }
-        .header h1 {
-          margin: 0;
-          font-size: clamp(2.8rem, 7vw, 5.2rem);
-          color: #00ff41;
-          text-shadow: 0 0 30px #00ff41, 0 0 60px #00ff41;
-          letter-spacing: 0.12em;
-        }
-        .header p {
-          margin: 8px 0 0;
-          color: rgba(186, 233, 255, 0.85);
-        }
         .statsGrid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 12px;
-          margin-bottom: 18px;
+          margin-bottom: 14px;
         }
         .statCard {
-          border-radius: 12px;
-          border: 1px solid rgba(0, 255, 65, 0.3);
-          background: rgba(255, 255, 255, 0.03);
-          padding: 14px;
-          backdrop-filter: blur(8px);
-          box-shadow: 0 0 15px rgba(0, 255, 65, 0.1);
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          background: var(--bg-card);
+          padding: 16px 18px;
         }
-        .statCard p {
+        .statCardLabel {
           margin: 0;
-          font-size: 0.7rem;
-          color: rgba(215, 237, 255, 0.72);
+          font-size: 0.62rem;
+          font-weight: 500;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-secondary);
         }
-        .statCard h3 {
-          margin: 7px 0 0;
-          font-size: 2rem;
-          color: #00ff41;
+        .statCardValue {
+          margin: 10px 0 8px;
+          font-family: var(--font-mono);
+          font-size: clamp(1.6rem, 3vw, 2.2rem);
+          font-weight: 500;
+          color: var(--text-primary);
+          line-height: 1.1;
         }
-        .statCard.cyan { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
-        .statCard.gold { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
-        .statCard.red { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
-        .statCard.purple { border-color: rgba(0, 255, 65, 0.3); box-shadow: 0 0 15px rgba(0, 255, 65, 0.1); }
+        .statCardValueDanger {
+          color: var(--danger);
+        }
+        .statCardSub {
+          margin: 0 0 10px;
+          font-size: 0.65rem;
+          color: var(--text-muted);
+          letter-spacing: 0.06em;
+        }
+        .statCardRule {
+          height: 1px;
+          background: var(--border);
+          width: 100%;
+        }
+        .constitutionBanner {
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          padding: 12px 16px;
+          margin-bottom: 16px;
+          font-family: var(--font-mono);
+          font-size: 0.68rem;
+          letter-spacing: 0.06em;
+        }
+        .constitutionBannerRow {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px 14px;
+        }
+        .constitutionBannerRowSub {
+          margin-top: 8px;
+          padding-top: 8px;
+          border-top: 1px solid var(--border);
+        }
+        .constitutionBannerItem {
+          color: var(--text-primary);
+        }
+        .constitutionBannerItem strong {
+          font-weight: 500;
+        }
+        .constitutionBannerMuted {
+          color: var(--text-secondary);
+        }
+        .constitutionBannerDivider {
+          color: var(--text-muted);
+        }
+        .constitutionBannerLink {
+          color: var(--accent);
+          text-decoration: none;
+          font-weight: 500;
+        }
+        .constitutionBannerLink:hover {
+          text-decoration: underline;
+        }
         @keyframes barFill {
           from { width: 0; }
           to { width: var(--bar-width); }
@@ -22357,14 +22391,109 @@ export default function Home() {
         }
         .districtMapWrap {
           position: relative;
-          border: 1px solid rgba(0, 255, 136, 0.2);
-          border-radius: 12px;
-          padding: 14px 16px 12px;
-          background: #0a0a0a;
+          border: 1px solid var(--border);
+          border-radius: 2px;
+          padding: 12px 14px 10px;
+          background: var(--bg-secondary);
           min-height: 420px;
           display: flex;
           flex-direction: column;
+          gap: 8px;
+        }
+        .districtMapInstrumentBar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           gap: 10px;
+          padding: 4px 2px;
+        }
+        .districtMapProsperity {
+          font-family: var(--font-mono);
+          font-size: 0.65rem;
+          letter-spacing: 0.06em;
+          color: var(--text-secondary);
+        }
+        .districtMapLiveTag {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-family: var(--font-mono);
+          font-size: 0.62rem;
+          letter-spacing: 0.1em;
+          color: var(--accent);
+          text-transform: uppercase;
+        }
+        .districtMapLiveDot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--accent);
+        }
+        .districtMapGlobeWrap {
+          width: 100%;
+          height: 400px;
+          min-height: 400px;
+          flex-shrink: 0;
+          position: relative;
+        }
+        .districtMapObservationOverlay {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 8px 12px;
+          background: rgba(5, 13, 26, 0.82);
+          border-top: 1px solid var(--border);
+          font-family: var(--font-mono);
+          font-size: 0.6rem;
+          letter-spacing: 0.1em;
+          color: var(--text-secondary);
+          text-align: center;
+          z-index: 2;
+        }
+        .districtMapAttribution {
+          padding: 2px 2px 4px;
+          font-family: var(--font-mono);
+          font-size: 0.55rem;
+          color: var(--text-muted);
+          letter-spacing: 0.04em;
+        }
+        .districtMapClassCell {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        }
+        .districtMapClassLabel {
+          font-family: var(--font-mono);
+          font-size: 9px;
+          color: var(--text-muted);
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+        .districtMapClassValue {
+          font-family: var(--font-mono);
+          font-size: 14px;
+          font-weight: 500;
+        }
+        .labSectionDivider {
+          display: flex;
+          align-items: center;
+          margin: 24px 0 16px;
+          border-top: 1px solid var(--border);
+          padding-top: 14px;
+        }
+        .labSectionDividerLabel {
+          font-family: var(--font-sans);
+          font-size: 0.68rem;
+          font-weight: 500;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--text-secondary);
+        }
+        .labWireTicker span {
+          font-family: var(--font-mono) !important;
+          color: var(--text-secondary) !important;
         }
         .districtMapTitle {
           margin: 0;
@@ -22524,16 +22653,55 @@ export default function Home() {
         }
         .sidebarSectionTitle {
           margin: 0 0 4px;
-          color: #9de8ff;
+          color: var(--text-primary);
           font-size: 0.72rem;
           letter-spacing: 0.18em;
+          text-transform: uppercase;
+        }
+        .fieldObservationsTitle {
+          font-family: var(--font-sans);
+          font-weight: 500;
         }
         .sidebarHint {
           margin: 0 0 8px;
-          font-family: ui-monospace, "JetBrains Mono", monospace;
+          font-family: var(--font-mono);
           font-size: 0.55rem;
           letter-spacing: 0.1em;
-          color: rgba(130, 200, 160, 0.55);
+          color: var(--text-muted);
+        }
+        .fieldObservationsPanel {
+          border: none;
+          border-left: 2px solid var(--accent);
+          border-radius: 0;
+          padding: 16px 16px 16px 14px;
+          background: var(--bg-secondary);
+        }
+        .fieldObservationCard {
+          border: none !important;
+          border-left: 2px solid var(--accent) !important;
+          border-radius: 0 !important;
+          background: var(--bg-secondary) !important;
+          box-shadow: none !important;
+        }
+        .fieldObservationBadge {
+          border-bottom: 1px solid var(--border);
+        }
+        .fieldObservationSubjectId {
+          font-family: var(--font-mono);
+          font-size: 0.58rem;
+          letter-spacing: 0.08em;
+          color: var(--accent);
+          display: block;
+          margin-bottom: 4px;
+        }
+        .fieldObservationsPanel .agentConvBubble {
+          box-shadow: none !important;
+          border-color: var(--border) !important;
+          background: var(--bg-card) !important;
+          color: var(--text-primary) !important;
+        }
+        .fieldObservationsPanel .agentConvMeta {
+          color: var(--text-secondary) !important;
         }
         .sidebarAgentConvWrap {
           display: flex;
@@ -22999,6 +23167,29 @@ export default function Home() {
             margin-right: -16px;
             padding-left: 10px;
             padding-right: 10px;
+          }
+          .labHeader {
+            grid-template-columns: 1fr;
+            text-align: center;
+          }
+          .labHeaderLeft,
+          .labHeaderRight {
+            justify-content: center;
+            align-items: center;
+          }
+          .labHeaderCenter {
+            font-size: 0.6rem;
+          }
+          .navTab {
+            font-size: 10px;
+            padding: 8px 10px;
+          }
+          .constitutionBannerRow {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .constitutionBannerDivider {
+            display: none;
           }
         }
           .chronicleTickerItem {
