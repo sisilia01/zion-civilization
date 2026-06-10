@@ -1306,10 +1306,20 @@ function zcoAgreementDisplayColor(pct: number): string {
   return "#ef4444";
 }
 
-/** ZCO event-type pill tint (reuses chronicle ticker palette where defined). */
-function zcoEventPillPalette(eventTypeRaw: string): { bg: string; border: string; fg: string } {
-  const br = chronicleTickerBorder(eventTypeRaw);
-  return { bg: `${br}2a`, border: `${br}66`, fg: br };
+/** Monochrome lab label — no event-type color coding */
+function labMonoBadge(): { bg: string; border: string; fg: string } {
+  return { bg: "var(--bg-card)", border: "var(--border)", fg: "var(--text-primary)" };
+}
+
+function zcoConsensusShort(d: ZcoDecision): string {
+  const c = d.consensus;
+  if (c?.method === "consensus" && c.votes_for != null && c.total_votes != null) {
+    return `${c.votes_for}/${c.total_votes}  ✓`;
+  }
+  const votes = d.votes ?? [];
+  const voted = votes.filter((v) => v.status === "voted").length;
+  if (votes.length > 0) return `${voted}/${votes.length}  —`;
+  return "—";
 }
 
 const MATRIX_CHARS =
@@ -10056,7 +10066,6 @@ export default function Home() {
   } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
-  const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const aliveAgents = stats?.alive ?? agents.length;
   const [agentClasses, setAgentClasses] = useState({ elite: 0, middle: 0, poor: 0, critical: 0 });
 
@@ -14127,67 +14136,6 @@ export default function Home() {
   }, [dashboardVisible, showIntro]);
 
   useEffect(() => {
-    if (showIntro || activeTab !== "civilization") return;
-    const canvas = matrixCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let raf = 0;
-    let last = performance.now();
-    let acc = 0;
-    const stepMs = 50;
-    const size = 14;
-    let drops: number[] = [];
-
-    const setup = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const cols = Math.floor(window.innerWidth / size);
-      drops = Array(cols)
-        .fill(0)
-        .map(() => Math.floor(Math.random() * -50));
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-    };
-
-    const loop = (now: number) => {
-      acc += now - last;
-      last = now;
-      if (acc >= stepMs) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
-        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-        ctx.fillStyle = "#00ff41";
-        ctx.font = `${size}px monospace`;
-        for (let i = 0; i < drops.length; i++) {
-          const ch = bgChars[Math.floor(Math.random() * bgChars.length)]!;
-          const x = i * size;
-          const y = drops[i]! * size;
-          ctx.fillText(ch, x, y);
-          if (y > window.innerHeight + size && Math.random() > 0.98) {
-            drops[i] = Math.floor(Math.random() * -20);
-          }
-          drops[i]! += 1;
-        }
-        acc = 0;
-      }
-      raf = requestAnimationFrame(loop);
-    };
-
-    setup();
-    window.addEventListener("resize", setup);
-    raf = requestAnimationFrame(loop);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", setup);
-    };
-  }, [activeTab, dashboardVisible, showIntro]);
-
-  useEffect(() => {
     if (!showIntro) {
       setDashboardVisible(true);
     }
@@ -15393,20 +15341,6 @@ export default function Home() {
         <div className="tabPanels">
           {activeTab === "civilization" && (
             <div className="civTabRoot" style={{ position: "relative", zIndex: 1 }}>
-              <canvas
-                ref={matrixCanvasRef}
-                style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  zIndex: 0,
-                  opacity: 0.15,
-                  pointerEvents: "none",
-                }}
-                aria-hidden
-              />
               <section
                 className="statsGrid"
                 style={
@@ -15474,6 +15408,10 @@ export default function Home() {
               </section>
 
               <section
+                className="planetHeroSection"
+                aria-label="Live observation — planetary telemetry"
+              >
+              <section
                 className="civilizationSidebarRow"
                 aria-label="Agent feed and territory map"
                 style={{
@@ -15537,8 +15475,7 @@ export default function Home() {
                               </div>
                               <div className="agentConvThread agentConvThreadCompact">
                                 <div className="agentConvRow agentConvRowLeft">
-                                  <div className="agentConvMeta" style={{ color: m1.border }}>
-                                    <span aria-hidden>{m1.icon}</span>
+                                  <div className="agentConvMeta fieldObservationMeta">
                                     <strong>{cleanName(conv.agent1.name)}</strong>
                                     <span className="agentConvClassTag">{conv.agent1.class}</span>
                                   </div>
@@ -15547,10 +15484,9 @@ export default function Home() {
                                   </div>
                                 </div>
                                 <div className="agentConvRow agentConvRowRight">
-                                  <div className="agentConvMeta agentConvMetaRight" style={{ color: m2.border }}>
+                                  <div className="agentConvMeta agentConvMetaRight fieldObservationMeta">
                                     <span className="agentConvClassTag">{conv.agent2.class}</span>
                                     <strong>{cleanName(conv.agent2.name)}</strong>
-                                    <span aria-hidden>{m2.icon}</span>
                                   </div>
                                   <div className="agentConvBubble agentConvBubbleRight agentConvBubbleAgent2">
                                     {rightText}
@@ -15564,6 +15500,7 @@ export default function Home() {
                     </div>
                   </div>
                 </aside>
+              </section>
               </section>
 
               {uniqueCorporations.length > 0 && (
@@ -15795,59 +15732,35 @@ export default function Home() {
 
               {clans.length > 0 && (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "24px 0 16px 0" }}>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to right, transparent, #ffaa00)" }} />
-                    <span style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", letterSpacing: "3px", whiteSpace: "nowrap" }}>
-                      ⚔️ CLAN RANKINGS ⚔️
-                    </span>
-                    <div style={{ flex: 1, height: "1px", background: "linear-gradient(to left, transparent, #ffaa00)" }} />
+                  <div className="labSectionDivider">
+                    <span className="labSectionDividerLabel">CLAN RANKINGS</span>
                   </div>
                   <section className="clanSection">
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
+                    <div className="clanRankGrid">
                       {(Array.isArray(clans) ? clans : []).map((clan, idx) => (
-                        <div
-                          key={clan.id}
-                          style={{
-                            border: "1px solid #3a2a0a",
-                            borderRadius: "10px",
-                            padding: "14px",
-                            background: "rgba(255,170,0,0.03)",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                            <span style={{ color: "#ffaa00", fontFamily: "monospace", fontWeight: "bold", fontSize: "0.85rem" }}>
-                              {idx === 0 ? "👑 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : ""}
-                              {clan.name}
+                        <div key={clan.id} className="clanRankCard">
+                          <div className="clanRankCardHead">
+                            <span className="clanRankName">
+                              #{idx + 1} {clan.name}
                             </span>
-                            <span
-                              style={{
-                                background: "rgba(255,170,0,0.1)",
-                                color: "#ffaa00",
-                                fontSize: "0.6rem",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontFamily: "monospace",
-                              }}
-                            >
+                            <span className="clanRankRecord">
                               W {clan.wins} / L {clan.losses}
                             </span>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "8px" }}>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>MEMBERS</div>
-                              <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>{clan.members}</div>
+                          <div className="clanRankStats">
+                            <div className="clanRankStat">
+                              <span className="clanRankStatLabel">MEMBERS</span>
+                              <span className="clanRankStatValue">{clan.members}</span>
                             </div>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>TREASURY</div>
-                              <div style={{ color: "#ffd700", fontFamily: "monospace", fontSize: "0.9rem", fontWeight: "bold" }}>
-                                {clan.treasury?.toFixed(0)}
-                              </div>
+                            <div className="clanRankStat">
+                              <span className="clanRankStatLabel">TREASURY</span>
+                              <span className="clanRankStatValue">{clan.treasury?.toFixed(0)}</span>
                             </div>
-                            <div style={{ textAlign: "center" }}>
-                              <div style={{ color: "#555", fontFamily: "monospace", fontSize: "0.6rem" }}>STATUS</div>
-                              <div style={{ color: "#ffaa00", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "bold" }}>
-                                {clan.wins > clan.losses ? "⚔️ DOM" : clan.wins === clan.losses ? "⚖️ TIE" : "💀 WEAK"}
-                              </div>
+                            <div className="clanRankStat">
+                              <span className="clanRankStatLabel">STATUS</span>
+                              <span className="clanRankStatValue">
+                                {clan.wins > clan.losses ? "DOMINANT" : clan.wins === clan.losses ? "CONTESTED" : "WEAK"}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -15858,54 +15771,11 @@ export default function Home() {
                 </>
               )}
 
-              <div
-                style={{
-                  margin: "24px 0 8px",
-                  overflow: "hidden",
-                  borderRadius: "6px",
-                  border: "1px solid #a78bfa33",
-                  background: "rgba(167,139,250,0.02)",
-                  position: "relative",
-                  zIndex: 1,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "5px 12px",
-                    background: "rgba(167,139,250,0.06)",
-                    borderBottom: "1px solid #a78bfa22",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "6px",
-                      height: "6px",
-                      borderRadius: "50%",
-                      background: "#a78bfa",
-                      boxShadow: "0 0 6px #a78bfa",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: "0.65rem",
-                      color: "#a78bfa",
-                      letterSpacing: "2px",
-                    }}
-                  >
-                    ⚖️ ZION CONSENSUS ORACLE — ZCO v1.0
-                  </span>
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      fontFamily: "monospace",
-                      fontSize: "0.65rem",
-                      color: "#555",
-                    }}
-                  >
+              <section className="zcoResearchPanel" aria-label="ZION Consensus Oracle">
+                <div className="zcoResearchHeader">
+                  <span className="zcoResearchLiveDot" />
+                  <span className="zcoResearchTitle">ZION CONSENSUS ORACLE — ZCO v1.0</span>
+                  <span className="zcoResearchUpdated">
                     {zcoLastUpdated
                       ? `Last updated: ${zcoLastUpdated.toLocaleTimeString()}`
                       : zcoLoading
@@ -15913,231 +15783,77 @@ export default function Home() {
                         : ""}
                   </span>
                 </div>
-                <div style={{ padding: "12px" }}>
-                  {zcoLoading && zcoDecisions.length === 0 ? (
-                    <p
-                      style={{
-                        margin: 0,
-                        fontFamily: "monospace",
-                        fontSize: "0.75rem",
-                        color: "#6b7280",
-                      }}
-                    >
-                      Loading ZCO decisions…
-                    </p>
-                  ) : zcoDecisions.length === 0 ? (
-                    <p
-                      style={{
-                        margin: 0,
-                        fontFamily: "monospace",
-                        fontSize: "0.75rem",
-                        color: "#6b7280",
-                      }}
-                    >
-                      No ZCO rounds yet.
-                    </p>
-                  ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
-                        gap: "12px",
-                      }}
-                    >
-                      {(Array.isArray(zcoDecisions) ? zcoDecisions : []).slice(0, 3).map((decision, zidx) => {
-                        const eventTypeRaw = (decision.event_type || "").trim();
-                        const eventBadge = eventTypeRaw
-                          ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
-                          : "EVENT";
-                        const pill = eventTypeRaw ? zcoEventPillPalette(eventTypeRaw) : null;
-                        const consensus = zcoConsensusLine(decision);
-                        const consensusOk = consensus.startsWith("CONSENSUS");
-                        const agreementPct = zcoAgreementPercent(decision);
-                        const agreeColor = zcoAgreementDisplayColor(agreementPct);
-                        const hash = decision.consensus_hash || decision.tx_hash || "";
-
-                        return (
-                          <article
-                            key={`zco-card-${hash || decision.agent}-${zidx}`}
-                            style={{
-                              borderRadius: "10px",
-                              border: "1px solid rgba(167, 139, 250, 0.25)",
-                              borderTop: "3px solid #a78bfa",
-                              background: "rgba(8, 8, 12, 0.92)",
-                              padding: "14px 16px",
-                              fontFamily: "monospace",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "10px",
-                              minWidth: 0,
-                            }}
-                          >
-                            {pill ? (
-                              <span
-                                style={{
-                                  alignSelf: "flex-start",
-                                  fontSize: "0.62rem",
-                                  fontWeight: 800,
-                                  letterSpacing: "0.12em",
-                                  padding: "4px 10px",
-                                  borderRadius: "4px",
-                                  border: `1px solid ${pill.border}`,
-                                  background: pill.bg,
-                                  color: pill.fg,
-                                  textTransform: "uppercase",
-                                }}
-                              >
-                                {eventBadge}
-                              </span>
-                            ) : (
-                              <span
-                                style={{
-                                  alignSelf: "flex-start",
-                                  fontSize: "0.62rem",
-                                  fontWeight: 800,
-                                  letterSpacing: "0.12em",
-                                  padding: "4px 10px",
-                                  borderRadius: "4px",
-                                  border: "1px solid #a78bfa33",
-                                  background: "#a78bfa22",
-                                  color: "#a78bfa",
-                                  textTransform: "uppercase",
-                                }}
-                              >
-                                {eventBadge}
-                              </span>
-                            )}
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: "0.78rem",
-                                lineHeight: 1.45,
-                                color: "#e8e8e8",
-                                wordBreak: "break-word",
-                              }}
-                            >
-                              {decision.event_description || decision.decision || "—"}
-                            </p>
-                            <div
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "#9ca3af",
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "4px 0",
-                              }}
-                              aria-label="Judge votes"
-                            >
-                              {(decision.votes || []).map((vote, idx) => (
-                                <span key={vote.judge || idx}>
-                                  Judge {["I", "II", "III"][idx] || idx + 1}{" "}
-                                  {vote.status === "voted" ? "✓" : "✗"}
-                                  {idx < (decision.votes ?? []).length - 1 ? (
-                                    <span style={{ color: "#444", margin: "0 6px" }}>|</span>
-                                  ) : null}
-                                </span>
-                              ))}
-                            </div>
-                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
-                              <span
-                                style={{
-                                  color: consensusOk ? "#00ff41" : "#ff4141",
-                                  fontWeight: 800,
-                                  fontSize: "0.8rem",
-                                  letterSpacing: "0.06em",
-                                }}
-                              >
-                                {consensus}
-                              </span>
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  minWidth: "36px",
-                                  height: "36px",
-                                  borderRadius: "50%",
-                                  fontSize: "0.72rem",
-                                  fontWeight: 800,
-                                  color: "#0a0a0c",
-                                  background: agreeColor,
-                                  boxShadow: `0 0 16px ${agreeColor}55`,
-                                }}
-                              >
-                                {agreementPct}%
-                              </span>
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                gap: "8px",
-                                marginTop: "8px",
-                              }}
-                            >
-                              {(() => {
-                                const proofHref = zcoProofHref(decision);
-                                return proofHref ? (
-                                  <a
-                                    href={proofHref}
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      background: "rgba(167,139,250,0.1)",
-                                      border: "1px solid #a78bfa44",
-                                      color: "#a78bfa",
-                                      fontFamily: "monospace",
-                                      fontSize: "0.7rem",
-                                      padding: "4px 10px",
-                                      borderRadius: "4px",
-                                      textDecoration: "none",
-                                    }}
-                                  >
-                                    View in Explorer ↗
-                                  </a>
-                                ) : (
-                                  <span
-                                    style={{
-                                      fontFamily: "monospace",
-                                      fontSize: "0.68rem",
-                                      color: "#888",
-                                    }}
-                                  >
-                                    ⏳ Storing proof…
-                                  </span>
-                                );
-                              })()}
-                              {decision.sui_url ? (
-                                <a
-                                  href={decision.sui_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                {zcoLoading && zcoDecisions.length === 0 ? (
+                  <p className="zcoResearchEmpty">Loading ZCO decisions…</p>
+                ) : zcoDecisions.length === 0 ? (
+                  <p className="zcoResearchEmpty">No ZCO rounds yet.</p>
+                ) : (
+                  <div className="zcoResearchTableWrap">
+                    <table className="zcoResearchTable">
+                      <thead>
+                        <tr>
+                          <th>EVENT TYPE</th>
+                          <th>DESCRIPTION</th>
+                          <th>CONSENSUS</th>
+                          <th>PROOF</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(Array.isArray(zcoDecisions) ? zcoDecisions : []).slice(0, 8).map((decision, zidx) => {
+                          const eventTypeRaw = (decision.event_type || "").trim();
+                          const eventBadge = eventTypeRaw
+                            ? eventTypeRaw.replace(/_/g, " ").replace(/\s+/g, " ").toUpperCase()
+                            : "EVENT";
+                          const mono = labMonoBadge();
+                          const hash = decision.consensus_hash || decision.tx_hash || "";
+                          const proofHref = zcoProofHref(decision);
+                          const desc = (decision.event_description || decision.decision || "—").slice(0, 120);
+                          return (
+                            <tr key={`zco-row-${hash || decision.agent}-${zidx}`}>
+                              <td>
+                                <span
+                                  className="zcoMonoBadge"
                                   style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    background: "rgba(79, 195, 247, 0.1)",
-                                    border: "1px solid #4FC3F744",
-                                    color: "#4FC3F7",
-                                    fontFamily: "monospace",
-                                    fontSize: "0.7rem",
-                                    padding: "4px 10px",
-                                    borderRadius: "4px",
-                                    textDecoration: "none",
+                                    border: `1px solid ${mono.border}`,
+                                    background: mono.bg,
+                                    color: mono.fg,
                                   }}
                                 >
-                                  🔗 Sui TX ↗
-                                </a>
-                              ) : null}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
+                                  {eventBadge}
+                                </span>
+                              </td>
+                              <td className="zcoResearchDesc">{desc}</td>
+                              <td className="zcoResearchConsensus">{zcoConsensusShort(decision)}</td>
+                              <td className="zcoResearchProof">
+                                {proofHref ? (
+                                  <a href={proofHref} className="zcoResearchLink">
+                                    Explorer
+                                  </a>
+                                ) : (
+                                  <span className="zcoResearchMuted">pending</span>
+                                )}
+                                {decision.sui_url ? (
+                                  <>
+                                    {" · "}
+                                    <a
+                                      href={decision.sui_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="zcoResearchLink"
+                                    >
+                                      Sui TX
+                                    </a>
+                                  </>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             </div>
           )}
 
@@ -20436,10 +20152,10 @@ export default function Home() {
           align-items: flex-start;
           gap: 10px;
           padding: 12px 14px 12px 14px;
-          border-radius: 10px;
-          border: 1px solid rgba(0, 255, 65, 0.1);
-          border-left: 4px solid #00ff41;
-          background: rgba(0, 0, 0, 0.55);
+          border-radius: 2px;
+          border: 1px solid var(--border);
+          border-left: 2px solid var(--border);
+          background: var(--bg-secondary);
           box-sizing: border-box;
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
@@ -21737,6 +21453,7 @@ export default function Home() {
           width: 100%;
         }
         .constitutionBanner {
+          position: relative;
           border: 1px solid var(--border);
           background: var(--bg-secondary);
           padding: 12px 16px;
@@ -21744,8 +21461,209 @@ export default function Home() {
           font-family: var(--font-mono);
           font-size: 0.68rem;
           letter-spacing: 0.06em;
+          overflow: hidden;
+        }
+        .constitutionBanner::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image: var(--star-field-image);
+          background-size: cover;
+          background-position: center;
+          opacity: 0.1;
+          pointer-events: none;
+          z-index: 0;
+        }
+        .planetHeroSection {
+          position: relative;
+          margin-bottom: 16px;
+          border-radius: 2px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+        }
+        .planetHeroSection::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image: var(--hero-space-image);
+          background-size: cover;
+          background-position: center;
+          opacity: 0.3;
+          pointer-events: none;
+          z-index: 0;
+        }
+        .planetHeroSection::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            180deg,
+            rgba(5, 13, 26, 0.55) 0%,
+            rgba(5, 13, 26, 0.82) 100%
+          );
+          pointer-events: none;
+          z-index: 0;
+        }
+        .planetHeroSection .civilizationSidebarRow {
+          position: relative;
+          z-index: 1;
+          padding: 12px;
+        }
+        .zcoResearchPanel {
+          margin: 24px 0 8px;
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          position: relative;
+          z-index: 1;
+        }
+        .zcoResearchHeader {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-card);
+        }
+        .zcoResearchLiveDot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--accent);
+        }
+        .zcoResearchTitle {
+          font-family: var(--font-mono);
+          font-size: 0.65rem;
+          letter-spacing: 0.12em;
+          color: var(--text-primary);
+          text-transform: uppercase;
+        }
+        .zcoResearchUpdated {
+          margin-left: auto;
+          font-family: var(--font-mono);
+          font-size: 0.62rem;
+          color: var(--text-muted);
+        }
+        .zcoResearchEmpty {
+          margin: 0;
+          padding: 14px 12px;
+          font-family: var(--font-mono);
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+        .zcoResearchTableWrap {
+          overflow-x: auto;
+        }
+        .zcoResearchTable {
+          width: 100%;
+          border-collapse: collapse;
+          font-family: var(--font-mono);
+          font-size: 0.72rem;
+        }
+        .zcoResearchTable th {
+          text-align: left;
+          padding: 10px 12px;
+          color: var(--text-secondary);
+          font-weight: 500;
+          letter-spacing: 0.1em;
+          font-size: 0.6rem;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-card);
+        }
+        .zcoResearchTable td {
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border);
+          color: var(--text-primary);
+          vertical-align: top;
+        }
+        .zcoResearchTable tr:last-child td {
+          border-bottom: none;
+        }
+        .zcoMonoBadge {
+          display: inline-block;
+          font-size: 0.58rem;
+          font-weight: 500;
+          letter-spacing: 0.1em;
+          padding: 3px 8px;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .zcoResearchDesc {
+          color: var(--text-secondary);
+          max-width: 420px;
+          line-height: 1.4;
+        }
+        .zcoResearchConsensus {
+          color: var(--accent);
+          white-space: nowrap;
+        }
+        .zcoResearchLink {
+          color: var(--accent);
+          text-decoration: none;
+        }
+        .zcoResearchLink:hover {
+          text-decoration: underline;
+        }
+        .zcoResearchMuted {
+          color: var(--text-muted);
+        }
+        .clanRankGrid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          gap: 12px;
+        }
+        .clanRankCard {
+          border: 1px solid var(--border);
+          background: var(--bg-secondary);
+          padding: 14px;
+          border-radius: 2px;
+        }
+        .clanRankCardHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .clanRankName {
+          font-family: var(--font-mono);
+          font-size: 0.82rem;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+        .clanRankRecord {
+          font-family: var(--font-mono);
+          font-size: 0.58rem;
+          color: var(--text-muted);
+          letter-spacing: 0.06em;
+        }
+        .clanRankStats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+        }
+        .clanRankStat {
+          text-align: center;
+        }
+        .clanRankStatLabel {
+          display: block;
+          font-family: var(--font-mono);
+          font-size: 0.55rem;
+          color: var(--text-muted);
+          letter-spacing: 0.08em;
+          margin-bottom: 4px;
+        }
+        .clanRankStatValue {
+          font-family: var(--font-mono);
+          font-size: 0.85rem;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+        .fieldObservationMeta {
+          color: var(--text-secondary) !important;
         }
         .constitutionBannerRow {
+          position: relative;
+          z-index: 1;
           display: flex;
           flex-wrap: wrap;
           align-items: center;

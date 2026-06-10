@@ -15,6 +15,8 @@
   --warning: #f59e0b;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --hero-space-image: url('https://stsci-opo.org/STScI-01EVT0Y6WX24VXTVZSYFFJK6T5.png');
+  --star-field-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Ssc2017-05b.jpg/2560px-Ssc2017-05b.jpg');
 }
 
 * {
