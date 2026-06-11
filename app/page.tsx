@@ -29,6 +29,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
@@ -9855,6 +9856,7 @@ const decryptNote = async (
 };
 
 export default function Home() {
+  const router = useRouter();
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
   const wallets = useWallets();
@@ -15047,7 +15049,13 @@ export default function Home() {
               key={id}
               type="button"
               className={`navTab ${activeTab === id ? "active" : ""}`}
-              onClick={() => setActiveTab(id)}
+              onClick={() => {
+                if (id === "constitution") {
+                  router.push("/constitution");
+                  return;
+                }
+                setActiveTab(id);
+              }}
             >
               {label}
             </button>
