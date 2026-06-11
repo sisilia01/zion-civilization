@@ -6,6 +6,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 const imFell = IM_Fell_English({ subsets: ["latin"], weight: ["400"] });
 
+const SUI_TESTNET_PACKAGE =
+  "0xcb6f3abdca6468fc90cd90dabe87b29eab7cacf739a65a318243d0cad78c543d";
+const SUI_TESTNET_PACKAGE_URL = `https://testnet.suivision.xyz/package/${SUI_TESTNET_PACKAGE}`;
+
 type ConstitutionArticle = { heading: string; body: string };
 
 type ConstitutionData = {
@@ -247,11 +251,14 @@ export default function ConstitutionPage() {
         .constStats {
           text-align: center;
           font-family: "IBM Plex Mono", monospace;
-          font-size: 0.68rem;
-          letter-spacing: 0.1em;
-          color: rgba(232, 213, 163, 0.65);
+          font-size: 0.75rem;
+          letter-spacing: 0.08em;
+          color: #94a3b8;
           margin-bottom: 2rem;
-          line-height: 1.9;
+          line-height: 1.7;
+        }
+        .constStatsLine {
+          display: block;
         }
         .constStats a {
           color: #7eb8ff;
@@ -404,19 +411,19 @@ export default function ConstitutionPage() {
             <p className="constSubtitle">{constitution.subtitle}</p>
 
             <div className="constStats">
-              {constitution.agents_ratified.toLocaleString()} AGENTS RATIFIED ·{" "}
-              {constitution.consensus_pct}% CONSENSUS · WALRUS:{" "}
-              <a href={constitution.walrus_url} target="_blank" rel="noopener noreferrer">
-                {truncateBlob(constitution.walrus_blob)}
-              </a>{" "}
-              ·{" "}
-              <a
-                href={`https://suiscan.xyz/mainnet/object/${constitution.registry}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                [VERIFY ON-CHAIN]
-              </a>
+              <span className="constStatsLine">
+                RATIFIED BY DEMOCRATIC CONSENSUS · {constitution.consensus_pct}% APPROVAL
+              </span>
+              <span className="constStatsLine">
+                WALRUS: {truncateBlob(constitution.walrus_blob)}{" "}
+                <a href={constitution.walrus_url} target="_blank" rel="noopener noreferrer">
+                  [VERIFY ↗]
+                </a>{" "}
+                ·{" "}
+                <a href={SUI_TESTNET_PACKAGE_URL} target="_blank" rel="noopener noreferrer">
+                  [VIEW ON SUI TESTNET ↗]
+                </a>
+              </span>
             </div>
 
             <div className="constDivider">═══════════════════════</div>
