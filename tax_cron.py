@@ -229,8 +229,10 @@ def apply_tax_cycle():
     top_rate = get_param("top_tax_rate", 0.35)
     min_rate = get_param("min_tax_rate", 0.05)
     corp_rate = get_param("corporate_tax_rate", 0.10)
+    wealth_rate = get_param("wealth_tax_rate", 0.0)
     print(
-        f"Constitutional tax rates — min={min_rate:.2f} top={top_rate:.2f} corp={corp_rate:.2f}"
+        f"Constitutional tax rates — min={min_rate:.2f} top={top_rate:.2f} "
+        f"corp={corp_rate:.2f} wealth={wealth_rate:.2f}"
     )
 
     total_tax = 0.0
@@ -249,6 +251,9 @@ def apply_tax_cycle():
         balance = float(ag["balance"] or 0)
         debt = float(ag["debt"] or 0)
         tax_amount = constitutional_agent_tax(ag, alive_count, reserve, tax_modifier_pct)
+        wealth_rate = float(get_param("wealth_tax_rate", 0.0))
+        if wealth_rate > 0 and ag.get("class") == "elite" and balance > 500:
+            tax_amount = round(tax_amount + balance * wealth_rate, 4)
         if tax_relief_active and (ag.get("class") in ("poor", "critical")):
             tax_amount = round(tax_amount * 0.5, 4)
         if int(ag["id"]) in hungry_ids:

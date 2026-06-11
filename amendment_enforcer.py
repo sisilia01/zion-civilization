@@ -31,6 +31,7 @@ DEFAULT_PARAMS = {
     "wealth_tax_rate": 0.0,
     "police_funding_bonus": 0.0,
     "corporate_tax_rate": 0.10,
+    "constitution_version": 1.0,
 }
 
 # change_type -> param_key -> delta applied to current value when amendment is enacted
@@ -61,6 +62,9 @@ CHANGE_TYPE_MAP = {
         "basic_income": 2.0,
         "police_funding_bonus": 500.0,
     },
+    "constitutional_reform": {
+        "constitution_version": 2.0,  # relative bump; v3.0 amendment sets active charter generation
+    },
 }
 
 PARAM_BOUNDS = {
@@ -71,6 +75,7 @@ PARAM_BOUNDS = {
     "wealth_tax_rate": (0.0, 0.25),
     "police_funding_bonus": (0.0, 10000.0),
     "corporate_tax_rate": (0.0, 0.35),
+    "constitution_version": (1.0, 10.0),
 }
 
 
@@ -179,9 +184,14 @@ def apply_enacted_amendments() -> list[int]:
             aid = amendment["id"]
             ctype = (amendment.get("change_type") or "").strip()
             deltas = CHANGE_TYPE_MAP.get(ctype)
-            if not deltas:
+            if deltas is None:
                 print(f"[enforcer] amendment #{aid} ({ctype}): no CHANGE_TYPE_MAP entry — skipped")
                 continue
+
+            title = (amendment.get("title") or "").lower()
+            if ctype == "constitutional_reform" and "v3" in title:
+                deltas = dict(deltas)
+                deltas["constitution_version"] = 3.0 - float(params.get("constitution_version", 1.0))
 
             print(f"[enforcer] applying amendment #{aid} ({ctype}): {amendment.get('title', '')[:60]}")
             for param_key, delta in deltas.items():

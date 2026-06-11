@@ -93,7 +93,7 @@ def constitution():
     ratification = _constitution_ratification(cur)
     cur.close()
     conn.close()
-    blob_id = (version_row or {}).get("blob_id") or "iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0"
+    blob_id = (version_row or {}).get("blob_id") or "-aBRD_GM1528p8zSLpRjqzR6S0p8yQywf41xrkFlUZM"
     return js(
         {
             "title": "CONSTITUTION OF THE ZION CIVILIZATION",

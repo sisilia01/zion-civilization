@@ -8,7 +8,7 @@ records on-chain via record_amendment with Merkle proof + tribunal verdicts.
 import os, sys, json, hashlib, subprocess
 import psycopg2, psycopg2.extras
 from datetime import datetime, timezone
-from walrus import store_blob, WALRUS_AGGREGATOR
+from walrus import store_amendment_record, store_blob, WALRUS_AGGREGATOR
 
 import os
 try:
@@ -94,8 +94,20 @@ def enact(amendment_id):
            "recorded_at":datetime.now(timezone.utc).isoformat(),
            "constitution_text":new_text}
     print("Storing on Walrus...")
-    res = store_blob(pkg, blob_type="constitution_amendment")
-    if not res: print("Walrus failed"); return
+    res = store_amendment_record(
+        dict(a),
+        extra={
+            "constitution_version": new_ver,
+            "constitution_sha256": new_sha,
+            "constitution_text": new_text,
+            "package_type": "constitution_amendment",
+        },
+    )
+    if not res:
+        res = store_blob(pkg, blob_type="constitution_amendment")
+    if not res:
+        print("Walrus failed")
+        return
     blob_id = res['blob_id']
     print(f"Walrus blob: {blob_id}")
 
