@@ -28,6 +28,37 @@ export function normalizePopulation(population = 0) {
   return Math.min(1, Math.max(0, population / 20000));
 }
 
+/** Polar aurora on planet surface only — off by default (atmosphere aurora reads as a solid green pole). */
+const USE_AURORA = false;
+
+const AURORA_NOISE_GLSL = USE_AURORA
+  ? `
+  float auroraPole = smoothstep(0.84, 0.97, lat);
+  float auroraNight = nightSide * smoothstep(0.15, 0.5, nightSide);
+  float auroraBand = auroraPole * auroraNight;
+  float ribbonA = abs(sin(dot(vPosition.xz, vec2(11.0, 7.0)) + uTime * 0.75));
+  float ribbonB = abs(sin(vPosition.x * 19.0 - vPosition.z * 15.0 + uTime * 0.45));
+  float ribbons = smoothstep(0.78, 1.0, ribbonA * ribbonB);
+  float shimmer = 0.35 + 0.65 * sin(uTime * 0.55 + lat * 18.0 + dot(vPosition.xz, vec2(6.0, 4.0)));
+  vec3 auroraTint = mix(vec3(0.1, 0.62, 0.38), vec3(0.18, 0.55, 0.72), sin(uTime * 0.22 + lat * 8.0) * 0.5 + 0.5);
+  color += auroraTint * auroraBand * ribbons * shimmer * 0.07;
+`
+  : "";
+
+const AURORA_TEXTURED_GLSL = USE_AURORA
+  ? `
+  float auroraPole = smoothstep(0.84, 0.97, poleLat);
+  float auroraNight = nightSide * smoothstep(0.15, 0.5, nightSide);
+  float auroraBand = auroraPole * auroraNight;
+  float ribbonA = abs(sin(N.x * 22.0 + N.z * 14.0 + uTime * 0.75));
+  float ribbonB = abs(sin(N.x * 17.0 - N.z * 21.0 + uTime * 0.42));
+  float ribbons = smoothstep(0.78, 1.0, ribbonA * ribbonB);
+  float shimmer = 0.35 + 0.65 * sin(uTime * 0.55 + poleLat * 18.0 + N.x * 9.0);
+  vec3 auroraTint = mix(vec3(0.1, 0.62, 0.38), vec3(0.18, 0.55, 0.72), sin(uTime * 0.22 + N.z * 7.0) * 0.5 + 0.5);
+  surface += auroraTint * auroraBand * ribbons * shimmer * 0.07;
+`
+  : "";
+
 const NOISE_GLSL = `
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -261,12 +292,7 @@ void main() {
   vec3 color = mix(nightCol, dayCol, dayAmount);
   color += vec3(1.0, 0.48, 0.14) * twilight * 0.08;
   color += cityMask * vec3(1.0, 0.65, 0.28) * twilight * 0.03 * uProsperity;
-
-  float auroraBand = smoothstep(0.68, 0.92, lat) * nightSide;
-  float auroraWave = 0.5 + 0.5 * sin(uTime * 0.85 + dot(vPosition.xz, vec2(9.0, 6.0)));
-  vec3 auroraCol = mix(vec3(0.08, 0.82, 0.48), vec3(0.28, 0.72, 1.0), sin(uTime * 0.35 + lat * 5.0) * 0.5 + 0.5);
-  color += auroraCol * auroraBand * auroraWave * 0.28;
-
+${AURORA_NOISE_GLSL}
   float limbFog = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5);
   vec3 limbHaze = mix(vec3(0.02, 0.05, 0.1), vec3(0.04, 0.08, 0.14), uProsperity);
   color = mix(color, color * 0.82 + limbHaze, limbFog * 0.32);
@@ -402,14 +428,6 @@ void main() {
   vec3 col = atmoColor * fres * 0.72;
   col *= mix(0.45, 1.0, dayMask);
   float alpha = fres * 0.28 * mix(0.35, 1.0, dayMask);
-
-  float poleLat = abs(N.y);
-  float auroraBand = smoothstep(0.7, 0.94, poleLat);
-  float nightSide = 1.0 - smoothstep(-0.02, 0.22, sunFacing);
-  float auroraPulse = 0.55 + 0.45 * sin(uTime * 0.9 + N.x * 10.0 + N.z * 7.0);
-  vec3 aurora = mix(vec3(0.12, 0.9, 0.55), vec3(0.35, 0.7, 1.0), sin(uTime * 0.4 + poleLat * 6.0) * 0.5 + 0.5);
-  col += aurora * auroraBand * nightSide * auroraPulse * fres * 0.42;
-  alpha += auroraBand * nightSide * fres * 0.12;
 
   gl_FragColor = vec4(col, alpha);
 }
@@ -682,64 +700,33 @@ function createFlagDecalTexture() {
 function createHeroSolarPanel(side) {
   const panelGroup = new THREE.Group();
   const panelMat = new THREE.MeshStandardMaterial({
-    color: 0x14143a,
-    metalness: 0.5,
-    roughness: 0.28,
-    map: createSolarCellGridTexture(),
-    emissive: 0x060812,
-    emissiveIntensity: 0.06,
+    color: 0x142d5c,
+    metalness: 0.6,
+    roughness: 0.2,
+    emissive: 0x0a1830,
+    emissiveIntensity: 0.08,
   });
-  const gridMat = new THREE.MeshStandardMaterial({ color: 0x0a0a20, metalness: 0.4, roughness: 0.35 });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.85, roughness: 0.32 });
-  const armMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.88, roughness: 0.3 });
-  const panelW = 0.44;
-  const panelH = 0.095;
-  const frameT = 0.0022;
-  const bodyReach = 0.024;
-  const boomLen = 0.034;
-  const hubDist = bodyReach + boomLen + panelW * 0.5;
-
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.0014, 0.0014, boomLen, 8), armMat);
-  boom.rotation.z = Math.PI / 2;
-  boom.position.set(side * (bodyReach + boomLen * 0.5), 0, 0);
-  markShadows(boom);
-  panelGroup.add(boom);
-
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, 0.001, 28, 8, 1), panelMat);
-  panel.position.set(side * hubDist, 0, 0);
-  markShadows(panel);
-  panelGroup.add(panel);
-
-  const frameSpecs = [
-    [panelW + frameT * 2, frameT, 0.0016, 0, panelH * 0.5 + frameT * 0.5],
-    [panelW + frameT * 2, frameT, 0.0016, 0, -panelH * 0.5 - frameT * 0.5],
-    [frameT, panelH, 0.0016, panelW * 0.5 + frameT * 0.5, 0],
-    [frameT, panelH, 0.0016, -panelW * 0.5 - frameT * 0.5, 0],
-  ];
-  frameSpecs.forEach(([fw, fh, fd, fx, fy]) => {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, fd), frameMat);
-    bar.position.set(fx, fy, 0.0008);
-    markShadows(bar);
-    panel.add(bar);
-  });
-
-  for (let c = 1; c < 14; c++) {
-    const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.0004, panelH * 0.94, 0.0014), gridMat);
-    vLine.position.x = -panelW / 2 + (panelW / 14) * c;
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x080810, metalness: 0.9, roughness: 0.35 });
+  const panelW = 0.42;
+  const panelH = 0.07;
+  const panelT = 0.001;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, panelT, 24, 6, 1), panelMat);
+  markShadows(base);
+  panelGroup.add(base);
+  for (let c = 1; c < 12; c++) {
+    const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.0005, panelH * 0.96, panelT * 1.6), frameMat);
+    vLine.position.x = -panelW / 2 + (panelW / 12) * c;
     markShadows(vLine);
-    panel.add(vLine);
+    panelGroup.add(vLine);
   }
-  for (let r = 1; r < 5; r++) {
-    const hLine = new THREE.Mesh(new THREE.BoxGeometry(panelW * 0.97, 0.0004, 0.0014), gridMat);
-    hLine.position.y = -panelH / 2 + (panelH / 5) * r;
+  for (let r = 1; r < 4; r++) {
+    const hLine = new THREE.Mesh(new THREE.BoxGeometry(panelW * 0.98, 0.0005, panelT * 1.6), frameMat);
+    hLine.position.y = -panelH / 2 + (panelH / 4) * r;
     markShadows(hLine);
-    panel.add(hLine);
+    panelGroup.add(hLine);
   }
-
+  panelGroup.position.x = side * (0.11 + panelW / 2);
   panelGroup.userData.panelMat = panelMat;
-  panelGroup.userData.side = side;
-  panelGroup.userData.panelDirX = side;
-  panelGroup.userData.panelDirY = 0;
   return panelGroup;
 }
 
@@ -766,258 +753,106 @@ function updateRealtimeSunDirection(out) {
   return out.set(sunX, sunY, sunZ).normalize();
 }
 
-function createIssModel() {
-  const issGroup = new THREE.Group();
-
-  const trussMat = new THREE.MeshStandardMaterial({
-    color: 0xccccdd,
-    metalness: 0.8,
-    roughness: 0.2,
-  });
-  const panelMatProto = {
-    color: 0xffaa33,
-    emissive: 0xffaa33,
-    emissiveIntensity: 0.3,
-    metalness: 0.3,
-    roughness: 0.4,
-  };
-  const habitatMat = new THREE.MeshStandardMaterial({
-    color: 0xeeeeee,
-    metalness: 0.5,
-    roughness: 0.35,
-  });
-  const portMat = new THREE.MeshStandardMaterial({
-    color: 0xaaaaaa,
-    metalness: 0.7,
-    roughness: 0.3,
-  });
-  const nodeMat = new THREE.MeshStandardMaterial({
-    color: 0xdddddd,
-    metalness: 0.6,
-    roughness: 0.28,
-  });
-
-  const truss = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.004, 0.004), trussMat);
-  markShadows(truss);
-  issGroup.add(truss);
-
-  const panelMats = [];
-  const panelXs = [-0.03, -0.02, 0.02, 0.03];
-  const panelSides = [1, -1];
-  panelXs.forEach((x) => {
-    panelSides.forEach((side) => {
-      const mat = new THREE.MeshStandardMaterial(panelMatProto);
-      panelMats.push(mat);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.001, 0.008), mat);
-      panel.position.set(x, side * 0.006, 0);
-      markShadows(panel);
-      issGroup.add(panel);
-    });
-  });
-
-  const habitat = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.02, 8), habitatMat);
-  habitat.rotation.z = Math.PI / 2;
-  markShadows(habitat);
-  issGroup.add(habitat);
-
-  const node = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.008, 8), nodeMat);
-  node.rotation.z = Math.PI / 2;
-  node.position.set(0.012, 0, 0.003);
-  markShadows(node);
-  issGroup.add(node);
-
-  [-1, 1].forEach((sign) => {
-    const port = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.004, 6), portMat);
-    port.rotation.z = Math.PI / 2;
-    port.position.set(sign * 0.042, 0, 0);
-    markShadows(port);
-    issGroup.add(port);
-  });
-
-  const radiator = new THREE.Mesh(
-    new THREE.BoxGeometry(0.012, 0.003, 0.006),
-    new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.5, roughness: 0.45 })
-  );
-  radiator.position.set(-0.01, 0, -0.005);
-  markShadows(radiator);
-  issGroup.add(radiator);
-
-  const issLight = new THREE.PointLight(0xffdd88, 0.4, 0.3);
-  issLight.position.set(0, 0, 0);
-  issGroup.add(issLight);
-
-  issGroup.scale.setScalar(2.4);
-
-  issGroup.userData.isIss = true;
-  issGroup.userData.panelMats = panelMats;
-  issGroup.userData.issLight = issLight;
-  return issGroup;
-}
-
 function createHeroSatellite() {
   const group = new THREE.Group();
-  const foilNormal = createFoilNormalMap();
-  const greyMat = new THREE.MeshStandardMaterial({
-    color: 0x3a3a3a,
-    metalness: 0.7,
-    roughness: 0.45,
-  });
   const foilMat = new THREE.MeshStandardMaterial({
-    color: 0xc9a227,
-    metalness: 0.7,
-    roughness: 0.45,
-    normalMap: foilNormal,
-    normalScale: new THREE.Vector2(0.25, 0.25),
+    color: 0xd4af6a,
+    metalness: 1.0,
+    roughness: 0.25,
+    normalMap: createFoilNormalMap(),
+    normalScale: new THREE.Vector2(0.35, 0.35),
   });
-  const zionMat = new THREE.MeshStandardMaterial({
-    color: 0xc9a227,
-    metalness: 0.7,
-    roughness: 0.45,
-    map: createZionDecalTexture(),
-  });
-  const flagMat = new THREE.MeshStandardMaterial({
-    color: 0xc9a227,
-    metalness: 0.7,
-    roughness: 0.45,
-    map: createFlagDecalTexture(),
-  });
-  const structureMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.25 });
-  const dishMat = new THREE.MeshStandardMaterial({
-    color: 0xcccccc,
-    metalness: 0.92,
-    roughness: 0.18,
-    side: THREE.DoubleSide,
-  });
+  const structureMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.92, roughness: 0.28 });
+  const copperMat = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.95, roughness: 0.35 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ee, metalness: 0.15, roughness: 0.55 });
+  const sensorMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.7, roughness: 0.4 });
 
-  const busLen = 0.05;
-  const busCore = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, busLen, 8), greyMat);
-  busCore.rotation.x = Math.PI / 2;
-  markShadows(busCore);
-  group.add(busCore);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.11, 32, 8), foilMat);
+  body.rotation.z = Math.PI / 2;
+  markShadows(body);
+  group.add(body);
+  const capF = new THREE.Mesh(new THREE.SphereGeometry(0.038, 24, 16), foilMat);
+  capF.position.x = 0.055;
+  markShadows(capF);
+  group.add(capF);
+  const capB = new THREE.Mesh(new THREE.SphereGeometry(0.038, 24, 16), foilMat);
+  capB.position.x = -0.055;
+  markShadows(capB);
+  group.add(capB);
 
-  const foilWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, busLen * 0.55, 8), foilMat);
-  foilWrap.rotation.x = Math.PI / 2;
-  markShadows(foilWrap);
-  group.add(foilWrap);
-
-  const greebles = [
-    [0.012, 0.008, 0.008, 0.014, 0.012, 0.018, greyMat],
-    [0.008, 0.006, 0.01, -0.016, -0.008, 0.012, foilMat],
-    [0.006, 0.005, 0.007, 0.01, -0.014, -0.016, greyMat],
-    [0.009, 0.007, 0.006, -0.012, 0.014, -0.014, foilMat],
-    [0.005, 0.004, 0.005, 0.018, 0.004, 0.0, greyMat],
-  ];
-  greebles.forEach(([w, h, d, x, y, z, mat]) => {
-    const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    g.position.set(x, y, z);
-    markShadows(g);
-    group.add(g);
-  });
-
-  const zionFace = new THREE.Mesh(new THREE.PlaneGeometry(0.026, 0.02), zionMat);
-  zionFace.position.set(0, 0.004, busLen * 0.5 + 0.001);
-  group.add(zionFace);
-  const flagFace = new THREE.Mesh(new THREE.PlaneGeometry(0.016, 0.01), flagMat);
-  flagFace.position.set(0.031, 0.006, 0.008);
-  flagFace.rotation.y = -Math.PI / 2;
-  group.add(flagFace);
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.18, 16, 1), structureMat);
+  boom.rotation.z = Math.PI / 2;
+  markShadows(boom);
+  group.add(boom);
 
   const panelL = createHeroSolarPanel(-1);
   const panelR = createHeroSolarPanel(1);
-  const panels = [panelL, panelR];
-  panels.forEach((p) => group.add(p));
+  group.add(panelL);
+  group.add(panelR);
 
-  const dishMount = new THREE.Group();
-  dishMount.position.z = busLen * 0.5;
-  const strutAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
-  strutAngles.forEach((a) => {
-    const strutLen = 0.038;
-    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.0012, strutLen, 6), structureMat);
-    strut.position.set(Math.cos(a) * 0.016, Math.sin(a) * 0.016, strutLen * 0.5);
-    strut.rotation.x = -0.42;
-    strut.rotation.y = a;
-    markShadows(strut);
-    dishMount.add(strut);
-  });
-
+  const dishStem = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.04, 8), structureMat);
+  dishStem.position.set(0, 0.06, 0.025);
+  markShadows(dishStem);
+  group.add(dishStem);
   const dish = new THREE.Mesh(
-    new THREE.SphereGeometry(0.042, 32, 18, 0, Math.PI * 2, 0, Math.PI * 0.52),
-    dishMat
+    new THREE.SphereGeometry(0.028, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.18, side: THREE.DoubleSide })
   );
-  dish.position.z = 0.052;
-  dish.rotation.x = -Math.PI / 2;
+  dish.position.set(0, 0.085, 0.025);
+  dish.rotation.x = -0.35;
   markShadows(dish);
-  dishMount.add(dish);
+  group.add(dish);
 
-  const feedStem = new THREE.Mesh(new THREE.CylinderGeometry(0.00055, 0.00055, 0.024, 6), structureMat);
-  feedStem.position.z = 0.032;
-  markShadows(feedStem);
-  dishMount.add(feedStem);
-  const feedHorn = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.001, 0.009, 8), structureMat);
-  feedHorn.position.z = 0.044;
-  markShadows(feedHorn);
-  dishMount.add(feedHorn);
-  for (const sx of [-0.0045, 0.0045]) {
-    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.0003, 0.0003, 0.014, 4), structureMat);
-    stick.position.set(sx, 0, 0.038);
-    stick.rotation.x = Math.PI / 2;
-    markShadows(stick);
-    dishMount.add(stick);
-  }
-  group.add(dishMount);
+  const radL = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.09, 0.045, 1, 8, 4), whiteMat);
+  radL.position.set(-0.04, -0.02, 0.04);
+  markShadows(radL);
+  group.add(radL);
+  const radR = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.09, 0.045, 1, 8, 4), whiteMat);
+  radR.position.set(0.04, -0.02, 0.04);
+  markShadows(radR);
+  group.add(radR);
 
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.0013, 0.13, 8), structureMat);
-  mast.position.set(-0.008, 0.018, -0.018);
-  mast.rotation.set(-0.72, 0.28, 0.12);
-  markShadows(mast);
-  group.add(mast);
   for (let i = 0; i < 3; i++) {
-    const inst = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.005, 0.005), i % 2 ? greyMat : foilMat);
-    inst.position.set(-0.008 + i * 0.004, 0.038 + i * 0.028, -0.018 - i * 0.012);
-    inst.rotation.set(-0.72, 0.28, 0.12);
-    markShadows(inst);
-    group.add(inst);
+    const cam = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.006, 0.006), sensorMat);
+    cam.position.set(-0.02 + i * 0.02, 0.04, -0.035);
+    markShadows(cam);
+    group.add(cam);
   }
 
-  const whipSpecs = [
-    [0.018, 0.012, 0.014, 0.42, 0.15, 0.55],
-    [-0.016, -0.014, 0.012, -0.35, 1.2, -0.4],
-    [0.012, -0.018, -0.01, 0.55, -0.8, 0.25],
-    [-0.01, 0.016, -0.014, -0.6, 0.4, -0.7],
+  const wireAngles = [
+    [0.2, 0.3, 0.1],
+    [0.5, -0.2, 0.4],
+    [-0.3, 0.6, -0.1],
+    [0.8, 0.1, -0.5],
   ];
-  whipSpecs.forEach(([px, py, pz, rx, ry, rz], wi) => {
-    const whip = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.00028, 0.0002, 0.06 + wi * 0.008, 4),
-      wi % 2 ? foilMat : structureMat
+  wireAngles.forEach(([rx, ry, rz], w) => {
+    const wire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0004, 0.0004, 0.06 + w * 0.012, 4),
+      w % 2 ? copperMat : foilMat
     );
-    whip.position.set(px, py, pz);
-    whip.rotation.set(rx, ry, rz);
-    markShadows(whip);
-    group.add(whip);
+    wire.position.set(-0.03 + w * 0.02, 0.02, 0.02);
+    wire.rotation.set(rx, ry, rz);
+    markShadows(wire);
+    group.add(wire);
   });
 
-  const beaconMat = new THREE.MeshStandardMaterial({
-    color: 0xff3333,
-    emissive: 0xff1100,
-    emissiveIntensity: 0,
-    metalness: 0.15,
-    roughness: 0.45,
-  });
-  const beaconAntenna = new THREE.Mesh(new THREE.CylinderGeometry(0.00065, 0.00065, 0.022, 6), structureMat);
-  beaconAntenna.position.set(0.014, 0.022, 0.012);
-  beaconAntenna.rotation.x = 0.35;
-  markShadows(beaconAntenna);
-  group.add(beaconAntenna);
-  const beaconTip = new THREE.Mesh(new THREE.SphereGeometry(0.0012, 8, 8), beaconMat);
-  beaconTip.position.set(0.014, 0.034, 0.018);
-  group.add(beaconTip);
+  const navLight = new THREE.Mesh(
+    new THREE.SphereGeometry(0.0012, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xcc1100, transparent: true, opacity: 0.85 })
+  );
+  navLight.position.set(0.05, 0.025, 0.03);
+  group.add(navLight);
 
-  group.userData.panels = panels;
-  group.userData.beaconMat = beaconMat;
-  group.userData.beaconTip = beaconTip;
+  const satLight = new THREE.PointLight(0xa8c8ff, 0.12, 0.45);
+  satLight.position.set(0, 0, 0);
+  group.add(satLight);
+
+  group.userData.panels = [panelL, panelR];
+  group.userData.navLight = navLight;
+  group.userData.satLight = satLight;
   group.userData.foilMat = foilMat;
-  group.userData.dishMat = dishMat;
-  group.scale.set(0.38, 0.38, 0.38);
+  group.userData.dishMat = dish.material;
+  group.scale.set(0.52, 0.52, 0.52);
   markDepth(group);
   return group;
 }
@@ -1554,16 +1389,16 @@ const TEXTURED_PLANET_SURFACE_FRAG = `
 
   vec3 dayColor = texture2D(map, vMapUv).rgb;
   float sunFacing = max(sunDot, 0.0);
-  vec3 dayLit = dayColor * (1.0 + sunFacing * 0.65);
+  vec3 dayLit = dayColor * (1.0 + sunFacing * 0.3);
 
   float specMask = texture2D(uSpecularMap, vMapUv).r;
   float oceanSheen = pow(max(dot(N, H), 0.0), 24.0) * specMask * sunFacing;
-  dayLit += vec3(0.85, 0.92, 1.0) * oceanSheen * 0.38;
+  dayLit += vec3(0.85, 0.92, 1.0) * oceanSheen * 0.16;
 
   float daySideMask = smoothstep(0.05, 0.55, sunDot);
   float viewRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
   float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
-  dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.28;
+  dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.14;
 
   float poleLat = abs(N.y);
   float poleMask = smoothstep(0.58, 0.9, poleLat);
@@ -1585,12 +1420,7 @@ const TEXTURED_PLANET_SURFACE_FRAG = `
   vec3 nightColor = nightBase + cityGlow * nightSide;
 
   vec3 surface = mix(nightColor, dayLit, dayAmount);
-
-  float auroraBand = smoothstep(0.72, 0.95, poleLat) * nightSide;
-  float auroraWave = 0.55 + 0.45 * sin(uTime * 0.9 + N.x * 12.0 + N.z * 8.0);
-  vec3 auroraColor = mix(vec3(0.1, 0.85, 0.55), vec3(0.35, 0.75, 1.0), sin(uTime * 0.4 + poleLat * 6.0) * 0.5 + 0.5);
-  surface += auroraColor * auroraBand * auroraWave * 0.32;
-
+${AURORA_TEXTURED_GLSL}
   gl_FragColor = vec4(surface, 1.0);
 }`;
 
@@ -1870,7 +1700,7 @@ export function LivingPlanet({
       renderer.setPixelRatio(getPixelRatio());
       renderer.setSize(w, h, false);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.4;
+      renderer.toneMappingExposure = 1.15;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
@@ -2010,8 +1840,8 @@ export function LivingPlanet({
 
       const starfield = createLayeredStarfield(scene);
 
-      const heroSat = createIssModel();
-      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800, isHero: true, isIss: true };
+      const heroSat = createHeroSatellite();
+      heroSat.userData = { radius: 1.38, angle: 0.8, orbitPeriod: 800, isHero: true };
       scene.add(heroSat);
 
       const distantSat2 = createDistantSatellite();
@@ -2104,9 +1934,6 @@ export function LivingPlanet({
       const orbitPos = new THREE.Vector3();
       const orbitAxisX = new THREE.Vector3(1, 0, 0);
       const orbitAxisY = new THREE.Vector3(0, 1, 0);
-      const issTangent = new THREE.Vector3();
-      const issLookTarget = new THREE.Vector3();
-      const trussAxis = new THREE.Vector3(1, 0, 0);
       const isInPlanetShadow = (satPos) => {
         const dotL = satPos.dot(lightDir);
         if (dotL >= 0) return false;
@@ -2235,28 +2062,6 @@ export function LivingPlanet({
           }
 
           const ud = sat.userData;
-          if (cfg.isIss) {
-            const eps = 0.012;
-            const a1 = angle + eps;
-            issLookTarget.set(
-              Math.cos(a1) * radius,
-              Math.sin(a1 * 0.5) * radius * 0.3,
-              Math.sin(a1) * radius
-            );
-            issTangent.subVectors(issLookTarget, sat.position);
-            if (issTangent.lengthSq() > 1e-8) {
-              issTangent.normalize();
-              issLookTarget.copy(sat.position).add(issTangent);
-              sat.quaternion.setFromUnitVectors(trussAxis, issTangent);
-            }
-            const solarPulse = 0.28 + Math.sin(t * 1.4) * 0.14;
-            ud.panelMats?.forEach((mat) => {
-              mat.emissiveIntensity = solarPulse;
-            });
-            if (ud.issLight) ud.issLight.intensity = 0.3 + Math.sin(t * 1.4) * 0.14;
-            return;
-          }
-
           sat.lookAt(0, 0, 0);
 
           if (cfg.isDistant) return;
@@ -2265,21 +2070,18 @@ export function LivingPlanet({
           sat.rotation.x += Math.cos(t * 0.17) * 0.0005 * frameScale;
           satWorldPos.copy(sat.position);
           const inPlanetShadow = isInPlanetShadow(satWorldPos);
-          if (ud.beaconMat) {
-            const cycle = 1.5;
-            const onTime = 0.3;
-            ud.beaconMat.emissiveIntensity = t % cycle < onTime ? 2.6 : 0;
-          }
-          ud.panels?.forEach((panel) => {
-            const side = panel.userData.side ?? 1;
+          if (ud.navLight) ud.navLight.visible = Math.sin(t * Math.PI) > 0;
+          if (ud.satLight) ud.satLight.intensity = inPlanetShadow ? 0.04 : 0.12;
+          ud.panels?.forEach((panel, pi) => {
+            const side = pi === 0 ? -1 : 1;
             panel.rotation.y = Math.atan2(lightDir.z * side, lightDir.x * side + 0.001) * 0.55;
-            panel.rotation.x = Math.asin(Math.max(-0.7, Math.min(0.7, lightDir.y))) * 0.32;
+            panel.rotation.x = Math.asin(Math.max(-0.7, Math.min(0.7, lightDir.y))) * 0.35;
             const panelMat = panel.userData.panelMat;
             if (panelMat) {
               const align = Math.abs(Math.cos(panel.rotation.y - Math.atan2(lightDir.x, lightDir.z)));
               const flash = align > 0.92 ? Math.min(1, (align - 0.92) / 0.08) : 0;
               panelMat.emissiveIntensity = 0.06 + flash * 0.12;
-              panelMat.emissive.setHex(flash > 0.5 ? 0x182040 : 0x060812);
+              panelMat.emissive.setHex(flash > 0.5 ? 0x1a3050 : 0x0a1830);
             }
           });
           if (ud.foilMat && !inPlanetShadow) {
@@ -2292,7 +2094,7 @@ export function LivingPlanet({
             ud.dishMat.roughness = inPlanetShadow ? 0.35 : 0.15;
           }
           sat.traverse((child) => {
-            if (!child.isMesh || !child.material || child === ud.beaconTip) return;
+            if (!child.isMesh || !child.material || child === ud.navLight) return;
             if (child.material.metalness !== undefined) {
               if (child.userData.baseRoughness === undefined) {
                 child.userData.baseRoughness = child.material.roughness;
