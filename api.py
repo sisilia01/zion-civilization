@@ -23,6 +23,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from openrouter_key import get_openrouter_key
+import time as _time
+
+_stats_cache: dict = {}
+_stats_cache_ts: float = 0.0
+_corps_cache = []
+_corps_cache_ts: float = 0.0
+_events_cache = []
+_events_cache_ts: float = 0.0
+_lb_cache = []
+_lb_cache_ts: float = 0.0
 
 STEALTH_PACKAGE = "0x003c26d67e9ee0b925556c54b81de39e3bafb0c57e420c30a46bd1eabf44db3a"
 HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
@@ -2387,6 +2397,10 @@ def root():
 
 @app.get("/stats")
 def get_stats():
+    global _stats_cache, _stats_cache_ts
+    if _time.time() - _stats_cache_ts < 30 and _stats_cache:
+        return _stats_cache
+
     from civ_economics import TARGET_POPULATION, fetch_economic_indicators
 
     defaults = {
@@ -2459,7 +2473,7 @@ def get_stats():
             conn.rollback()
 
         alive = int(indicators.get("alive") or 0)
-        return {
+        result = {
             "alive": alive,
             "dead": int(dead),
             "total_zion": float(indicators.get("total_economy") or 0),
@@ -2487,6 +2501,9 @@ def get_stats():
             "zrs_reserve": float(indicators.get("zrs_reserve") or 0),
             "frs_chief": _fetch_frs_chief(cur),
         }
+        _stats_cache = result
+        _stats_cache_ts = _time.time()
+        return result
     except Exception:
         if conn is not None:
             try:
@@ -2505,6 +2522,19 @@ def get_stats():
                 conn.close()
             except Exception:
                 pass
+
+
+@app.get("/civilization/stats")
+@app.get("/api/civilization/stats")
+def get_civilization_stats():
+    result = get_stats()
+    alive = int(result.get("alive") or 0)
+    return {
+        **result,
+        "active_agents": alive,
+        "total_agents": int(result.get("total_agents") or alive),
+    }
+
 
 @app.get("/agents")
 def get_agents(
@@ -2569,6 +2599,10 @@ def get_events(limit: int = 20):
 @app.get("/events/by_type")
 def get_events_by_type(limit: int = 50):
     """Returns mixed events — up to `limit` per meaningful type, excluding prayer/birth/death spam"""
+    global _events_cache, _events_cache_ts
+    if _time.time() - _events_cache_ts < 30 and _events_cache_ts > 0:
+        return _events_cache
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
@@ -2607,7 +2641,10 @@ def get_events_by_type(limit: int = 50):
 
     cur.close(); conn.close()
     # Sort all by time desc
-    return sorted(events, key=lambda x: x["time"], reverse=True)
+    result = sorted(events, key=lambda x: x["time"], reverse=True)
+    _events_cache = result
+    _events_cache_ts = _time.time()
+    return result
 
 @app.get("/clans")
 def get_clans():
@@ -2639,6 +2676,10 @@ def get_nfts(limit: int = 20):
 
 @app.get("/leaderboard")
 def get_leaderboard():
+    global _lb_cache, _lb_cache_ts
+    if _time.time() - _lb_cache_ts < 60 and _lb_cache_ts > 0:
+        return _lb_cache
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
@@ -2679,6 +2720,8 @@ def get_leaderboard():
                 "ref_code": row["referral_code"],
                 "zionbet_pnl": round(pnl, 2),
             })
+        _lb_cache = users
+        _lb_cache_ts = _time.time()
         return users
     finally:
         cur.close()
@@ -6536,6 +6579,10 @@ async def get_zrs_actions():
 
 @app.get("/corporations")
 async def get_corporations():
+    global _corps_cache, _corps_cache_ts
+    if _time.time() - _corps_cache_ts < 60 and _corps_cache_ts > 0:
+        return _corps_cache
+
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -6556,7 +6603,10 @@ async def get_corporations():
             ORDER BY treasury DESC LIMIT 9
         """)
         rows = cur.fetchall()
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        _corps_cache = result
+        _corps_cache_ts = _time.time()
+        return result
     finally:
         cur.close()
         db.close()
