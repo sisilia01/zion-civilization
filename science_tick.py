@@ -27,6 +27,9 @@ def maybe_run_amendment():
     ensure_tables()
     title, desc, ctype = random.choice(AMENDMENT_IDEAS)
     aid = propose_amendment(title, desc, ctype)
+    if aid is None:
+        print(f"[science_tick] skipped duplicate amendment proposal: {title}")
+        return
     vote_result = run_vote(aid, ctype)
     if vote_result['passed']:
         from zco_tribunal import convene, get_amendment

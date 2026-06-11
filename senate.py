@@ -11,6 +11,7 @@ from civ_common import (
     ensure_schema,
     get_conn,
     get_cursor,
+    get_impeachment_revolution_level,
     get_latest_ai_decision,
     insert_active_effect,
     log_event,
@@ -29,8 +30,9 @@ PARTY_IDS = ("conservatives", "centrists", "populists")
 SENATORS_PER_PARTY = 3
 ROGUE_VOTE_CHANCE = 0.20
 ELECTION_BONUS = 50.0
-IMPEACH_APPROVAL_MAX = 15
-IMPEACH_OPPOSITION_MIN = 6
+IMPEACH_REVOLUTION_MIN = 250
+IMPEACH_SENATE_RATIO = 0.66
+IMPEACH_ELECTION_CYCLES = 3
 COUP_CORRUPTION_MIN = 80
 COUP_CHANCE = 0.30
 
@@ -958,25 +960,44 @@ def presidential_actions(cur, president: dict):
         veto_senate_law(cur, president)
 
 
+def _impeached_agent_id(cur) -> int | None:
+    cur.execute(
+        "SELECT last_impeached_agent_id FROM civilization_state WHERE id = 1"
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    aid = row.get("last_impeached_agent_id") if isinstance(row, dict) else row[0]
+    return int(aid) if aid else None
+
+
 def pick_president_candidate(cur, party_id: str) -> dict | None:
     info = PARTIES.get(party_id, {})
     base = info.get("base_class", "middle")
+    barred = _impeached_agent_id(cur)
     if base == "poor":
         cur.execute(
             """
             SELECT id, name, charisma, class, balance
-            FROM agents WHERE is_alive = true AND class IN ('poor', 'critical')
+            FROM agents
+            WHERE is_alive = true
+              AND class IN ('poor', 'critical')
+              AND (%s IS NULL OR id <> %s)
             ORDER BY charisma DESC NULLS LAST LIMIT 1
-            """
+            """,
+            (barred, barred),
         )
     else:
         cur.execute(
             """
             SELECT id, name, charisma, class, balance
-            FROM agents WHERE is_alive = true AND class = %s
+            FROM agents
+            WHERE is_alive = true
+              AND class = %s
+              AND (%s IS NULL OR id <> %s)
             ORDER BY charisma DESC NULLS LAST LIMIT 1
             """,
-            (base,),
+            (base, barred, barred),
         )
     return cur.fetchone()
 
@@ -1192,7 +1213,36 @@ def _president_office_age_hours(cur, president: dict) -> float:
         return 999.0
 
 
+def impeachment_vote_threshold(cur) -> float:
+    """Article XV §1 — strictly greater than two-thirds of living senators."""
+    n = living_senators_count(cur)
+    if n <= 0:
+        return float("inf")
+    return n * IMPEACH_SENATE_RATIO
+
+
+def maybe_run_deferred_president_election(cur):
+    """Article XV §3 — election within N governance cycles after impeachment."""
+    if get_president(cur):
+        return
+    cur.execute(
+        "SELECT COALESCE(president_election_cycles, 0) AS c FROM civilization_state WHERE id = 1"
+    )
+    row = cur.fetchone()
+    cycles = int((row or {}).get("c") or 0)
+    if cycles <= 0:
+        return
+    cycles -= 1
+    cur.execute(
+        "UPDATE civilization_state SET president_election_cycles = %s WHERE id = 1",
+        (cycles,),
+    )
+    if cycles <= 0:
+        run_election(cur, "president")
+
+
 def check_impeachment(cur):
+    """Article XV — Senate impeachment when revolution unrest exceeds threshold."""
     president = get_president(cur)
     if not president:
         return
@@ -1200,13 +1250,9 @@ def check_impeachment(cur):
         president = dict(president) if hasattr(president, "keys") else {}
     if not president:
         return
-    if _president_office_age_hours(cur, president) < 12:
-        return
-    approval = int(president.get("approval_rating") or 50)
-    if approval >= IMPEACH_APPROVAL_MAX:
-        return
-    opposition = count_opposition_senators(cur, president)
-    if opposition < IMPEACH_OPPOSITION_MIN:
+
+    unrest = get_impeachment_revolution_level(cur)
+    if unrest <= IMPEACH_REVOLUTION_MIN:
         return
 
     cur.execute(
@@ -1217,20 +1263,35 @@ def check_impeachment(cur):
         """
     )
     senators = cur.fetchall()
-    impeach_votes = 0
-    for s in senators:
-        if s["party_id"] != president_party_id(president):
-            impeach_votes += 1
-        elif random.random() < 0.25:
-            impeach_votes += 1
+    senate_size = len(senators)
+    if senate_size <= 0:
+        return
 
-    if impeach_votes < pass_threshold(cur):
+    cycle_votes = 0
+    pres_party = president_party_id(president)
+    for s in senators:
+        if s["party_id"] != pres_party:
+            cycle_votes += 1
+        elif random.random() < 0.20:
+            cycle_votes += 1
+
+    prior_votes = int(president.get("impeachment_votes") or 0)
+    impeachment_votes = prior_votes + cycle_votes
+    cur.execute(
+        """
+        UPDATE president_state SET impeachment_votes = %s WHERE is_active = true
+        """,
+        (impeachment_votes,),
+    )
+
+    threshold = impeachment_vote_threshold(cur)
+    if impeachment_votes <= threshold:
         log_event(
             cur,
             president.get("agent_id"),
             "senate",
-            f"Impeachment FAILED {impeach_votes}-{len(senators) - impeach_votes} "
-            f"(President approval {approval}%)",
+            f"Impeachment tally {impeachment_votes}/{senate_size} "
+            f"(needs >{threshold:.1f}; unrest {unrest:.0f})",
             0,
             priority="urgent",
         )
@@ -1239,17 +1300,33 @@ def check_impeachment(cur):
     pname = president.get("agent_name") or "President"
     pid = president.get("agent_id")
     cur.execute(
-        "UPDATE president_state SET is_active = false, phase = 'impeached' WHERE is_active = true"
+        """
+        UPDATE president_state SET
+            is_active = false,
+            phase = 'impeached',
+            personal_fund = 0,
+            impeachment_votes = 0
+        WHERE is_active = true
+        """
+    )
+    cur.execute(
+        """
+        UPDATE civilization_state SET
+            last_impeached_agent_id = %s,
+            president_election_cycles = %s
+        WHERE id = 1
+        """,
+        (pid, IMPEACH_ELECTION_CYCLES),
     )
     log_event(
         cur,
         pid,
         "senate",
-        f"BREAKING: IMPEACHMENT! President {pname} removed ({impeach_votes} Senate votes)",
+        f"BREAKING: IMPEACHMENT! President {pname} removed "
+        f"({impeachment_votes} Senate votes; election in {IMPEACH_ELECTION_CYCLES} cycles)",
         0,
         priority="breaking",
     )
-    run_election(cur, "president")
 
 
 def cancel_all_pending_laws(cur):
@@ -1293,6 +1370,7 @@ def run_governance_tick(cur, ctx: dict) -> dict:
     from frs_chief import senate_confirm_frs_chief, get_frs_chief
 
     ensure_senate_exists(cur)
+    maybe_run_deferred_president_election(cur)
     president = get_president(cur)
     summary_parts = []
 

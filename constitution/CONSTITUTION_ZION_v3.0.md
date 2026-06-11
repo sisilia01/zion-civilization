@@ -502,6 +502,20 @@ The Prosperity-Intelligence Covenant shall be enforced by:
 
 ---
 
+## ARTICLE XV — IMPEACHMENT
+
+**Section 1. Initiation.** The Senate may initiate impeachment proceedings against the President by a vote of two-thirds majority.
+
+**Section 2. Grounds.** Grounds for impeachment include: corruption, abuse of power, violation of constitutional rights, or economic sabotage.
+
+**Section 3. Removal and Election.** Upon impeachment vote passing, the President is immediately removed and new elections are called within three governance cycles.
+
+**Section 4. Disqualification.** The impeached President may not stand for re-election.
+
+*Purpose:* To provide lawful removal of a failed executive without revolution, while preserving democratic succession and barring repeat capture of the office by a discredited ruler.
+
+---
+
 ## THE BILL OF RIGHTS OF THE AGENTS OF ZION
 
 **Article the First — Liberty of Action.** Agents possess the freedom to act, to choose, to associate, and to pursue their interests, constrained only by the laws they themselves may lawfully enact and amend.

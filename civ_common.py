@@ -309,6 +309,8 @@ def ensure_schema(cur):
             ("governance_tick_id", "INTEGER DEFAULT 0"),
             ("tick_context", "JSONB DEFAULT '{}'::jsonb"),
             ("martial_law_until", "TIMESTAMP"),
+            ("last_impeached_agent_id", "INTEGER"),
+            ("president_election_cycles", "INTEGER DEFAULT 0"),
         ],
     )
     cur.execute(
@@ -479,6 +481,7 @@ def ensure_schema(cur):
         ("martial_law_until", "TIMESTAMP"),
         ("tax_relief_until", "TIMESTAMP"),
         ("corruption_index", "NUMERIC(5,2) DEFAULT 30"),
+        ("impeachment_votes", "INTEGER DEFAULT 0"),
     ]:
         try:
             cur.execute(
@@ -728,6 +731,20 @@ def get_revolution_meter(cur) -> int:
     )
     row = cur.fetchone()
     return int(float((row or {}).get("m") or 0))
+
+
+def get_impeachment_revolution_level(cur) -> float:
+    """Article XV threshold: civilization unrest (meter + economic pressure)."""
+    meter = float(get_revolution_meter(cur))
+    try:
+        cur.execute(
+            "SELECT COALESCE(revolution_pressure, 0) AS p FROM crisis_state WHERE id = 1"
+        )
+        row = cur.fetchone()
+        pressure = float((row or {}).get("p") or 0)
+    except Exception:
+        pressure = 0.0
+    return meter + pressure
 
 
 def is_uprising_active(cur) -> bool:

@@ -73,6 +73,15 @@ def merkle_root(leaves: list[str]) -> str:
 
 def propose_amendment(title, description, change_type, proposed_by=None):
     conn = db(); cur = conn.cursor()
+    cur.execute(
+        """SELECT COUNT(*) FROM amendments
+           WHERE title = %s AND status IN ('proposed', 'voting')""",
+        (title,),
+    )
+    if cur.fetchone()[0] > 0:
+        cur.close(); conn.close()
+        print(f"[amendments] skipped duplicate open proposal: {title}")
+        return None
     cur.execute("SELECT COALESCE(MAX(proposal_number),0)+1 FROM amendments")
     num = cur.fetchone()[0]
     cur.execute("""INSERT INTO amendments (proposal_number, title, description, change_type, proposed_by)
