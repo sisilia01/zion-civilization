@@ -15433,7 +15433,17 @@ export default function Home() {
                             </div>
                             <div className="labDataCardStat">
                               <span className="labDataCardStatLabel">STATUS</span>
-                              <span className="labDataCardStatValue">{statusLabel}</span>
+                              <span
+                                className={`labDataCardStatValue${
+                                  statusLabel === "DEPLETED"
+                                    ? " labDataCardStatValueDepleted"
+                                    : statusLabel === "MOBILIZED"
+                                      ? " labDataCardStatValueMobilized"
+                                      : ""
+                                }`}
+                              >
+                                {statusLabel}
+                              </span>
                             </div>
                           </div>
                         </GlassCard>
@@ -21353,17 +21363,10 @@ export default function Home() {
         }
         .labDataCardTitle {
           font-family: var(--font-sans);
-          font-weight: 300;
           font-size: 0.85rem;
-          color: rgba(255, 255, 255, 0.9);
-          letter-spacing: 0.12em;
-          text-shadow: 0 0 20px rgba(0, 180, 216, 0.4);
         }
         .labDataCardBadge {
           font-family: var(--font-mono);
-          font-size: 9px;
-          color: rgba(0, 180, 216, 0.4);
-          letter-spacing: 0.25em;
           text-transform: uppercase;
           white-space: nowrap;
         }
@@ -21376,9 +21379,6 @@ export default function Home() {
         }
         .labDataCardMeta {
           font-family: var(--font-mono);
-          font-size: 9px;
-          color: rgba(0, 180, 216, 0.35);
-          letter-spacing: 0.15em;
         }
         .labDataCardStats {
           display: grid;
@@ -21390,20 +21390,13 @@ export default function Home() {
         }
         .labDataCardStatLabel {
           display: block;
-          color: rgba(0, 180, 216, 0.5);
           font-family: var(--font-mono);
-          font-size: 9px;
-          letter-spacing: 0.2em;
-          text-shadow: none;
           margin-bottom: 4px;
         }
         .labDataCardStatValue {
           display: block;
-          color: rgba(255, 255, 255, 0.75);
-          font-family: "IBM Plex Mono", var(--font-mono);
           font-size: 0.9rem;
           font-weight: 400;
-          text-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
         }
         .zcoResearchDesc {
           color: var(--text-secondary);
