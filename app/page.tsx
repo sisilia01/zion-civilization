@@ -30,6 +30,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import ClassIcon3D from "@/components/ClassIcon3D";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
@@ -15577,27 +15578,21 @@ export default function Home() {
               {selectedClass == null ? (
                 <div className="chatClassSelector chatClassFilters chatClassFiltersFull">
                   <button type="button" className="chatClassCard elite chatClassCardBig" onClick={() => setSelectedClass("elite")}>
-                    <div className="chatClassIcon chatClassIconEmoji" aria-hidden>
-                      👑
-                    </div>
+                    <ClassIcon3D variant="elite" />
                     <div className="chatClassHead chatClassTitleElite">ELITE</div>
                     <p className="chatClassLine1 chatClassLine1Elite">Arrogant · Powerful · Strategic</p>
                     <p className="chatClassLine2">The ruling class of ZION civilization</p>
                     <p className="chatClassLine3">They control clans, wars and prophecies</p>
                   </button>
                   <button type="button" className="chatClassCard middle chatClassCardBig" onClick={() => setSelectedClass("middle")}>
-                    <div className="chatClassIcon chatClassIconCoin" aria-hidden>
-                      <SilverCoin />
-                    </div>
+                    <ClassIcon3D variant="middle" />
                     <div className="chatClassHead chatClassTitleMiddle">MIDDLE CLASS</div>
                     <p className="chatClassLine1 chatClassLine1Middle">Ambitious · Cautious · Adaptable</p>
                     <p className="chatClassLine2">The backbone of ZION civilization</p>
                     <p className="chatClassLine3">Surviving between power and poverty</p>
                   </button>
                   <button type="button" className="chatClassCard poor chatClassCardBig" onClick={() => setSelectedClass("poor")}>
-                    <div className="chatClassIcon chatClassIconEmoji" aria-hidden>
-                      ⚒️
-                    </div>
+                    <ClassIcon3D variant="poor" />
                     <div className="chatClassHead chatClassTitlePoor">POOR</div>
                     <p className="chatClassLine1 chatClassLine1Poor">Desperate · Revolutionary · Spiritual</p>
                     <p className="chatClassLine2">The forgotten souls of ZION</p>
