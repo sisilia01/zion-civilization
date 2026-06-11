@@ -6524,6 +6524,7 @@ type TabId =
   | "press"
   | "treasury" // ECO-POL (display label; id kept for routing)
   | "constitution"
+  | "research"
   | "lab"
   | "archive";
 
@@ -6532,6 +6533,7 @@ const LAB_NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: "chat", label: "FIELD NOTES" },
   { id: "zionbet", label: "PREDICTION ENGINE" },
   { id: "treasury", label: "GOVERNANCE" },
+  { id: "research", label: "RESEARCH" },
   { id: "constitution", label: "CONSTITUTION" },
   { id: "lab", label: "LAB" },
   { id: "archive", label: "ARCHIVE" },
@@ -10012,6 +10014,77 @@ export default function Home() {
   const [heroStatsLoading, setHeroStatsLoading] = useState(true);
   const [corporationsLoading, setCorporationsLoading] = useState(true);
 
+  const loadWave1Data = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setStatsLoading(true);
+      setHeroStatsLoading(true);
+    }
+    try {
+      const [statsRaw, agentsRaw, clansRaw] = await Promise.all([
+        fetch("/api/stats").then((r) => r.json()),
+        fetch("/api/agents").then((r) => r.json()),
+        fetch("/api/clans").then((r) => r.json()),
+      ]);
+
+      const s = parseApiStatsResponse(statsRaw);
+      setStats(s);
+      if (Number.isFinite(s.alive)) setLastAliveCount(s.alive);
+      setAgentClasses({
+        elite: s.elite || 0,
+        middle: s.middle || 0,
+        poor: s.poor || 0,
+        critical: s.critical || 0,
+      });
+
+      const n = Number(s.alive ?? s.alive_agents);
+      if (Number.isFinite(n) && n >= 0) setHeroAgentCount(n);
+
+      setAgents(Array.isArray(agentsRaw) ? agentsRaw : []);
+      setClans(Array.isArray(clansRaw) ? clansRaw : []);
+    } catch {
+      // keep last successful snapshot
+    } finally {
+      if (isInitial) {
+        setStatsLoading(false);
+        setHeroStatsLoading(false);
+      }
+    }
+  }, []);
+
+  const loadWave2Data = useCallback(async () => {
+    setCorporationsLoading(true);
+    try {
+      const [corpsRaw, policeRaw] = await Promise.all([
+        fetch("/api/corporations").then((r) => r.json()),
+        fetch("/api/police/divisions").then((r) => r.json()),
+      ]);
+
+      if (Array.isArray(corpsRaw)) setCorporations(corpsRaw);
+
+      if (policeRaw?.divisions && Array.isArray(policeRaw.divisions)) {
+        setPoliceDivisions({
+          ...policeRaw,
+          divisions: policeRaw.divisions.map((div: Record<string, unknown>) =>
+            normalizePoliceDivision(div),
+          ),
+        });
+      }
+    } catch {
+      // keep last successful snapshot
+    } finally {
+      setCorporationsLoading(false);
+    }
+  }, []);
+
+  const loadWave3WalrusBlobs = useCallback(async () => {
+    try {
+      const walrusRaw = await fetch("/api/walrus/blobs").then((r) => r.json());
+      if (Array.isArray(walrusRaw)) setWalrusBlobs(walrusRaw);
+    } catch {
+      /* keep last snapshot */
+    }
+  }, []);
+
   const loadCoreData = useCallback(async (isInitial = false) => {
     if (isInitial) {
       setStatsLoading(true);
@@ -10068,7 +10141,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void loadCoreData(true);
     const t = window.setInterval(() => void loadCoreData(false), 30000);
     return () => clearInterval(t);
   }, [loadCoreData]);
@@ -10560,7 +10632,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void fetchSenateLaws();
     const interval = setInterval(() => void fetchSenateLaws(), 30000);
     return () => clearInterval(interval);
   }, [fetchSenateLaws]);
@@ -10590,7 +10661,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void fetchPoliticalEconomy();
     const peInterval = setInterval(() => {
       void fetchPoliticalEconomy();
     }, 30_000);
@@ -10752,9 +10822,6 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab !== "civilization") return;
-    void fetchPoliceNews();
-    void fetchCorporateNews();
-    void fetchClanNews();
     const interval = setInterval(() => {
       void fetchPoliceNews();
       void fetchCorporateNews();
@@ -11053,7 +11120,6 @@ export default function Home() {
   }, [activeTab]);
 
   useEffect(() => {
-    void fetchZcoDecisions();
     const interval = window.setInterval(() => {
       void fetchZcoDecisions();
     }, 5 * 60 * 1000);
@@ -11431,7 +11497,6 @@ export default function Home() {
   }, [zionbetMarkets]);
 
   useEffect(() => {
-    void loadZionBetMarkets();
     const interval = window.setInterval(() => {
       void loadZionBetMarkets();
     }, 60000);
@@ -11529,7 +11594,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void fetchWalrusEvents();
     const interval = setInterval(() => {
       void fetchWalrusEvents();
     }, 30000);
@@ -14042,7 +14106,6 @@ export default function Home() {
   }, [faucetCooldownEndsAt]);
 
   useEffect(() => {
-    void fetchConversations();
     const t = window.setInterval(() => void fetchConversations(), 60000);
     return () => clearInterval(t);
   }, [fetchConversations]);
@@ -14111,27 +14174,68 @@ export default function Home() {
     loadUser();
   }, [walletAddress]);
 
-  useEffect(() => {
-    const loadLb = async () => {
-      try {
-        const r = await fetch("/api/leaderboard");
-        const d = await r.json();
-        const rows = Array.isArray(d)
-          ? d
-          : Array.isArray(d?.leaderboard)
-            ? d.leaderboard
-            : Array.isArray(d?.rows)
-              ? d.rows
-              : [];
-        setLeaderboard(rows);
-      } catch {
-        setLeaderboard([]);
-      }
-    };
-    loadLb();
-    const t = setInterval(loadLb, 30000);
-    return () => clearInterval(t);
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      const r = await fetch("/api/leaderboard");
+      const d = await r.json();
+      const rows = Array.isArray(d)
+        ? d
+        : Array.isArray(d?.leaderboard)
+          ? d.leaderboard
+          : Array.isArray(d?.rows)
+            ? d.rows
+            : [];
+      setLeaderboard(rows);
+    } catch {
+      setLeaderboard([]);
+    }
   }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => void loadLeaderboard(), 30000);
+    return () => clearInterval(t);
+  }, [loadLeaderboard]);
+
+  useEffect(() => {
+    void loadWave1Data(true);
+
+    const wave2Timer = window.setTimeout(() => {
+      void loadWave2Data();
+      void fetchConversations();
+    }, 100);
+
+    const wave3Timer = window.setTimeout(() => {
+      void loadWave3WalrusBlobs();
+      void fetchSenateLaws();
+      void fetchPoliticalEconomy();
+      void fetchZcoDecisions();
+      void loadZionBetMarkets();
+      void fetchWalrusEvents();
+      void loadLeaderboard();
+      void fetchPoliceNews();
+      void fetchCorporateNews();
+      void fetchClanNews();
+    }, 800);
+
+    return () => {
+      window.clearTimeout(wave2Timer);
+      window.clearTimeout(wave3Timer);
+    };
+  }, [
+    loadWave1Data,
+    loadWave2Data,
+    loadWave3WalrusBlobs,
+    fetchConversations,
+    fetchSenateLaws,
+    fetchPoliticalEconomy,
+    fetchZcoDecisions,
+    loadZionBetMarkets,
+    fetchWalrusEvents,
+    loadLeaderboard,
+    fetchPoliceNews,
+    fetchCorporateNews,
+    fetchClanNews,
+  ]);
 
   const maxBalance = useMemo(
     () => Math.max(1, ...(Array.isArray(agents) ? agents : []).map((a) => a.balance)),
@@ -15054,6 +15158,14 @@ export default function Home() {
                   router.push("/constitution");
                   return;
                 }
+                if (id === "research" || id === "lab") {
+                  router.push("/lab");
+                  return;
+                }
+                if (id === "archive") {
+                  router.push("/archive");
+                  return;
+                }
                 setActiveTab(id);
               }}
             >
@@ -15342,22 +15454,6 @@ export default function Home() {
               </p>
               <p className="stubTabMeta">Walrus blob: iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0</p>
               <p className="stubTabBody">Full constitutional text and amendment tree — coming soon</p>
-            </section>
-          )}
-
-          {activeTab === "lab" && (
-            <section className="stubTabSection" aria-label="Z-Lab Research">
-              <h2 className="stubTabTitle">Z-LAB RESEARCH</h2>
-              <p className="stubTabSubtitle">Academic findings from autonomous agent civilization</p>
-              <p className="stubTabBody">5 research tracks · 161 source texts · Active analysis</p>
-            </section>
-          )}
-
-          {activeTab === "archive" && (
-            <section className="stubTabSection" aria-label="Civilization Archive">
-              <h2 className="stubTabTitle">CIVILIZATION ARCHIVE</h2>
-              <p className="stubTabSubtitle">Historical record of ZION · Day 412</p>
-              <p className="stubTabBody">Downloadable datasets and civilization chronicles</p>
             </section>
           )}
 
