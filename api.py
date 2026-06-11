@@ -2746,31 +2746,40 @@ async def chat_with_agent(request: dict):
     personality = _build_zion_chat_system_prompt(dict(agent))
     response_text = f"*{agent['name']} stares at you* The network fluctuates. Speak again."
     try:
-        openrouter_key = get_openrouter_key()
-    except RuntimeError as e:
-        print(f"Chat skipped: {e}")
-        openrouter_key = None
-    if openrouter_key:
-        key_preview = openrouter_key[:10]
-        print(f"Chat OPENROUTER_KEY prefix: {key_preview}... (from env)")
-    try:
-        if not openrouter_key:
-            raise RuntimeError("OPENROUTER_KEY not configured")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openrouter_key}"},
-                json={"model": "deepseek/deepseek-chat-v3-0324",
-                      "messages": [{"role": "system", "content": personality}, {"role": "user", "content": message}],
-                      "max_tokens": 120},
-                timeout=15)
-            if resp.status_code != 200:
-                print(f"Chat error: OpenRouter HTTP {resp.status_code} — {resp.text[:200]}")
+        from local_llm import generate_agent_text, use_local_model
+
+        if use_local_model():
+            llm_text = generate_agent_text(message, max_tokens=120, system=personality)
+            if llm_text:
+                response_text = clean_agent_response(llm_text)
+                print(f"Chat OK (local): agent={agent_id} response_len={len(response_text)}")
             else:
-                response_text = clean_agent_response(
-                    resp.json()["choices"][0]["message"]["content"]
+                raise RuntimeError("local LLM returned no response")
+        else:
+            openrouter_key = get_openrouter_key()
+            if openrouter_key:
+                key_preview = openrouter_key[:10]
+                print(f"Chat OPENROUTER_KEY prefix: {key_preview}... (from env)")
+            if not openrouter_key:
+                raise RuntimeError("OPENROUTER_KEY not configured")
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {openrouter_key}"},
+                    json={
+                        "model": "deepseek/deepseek-chat-v3-0324",
+                        "messages": [{"role": "system", "content": personality}, {"role": "user", "content": message}],
+                        "max_tokens": 120,
+                    },
+                    timeout=15,
                 )
-                print(f"Chat OK: agent={agent_id} response_len={len(response_text)}")
+                if resp.status_code != 200:
+                    print(f"Chat error: OpenRouter HTTP {resp.status_code} — {resp.text[:200]}")
+                else:
+                    response_text = clean_agent_response(
+                        resp.json()["choices"][0]["message"]["content"]
+                    )
+                    print(f"Chat OK: agent={agent_id} response_len={len(response_text)}")
     except Exception as e:
         print(f"Chat error: {e}")
     cur.execute("INSERT INTO agent_chats (wallet_address, agent_id, message, response, zion_cost, points_earned) VALUES (%s,%s,%s,%s,%s,%s)",
@@ -5848,10 +5857,10 @@ def get_districts():
 
 @app.on_event("startup")
 def _startup_districts():
-    from districts import refresh_districts, start_districts_background
+    from districts import start_districts_background
 
     try:
-        refresh_districts()
+        # Background thread refreshes districts; sync refresh can block startup on DB lock.
         start_districts_background(30)
     except Exception as exc:
         print(f"[districts] startup error: {exc}")

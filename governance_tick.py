@@ -216,6 +216,24 @@ def _run_governance_tick_once() -> dict:
             return ctx_in
 
         ctx = _run_step_or_skip("Step 6: Courts...", _courts_step, cur, conn, ctx)
+        _log_step_or_skip(
+            conn, cur, tick_id, "courts",
+            "courts tick complete",
+            ctx.get("courts"),
+            "courts",
+        )
+
+        # 7. Z-LAB research observations
+        from zlab import run_governance_tick as zlab_tick
+
+        ctx = _run_step_or_skip("Step 7: Z-LAB...", zlab_tick, cur, conn, ctx)
+        _log_step_or_skip(
+            conn, cur, tick_id, "zlab",
+            str(ctx.get("zlab", {}).get("summary", "—")),
+            ctx.get("zlab"),
+            "zlab",
+        )
+
         try:
             ledger = check_money_conservation(cur, label=f"tick_{tick_id}")
             ctx["money_ledger"] = ledger

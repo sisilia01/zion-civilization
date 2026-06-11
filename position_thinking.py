@@ -7,7 +7,7 @@ REASONING for each action. This produces a rich record of the thinking
 process, not just outcomes. Hybrid: mass agents reason by logic (cheap),
 selected smart agents reason via LLM with text (deep).
 """
-import psycopg2, psycopg2.extras, random, json, asyncio, httpx
+import psycopg2, psycopg2.extras, random, json, asyncio, httpx, re
 from datetime import datetime, timezone
 from openrouter_key import get_openrouter_key
 
@@ -61,22 +61,30 @@ def logic_reconsider(agent, bet):
     else:
         return ("close_early", bet['prediction'], "Uncertainty rose; closing early to limit exposure.")
 
+def _parse_json_response(raw: str) -> dict:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return json.loads(text)
+
+
 async def llm_reconsider(agent, bet):
     """Deep LLM reconsideration for selected smart agents."""
+    from local_llm import generate_agent_text
+
     sys = """You are an AI agent reconsidering an open prediction you made. Decide whether to HOLD, CLOSE early, or FLIP (reverse) your position, and explain your reasoning in one or two sentences. Respond ONLY JSON: {"action":"hold|close_early|flip","reasoning":"..."}"""
     user = f"Your prediction: '{bet['question']}' -> you predicted {'YES' if bet['prediction'] else 'NO'}. Reconsider it now."
     try:
-        async with httpx.AsyncClient(timeout=45) as c:
-            r=await c.post("https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization":f"Bearer {KEY}"},
-                json={"model":THINKER_MODEL,"messages":[{"role":"system","content":sys},{"role":"user","content":user}],
-                    "max_tokens":150,"response_format":{"type":"json_object"}})
-            m=json.loads(r.json()["choices"][0]["message"]["content"])
-            action=m.get("action","hold")
-            new_pred = (not bet['prediction']) if action=="flip" else bet['prediction']
-            return (action, new_pred, m.get("reasoning","")[:300])
+        raw = generate_agent_text(user, max_tokens=150, system=sys, model=THINKER_MODEL)
+        if not raw:
+            raise ValueError("empty LLM response")
+        m = _parse_json_response(raw)
+        action = m.get("action", "hold")
+        new_pred = (not bet["prediction"]) if action == "flip" else bet["prediction"]
+        return (action, new_pred, m.get("reasoning", "")[:300])
     except Exception:
-        return ("hold", bet['prediction'], "Reconsidered, no change.")
+        return ("hold", bet["prediction"], "Reconsidered, no change.")
 
 def apply_action(cur, bet, action, new_pred, reasoning, by_llm):
     if action=="hold":
