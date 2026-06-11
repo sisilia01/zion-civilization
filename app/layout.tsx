@@ -26,15 +26,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" style={{ background: "#000000" }}>
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body
+        className="min-h-full flex flex-col"
+        style={{ background: "#000000", margin: 0, visibility: "hidden" }}
+      >
         <Providers>{children}</Providers>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+    window.addEventListener('load', function() {
+      document.body.style.visibility = 'visible';
+    });
+  `,
+          }}
+        />
       </body>
     </html>
   );

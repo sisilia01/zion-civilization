@@ -32,6 +32,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
+import { GlassCard } from "@/components/GlassCard";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
 
 const ParticleField = dynamic(
@@ -4794,13 +4795,13 @@ function zionbetFormatStakedLabel(stats: ZionBetWalletStats | null): string {
   return parts.join(" + ");
 }
 
-const ZION_ACHIEVEMENT_DEFS: { id: string; emoji: string; label: string }[] = [
-  { id: "first_bet", emoji: "🎯", label: "First Bet" },
-  { id: "hot_streak", emoji: "🔥", label: "Hot Streak" },
-  { id: "diamond_hands", emoji: "💎", label: "Diamond Hands" },
-  { id: "whale", emoji: "🐋", label: "Whale" },
-  { id: "oracle", emoji: "🧠", label: "Oracle" },
-  { id: "speed_trader", emoji: "⚡", label: "Speed Trader" },
+const ZION_ROLE_DEFS: { id: string; label: string }[] = [
+  { id: "night_wolf", label: "NIGHT WOLF" },
+  { id: "fire_fox", label: "FIRE FOX" },
+  { id: "void_dragon", label: "VOID DRAGON" },
+  { id: "storm_hawk", label: "STORM HAWK" },
+  { id: "crystal_mind", label: "CRYSTAL MIND" },
+  { id: "shadow_ninja", label: "SHADOW NINJA" },
 ];
 
 function zionProfileStorageKey(wallet: string): string {
@@ -4823,36 +4824,37 @@ function saveZionProfile(wallet: string, profile: ZionProfile): void {
 
 function zionbetComputeAchievements(bets: ZionBetMyBetRow[], stats: ZionBetWalletStats | null): string[] {
   const earned: string[] = [];
-  if (bets.length >= 1) earned.push("first_bet");
-  if (bets.length > 10) earned.push("speed_trader");
-  const staked =
-    (stats?.total_staked_sui ?? 0) + (stats?.total_staked_usdc ?? 0) ||
-    stats?.total_staked ||
-    bets.reduce((s, b) => s + b.amount_sui, 0);
-  if (staked > 10) earned.push("whale");
+  const totalBets = stats?.total_bets ?? bets.length;
+  const winRate = stats?.win_rate ?? 0;
+  const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
+
+  if (totalBets >= 50) earned.push("night_wolf");
+  if (winRate > 60) earned.push("fire_fox");
+  if (profit > 100) earned.push("void_dragon");
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const bets24h = bets.filter((b) => {
+    const t = b.created_at ? Date.parse(b.created_at) : NaN;
+    return Number.isFinite(t) && now - t < dayMs;
+  }).length;
+  if (bets24h >= 5) earned.push("storm_hawk");
+
   const settled = [...bets]
     .filter((b) => {
       const s = (b.status || "").toLowerCase();
       return s === "won" || s === "lost";
     })
     .sort((a, b) => b.id - a.id);
-  if (settled.length >= 3 && settled.slice(0, 3).every((b) => (b.status || "").toLowerCase() === "won")) {
-    earned.push("hot_streak");
+  let winStreak = 0;
+  for (const b of settled) {
+    if ((b.status || "").toLowerCase() === "won") winStreak += 1;
+    else break;
   }
-  const winRate = stats?.win_rate ?? 0;
-  if (settled.length > 5 && winRate > 60) earned.push("oracle");
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  if (
-    bets.some((b) => {
-      const s = (b.status || "active").toLowerCase();
-      if (s !== "active" && s !== "pending") return false;
-      const t = b.created_at ? Date.parse(b.created_at) : NaN;
-      return Number.isFinite(t) && now - t >= weekMs;
-    })
-  ) {
-    earned.push("diamond_hands");
-  }
+  if (winStreak >= 10) earned.push("crystal_mind");
+
+  if (bets.some((b) => b.amount_sui > 10)) earned.push("shadow_ninja");
+
   return earned;
 }
 
@@ -5551,11 +5553,157 @@ function zionbetMarketFromBet(
   };
 }
 
+function ZionRoleSvg({ roleId }: { roleId: string }) {
+  const cyan = "#00b4d8";
+  const purple = "#7b2fff";
+  const bg = "#0a0a1a";
+  const common = { width: 40, height: 40, viewBox: "0 0 40 40", fill: "none" as const };
+
+  switch (roleId) {
+    case "night_wolf":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <path d="M8 28 L14 14 L20 22 L26 14 L32 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
+          <path d="M12 18 L10 10 M28 18 L30 10" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
+          <circle cx="16" cy="22" r="2" fill={cyan} />
+          <circle cx="24" cy="22" r="2" fill={cyan} />
+          <path d="M18 26 Q20 28 22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
+        </svg>
+      );
+    case "fire_fox":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <path d="M10 26 Q14 18 20 16 Q26 14 28 20 Q30 26 24 28 Q20 30 14 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
+          <path d="M28 20 Q34 14 32 26 Q30 32 24 28" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
+          <circle cx="22" cy="22" r="1.5" fill={cyan} />
+          <path d="M24 24 L26 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
+        </svg>
+      );
+    case "void_dragon":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <path d="M8 30 Q12 10 20 14 Q28 10 32 30" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
+          <path d="M14 20 L20 16 L26 20 L22 24 Z" stroke={cyan} strokeWidth="1" fill="rgba(0,180,216,0.12)" />
+          <path d="M10 26 L6 22 M30 26 L34 22" stroke={purple} strokeWidth="1" strokeLinecap="round" />
+          <circle cx="20" cy="19" r="1.5" fill={cyan} />
+        </svg>
+      );
+    case "storm_hawk":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <path d="M8 22 L20 12 L32 22 L26 22 L30 30 L20 24 L10 30 L14 22 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
+          <path d="M18 8 L20 14 M24 6 L22 12" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M6 16 L10 18 L8 20" stroke={purple} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "crystal_mind":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <path d="M20 8 L28 16 L24 32 L16 32 L12 16 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.08)" />
+          <path d="M20 8 L20 32 M12 16 L28 16 M16 32 L24 16 M24 32 L16 16" stroke={cyan} strokeWidth="0.6" opacity="0.5" />
+          <circle cx="17" cy="20" r="1.2" fill={cyan} />
+          <circle cx="23" cy="20" r="1.2" fill={cyan} />
+          <path d="M18 26 L22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
+        </svg>
+      );
+    case "shadow_ninja":
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+          <ellipse cx="20" cy="30" rx="10" ry="3" fill="rgba(123,47,255,0.2)" />
+          <path d="M20 10 Q26 14 24 22 Q22 28 20 28 Q18 28 16 22 Q14 14 20 10" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
+          <path d="M12 18 Q8 20 10 24 M28 18 Q32 20 30 24" stroke={purple} strokeWidth="1" strokeLinecap="round" opacity="0.7" />
+          <path d="M16 20 L24 20" stroke={cyan} strokeWidth="0.8" opacity="0.4" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <rect width="40" height="40" rx="4" fill={bg} />
+        </svg>
+      );
+  }
+}
+
+function ZionRoleBadge({ roleId, earned, label }: { roleId: string; earned: boolean; label: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 4,
+          overflow: "hidden",
+          opacity: earned ? 1 : 0.2,
+          filter: earned ? "none" : "grayscale(1)",
+          boxShadow: earned ? "0 0 10px rgba(0, 180, 216, 0.45)" : "none",
+          border: earned ? "1px solid rgba(0, 180, 216, 0.35)" : "1px solid rgba(255,255,255,0.06)",
+          transition: "opacity 0.2s, box-shadow 0.2s",
+        }}
+      >
+        <ZionRoleSvg roleId={roleId} />
+      </div>
+      {!earned ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 2,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 10,
+            height: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <rect x="2" y="4.5" width="6" height="4.5" rx="0.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
+            <path d="M3.5 4.5 V3.5 C3.5 2.5 4.5 2 5 2 C5.5 2 6.5 2.5 6.5 3.5 V4.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
+          </svg>
+        </div>
+      ) : null}
+      {hovered ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            whiteSpace: "nowrap",
+            background: "rgba(0, 8, 20, 0.95)",
+            border: "1px solid rgba(0, 180, 216, 0.25)",
+            borderRadius: 2,
+            padding: "3px 8px",
+            fontSize: "0.62rem",
+            fontFamily: "'IBM Plex Mono', monospace",
+            color: earned ? "#00b4d8" : "rgba(255,255,255,0.45)",
+            letterSpacing: "0.06em",
+            pointerEvents: "none",
+            zIndex: 5,
+          }}
+        >
+          {label}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ZionBetProfileDropdown({
   walletAddress,
   profile,
   stats,
-  onProfileChange,
   onRefreshAchievements,
   onOpenPortfolio,
   onOpenMyBets,
@@ -5566,7 +5714,6 @@ function ZionBetProfileDropdown({
   walletAddress: string;
   profile: ZionProfile;
   stats: ZionBetWalletStats | null;
-  onProfileChange: (p: ZionProfile) => void;
   onRefreshAchievements: () => void;
   onOpenPortfolio: () => void;
   onOpenMyBets: () => void;
@@ -5574,36 +5721,33 @@ function ZionBetProfileDropdown({
   onDisconnect: () => void;
   onClose: () => void;
 }) {
-  const [editingNick, setEditingNick] = useState(false);
-  const [nickDraft, setNickDraft] = useState(profile.nickname || "");
-
   useEffect(() => {
     onRefreshAchievements();
   }, [onRefreshAchievements]);
 
-  useEffect(() => {
-    setNickDraft(profile.nickname || "");
-  }, [profile.nickname]);
-
-  const displayName = profile.nickname?.trim() || "ZION Trader";
-  const avatarId = zionNormalizeAvatarId(profile.avatar);
   const totalBets = stats?.total_bets ?? 0;
   const winRate = stats?.win_rate ?? 0;
   const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
+  const earnedRoles = new Set(profile.achievements ?? []);
+
+  const mono: CSSProperties = {
+    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+    letterSpacing: "0.02em",
+  };
 
   const menuBtn: CSSProperties = {
     width: "100%",
     background: "transparent",
     border: "none",
-    color: "#c8e6ff",
-    padding: "10px 14px",
+    color: "rgba(255,255,255,0.85)",
+    padding: "10px 16px",
     cursor: "pointer",
-    fontFamily: "inherit",
-    fontSize: "0.82rem",
+    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
+    fontSize: "0.72rem",
+    letterSpacing: "0.08em",
     textAlign: "left",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
+    textTransform: "uppercase",
+    transition: "background 0.15s, color 0.15s",
   };
 
   return (
@@ -5612,168 +5756,137 @@ function ZionBetProfileDropdown({
         position: "absolute",
         right: 0,
         top: "40px",
-        width: "min(320px, 92vw)",
-        background: "linear-gradient(165deg, rgba(12, 35, 70, 0.98) 0%, rgba(8, 18, 40, 0.99) 100%)",
-        border: "1px solid rgba(100, 180, 255, 0.35)",
-        borderRadius: "12px",
+        width: "min(300px, 92vw)",
+        background: "rgba(0, 8, 20, 0.85)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid rgba(0, 180, 216, 0.2)",
+        borderRadius: "4px",
         zIndex: 210,
-        boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
-        overflow: "hidden",
+        boxShadow: "0 12px 40px rgba(0, 0, 0, 0.5)",
+        overflow: "visible",
+        color: "#fff",
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(100, 180, 255, 0.12)" }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <ZionBetAvatarImg avatarId={avatarId} size={48} selected />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {editingNick ? (
-                <input
-                  value={nickDraft}
-                  onChange={(e) => setNickDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const next = { ...profile, nickname: nickDraft.trim() };
-                      onProfileChange(next);
-                      saveZionProfile(walletAddress, next);
-                      setEditingNick(false);
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "rgba(0,0,0,0.35)",
-                    border: "1px solid rgba(100,180,255,0.35)",
-                    borderRadius: 6,
-                    color: "#fff",
-                    padding: "4px 8px",
-                    fontSize: "0.85rem",
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.95rem" }}>{displayName}</span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (editingNick) {
-                    const next = { ...profile, nickname: nickDraft.trim() };
-                    onProfileChange(next);
-                    saveZionProfile(walletAddress, next);
-                  }
-                  setEditingNick(!editingNick);
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  opacity: 0.7,
-                }}
-                title="Edit nickname"
-              >
-                ✏️
-              </button>
-            </div>
-            <div style={{ fontSize: "0.72rem", color: "rgba(150,200,255,0.65)", marginTop: 4, fontFamily: "monospace" }}>
-              {zionbetWalletTruncated(walletAddress)}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-          {ZION_AVATARS.map((av) => (
-            <button
-              key={av.id}
-              type="button"
-              onClick={() => {
-                const next = { ...profile, avatar: av.id };
-                onProfileChange(next);
-                saveZionProfile(walletAddress, next);
-              }}
-              style={{
-                padding: 0,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                borderRadius: 8,
-              }}
-              title={av.id}
-            >
-              <ZionBetAvatarImg avatarId={av.id} size={40} selected={avatarId === av.id} />
-            </button>
-          ))}
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0, 180, 216, 0.12)" }}>
+        <div
+          style={{
+            ...mono,
+            fontSize: "0.78rem",
+            color: "rgba(255,255,255,0.9)",
+            wordBreak: "break-all",
+          }}
+        >
+          {zionbetWalletTruncated(walletAddress)}
         </div>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 8,
-            marginTop: 12,
-            fontSize: "0.72rem",
+            ...mono,
+            marginTop: 10,
+            fontSize: "0.68rem",
+            color: "rgba(255,255,255,0.55)",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "4px 0",
           }}
         >
-          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
-            <div style={{ color: "rgba(150,200,255,0.7)" }}>Total bets</div>
-            <div style={{ color: "#fff", fontWeight: 700, marginTop: 2 }}>{totalBets}</div>
-          </div>
-          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
-            <div style={{ color: "rgba(150,200,255,0.7)" }}>Win rate</div>
-            <div style={{ color: "#fff", fontWeight: 700, marginTop: 2 }}>{winRate}%</div>
-          </div>
-          <div style={{ textAlign: "center", padding: "6px 4px", background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
-            <div style={{ color: "rgba(150,200,255,0.7)" }}>Profit</div>
-            <div
-              style={{
-                color: profit >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO,
-                fontWeight: 700,
-                marginTop: 2,
-              }}
-            >
+          <span>
+            BETS <span style={{ color: "#fff" }}>{totalBets}</span>
+          </span>
+          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
+          <span>
+            WIN <span style={{ color: "#fff" }}>{Number(winRate).toFixed(1)}%</span>
+          </span>
+          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
+          <span>
+            P&amp;L{" "}
+            <span style={{ color: profit >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
               {profit >= 0 ? "+" : ""}
-              {profit.toFixed(2)}
-            </div>
-          </div>
+              {profit.toFixed(2)} SUI
+            </span>
+          </span>
         </div>
-        {(profile.achievements?.length ?? 0) > 0 ? (
-          <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {ZION_ACHIEVEMENT_DEFS.filter((a) => profile.achievements?.includes(a.id)).map((a) => (
-              <span
-                key={a.id}
-                title={a.label}
-                style={{
-                  fontSize: "0.7rem",
-                  padding: "3px 8px",
-                  borderRadius: 999,
-                  background: "rgba(0, 212, 170, 0.12)",
-                  border: "1px solid rgba(0, 212, 170, 0.25)",
-                  color: "#a8ffe8",
-                }}
-              >
-                {a.emoji} {a.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "space-between" }}>
+          {ZION_ROLE_DEFS.map((role) => (
+            <ZionRoleBadge
+              key={role.id}
+              roleId={role.id}
+              label={role.label}
+              earned={earnedRoles.has(role.id)}
+            />
+          ))}
+        </div>
       </div>
       <div style={{ padding: "4px 0" }}>
-        <button type="button" style={menuBtn} onClick={() => { onOpenPortfolio(); onClose(); }}>
-          📊 My Portfolio
-        </button>
-        <button type="button" style={menuBtn} onClick={() => { onOpenMyBets(); onClose(); }}>
-          🎯 My Bets
-        </button>
-        <button type="button" style={menuBtn} onClick={() => { onLeaderboard(); onClose(); }}>
-          🏆 Leaderboard
+        <button
+          type="button"
+          style={menuBtn}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
+          onClick={() => {
+            onOpenPortfolio();
+            onClose();
+          }}
+        >
+          My Portfolio
         </button>
         <button
           type="button"
-          style={{ ...menuBtn, color: "#ff6b6b", borderTop: "1px solid rgba(100,180,255,0.1)" }}
+          style={menuBtn}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
+          onClick={() => {
+            onOpenMyBets();
+            onClose();
+          }}
+        >
+          My Bets
+        </button>
+        <button
+          type="button"
+          style={menuBtn}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
+          onClick={() => {
+            onLeaderboard();
+            onClose();
+          }}
+        >
+          Leaderboard
+        </button>
+        <button
+          type="button"
+          style={{
+            ...menuBtn,
+            color: "rgba(255, 120, 120, 0.9)",
+            borderTop: "1px solid rgba(0, 180, 216, 0.1)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 80, 80, 0.08)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+          }}
           onClick={() => {
             onDisconnect();
             onClose();
           }}
         >
-          🔌 Disconnect Wallet
+          Disconnect
         </button>
       </div>
     </div>
@@ -14776,13 +14889,7 @@ export default function Home() {
   const renderZionWalletProfileMenu = () => {
     const w = walletAddress.trim();
     if (!w) return null;
-    const nick = zionProfile.nickname?.trim();
-    const avatarId = zionNormalizeAvatarId(zionProfile.avatar);
-    const btnLabel = nick
-      ? nick.length > 12
-        ? `${nick.slice(0, 10)}…`
-        : nick
-      : `${w.slice(0, 6)}...${w.slice(-4)}`;
+    const btnLabel = zionbetWalletTruncated(w);
     return (
       <div style={{ position: "relative" }}>
         <button
@@ -14795,19 +14902,18 @@ export default function Home() {
             background: "transparent",
             border: "1px solid var(--border)",
             color: "var(--text-primary)",
-            padding: "6px 10px 6px 6px",
+            padding: "6px 10px",
             borderRadius: "2px",
             cursor: "pointer",
-            fontFamily: "monospace",
+            fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
             fontSize: "0.78rem",
             letterSpacing: "0.5px",
             height: "36px",
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
           }}
         >
-          <ZionBetAvatarImg avatarId={avatarId} size={26} />
           <span>{`${btnLabel} ▾`}</span>
         </button>
         {showWalletMenu ? (
@@ -14815,10 +14921,6 @@ export default function Home() {
             walletAddress={w}
             profile={zionProfile}
             stats={zionBetStats}
-            onProfileChange={(p) => {
-              setZionProfile(p);
-              saveZionProfile(w, p);
-            }}
             onRefreshAchievements={refreshZionAchievements}
             onOpenPortfolio={() => setShowPortfolioOverlay(true)}
             onOpenMyBets={() => setShowMyBetsOverlay(true)}
@@ -15247,14 +15349,14 @@ export default function Home() {
                   <div className="labDataCardGrid">
                     {corporationsLoading && uniqueCorporations.length === 0
                       ? Array.from({ length: 9 }, (_, i) => (
-                          <div key={`corp-skel-${i}`} className="labDataCard labDataCardSkeleton">
+                          <GlassCard key={`corp-skel-${i}`} className="labDataCard labDataCardSkeleton">
                             <div className="labSkeletonLine labSkeletonLineWide" />
                             <div className="labSkeletonLine" />
                             <div className="labSkeletonLine labSkeletonLineShort" />
-                          </div>
+                          </GlassCard>
                         ))
                       : uniqueCorporations.map((corp) => (
-                          <div key={corp.id} className="labDataCard">
+                          <GlassCard key={corp.id} className="labDataCard">
                             <div className="labDataCardHead">
                               <span className="labDataCardTitle">{corp.name}</span>
                               <span className="labDataCardBadge">{corp.corp_type?.toUpperCase() || "SECTOR"}</span>
@@ -15273,7 +15375,7 @@ export default function Home() {
                                 <span className="labDataCardStatValue">{corp.revenue?.toFixed(0)}</span>
                               </div>
                             </div>
-                          </div>
+                          </GlassCard>
                         ))}
                   </div>
                   {!corporationsLoading && (
@@ -15307,7 +15409,7 @@ export default function Home() {
                               ? "MID"
                               : "LOW";
                       return (
-                        <div
+                        <GlassCard
                           key={divName}
                           className="labDataCard"
                           style={{ opacity: dimmed && !mobilized ? 0.55 : 1 }}
@@ -15334,7 +15436,7 @@ export default function Home() {
                               <span className="labDataCardStatValue">{statusLabel}</span>
                             </div>
                           </div>
-                        </div>
+                        </GlassCard>
                       );
                     })}
                   </div>
@@ -15348,34 +15450,34 @@ export default function Home() {
                     <span className="labSectionDividerLabel">CLAN RANKINGS</span>
                   </div>
                   <section className="clanSection">
-                    <div className="clanRankGrid">
+                    <div className="labDataCardGrid">
                       {(Array.isArray(clans) ? clans : []).map((clan, idx) => (
-                        <div key={clan.id} className="clanRankCard">
-                          <div className="clanRankCardHead">
-                            <span className="clanRankName">
+                        <GlassCard key={clan.id} className="labDataCard">
+                          <div className="labDataCardHead">
+                            <span className="labDataCardTitle">
                               #{idx + 1} {clan.name}
                             </span>
-                            <span className="clanRankRecord">
+                            <span className="labDataCardBadge">
                               W {clan.wins} / L {clan.losses}
                             </span>
                           </div>
-                          <div className="clanRankStats">
-                            <div className="clanRankStat">
-                              <span className="clanRankStatLabel">MEMBERS</span>
-                              <span className="clanRankStatValue">{clan.members}</span>
+                          <div className="labDataCardStats">
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">MEMBERS</span>
+                              <span className="labDataCardStatValue">{clan.members}</span>
                             </div>
-                            <div className="clanRankStat">
-                              <span className="clanRankStatLabel">TREASURY</span>
-                              <span className="clanRankStatValue">{clan.treasury?.toFixed(0)}</span>
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">TREASURY</span>
+                              <span className="labDataCardStatValue">{clan.treasury?.toFixed(0)}</span>
                             </div>
-                            <div className="clanRankStat">
-                              <span className="clanRankStatLabel">STATUS</span>
-                              <span className="clanRankStatValue">
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">STATUS</span>
+                              <span className="labDataCardStatValue">
                                 {clan.wins > clan.losses ? "DOMINANT" : clan.wins === clan.losses ? "CONTESTED" : "WEAK"}
                               </span>
                             </div>
                           </div>
-                        </div>
+                        </GlassCard>
                       ))}
                     </div>
                   </section>
@@ -21212,23 +21314,13 @@ export default function Home() {
           grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
           gap: 12px;
         }
-        .labDataCard {
-          border: 1px solid var(--border);
-          border-radius: 2px;
-          padding: 20px 24px;
-          background: rgba(255, 255, 255, 0.03);
-          transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .labDataCard:hover {
-          background: rgba(255, 255, 255, 0.05);
-          border-color: rgba(255, 255, 255, 0.15);
-        }
         .labDataCardSkeleton {
           min-height: 120px;
           display: flex;
           flex-direction: column;
           gap: 10px;
           pointer-events: none;
+          opacity: 0.6;
         }
         .labSkeletonLine {
           height: 10px;
@@ -21260,16 +21352,18 @@ export default function Home() {
           margin-bottom: 10px;
         }
         .labDataCardTitle {
-          font-family: var(--font-mono);
-          font-weight: 500;
+          font-family: var(--font-sans);
+          font-weight: 300;
           font-size: 0.85rem;
-          color: var(--text-primary);
+          color: rgba(255, 255, 255, 0.9);
+          letter-spacing: 0.12em;
+          text-shadow: 0 0 20px rgba(0, 180, 216, 0.4);
         }
         .labDataCardBadge {
           font-family: var(--font-mono);
-          font-size: 0.6rem;
-          color: var(--text-secondary);
-          letter-spacing: 0.08em;
+          font-size: 9px;
+          color: rgba(0, 180, 216, 0.4);
+          letter-spacing: 0.25em;
           text-transform: uppercase;
           white-space: nowrap;
         }
@@ -21282,8 +21376,9 @@ export default function Home() {
         }
         .labDataCardMeta {
           font-family: var(--font-mono);
-          font-size: 0.6rem;
-          color: var(--text-muted);
+          font-size: 9px;
+          color: rgba(0, 180, 216, 0.35);
+          letter-spacing: 0.15em;
         }
         .labDataCardStats {
           display: grid;
@@ -21295,17 +21390,20 @@ export default function Home() {
         }
         .labDataCardStatLabel {
           display: block;
-          color: var(--text-muted);
+          color: rgba(0, 180, 216, 0.5);
           font-family: var(--font-mono);
-          font-size: 0.6rem;
-          letter-spacing: 0.06em;
+          font-size: 9px;
+          letter-spacing: 0.2em;
+          text-shadow: none;
+          margin-bottom: 4px;
         }
         .labDataCardStatValue {
           display: block;
-          color: var(--text-primary);
-          font-family: var(--font-mono);
+          color: rgba(255, 255, 255, 0.75);
+          font-family: "IBM Plex Mono", var(--font-mono);
           font-size: 0.9rem;
-          font-weight: 500;
+          font-weight: 400;
+          text-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
         }
         .zcoResearchDesc {
           color: var(--text-secondary);
@@ -21326,58 +21424,6 @@ export default function Home() {
         }
         .zcoResearchMuted {
           color: var(--text-muted);
-        }
-        .clanRankGrid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 12px;
-        }
-        .clanRankCard {
-          border: 1px solid var(--border);
-          background: var(--bg-secondary);
-          padding: 14px;
-          border-radius: 2px;
-        }
-        .clanRankCardHead {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-        }
-        .clanRankName {
-          font-family: var(--font-mono);
-          font-size: 0.82rem;
-          font-weight: 500;
-          color: var(--text-primary);
-        }
-        .clanRankRecord {
-          font-family: var(--font-mono);
-          font-size: 0.58rem;
-          color: var(--text-muted);
-          letter-spacing: 0.06em;
-        }
-        .clanRankStats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-        }
-        .clanRankStat {
-          text-align: center;
-        }
-        .clanRankStatLabel {
-          display: block;
-          font-family: var(--font-mono);
-          font-size: 0.55rem;
-          color: var(--text-muted);
-          letter-spacing: 0.08em;
-          margin-bottom: 4px;
-        }
-        .clanRankStatValue {
-          font-family: var(--font-mono);
-          font-size: 0.85rem;
-          font-weight: 500;
-          color: var(--text-primary);
         }
         .fieldObservationMeta {
           color: var(--text-secondary) !important;
