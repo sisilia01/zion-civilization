@@ -69,6 +69,8 @@ CRON_SCRIPTS = {
     "zion_speech":      ("zion_speech.py cycle", 3600),       # hourly — agents converse in ZION
     "zion_evolution":   ("zion_evolution.py cycle", 3600),    # hourly — mixed speech + new words
     "zion_lang_record": ("zion_lang_record.py", 86400),       # daily Walrus authorship record
+    "security_patterns":   ("vuln_patterns.py propose 3", 86400),             # daily: agents expand detection library (data only)
+    "security_self_audit": ("security_audit.py scan ~/zion_backend", 86400),  # daily self-audit, own code only
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),

@@ -139,7 +139,7 @@ def enact(amendment_id):
             host=os.environ.get("DB_HOST","localhost"),
             database=os.environ.get("DB_NAME","zion_db"),
             user=os.environ.get("DB_USER","zion_user"),
-            password=os.environ.get("DB_PASSWORD","zion2026"))
+            password=os.environ.get("DB_PASSWORD",""))
         cur = conn.cursor()
         # Read latest constitution version text
         cur.execute("""SELECT cv.version, cv.blob_id, a.title
