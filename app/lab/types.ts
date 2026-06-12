@@ -1,27 +1,24 @@
-export type Observation = {
-  id: number;
+export type EnglishEntry = {
   agent_id: number;
   agent_name: string;
-  book_title: string;
-  author: string;
-  track: string;
-  observation_text: string;
+  topic: string;
+  thought_text: string;
   created_at: string;
-  agent_class?: string;
 };
 
-export type Report = {
+export type ZionEntry = {
   id: number;
-  report_type: string;
-  week_number: number | null;
-  month_number: number | null;
-  year_number: number | null;
-  content_md: string;
-  walrus_blob_id: string | null;
-  walrus_url?: string;
-  preview?: string;
+  agent_id: number;
+  name_glyphs: number[];
+  text_glyphs: number[];
+  number_glyphs: number[];
+  language_level?: number;
+  message_type?: string;
   created_at: string;
+  status: string;
 };
+
+export type GlyphMap = Record<string, string>;
 
 export type Stats = {
   total_observations: number;
@@ -30,14 +27,3 @@ export type Stats = {
   reports_on_walrus: number;
   total_reports: number;
 };
-
-export type TrackFilter = "ALL" | "ECONOMICS" | "POLITICS" | "PHILOSOPHY" | "LINGUISTICS" | "SCIENCE";
-
-export const TRACKS: TrackFilter[] = [
-  "ALL",
-  "ECONOMICS",
-  "POLITICS",
-  "PHILOSOPHY",
-  "LINGUISTICS",
-  "SCIENCE",
-];

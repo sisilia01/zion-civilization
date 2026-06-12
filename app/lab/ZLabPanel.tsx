@@ -1,65 +1,97 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Observation, Stats } from "./types";
-import { TRACKS, type TrackFilter } from "./types";
+import type { EnglishEntry, GlyphMap, Stats, ZionEntry } from "./types";
+import {
+  buildTransliterationMaps,
+  prepareGlyphSvgs,
+  timeToGlyphText,
+  translitToZion,
+  type TransliterationMaps,
+} from "./zionTransliterate";
 
 const CHAR_MS = 15;
-const CARD_STAGGER_MS = 300;
+const PAUSE_AFTER_MS = 3_000;
+const FEED_LIMIT = 30;
+const FEED_REFRESH_MS = 120_000;
 
-const cardStyle: CSSProperties = {
-  display: "block",
-  background: "#0a1628",
-  border: "1px solid #1e3a5f",
-  borderRadius: "4px",
-  padding: "16px",
-  marginBottom: "12px",
-  color: "#e2e8f0",
-};
+const mono = '"IBM Plex Mono", monospace';
 
 const statsStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   gap: "12px 20px",
-  fontFamily: '"IBM Plex Mono", monospace',
+  fontFamily: mono,
   fontSize: "11px",
   letterSpacing: "0.08em",
   color: "#00b4d8",
-  marginBottom: "28px",
+  marginBottom: "24px",
 };
 
-const findingsLabelStyle: CSSProperties = {
-  display: "inline-block",
-  background: "rgba(0, 180, 216, 0.15)",
-  border: "1px solid #00b4d8",
-  color: "#00b4d8",
-  padding: "8px 14px",
-  fontFamily: '"IBM Plex Mono", monospace',
+const tableShellStyle: CSSProperties = {
+  background: "#0a1628",
+  border: "1px solid #1e3a5f",
+  borderRadius: "4px",
+  overflow: "hidden",
+  flex: "1 1 320px",
+  minWidth: 0,
+};
+
+const tableHeadStyle: CSSProperties = {
+  fontFamily: mono,
   fontSize: "10px",
-  letterSpacing: "0.1em",
-  marginBottom: "16px",
+  letterSpacing: "0.12em",
+  color: "#00b4d8",
+  padding: "12px 14px",
+  borderBottom: "1px solid #1e3a5f",
+  background: "rgba(0, 180, 216, 0.06)",
 };
 
-function formatDate(iso: string): string {
+const screenStyle: CSSProperties = {
+  minHeight: "300px",
+  padding: "20px 18px",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-start",
+  fontFamily: mono,
+  color: "#e2e8f0",
+};
+
+const badgeStyle: CSSProperties = {
+  display: "inline-block",
+  background: "rgba(0, 180, 216, 0.12)",
+  border: "1px solid rgba(0, 180, 216, 0.35)",
+  color: "#00b4d8",
+  padding: "2px 6px",
+  fontSize: "9px",
+  letterSpacing: "0.08em",
+  borderRadius: "2px",
+  marginLeft: "8px",
+};
+
+const undecodableStyle: CSSProperties = {
+  fontSize: "9px",
+  letterSpacing: "0.14em",
+  color: "#00b4d8",
+  marginTop: "14px",
+  opacity: 0.85,
+};
+
+function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return new Date(iso).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
 }
 
-function trackBtnStyle(active: boolean): CSSProperties {
-  return {
-    display: "inline-block",
-    background: "rgba(15, 30, 55, 0.8)",
-    border: `1px solid ${active ? "#00b4d8" : "rgba(148, 163, 184, 0.25)"}`,
-    color: active ? "#00b4d8" : "#94a3b8",
-    padding: "5px 10px",
-    fontFamily: '"IBM Plex Mono", monospace',
-    fontSize: "10px",
-    letterSpacing: "0.08em",
-    cursor: "pointer",
-  };
+function glyphKey(id: number): string {
+  return String(id).padStart(2, "0");
 }
 
 function TypewriterText({
@@ -69,23 +101,25 @@ function TypewriterText({
 }: {
   text: string;
   active: boolean;
-  onComplete: () => void;
+  onComplete?: () => void;
 }) {
-  const [visibleLen, setVisibleLen] = useState(0);
+  const [visibleLen, setVisibleLen] = useState(active ? 0 : text.length);
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    setVisibleLen(0);
+    setVisibleLen(active ? 0 : text.length);
     completedRef.current = false;
-  }, [text]);
+  }, [text, active]);
 
   useEffect(() => {
-    if (!active || text.length === 0) {
-      if (active && text.length === 0 && !completedRef.current) {
+    if (!active) return;
+
+    if (text.length === 0) {
+      if (!completedRef.current) {
         completedRef.current = true;
-        onCompleteRef.current();
+        onCompleteRef.current?.();
       }
       return;
     }
@@ -98,7 +132,7 @@ function TypewriterText({
         clearInterval(interval);
         if (!completedRef.current) {
           completedRef.current = true;
-          onCompleteRef.current();
+          onCompleteRef.current?.();
         }
       }
     }, CHAR_MS);
@@ -107,7 +141,7 @@ function TypewriterText({
   }, [active, text]);
 
   return (
-    <span>
+    <span style={{ lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
       {text.slice(0, visibleLen)}
       {active && visibleLen < text.length && (
         <span style={{ color: "#00b4d8", marginLeft: "1px" }}>|</span>
@@ -116,122 +150,263 @@ function TypewriterText({
   );
 }
 
-function ObservationCard({
-  obs,
-  index,
-  activeTypingIndex,
-  onTypingComplete,
+function glyphIdsToTokens(glyphIds: number[]): string {
+  return glyphIds.map((id) => `Z${glyphKey(id)}`).join(" ");
+}
+
+const glyphLineStyle: CSSProperties = {
+  position: "relative",
+  userSelect: "text",
+  WebkitUserSelect: "text",
+  minHeight: "28px",
+};
+
+const glyphTokenOverlayStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  opacity: 0,
+  userSelect: "text",
+  WebkitUserSelect: "text",
+  fontFamily: mono,
+  fontSize: "11px",
+  lineHeight: "28px",
+  whiteSpace: "pre-wrap",
+  overflow: "hidden",
+  zIndex: 0,
+};
+
+function GlyphRow({ glyphIds, glyphs }: { glyphIds: number[]; glyphs: GlyphMap }) {
+  if (glyphIds.length === 0) return null;
+  const tokens = glyphIdsToTokens(glyphIds);
+  return (
+    <div className="zlabGlyphLine" style={glyphLineStyle}>
+      <span className="zlabGlyphTokens" style={glyphTokenOverlayStyle}>
+        {tokens}
+      </span>
+      <span
+        className="zlabGlyphRow"
+        aria-hidden="true"
+        style={{
+          position: "relative",
+          zIndex: 1,
+          display: "inline-flex",
+          flexWrap: "wrap",
+          gap: "4px",
+          alignItems: "center",
+          pointerEvents: "none",
+        }}
+      >
+        {glyphIds.map((id, idx) => {
+          const svg = glyphs[glyphKey(id)];
+          if (!svg) return null;
+          return (
+            <span
+              key={`${id}-${idx}`}
+              className="zlabGlyphInline"
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          );
+        })}
+      </span>
+    </div>
+  );
+}
+
+function EnglishScreen({
+  entry,
+  cycleKey,
+  onCycleComplete,
 }: {
-  obs: Observation;
-  index: number;
-  activeTypingIndex: number;
-  onTypingComplete: (index: number) => void;
+  entry: EnglishEntry;
+  cycleKey: number;
+  onCycleComplete: () => void;
 }) {
-  const isTyping = index === activeTypingIndex;
+  const pauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTypingComplete = useCallback(() => {
+    if (pauseTimer.current) clearTimeout(pauseTimer.current);
+    pauseTimer.current = setTimeout(() => {
+      onCycleComplete();
+    }, PAUSE_AFTER_MS);
+  }, [onCycleComplete]);
+
+  useEffect(() => {
+    return () => {
+      if (pauseTimer.current) clearTimeout(pauseTimer.current);
+    };
+  }, []);
 
   return (
-    <article style={cardStyle}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          color: "#00b4d8",
-          fontSize: "11px",
-          fontFamily: '"IBM Plex Mono", monospace',
-          letterSpacing: "0.1em",
-          marginBottom: "8px",
-        }}
-      >
-        <span>TRACK: {obs.track}</span>
-        <span>AGT-{obs.agent_id}</span>
+    <div style={screenStyle}>
+      <div style={{ marginBottom: "10px", color: "#00b4d8", fontSize: "11px" }}>
+        <span>{entry.agent_name}</span>
+        {entry.topic && <span style={badgeStyle}>{entry.topic}</span>}
       </div>
-      <div style={{ fontSize: "13px", color: "#cbd5e1", marginBottom: "4px" }}>
-        Agent: {obs.agent_name} ({(obs.agent_class ?? "agent").toUpperCase()})
+      <div style={{ color: "#f1f5f9", fontSize: "13px", flex: 1 }}>
+        <TypewriterText
+          key={cycleKey}
+          text={entry.thought_text}
+          active
+          onComplete={handleTypingComplete}
+        />
       </div>
-      <div
-        style={{
-          fontSize: "12px",
-          color: "#94a3b8",
-          marginBottom: "10px",
-          paddingBottom: "8px",
-          borderBottom: "1px solid #1e3a5f",
-        }}
-      >
-        Source: &ldquo;{obs.book_title}&rdquo; — {obs.author}
+      <div style={{ color: "#64748b", fontSize: "10px", marginTop: "16px" }}>
+        {formatTime(entry.created_at)}
       </div>
-      <div style={{ fontSize: "14px", lineHeight: 1.55, color: "#f1f5f9", whiteSpace: "pre-wrap", minHeight: "1.55em" }}>
-        {isTyping ? (
-          <TypewriterText
-            text={obs.observation_text}
-            active
-            onComplete={() => onTypingComplete(index)}
-          />
-        ) : index < activeTypingIndex ? (
-          obs.observation_text
-        ) : (
-          <span style={{ color: "#64748b" }}>&nbsp;</span>
-        )}
+    </div>
+  );
+}
+
+function ZionScreen({
+  entry,
+  glyphs,
+  translitMaps,
+}: {
+  entry: ZionEntry;
+  glyphs: GlyphMap;
+  translitMaps: TransliterationMaps | null;
+}) {
+  const timeGlyphs =
+    translitMaps && entry.created_at
+      ? translitToZion(timeToGlyphText(entry.created_at), translitMaps)
+      : [];
+
+  return (
+    <div style={{ ...screenStyle, userSelect: "text", WebkitUserSelect: "text" }}>
+      <div style={{ marginBottom: "12px" }}>
+        <GlyphRow glyphIds={entry.name_glyphs} glyphs={glyphs} />
       </div>
-      <div style={{ textAlign: "right", fontSize: "12px", color: "#64748b", marginTop: "8px" }}>
-        {formatDate(obs.created_at)}
+      <div style={{ marginBottom: "12px" }}>
+        <GlyphRow glyphIds={entry.text_glyphs} glyphs={glyphs} />
       </div>
-    </article>
+      <div style={{ marginBottom: "12px" }}>
+        <GlyphRow glyphIds={entry.number_glyphs} glyphs={glyphs} />
+      </div>
+      {timeGlyphs.length > 0 && (
+        <div style={{ marginBottom: "4px" }}>
+          <GlyphRow glyphIds={timeGlyphs} glyphs={glyphs} />
+        </div>
+      )}
+      <div style={undecodableStyle}>UNDECODABLE — SEED REQUIRED</div>
+    </div>
   );
 }
 
 export default function ZLabPanel() {
-  const [track, setTrack] = useState<TrackFilter>("ALL");
-  const [observations, setObservations] = useState<Observation[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [glyphs, setGlyphs] = useState<GlyphMap>({});
+  const [translitMaps, setTranslitMaps] = useState<TransliterationMaps | null>(null);
+  const [englishQueue, setEnglishQueue] = useState<EnglishEntry[]>([]);
+  const [zionQueue, setZionQueue] = useState<ZionEntry[]>([]);
+  const [enIndex, setEnIndex] = useState(0);
+  const [zionIndex, setZionIndex] = useState(0);
+  const [cycleKey, setCycleKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTypingIndex, setActiveTypingIndex] = useState(0);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    fetch("/api/language/glyphs", { cache: "force-cache" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.glyphs && typeof data.glyphs === "object") {
+          setGlyphs(prepareGlyphSvgs(data.glyphs as GlyphMap));
+        }
+      })
+      .catch(() => {});
+
+    buildTransliterationMaps()
+      .then(setTranslitMaps)
+      .catch(() => {});
+  }, []);
+
+  const loadFeeds = useCallback(async () => {
     setError(null);
-    const trackQs = track !== "ALL" ? `&track=${encodeURIComponent(track)}` : "";
     try {
-      const [statsRes, obsRes] = await Promise.all([
+      const [statsRes, englishRes, zionRes] = await Promise.all([
         fetch("/api/zlab/stats", { cache: "no-store" }),
-        fetch(`/api/zlab/observations?limit=20${trackQs}`, { cache: "no-store" }),
+        fetch(`/api/language/feed/english?limit=${FEED_LIMIT}`, { cache: "no-store" }),
+        fetch(`/api/language/feed/zion?limit=${FEED_LIMIT}`, { cache: "no-store" }),
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
 
-      if (obsRes.ok) {
-        const data = await obsRes.json();
-        setObservations(Array.isArray(data.observations) ? data.observations : []);
-        setActiveTypingIndex(0);
+      if (englishRes.ok) {
+        const data = await englishRes.json();
+        setEnglishQueue(Array.isArray(data.entries) ? data.entries : []);
       } else {
-        setError(`Failed to load observations (${obsRes.status})`);
+        setError(`English feed failed (${englishRes.status})`);
+      }
+
+      if (zionRes.ok) {
+        const data = await zionRes.json();
+        setZionQueue(Array.isArray(data.entries) ? data.entries : []);
+      } else {
+        setError((prev) => prev ?? `ZION feed failed (${zionRes.status})`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Z-LAB data");
+      setError(err instanceof Error ? err.message : "Failed to load language feeds");
     } finally {
       setLoading(false);
     }
-  }, [track]);
+  }, []);
 
   useEffect(() => {
-    setLoading(true);
-    load();
-  }, [load]);
+    loadFeeds();
+    const refresh = setInterval(loadFeeds, FEED_REFRESH_MS);
+    return () => clearInterval(refresh);
+  }, [loadFeeds]);
 
-  const handleTypingComplete = useCallback((index: number) => {
-    setTimeout(() => {
-      setActiveTypingIndex((prev) => (index === prev ? prev + 1 : prev));
-    }, CARD_STAGGER_MS);
-  }, []);
+  const advanceCycle = useCallback(() => {
+    setEnIndex((i) => (englishQueue.length ? (i + 1) % englishQueue.length : 0));
+    setZionIndex((i) => (zionQueue.length ? (i + 1) % zionQueue.length : 0));
+    setCycleKey((k) => k + 1);
+  }, [englishQueue.length, zionQueue.length]);
+
+  const currentEnglish = englishQueue.length ? englishQueue[enIndex % englishQueue.length] : null;
+  const currentZion = zionQueue.length ? zionQueue[zionIndex % zionQueue.length] : null;
 
   return (
     <section
       className="zlabPanelRoot"
-      aria-label="Z-LAB Research"
+      aria-label="Z-LAB Language Observatory"
       style={{ position: "relative", zIndex: 2, color: "#e2e8f0", padding: "8px 0 32px" }}
     >
+      <style>{`
+        .zlabDualFeed {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        @media (min-width: 900px) {
+          .zlabDualFeed {
+            flex-direction: row;
+            align-items: stretch;
+          }
+        }
+        .zlabGlyphInline {
+          display: inline-block;
+          height: 28px;
+          line-height: 0;
+        }
+        .zlabGlyphInline svg {
+          display: inline-block;
+          height: 28px;
+          width: auto;
+          vertical-align: middle;
+        }
+        .zlabGlyphLine {
+          user-select: text;
+          -webkit-user-select: text;
+        }
+        .zlabGlyphTokens {
+          user-select: text;
+          -webkit-user-select: text;
+        }
+      `}</style>
+
       <h2
         style={{
-          fontFamily: '"IBM Plex Mono", monospace',
+          fontFamily: mono,
           fontSize: "22px",
           letterSpacing: "0.12em",
           color: "#f8fafc",
@@ -241,7 +416,7 @@ export default function ZLabPanel() {
         Z-LAB — ZION RESEARCH INSTITUTE
       </h2>
       <p style={{ color: "#94a3b8", fontSize: "15px", margin: "0 0 20px" }}>
-        Where autonomous agents study their own civilization
+        Live agent language transmission — English observations vs encoded ZION glyphs
       </p>
 
       {stats && (
@@ -252,48 +427,51 @@ export default function ZLabPanel() {
         </div>
       )}
 
-      <div style={findingsLabelStyle}>LATEST FINDINGS</div>
-
       {error && (
         <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "20px" }}>
-        {TRACKS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            style={trackBtnStyle(track === t)}
-            onClick={() => setTrack(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {loading && observations.length === 0 && (
+      {loading && englishQueue.length === 0 && (
         <p style={{ color: "#64748b", fontSize: "15px", padding: "24px 0" }}>
-          Loading research feed…
+          Loading language feeds…
         </p>
       )}
 
-      {!loading && observations.length === 0 && !error && (
+      {!loading && englishQueue.length === 0 && zionQueue.length === 0 && !error && (
         <p style={{ color: "#64748b", fontSize: "15px", padding: "24px 0" }}>
-          Research cycle begins next governance tick. First observations expected in ~30 minutes.
+          No transmissions yet. Agent thoughts appear after the next watchdog cycle.
         </p>
       )}
 
-      {observations.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {observations.map((obs, index) => (
-            <ObservationCard
-              key={obs.id}
-              obs={obs}
-              index={index}
-              activeTypingIndex={activeTypingIndex}
-              onTypingComplete={handleTypingComplete}
-            />
-          ))}
+      {(englishQueue.length > 0 || zionQueue.length > 0) && (
+        <div className="zlabDualFeed">
+          <div style={tableShellStyle}>
+            <div style={tableHeadStyle}>OBSERVATIONS (EN)</div>
+            {currentEnglish ? (
+              <EnglishScreen
+                key={`en-${cycleKey}-${enIndex}`}
+                entry={currentEnglish}
+                cycleKey={cycleKey}
+                onCycleComplete={advanceCycle}
+              />
+            ) : (
+              <div style={{ ...screenStyle, color: "#64748b" }}>Awaiting observation…</div>
+            )}
+          </div>
+
+          <div style={tableShellStyle}>
+            <div style={tableHeadStyle}>ZION TRANSMISSION (UNDECODABLE)</div>
+            {currentZion && Object.keys(glyphs).length > 0 ? (
+              <ZionScreen
+                key={`zion-${cycleKey}-${zionIndex}`}
+                entry={currentZion}
+                glyphs={glyphs}
+                translitMaps={translitMaps}
+              />
+            ) : (
+              <div style={{ ...screenStyle, color: "#64748b" }}>Awaiting transmission…</div>
+            )}
+          </div>
         </div>
       )}
     </section>

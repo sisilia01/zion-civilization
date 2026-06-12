@@ -25,7 +25,7 @@ const navStyle: CSSProperties = {
 };
 
 const wrapStyle: CSSProperties = {
-  maxWidth: "56rem",
+  maxWidth: "90rem",
   margin: "0 auto",
   padding: "32px 20px 48px",
 };
