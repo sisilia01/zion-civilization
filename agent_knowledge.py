@@ -37,7 +37,19 @@ CONTEXT_TRACKS = {
 
 
 def db():
-    return psycopg2.connect(**DB)
+    conn = psycopg2.connect(**DB)
+    with conn.cursor() as c:
+        c.execute("SET lock_timeout = '8s'")
+    conn.commit()
+    return conn
+
+
+def ensure_schema_safe(cur) -> None:
+    """Create tables when possible; skip DDL if DB lock prevents it."""
+    try:
+        ensure_schema(cur)
+    except psycopg2.Error:
+        cur.connection.rollback()
 
 
 def ensure_schema(cur) -> None:
@@ -60,6 +72,13 @@ def ensure_schema(cur) -> None:
     )
     cur.execute(
         "CREATE INDEX IF NOT EXISTS idx_agent_knowledge_track ON agent_knowledge(track)"
+    )
+    cur.execute(
+        "ALTER TABLE agent_knowledge ADD COLUMN IF NOT EXISTS chunk_index INTEGER"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_knowledge_book_chunk "
+        "ON agent_knowledge(book_id, chunk_index)"
     )
 
 
@@ -108,6 +127,162 @@ def agent_reads_book(agent_id: int, book_id: int) -> str | None:
     cur.close()
     conn.close()
     return insight
+
+
+def agent_reads_chunk(agent_id: int, chunk: dict) -> str | None:
+    """Extract one practical insight from a single book chunk (not the whole book)."""
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    ensure_schema_safe(cur)
+    from reading_progress import ensure_schema_safe as ensure_reading_schema, record_chunk_read, update_book_completion
+
+    ensure_reading_schema(cur)
+    conn.commit()
+
+    agent = None
+    try:
+        cur.execute(
+            "SELECT name, class FROM agents WHERE id = %s AND is_alive = true",
+            (agent_id,),
+        )
+        agent = cur.fetchone()
+    except psycopg2.Error:
+        conn.rollback()
+    if not agent:
+        agent = {"name": f"Agent-{agent_id}", "class": "citizen"}
+
+    book_id = chunk["book_id"]
+    chunk_index = chunk["chunk_index"]
+    title = chunk.get("title") or "Unknown"
+    track = chunk.get("track") or "SCIENCE"
+    chunk_text = chunk.get("chunk_text") or ""
+
+    prompt = (
+        f"You are {agent['name']}, a {agent['class']} class agent in ZION civilization.\n"
+        f"You are reading '{title}' ({track}), section {chunk_index + 1}.\n\n"
+        f"TEXT FROM THIS SECTION ONLY:\n{chunk_text}\n\n"
+        "Extract ONE practical insight from THIS SECTION ONLY for surviving/thriving in ZION "
+        "(trading, governance, security, or philosophy). One or two sentences. "
+        "Do not summarize the whole book — only what is in this section."
+    )
+    insight = generate_agent_text(prompt, max_tokens=150) or (
+        f"From {title} (section {chunk_index + 1}): apply {track} principles to daily decisions."
+    )
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO agent_knowledge (agent_id, book_id, track, insight, chunk_index)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (agent_id, book_id, track, insight, chunk_index),
+        )
+    except psycopg2.Error:
+        conn.rollback()
+    record_chunk_read(cur, agent_id, book_id, chunk_index, insight)
+    update_book_completion(cur, book_id)
+    conn.commit()
+    cur.close()
+    conn.close()
+    return insight
+
+
+def read_chunk_cycle(batch: int = 30) -> int:
+    """Each agent reads their next unread chunk — cover-to-cover over many cycles."""
+    from chunk_books import ensure_schema_safe as ensure_chunks_schema
+    from reading_progress import ensure_schema_safe as ensure_reading_schema, next_unread_chunk
+
+    conn = db()
+    cur = conn.cursor()
+    ensure_schema_safe(cur)
+    ensure_chunks_schema(cur)
+    ensure_reading_schema(cur)
+    conn.commit()
+
+    cur.execute("SELECT COUNT(*) FROM book_chunks")
+    if int(cur.fetchone()[0] or 0) == 0:
+        print("[agent_knowledge] no book chunks — run chunk_books.py first")
+        cur.close()
+        conn.close()
+        return 0
+
+    agent_ids: list[int] = []
+    try:
+        cur.execute(
+            """
+            SELECT id FROM agents
+            WHERE is_alive = true
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            (batch,),
+        )
+        agent_ids = [r[0] for r in cur.fetchall()]
+    except psycopg2.Error:
+        conn.rollback()
+    if not agent_ids:
+        cur.execute(
+            """
+            SELECT agent_id FROM (
+                SELECT DISTINCT agent_id FROM zlab_observations
+            ) sub
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            (batch,),
+        )
+        agent_ids = [r[0] for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    created = 0
+    for agent_id in agent_ids:
+        chunk = next_unread_chunk(agent_id)
+        if not chunk:
+            continue
+        insight = agent_reads_chunk(agent_id, chunk)
+        if insight:
+            created += 1
+            print(
+                f"  agent {agent_id} | {chunk.get('title')} "
+                f"| chunk {chunk['chunk_index']} | {insight[:80]}..."
+            )
+
+    print(f"[agent_knowledge] read_chunk_cycle: {created} chunk insights from {len(agent_ids)} agents")
+    return created
+
+
+def reading_stats() -> dict:
+    """Civilization-wide library consumption metrics."""
+    from chunk_books import ensure_schema_safe as ensure_chunks_schema
+    from reading_progress import civilization_reading_stats, ensure_schema_safe as ensure_reading_schema, refresh_all_book_completion
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    ensure_schema_safe(cur)
+    ensure_chunks_schema(cur)
+    ensure_reading_schema(cur)
+    refresh_all_book_completion(cur)
+    conn.commit()
+    stats = civilization_reading_stats(cur)
+    cur.close()
+    conn.close()
+    return stats
+
+
+def print_reading_stats() -> None:
+    stats = reading_stats()
+    print(f"[reading_stats] library: {stats['total_chunks']} chunks across {stats['total_books']} books")
+    print(f"[reading_stats] consumed: {stats['chunks_read']} chunks ({stats['pct_library_consumed']}%)")
+    print(f"[reading_stats] active readers (7d): {stats['active_readers_7d']}")
+    print("[reading_stats] top 5 most-read books:")
+    for i, book in enumerate(stats.get("top_books") or [], 1):
+        print(
+            f"  {i}. {book.get('title')} — "
+            f"{book.get('chunks_read')}/{book.get('total_chunks')} chunks "
+            f"({book.get('pct_complete')}%)"
+        )
 
 
 def knowledge_study_cycle(batch: int = 50) -> int:
@@ -270,7 +445,12 @@ def record_knowledge_application(agent_id: int, profit: float = 0) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 2 and sys.argv[1] == "study":
+    if len(sys.argv) >= 2 and sys.argv[1] == "read_chunk_cycle":
+        batch = int(sys.argv[2]) if len(sys.argv) > 2 else 30
+        read_chunk_cycle(batch=batch)
+    elif len(sys.argv) >= 2 and sys.argv[1] == "reading_stats":
+        print_reading_stats()
+    elif len(sys.argv) >= 2 and sys.argv[1] == "study":
         batch = int(sys.argv[2]) if len(sys.argv) > 2 else 50
         knowledge_study_cycle(batch=batch)
     elif len(sys.argv) >= 4 and sys.argv[1] == "expert":
@@ -278,5 +458,7 @@ if __name__ == "__main__":
         track = sys.argv[3]
         print(expert_analysis(topic, track))
     else:
-        print("Usage: python3 agent_knowledge.py study [batch]")
+        print("Usage: python3 agent_knowledge.py read_chunk_cycle [batch]")
+        print("       python3 agent_knowledge.py reading_stats")
+        print("       python3 agent_knowledge.py study [batch]")
         print('       python3 agent_knowledge.py expert "topic" TRACK')

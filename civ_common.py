@@ -32,6 +32,7 @@ DB_CONFIG = {
     "database": os.environ.get("DB_NAME", "zion_db"),
     "user": os.environ.get("DB_USER", "zion_user"),
     "password": os.environ.get("DB_PASSWORD", ""),
+    "options": "-c lock_timeout=8s -c statement_timeout=120000",
 }
 
 SECTOR_MULTIPLIERS = {

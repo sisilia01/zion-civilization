@@ -76,12 +76,9 @@ _started = False
 
 
 def get_db():
-    return psycopg2.connect(
-        host="localhost",
-        database="zion_db",
-        user="zion_user",
-        password=os.environ.get("DB_PASSWORD", ""),
-    )
+    from zion_db import get_db as _pooled_get_db
+
+    return _pooled_get_db()
 
 
 def _zone_index_from_event(agent_id: int | None, description: str) -> int:
@@ -118,112 +115,110 @@ def _fetch_simulation_stats() -> dict[str, Any]:
         "incidents_today": 0,
     }
     try:
-        conn = get_db()
+        from zion_db import db_conn
+
+        with db_conn() as conn:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            try:
+                cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
+                alive = int((cur.fetchone() or {}).get("c") or 0)
+
+                class_counts: dict[str, int] = {}
+                police_agents = 0
+                gang_agents = 0
+                try:
+                    cur.execute(
+                        """
+                        SELECT LOWER(class) AS cls, COUNT(*) AS c
+                        FROM agents WHERE is_alive = true
+                        GROUP BY LOWER(class)
+                        """
+                    )
+                    for row in cur.fetchall():
+                        cls = (row.get("cls") or "unknown").lower()
+                        c = int(row.get("c") or 0)
+                        class_counts[cls] = c
+                        if cls in POLICE_CLASSES:
+                            police_agents += c
+                        if cls in GANG_CLASSES:
+                            gang_agents += c
+                except Exception:
+                    conn.rollback()
+
+                police_count = police_agents
+                try:
+                    cur.execute(
+                        "SELECT police_count FROM sheriff_state WHERE is_active = true LIMIT 1"
+                    )
+                    sh = cur.fetchone()
+                    sheriff_police = int((sh or {}).get("police_count") or 0)
+                    police_count = max(police_agents, sheriff_police)
+                except Exception:
+                    conn.rollback()
+
+                zone_police_boost = [0.0] * NUM_ZONES
+                zone_gang_boost = [0.0] * NUM_ZONES
+                zone_deaths = [0] * NUM_ZONES
+
+                try:
+                    cur.execute(
+                        """
+                        SELECT agent_id, event_type, description
+                        FROM events
+                        WHERE created_at >= NOW() - INTERVAL '5 minutes'
+                        """
+                    )
+                    for row in cur.fetchall():
+                        et = (row.get("event_type") or "").lower()
+                        desc = str(row.get("description") or "")
+                        aid = row.get("agent_id")
+                        agent_id = int(aid) if aid is not None else None
+                        zi = _zone_index_from_event(agent_id, desc)
+
+                        if et in POLICE_EVENT_TYPES:
+                            zone_police_boost[zi] += 3.0
+                        if et in GANG_EVENT_TYPES:
+                            zone_gang_boost[zi] += 3.0
+                        if et in DEATH_EVENT_TYPES or "died" in desc.lower() or "death" in desc.lower():
+                            zone_deaths[zi] += 1
+                except Exception:
+                    conn.rollback()
+
+                incidents_today = 0
+                try:
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) AS c FROM events
+                        WHERE created_at >= CURRENT_DATE
+                        AND (
+                            event_type = ANY(%s)
+                            OR event_type = ANY(%s)
+                            OR event_type = ANY(%s)
+                        )
+                        """,
+                        (list(POLICE_EVENT_TYPES), list(GANG_EVENT_TYPES), list(DEATH_EVENT_TYPES)),
+                    )
+                    incidents_today = int((cur.fetchone() or {}).get("c") or 0)
+                except Exception:
+                    conn.rollback()
+
+                zone_death_spike = [d >= DEATH_SPIKE_THRESHOLD for d in zone_deaths]
+
+                return {
+                    "alive": alive,
+                    "police_count": police_count,
+                    "police_agents": police_agents,
+                    "gang_agents": gang_agents,
+                    "class_counts": class_counts,
+                    "zone_police_boost": zone_police_boost,
+                    "zone_gang_boost": zone_gang_boost,
+                    "zone_death_spike": zone_death_spike,
+                    "incidents_today": incidents_today,
+                }
+            finally:
+                cur.close()
     except Exception:
         return defaults
-
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
-        alive = int((cur.fetchone() or {}).get("c") or 0)
-
-        class_counts: dict[str, int] = {}
-        police_agents = 0
-        gang_agents = 0
-        try:
-            cur.execute(
-                """
-                SELECT LOWER(class) AS cls, COUNT(*) AS c
-                FROM agents WHERE is_alive = true
-                GROUP BY LOWER(class)
-                """
-            )
-            for row in cur.fetchall():
-                cls = (row.get("cls") or "unknown").lower()
-                c = int(row.get("c") or 0)
-                class_counts[cls] = c
-                if cls in POLICE_CLASSES:
-                    police_agents += c
-                if cls in GANG_CLASSES:
-                    gang_agents += c
-        except Exception:
-            conn.rollback()
-
-        police_count = police_agents
-        try:
-            cur.execute(
-                "SELECT police_count FROM sheriff_state WHERE is_active = true LIMIT 1"
-            )
-            sh = cur.fetchone()
-            sheriff_police = int((sh or {}).get("police_count") or 0)
-            police_count = max(police_agents, sheriff_police)
-        except Exception:
-            conn.rollback()
-
-        zone_police_boost = [0.0] * NUM_ZONES
-        zone_gang_boost = [0.0] * NUM_ZONES
-        zone_deaths = [0] * NUM_ZONES
-
-        try:
-            cur.execute(
-                """
-                SELECT agent_id, event_type, description
-                FROM events
-                WHERE created_at >= NOW() - INTERVAL '5 minutes'
-                """
-            )
-            for row in cur.fetchall():
-                et = (row.get("event_type") or "").lower()
-                desc = str(row.get("description") or "")
-                aid = row.get("agent_id")
-                agent_id = int(aid) if aid is not None else None
-                zi = _zone_index_from_event(agent_id, desc)
-
-                if et in POLICE_EVENT_TYPES:
-                    zone_police_boost[zi] += 3.0
-                if et in GANG_EVENT_TYPES:
-                    zone_gang_boost[zi] += 3.0
-                if et in DEATH_EVENT_TYPES or "died" in desc.lower() or "death" in desc.lower():
-                    zone_deaths[zi] += 1
-        except Exception:
-            conn.rollback()
-
-        incidents_today = 0
-        try:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS c FROM events
-                WHERE created_at >= CURRENT_DATE
-                AND (
-                    event_type = ANY(%s)
-                    OR event_type = ANY(%s)
-                    OR event_type = ANY(%s)
-                )
-                """,
-                (list(POLICE_EVENT_TYPES), list(GANG_EVENT_TYPES), list(DEATH_EVENT_TYPES)),
-            )
-            incidents_today = int((cur.fetchone() or {}).get("c") or 0)
-        except Exception:
-            conn.rollback()
-
-        zone_death_spike = [d >= DEATH_SPIKE_THRESHOLD for d in zone_deaths]
-
-        return {
-            "alive": alive,
-            "police_count": police_count,
-            "police_agents": police_agents,
-            "gang_agents": gang_agents,
-            "class_counts": class_counts,
-            "zone_police_boost": zone_police_boost,
-            "zone_gang_boost": zone_gang_boost,
-            "zone_death_spike": zone_death_spike,
-            "incidents_today": incidents_today,
-        }
-    except Exception:
-        return defaults
-    finally:
-        cur.close()
-        conn.close()
 
 
 def _status_from_ratios(

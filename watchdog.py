@@ -52,7 +52,8 @@ CRON_SCRIPTS = {
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
     "knowledge_loop": ("knowledge_loop.py", 86400),  # 1x/day — feedback loop: science findings → agent memory
-    "knowledge_study": ("agent_knowledge.py study", 3600),  # hourly — agents read books via Ollama
+    "ingest_new_books": ("ingest_new_books.py", 3600),  # hourly — auto-detect + classify + chunk newly added books
+    "knowledge_study": ("agent_knowledge.py read_chunk_cycle", 1800),  # 30 min — chunk-by-chunk cover-to-cover reading
     "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
     # [DISABLED for scientific clarity] "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
     # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
@@ -69,6 +70,7 @@ CRON_SCRIPTS = {
     "zion_speech":      ("zion_speech.py cycle", 3600),       # hourly — agents converse in ZION
     "zion_evolution":   ("zion_evolution.py cycle", 3600),    # hourly — mixed speech + new words
     "zion_lang_record": ("zion_lang_record.py", 86400),       # daily Walrus authorship record
+    "agent_thoughts":      ("agent_thoughts.py cycle", 1800),               # 30 min — English + ZION paired thoughts
     "security_patterns":   ("vuln_patterns.py propose 3", 86400),             # daily: agents expand detection library (data only)
     "security_self_audit": ("security_audit.py scan ~/zion_backend", 86400),  # daily self-audit, own code only
     "walrus":       ("walrus.py",         3600),
@@ -253,17 +255,15 @@ def main():
                     log.info(f"Heartbeat — API:✅ | Cron:{len(CRON_SCRIPTS)}")
                 else:
                     log.warning(
-                        "Heartbeat — API:❌ down — check: systemctl status zion-api"
+                        "Heartbeat — API:❌ down — restarting via systemd (no duplicate uvicorn)"
                     )
-                    print("[WATCHDOG] API down — restarting...")
-                    subprocess.Popen(
-                        ["nohup", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"],
-                        cwd="/root/zion_backend",
-                        stdout=open("/var/log/zion-api.log", "a"),
-                        stderr=open("/var/log/zion-api.log", "a"),
+                    print("[WATCHDOG] API down — systemctl restart zion-api")
+                    subprocess.run(
+                        ["systemctl", "restart", "zion-api"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
                     )
-                    time.sleep(5)
-                    print("[WATCHDOG] API restarted")
 
             if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
                 subprocess.Popen(

@@ -35,7 +35,10 @@ router = APIRouter()
 CONST_DIR = Path(os.path.expanduser("~/zion_backend/constitution"))
 CONST_V3_PATH = CONST_DIR / "CONSTITUTION_ZION_v3.0.md"
 
-def db(): return psycopg2.connect(**DB)
+def db():
+    from zion_db import get_db
+
+    return get_db()
 def js(o):
     if isinstance(o,Decimal): return float(o)
     if isinstance(o,datetime): return o.isoformat()
@@ -730,6 +733,147 @@ def archive_timeline():
     cur.close()
     conn.close()
     return {"timeline": js(timeline)}
+
+
+_GLYPH_CACHE: dict | None = None
+
+
+def _load_glyph_cache() -> dict:
+    """Cache 48 inline SVG glyphs — deterministic, never changes."""
+    global _GLYPH_CACHE
+    if _GLYPH_CACHE is not None:
+        return _GLYPH_CACHE
+
+    glyphs_dir = Path(os.path.expanduser("~/zion_backend/zion_glyphs"))
+    out: dict[str, str] = {}
+    for gid in range(48):
+        path = glyphs_dir / f"glyph_{gid:02d}.svg"
+        if path.is_file():
+            out[f"{gid:02d}"] = path.read_text(encoding="utf-8")
+        else:
+            try:
+                from zion_alphabet import load_alphabet_from_db
+
+                rows = {r["symbol_id"]: r for r in load_alphabet_from_db()}
+                if gid in rows:
+                    out[f"{gid:02d}"] = rows[gid]["svg_path"]
+            except Exception:
+                out[f"{gid:02d}"] = (
+                    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+                    f'<text x="50" y="55" text-anchor="middle">{gid}</text></svg>'
+                )
+    _GLYPH_CACHE = {"count": len(out), "glyphs": out}
+    return _GLYPH_CACHE
+
+
+@router.get("/language/glyphs")
+def language_glyphs():
+    """48 ZION glyphs as inline SVG keyed by glyph_id (00-47). Cached."""
+    return js(_load_glyph_cache())
+
+
+@router.get("/language/feed/english")
+def language_feed_english(limit: int = 20):
+    """Recent agent thoughts in plain English — names and numbers readable."""
+    limit = max(1, min(limit, 50))
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SET lock_timeout = '8s'")
+
+    rows: list[dict] = []
+    try:
+        cur.execute(
+            """
+            SELECT agent_id, agent_name, topic, thought_text, created_at
+            FROM agent_thoughts
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    except psycopg2.errors.UndefinedTable:
+        conn.rollback()
+    except psycopg2.Error:
+        conn.rollback()
+
+    if len(rows) < limit:
+        need = limit - len(rows)
+        cur.execute(
+            """
+            SELECT o.agent_id, o.agent_name, o.track AS topic,
+                   o.observation_text AS thought_text, o.created_at
+            FROM zlab_observations o
+            ORDER BY o.created_at DESC
+            LIMIT %s
+            """,
+            (need,),
+        )
+        rows.extend(dict(r) for r in cur.fetchall())
+
+    cur.close()
+    conn.close()
+    return {"feed": "english", "count": len(rows), "entries": js(rows)}
+
+
+@router.get("/language/feed/zion")
+def language_feed_zion(limit: int = 20):
+    """
+    Recent agent content rendered as ZION glyph_ids only.
+    NEVER exposes true_meaning — status always UNDECODABLE.
+    """
+    from zion_translit import parse_zion_tokens, translit_to_zion
+
+    limit = max(1, min(limit, 50))
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SET lock_timeout = '8s'")
+    cur.execute(
+        """
+        SELECT m.id, m.from_agent AS agent_id,
+               COALESCE(o.agent_name, 'agent_' || m.from_agent::text) AS agent_name,
+               m.zion_text, m.language_level, m.created_at, m.message_type
+        FROM agent_messages_zion m
+        LEFT JOIN LATERAL (
+            SELECT agent_name FROM zlab_observations zo
+            WHERE zo.agent_id = m.from_agent
+            ORDER BY zo.created_at DESC LIMIT 1
+        ) o ON true
+        ORDER BY m.created_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    raw_rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    entries = []
+    for r in raw_rows:
+        row = dict(r)
+        agent_name = row.get("agent_name") or f"agent_{row['agent_id']}"
+        zion_text = row.get("zion_text") or ""
+
+        if parse_zion_tokens(zion_text):
+            text_glyphs = parse_zion_tokens(zion_text)
+        else:
+            text_glyphs = translit_to_zion(zion_text)
+
+        entries.append(
+            {
+                "id": row["id"],
+                "agent_id": row["agent_id"],
+                "name_glyphs": translit_to_zion(agent_name),
+                "text_glyphs": text_glyphs,
+                "number_glyphs": translit_to_zion(str(row["agent_id"])),
+                "language_level": float(row.get("language_level") or 0),
+                "message_type": row.get("message_type"),
+                "created_at": row.get("created_at"),
+                "status": "UNDECODABLE",
+            }
+        )
+
+    return {"feed": "zion", "count": len(entries), "entries": js(entries)}
 
 
 @router.get("/archive/stats")

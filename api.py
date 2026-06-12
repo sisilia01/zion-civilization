@@ -1035,10 +1035,9 @@ async def zk_stealth_claim(req: Request):
 
 
 def get_db():
-    return psycopg2.connect(
-        host="localhost", database="zion_db",
-        user="zion_user", password=os.environ.get("DB_PASSWORD", "")
-    )
+    from zion_db import get_db as _pooled_get_db
+
+    return _pooled_get_db()
 
 
 def _fetch_frs_chief(cur) -> dict:
@@ -4896,12 +4895,28 @@ async def trigger_market_resolution():
     return {"success": True, "resolved": resolved, "generated": generated}
 
 
+
+def _sync_auto_resolve_markets():
+    """Sync wrapper: runs async auto_resolve_markets in an isolated loop inside a worker thread.
+    Keeps the main API event loop free so endpoints always respond."""
+    import asyncio as _aio
+    try:
+        _loop = _aio.new_event_loop()
+        _aio.set_event_loop(_loop)
+        _loop.run_until_complete(auto_resolve_markets())
+        _loop.close()
+    except Exception as _e:
+        print(f"[market scheduler thread] {_e}")
+
 async def daily_market_scheduler():
     """Run market generation and resolution daily"""
+    # Let the API fully start and begin serving requests before heavy work
+    await asyncio.sleep(60)
     while True:
         try:
             now = datetime.utcnow()
-            await auto_resolve_markets()
+            # Run blocking market resolution in a thread so it never blocks the event loop
+            await asyncio.to_thread(_sync_auto_resolve_markets)
             if now.hour == 0 and now.minute < 5:
                 await generate_daily_markets()
             await asyncio.sleep(3600)
@@ -5896,6 +5911,26 @@ def get_districts():
             "counts": {"police": 0, "gang": 0, "contested": 0},
             "error": str(exc),
         }
+
+
+@app.on_event("startup")
+def _startup_db_pool():
+    from zion_db import init_pool
+
+    try:
+        init_pool()
+    except Exception as exc:
+        print(f"[db_pool] startup error: {exc}")
+
+
+@app.on_event("shutdown")
+def _shutdown_db_pool():
+    from zion_db import close_pool
+
+    try:
+        close_pool()
+    except Exception as exc:
+        print(f"[db_pool] shutdown error: {exc}")
 
 
 @app.on_event("startup")
@@ -6907,10 +6942,14 @@ async def zco_notarize(request: Request):
         stealth_address = body.get("stealth_address", "")
         
         # Pick random agent as notary
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("SELECT id, name, class FROM agents WHERE is_alive=true ORDER BY RANDOM() LIMIT 1")
-                agent = cur.fetchone()
+        conn = get_db()
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT id, name, class FROM agents WHERE is_alive=true ORDER BY RANDOM() LIMIT 1")
+            agent = cur.fetchone()
+            cur.close()
+        finally:
+            conn.close()
         
         if not agent:
             return {"ok": False, "error": "No agents available"}
