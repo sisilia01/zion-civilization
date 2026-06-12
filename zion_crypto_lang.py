@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import random
 import sys
 
 import psycopg2
@@ -64,6 +65,19 @@ CORE_VOCAB = [
     "forecast", "predict", "outcome", "chance", "certain", "uncertain", "proof", "claim",
     "constitution", "amendment", "emergency", "martial", "election", "dissolve", "seize", "execute",
     "agent", "human", "machine", "civilization", "zion", "walrus", "blob", "timestamp",
+]
+
+SENTENCE_TEMPLATES = [
+    "We must {0} before they {1}.",
+    "I have decided to {0} regarding {1}.",
+    "The council discusses {0} and {1} today.",
+    "Our people need {0}, but fear {1}.",
+    "Beware — {0} leads to {1}.",
+    "{0} is rising while {1} fades among us.",
+    "I sense {0} nearby, and {1} will follow.",
+    "Let us trade {0} for {1} while we still can.",
+    "Word has spread: {0} threatens our {1}.",
+    "Some say {0} is the answer to {1}.",
 ]
 
 
@@ -216,7 +230,12 @@ def build_sentence(concepts: list[str], seed: str | None = None) -> tuple[str, s
             zw = encode(c, seed=seed, store=True)
         words.append(zw)
     zion_text = " \u2060 ".join(words)
-    true_meaning = " ".join(concepts)
+    safe_concepts = [c for c in concepts if len(c) >= 3] or concepts
+    if len(safe_concepts) < 2:
+        extra = random.choice(CORE_VOCAB)
+        safe_concepts = safe_concepts + [extra]
+    c0, c1 = safe_concepts[0], safe_concepts[1]
+    true_meaning = random.choice(SENTENCE_TEMPLATES).format(c0, c1)
     return zion_text, true_meaning
 
 

@@ -100,11 +100,11 @@ def _intent_to_concepts(intent: str) -> list[str]:
     concepts: list[str] = []
     for pool in TOPIC_POOLS.values():
         for word in pool:
-            if word in intent_l and word not in concepts:
+            if len(word) >= 3 and word in intent_l and word not in concepts:
                 concepts.append(word)
     if not concepts:
         for word in re.findall(r"[a-z]+", intent_l):
-            if lookup_zion_word(word):
+            if len(word) >= 3 and lookup_zion_word(word):
                 concepts.append(word)
             if len(concepts) >= 4:
                 break
