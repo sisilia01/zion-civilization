@@ -588,7 +588,7 @@ def sheriff_actions(sheriff):
                     (hire_bonus, new_cops),
                 )
             log_event(sid, 'sheriff_action',
-                     f"⚔️ Junta Sheriff {name} expands military! Recruited {new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
+                     f"🚔 Sheriff {name} expanded police force: +{new_cops} officers. Total: {police + new_cops}. Budget: -{cost} ZION",
                      cost)
             print("constitutional enforcement check")
         
@@ -600,7 +600,7 @@ def sheriff_actions(sheriff):
             cur.execute("UPDATE clans SET treasury = treasury - %s WHERE id = %s", (seized, clan_target['id']))
             cur.execute("UPDATE sheriff_state SET police_budget = police_budget + %s WHERE is_active=true", (seized,))
             log_event(sid, 'sheriff_action',
-                     f"⚔️ Junta forces seized {seized:.0f} ZION from {clan_target['name']}! Military growing stronger.",
+                     f"🚔 Sheriff dept recovered {seized:.0f} ZION in lawful asset forfeiture from {clan_target['name']}.",
                      seized)
             print("constitutional enforcement check")
         

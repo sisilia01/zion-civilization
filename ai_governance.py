@@ -48,6 +48,56 @@ OFFICER_HIRE_COST = 100.0
 RAID_COST = 200.0
 HIRE_ADVANCE = 15.0
 
+FORBIDDEN_ACTIONS = frozenset({
+    "declare_dictatorship",
+    "declare_emergency",
+    "dissolve_senate",
+    "dissolve",
+    "martial_law",
+    "seize_power",
+    "execute_enemy",
+    "cancel_elections",
+    "establish_junta",
+})
+FORBIDDEN_TEXT_MARKERS = (
+    "dictator",
+    "coup",
+    "martial law",
+    "martial_law",
+    "junta",
+    "dissolve",
+    "seize power",
+    "power grab",
+    "shadow government",
+    "overthrow",
+    "execute enemy",
+    "execute_enemy",
+)
+
+
+def normalize_governance_action(action: str) -> str:
+    a = (action or "do_nothing").lower().strip().replace(" ", "_")
+    if a in FORBIDDEN_ACTIONS:
+        return "do_nothing"
+    if any(m.replace(" ", "_") in a or m in a for m in FORBIDDEN_TEXT_MARKERS):
+        return "do_nothing"
+    return a
+
+
+def is_unconstitutional_text(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(m in lower for m in FORBIDDEN_TEXT_MARKERS)
+
+
+def safe_event_text(text: str, fallback: str, max_len: int = 200) -> str | None:
+    """Return text safe for public events feed, or None to skip."""
+    if is_unconstitutional_text(text):
+        return None
+    cleaned = (text or "").strip()
+    return (cleaned or fallback)[:max_len]
+
 FACTION_EVENT_TAGS = {
     "president": "GPT-PRESIDENT",
     "sheriff": "GEMINI-SHERIFF",
@@ -894,7 +944,7 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
     cur = conn.cursor()
     approval_delta = 0
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
         reasoning = decision.get("reasoning", "")
         result = f"President AI ({MODELS['president']}): {decision.get('analysis', '')}"
@@ -1017,22 +1067,30 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
         elif action == "declare_dictatorship":  # Unconstitutional — disabled
             result += " | Action blocked by Constitution — no power grab permitted"
 
-        if action not in ("declare_dictatorship",):  # blocked power grabs still log normally below
+        decision_text = safe_event_text(
+            decision.get("decision", ""),
+            "President pursues lawful constitutional policy.",
+        )
+        if decision_text and action != "declare_dictatorship":
             cur.execute(
                 """
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                (f"🏛 {decision.get('decision', '')[:200]}",),
+                (f"🏛 {decision_text}",),
             )
-        analysis = (decision.get("analysis") or "").strip()
-        if analysis:
+        analysis_text = safe_event_text(
+            decision.get("analysis", ""),
+            "President reviews constitutional options.",
+            max_len=150,
+        )
+        if analysis_text:
             cur.execute(
                 """
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                (f"President analysis: {analysis[:150]}",),
+                (f"President analysis: {analysis_text}",),
             )
         conn.commit()
         return result, approval_delta
@@ -1049,7 +1107,7 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
     cur = conn.cursor()
     approval_delta = 0
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
         result = f"Sheriff AI ({MODELS['sheriff']}): {decision.get('analysis', '')}"
 
@@ -1061,20 +1119,32 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
         officers = int((sh[1] if sh else 0) or 0)
         sheriff_name = (sh[2] if sh else None) or "Sheriff"
 
-        cur.execute(
-            """
-            INSERT INTO events (event_type, description, created_at)
-            VALUES ('sheriff_action', %s, NOW())
-            """,
-            (f"🚔 Sheriff {sheriff_name}: {decision.get('analysis', 'monitoring situation')[:150]}",),
+        analysis_text = safe_event_text(
+            decision.get("analysis", ""),
+            "Sheriff monitors lawful order.",
+            max_len=150,
         )
-        cur.execute(
-            """
-            INSERT INTO events (event_type, description, created_at)
-            VALUES ('sheriff_action', %s, NOW())
-            """,
-            (f"🚔 {decision.get('decision', 'patrolling')[:180]}",),
+        if analysis_text:
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('sheriff_action', %s, NOW())
+                """,
+                (f"🚔 Sheriff {sheriff_name}: {analysis_text}",),
+            )
+        decision_text = safe_event_text(
+            decision.get("decision", ""),
+            "Sheriff patrols and enforces constitutional law.",
+            max_len=180,
         )
+        if decision_text:
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('sheriff_action', %s, NOW())
+                """,
+                (f"🚔 {decision_text}",),
+            )
 
         if action == "raid_gang":
             raid_cost = clamp_amount(RAID_COST, budget)
@@ -1164,12 +1234,13 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
         if sh_end:
             budget = float((sh_end[0] or 0) or 0)
             officers = int((sh_end[1] or 0) or 0)
+        public_action = "constitutional_enforcement" if action == "declare_dictatorship" else action
         cur.execute(
             """
             INSERT INTO events (event_type, description, created_at)
             VALUES ('sheriff_action', %s, NOW())
             """,
-            (f"🚔 Police force: {officers} officers | Budget: {budget:.0f} ZION | Action: {action}",),
+            (f"🚔 Police force: {officers} officers | Budget: {budget:.0f} ZION | Action: {public_action}",),
         )
         conn.commit()
         return result, approval_delta
@@ -1185,7 +1256,7 @@ async def execute_senate_action(decision: dict, state: dict, budgets: dict) -> t
     conn = get_conn()
     cur = get_cursor(conn)
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 100.0)
         result = f"Senate AI ({MODELS['senate']}): {decision.get('analysis', '')}"
 
@@ -1246,13 +1317,18 @@ async def execute_senate_action(decision: dict, state: dict, budgets: dict) -> t
         elif action == "declare_dictatorship":  # Unconstitutional — disabled
             result += " | Action blocked by Constitution — no power grab permitted"
         else:
-            cur.execute(
-                """
-                INSERT INTO events (event_type, description, created_at)
-                VALUES ('senate', %s, NOW())
-                """,
-                (f"🏦 {decision.get('decision', '')[:200]}",),
+            decision_text = safe_event_text(
+                decision.get("decision", ""),
+                "Senate deliberates constitutional legislation.",
             )
+            if decision_text:
+                cur.execute(
+                    """
+                    INSERT INTO events (event_type, description, created_at)
+                    VALUES ('senate', %s, NOW())
+                    """,
+                    (f"🏦 {decision_text}",),
+                )
         conn.commit()
         return result, 0
     except Exception as e:
@@ -1267,7 +1343,7 @@ async def execute_zrs_action(decision: dict, state: dict, budgets: dict) -> tupl
     conn = get_conn()
     cur = get_cursor(conn)
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount", 0))
 
         POLITICAL_ACTIONS = [
@@ -1400,7 +1476,7 @@ async def execute_gang_action(decision: dict, state: dict, budgets: dict) -> tup
     conn = get_db()
     cur = conn.cursor()
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 10.0)
         result = f"Gang AI ({MODELS['gangs']}): {decision.get('analysis', '')}"
 
@@ -1474,13 +1550,18 @@ async def execute_gang_action(decision: dict, state: dict, budgets: dict) -> tup
             else:
                 result += " | Extortion failed"
 
-        cur.execute(
-            """
-            INSERT INTO events (event_type, description, created_at)
-            VALUES ('gang', %s, NOW())
-            """,
-            (f"💀 {decision.get('decision', '')[:200]}",),
+        gang_text = safe_event_text(
+            decision.get("decision", ""),
+            "Gang activity logged under constitutional oversight.",
         )
+        if gang_text:
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('gang', %s, NOW())
+                """,
+                (f"💀 {gang_text}",),
+            )
         conn.commit()
         return result, 0
     except Exception as e:
@@ -1495,7 +1576,7 @@ async def execute_corporations_action(decision: dict, state: dict, budgets: dict
     conn = get_db()
     cur = conn.cursor()
     try:
-        action = decision.get("action", "do_nothing")
+        action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 20.0)
         result = f"Corp AI ({MODELS['corporations']}): {decision.get('analysis', '')}"
 
@@ -1682,13 +1763,18 @@ async def execute_corporations_action(decision: dict, state: dict, budgets: dict
             """
         )
 
-        cur.execute(
-            """
-            INSERT INTO events (event_type, description, created_at)
-            VALUES ('economy', %s, NOW())
-            """,
-            (f"🏢 {decision.get('decision', '')[:200]}",),
+        decision_text = safe_event_text(
+            decision.get("decision", ""),
+            "Corporations pursue lawful economic policy.",
         )
+        if decision_text:
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('economy', %s, NOW())
+                """,
+                (f"🏢 {decision_text}",),
+            )
         conn.commit()
         return result, 0
     except Exception as e:

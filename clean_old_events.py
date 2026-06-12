@@ -32,10 +32,13 @@ PATTERNS = [
     "%print%billion%",
     "%dissolv%",
     "%coup%",
+    "%junta%",
     "%shadow government%",
+    "%seize power%",
     "%seize%",
     "%execute%enem%",
     "%cancel%election%",
+    "%overthrow%",
 ]
 
 WHERE_CLAUSE = " OR ".join("description ILIKE %s" for _ in PATTERNS)

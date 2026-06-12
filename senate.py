@@ -480,7 +480,6 @@ def choose_law_for_president(cur, president: dict) -> str:
     }
     if corruption > 60:
         weights["ELECTION_DELAY"] += 15
-        weights["MARTIAL_LAW"] += 10
     pool = list(weights.keys())
     w = [weights[k] for k in pool]
     return random.choices(pool, weights=w, k=1)[0]
@@ -551,7 +550,9 @@ def senator_votes_for(senator: dict, law_type: str) -> bool:
 
 def execute_law_effect(cur, law: dict, president: dict) -> bool:
     """Apply law effects. Returns False if effect could not run (e.g. ZRS insufficient)."""
-    law_type = law["law_type"]
+    law_type = (law.get("law_type") or "").upper()
+    if law_type in {"MARTIAL_LAW", "DISSOLVE", "DISSOLVE_SENATE"}:
+        return False  # Unconstitutional — blocked
     pid = president["agent_id"]
     pname = president["agent_name"]
 
