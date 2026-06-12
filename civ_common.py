@@ -1004,15 +1004,8 @@ def apply_uprising_corruption(cur, president: dict):
 
 
 def apply_uprising_coup_pressure(cur):
-    """PRES.GUARD depleted: coup_points += 10 per cycle."""
-    if not is_uprising_active(cur):
-        return
-    cur.execute(
-        """
-        UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 10
-        WHERE is_active = true
-        """
-    )
+    """Disabled — coup_points metric no longer incremented."""
+    return
 
 
 def trigger_full_revolution(cur, president: dict) -> bool:
@@ -1035,7 +1028,7 @@ def trigger_full_revolution(cur, president: dict) -> bool:
     if rebel_count > state_force:
         cur.execute(
             """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'revolution'
+            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'constitutional_crisis_vote'
             WHERE id = %s
             """,
             (president["agent_id"],),
@@ -1044,12 +1037,12 @@ def trigger_full_revolution(cur, president: dict) -> bool:
             "UPDATE president_state SET is_active = false WHERE is_active = true"
         )
         end_uprising(cur, police_won=False)
-        update_revolution_meter(cur, -get_revolution_meter(cur), "revolution succeeded")
+        update_revolution_meter(cur, -get_revolution_meter(cur), "constitutional_crisis_vote succeeded")
         log_event(
             cur,
             None,
-            "revolution",
-            f"BREAKING: REVOLUTION SUCCEEDS! President {pname} removed from power!",
+            "constitutional_crisis_vote",
+            f"BREAKING: Constitutional crisis vote succeeds (Article XV)! President {pname} removed from office!",
             rebel_count,
             priority="breaking",
         )
@@ -1071,8 +1064,8 @@ def trigger_full_revolution(cur, president: dict) -> bool:
     log_event(
         cur,
         None,
-        "revolution",
-        f"BREAKING: REVOLUTION SUPPRESSED! RIOT CTRL defeats rebels. {arrested} arrested.",
+        "constitutional_crisis_vote",
+        f"BREAKING: Constitutional crisis vote suppressed! RIOT CTRL defeats unrest. {arrested} arrested.",
         arrested,
         priority="breaking",
     )

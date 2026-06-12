@@ -215,14 +215,11 @@ def process_sheriff_orders(cur, sheriff):
                     )
                 continue
 
-            if stype == "junta" and random.random() < 0.35:
+            if stype == "enforcement" and random.random() < 0.35:
                 ignored += 1
                 cur.execute(
                     "UPDATE sheriff_orders SET status = 'ignored', executed_at = NOW() WHERE id = %s",
                     (oid,),
-                )
-                cur.execute(
-                    "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 15 WHERE is_active = true"
                 )
                 continue
 
@@ -254,12 +251,6 @@ def process_sheriff_orders(cur, sheriff):
             """,
             (executed, ignored),
         )
-
-        if stype in ("corrupt", "junta"):
-            cur.execute(
-                "UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + %s WHERE is_active = true",
-                (ignored * 12,),
-            )
 
         print(f"process_sheriff_orders: done — executed={executed} ignored={ignored}", flush=True)
         return executed, ignored

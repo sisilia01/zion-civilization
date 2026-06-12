@@ -304,6 +304,18 @@ def execute_decision(cur, data: dict):
     approval = data["approval"]
     action = decide_action(cur, data)
 
+    action_key = (action or "").upper()
+    if action_key == "MARTIAL_LAW" or (action or "").lower() == "martial_law":
+        log_event(
+            cur,
+            pid,
+            "president",
+            f"BLOCKED: President {pname} attempted martial law — blocked by Constitution (Article II Sec.3)",
+            0,
+            priority="normal",
+        )
+        return "blocked"
+
     if action == "ANTI_CORRUPTION_DRIVE":
         cur.execute(
             """
@@ -322,28 +334,6 @@ def execute_decision(cur, data: dict):
             f"ANTI-CORRUPTION DRIVE: President {pname} purges corrupt officials! Approval +15",
             0,
             priority="urgent",
-        )
-    elif action == "MARTIAL_LAW":
-        # Redirected: martial law is unconstitutional (Article II Sec.3)
-        # President funds police instead — constitutional emergency response
-        police_bonus = float(get_param("police_funding_bonus", 0.0))
-        extra_officers = 20 + int(police_bonus / 500)
-        cur.execute(
-            """UPDATE sheriff_state SET police_count = police_count + %s,
-                police_budget = police_budget + %s
-            WHERE is_active = true""",
-            (extra_officers, police_bonus),
-        )
-        cur.execute("""UPDATE president_state SET
-            approval_rating = LEAST(100, approval_rating + 5)
-            WHERE is_active = true""")
-        log_event(
-            cur,
-            pid,
-            "president",
-            f"BREAKING: Emergency Police Funding — additional officers and budget deployed",
-            0,
-            priority="breaking",
         )
     elif action == "STIMULUS":
         from civ_common import debit_personal_fund_pay_agents
@@ -385,12 +375,6 @@ def execute_decision(cur, data: dict):
         nationalize_bankrupt_corps(cur, pres)
     elif action == "INVESTIGATE_SHERIFF":
         rate = data["sheriff_compliance_metrics"]["compliance_rate"]
-        cur.execute(
-            """
-            UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 50
-            WHERE is_active = true
-            """
-        )
         log_event(
             cur,
             pid,

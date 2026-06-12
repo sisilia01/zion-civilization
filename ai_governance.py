@@ -347,7 +347,7 @@ async def get_civilization_state() -> dict:
         sheriff_corruption = 0.0
         if sheriff:
             stype = sheriff[2] or "honest"
-            sheriff_corruption = {"honest": 10.0, "corrupt": 75.0, "junta": 60.0}.get(stype, 20.0)
+            sheriff_corruption = {"honest": 10.0, "corrupt": 75.0, "enforcement": 60.0}.get(stype, 20.0)
 
         cur.execute(
             """
@@ -1066,6 +1066,87 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
 
         elif action == "declare_dictatorship":  # Unconstitutional — disabled
             result += " | Action blocked by Constitution — no power grab permitted"
+
+        elif action == "anti_corruption_drive":
+            cur.execute(
+                """
+                UPDATE president_state SET approval_rating = LEAST(100, approval_rating + 15),
+                    corruption_index = GREATEST(0, COALESCE(corruption_index, 30) - 10)
+                WHERE is_active = true
+                """
+            )
+            cur.execute(
+                """
+                UPDATE sheriff_state SET sheriff_type = 'honest',
+                    coup_points = GREATEST(0, COALESCE(coup_points, 0) - 50)
+                WHERE is_active = true AND sheriff_type = 'corrupt'
+                """
+            )
+            approval_delta = 5
+            adjust_president_approval(cur, approval_delta)
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('president', %s, NOW())
+                """,
+                ("ANTI-CORRUPTION DRIVE: President orders lawful integrity review (+approval)",),
+            )
+            result += " | Anti-corruption drive launched"
+
+        elif action == "fund_research" and amount > 0:
+            spend = clamp_amount(amount, fund)
+            if spend > 0:
+                cur.execute(
+                    """
+                    UPDATE president_state SET personal_fund = personal_fund - %s
+                    WHERE is_active = true AND personal_fund >= %s
+                    """,
+                    (spend, spend),
+                )
+                if cur.rowcount:
+                    approval_delta = 2
+                    adjust_president_approval(cur, approval_delta)
+                    cur.execute(
+                        """
+                        INSERT INTO events (event_type, description, created_at)
+                        VALUES ('president', %s, NOW())
+                        """,
+                        (f"RESEARCH FUNDING: President allocates {spend:.0f} ZION to ZION Academy.",),
+                    )
+                    result += f" | Funded research: {spend:.0f} ZION"
+                else:
+                    result += " | SKIPPED: insufficient personal_fund"
+            else:
+                result += " | SKIPPED: insufficient personal_fund"
+
+        elif action == "propose_amendment":
+            title = safe_event_text(
+                decision.get("target") or decision.get("decision", ""),
+                "Constitutional amendment proposal",
+                max_len=120,
+            ) or "Constitutional amendment proposal"
+            desc = safe_event_text(
+                reasoning or decision.get("decision", ""),
+                "Proposed via lawful presidential initiative.",
+                max_len=300,
+            ) or "Proposed via lawful presidential initiative."
+            try:
+                from amendments import propose_amendment
+
+                aid = propose_amendment(title, desc, "param_change", proposed_by="president_ai")
+                if aid:
+                    cur.execute(
+                        """
+                        INSERT INTO events (event_type, description, created_at)
+                        VALUES ('president', %s, NOW())
+                        """,
+                        (f"AMENDMENT PROPOSED: {title[:120]}",),
+                    )
+                    result += f" | Amendment #{aid} proposed"
+                else:
+                    result += " | Amendment already pending"
+            except Exception as exc:
+                result += f" | Amendment proposal failed: {exc}"
 
         decision_text = safe_event_text(
             decision.get("decision", ""),

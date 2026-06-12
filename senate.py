@@ -647,34 +647,6 @@ def execute_law_effect(cur, law: dict, president: dict) -> bool:
             priority="breaking",
         )
 
-    elif law_type == "MARTIAL_LAW":
-        cur.execute(
-            """
-            UPDATE sheriff_state
-            SET police_count = police_count * 2
-            WHERE is_active = true
-            """
-        )
-        apply_martial_law_divisions(cur)
-        sync_police_divisions(cur)
-        insert_active_effect(cur, "martial_law", 24, crime_modifier=-0.35, poverty_modifier=0.1)
-        cur.execute(
-            """
-            UPDATE president_state
-            SET approval_rating = GREATEST(5, COALESCE(approval_rating, 50) - 15),
-                martial_law_until = NOW() + INTERVAL '24 hours'
-            WHERE is_active = true
-            """
-        )
-        log_event(
-            cur,
-            pid,
-            "senate",
-            f"MARTIAL LAW: police doubled, crime suppressed — President {pname} approval -15",
-            0,
-            priority="breaking",
-        )
-
     elif law_type == "AMNESTY":
         cur.execute(
             """

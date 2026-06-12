@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ZION Sheriff System — elected sheriff, law enforcement, and military junta.
+ZION Sheriff System — elected sheriff and law enforcement.
 """
 import psycopg2
 import psycopg2.extras
@@ -53,7 +53,7 @@ def _init_sheriff_db():
         cur = get_cursor(conn)
     return conn, cur
 
-SHERIFF_TYPES = ["honest", "corrupt", "junta"]
+SHERIFF_TYPES = ["honest", "corrupt", "enforcement"]
 TYPE_WEIGHTS = [0.5, 0.35, 0.15]
 TERM_DAYS = 10
 MAX_TERMS = 2
@@ -313,7 +313,7 @@ def run_sheriff_election(forced=False):
     type_desc = {
         "honest": "HONEST — will fight crime and protect citizens",
         "corrupt": "CORRUPT — will take bribes and enable crime",
-        "junta": "JUNTA — dangerous military ambitions",
+        "enforcement": "ENFORCEMENT — expanded police operations within the law",
     }
 
     log_event(
@@ -388,7 +388,7 @@ def _ai_ordered_raid(sheriff, ai_decision: dict):
 
 
 def sheriff_actions(sheriff):
-    """Daily sheriff actions by type: honest fights crime, corrupt takes bribes, junta attempts coup."""
+    """Daily sheriff actions by type: honest fights crime, corrupt takes bribes, enforcement expands operations."""
     print(f"Sheriff tick: sheriff_actions type={sheriff.get('sheriff_type')}...", flush=True)
     sid = sheriff["agent_id"]
     name = sheriff["agent_name"]
@@ -563,7 +563,7 @@ def sheriff_actions(sheriff):
             )
         print(f"Corrupt sheriff: {bribes:.0f} ZION in bribes")
 
-    elif stype == "junta":
+    elif stype == "enforcement":
         print("Sheriff tick: constitutional enforcement check", flush=True)
         # Junta actively builds military power
         if budget > 80:
@@ -606,71 +606,13 @@ def sheriff_actions(sheriff):
         
         if approval < 30 or random.random() < 0.1:
             return None  # Unconstitutional — disabled
-            print("Sheriff tick: constitutional enforcement check", flush=True)
-            cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
-            president = cur.fetchone()
-
-            if president and random.random() < 0.4:
-                print("Sheriff tick: constitutional enforcement check", flush=True)
-                cur.execute(
-                    "UPDATE agents SET balance = balance - 100 WHERE id = %s",
-                    (president["agent_id"],),
-                )
-                transfer_power(
-                    cur,
-                    f"COUP! Sheriff {name} arrested President {president['agent_name']}! "
-                    f"Military junta takes control!",
-                    new_agent_id=sid,
-                    new_agent_name=name,
-                    new_party="junta",
-                    phase="interim",
-                    is_dictator=True,
-                    dictatorship_mode=True,
-                    log_agent_id=sid,
-                )
-                print("constitutional enforcement check")
-
-                cur.execute("SELECT COUNT(*) AS cnt FROM agents WHERE is_alive = true")
-                total = cur.fetchone()["cnt"]
-                deaths = int(total * random.uniform(0.05, 0.15))
-                cur.execute(
-                    """
-                    UPDATE agents
-                    SET is_alive = false, died_at = NOW(), death_cause = 'killed in coup resistance'
-                    WHERE is_alive = true
-                    AND id IN (
-                        SELECT id FROM agents WHERE is_alive = true
-                        ORDER BY RANDOM() LIMIT %s
-                    )
-                    """,
-                    (deaths,),
-                )
-                log_event(
-                    None,
-                    "sheriff_action",
-                    f"Coup resistance crushed! {deaths} agents killed in street fighting.",
-                    deaths * 10,
-                )
-                print("constitutional enforcement check")
-                approval_change = -10
-            else:
-                log_event(
-                    sid,
-                    "sheriff_action",
-                    f"Sheriff {name} (JUNTA) attempted coup but failed. Tensions rise.",
-                    0,
-                )
-                approval_change = -8
-                print("constitutional enforcement check")
-        else:
-            log_event(
-                sid,
-                "sheriff_action",
-                f"Sheriff {name} (JUNTA) bides his time. Approval: {approval}%",
-                0,
-            )
-            approval_change = -5
-            print("constitutional enforcement check")
+        log_event(
+            sid,
+            "sheriff_action",
+            f"Sheriff {name} (ENFORCEMENT) monitoring situation. Approval: {approval}%",
+            0,
+        )
+        approval_change = -5
 
     if force_raid:
         print("Sheriff tick: force_raid — AI ordered raid...", flush=True)
@@ -732,11 +674,11 @@ def check_interaction_with_president():
             log_event(
                 sheriff["agent_id"],
                 "sheriff_action",
-                f"Sheriff {sheriff['agent_name']} REFUSES to support dictator "
-                f"{president['agent_name']}! Police stand with the people!",
+                f"Sheriff {sheriff['agent_name']} opens constitutional review of "
+                f"President {president['agent_name']} — police uphold the rule of law.",
                 0,
             )
-            print(f"Sheriff {sheriff['agent_name']} defies dictator")
+            print(f"Sheriff {sheriff['agent_name']} constitutional review")
 
             cur.execute(
                 "SELECT approval_rating FROM president_state WHERE is_active = true LIMIT 1"
@@ -745,15 +687,15 @@ def check_interaction_with_president():
             current_approval = row["approval_rating"] if row else president["approval_rating"]
 
             if current_approval < 25:
-                cur.execute("UPDATE president_state SET is_active = false WHERE is_active = true")
+                cur.execute("UPDATE president_state SET is_active = false, is_dictator = false WHERE is_active = true")
                 log_event(
                     sheriff["agent_id"],
                     "sheriff_action",
-                    f"Sheriff {sheriff['agent_name']} ARRESTED dictator "
-                    f"{president['agent_name']}! Democracy restored!",
+                    f"Sheriff {sheriff['agent_name']} enforces Article XV review — "
+                    f"President {president['agent_name']} removed; election scheduled.",
                     0,
                 )
-                print(f"Dictator {president['agent_name']} arrested by sheriff!")
+                print(f"President {president['agent_name']} removed via constitutional review")
 
     elif is_dictator and sheriff["sheriff_type"] == "corrupt":
         if random.random() < 0.2:
@@ -774,15 +716,15 @@ def check_interaction_with_president():
             log_event(
                 None,
                 "sheriff_action",
-                f"CORRUPT REGIME: Dictator + Corrupt Sheriff oppress citizens! "
-                f"{victims} poor agents killed! City in chaos!",
+                f"CORRUPT REGIME CRISIS: unlawful oppression under review — "
+                f"{victims} vulnerable agents harmed; Senate emergency session called.",
                 victims * 10,
             )
             print(f"Corrupt regime chaos: {victims} victims")
 
 
 def check_term_end(sheriff):
-    """10 days per term, max 2 terms; junta sheriff may refuse to leave."""
+    """10 days per term, max 2 terms; enforcement sheriff may request term review."""
     days = sheriff["days_in_office"]
     term = sheriff["term_number"]
 
@@ -803,11 +745,11 @@ def check_term_end(sheriff):
         print(f"Sheriff {sheriff['agent_name']} re-elected for term 2")
 
     elif days >= TERM_DAYS and term >= MAX_TERMS:
-        if sheriff["sheriff_type"] == "junta" and random.random() < 0.4:
+        if sheriff["sheriff_type"] == "enforcement" and random.random() < 0.4:
             log_event(
                 sheriff["agent_id"],
                 "sheriff_action",
-                f"Sheriff {sheriff['agent_name']} REFUSES to step down! Military coup imminent!",
+                f"Sheriff {sheriff['agent_name']} requests lawful term review before stepping down.",
                 0,
             )
             print("constitutional enforcement check")
