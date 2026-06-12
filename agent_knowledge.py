@@ -27,9 +27,10 @@ DB = {
 }
 
 CONTEXT_TRACKS = {
-    "trading": ("ECONOMICS", "ARTIFICIAL_INTELLIGENCE", "BLOCKCHAIN"),
-    "governance": ("POLITICS", "PHILOSOPHY", "ECONOMICS"),
-    "security": ("SECURITY", "BLOCKCHAIN", "ARTIFICIAL_INTELLIGENCE"),
+    "trading": ("ECONOMICS", "ARTIFICIAL_INTELLIGENCE", "PSYCHOLOGY"),
+    "forecasting": ("ECONOMICS", "SCIENCE", "POLITICS", "PSYCHOLOGY"),
+    "governance": ("POLITICS", "PHILOSOPHY", "ECONOMICS", "HISTORY"),
+    "security": ("SECURITY", "BLOCKCHAIN"),
     "science": ("SCIENCE", "ARTIFICIAL_INTELLIGENCE", "COSMOLOGY"),
     "general": ("PHILOSOPHY", "ECONOMICS", "POLITICS", "SCIENCE"),
 }
@@ -155,7 +156,7 @@ def knowledge_study_cycle(batch: int = 50) -> int:
 
 
 def apply_knowledge_to_decision(agent_id: int, context: str = "general") -> str:
-    """Return most relevant stored insights for a decision context."""
+    """Return top 3 insights by usefulness_score for the context's tracks."""
     tracks = CONTEXT_TRACKS.get(context.lower(), CONTEXT_TRACKS["general"])
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -167,30 +168,40 @@ def apply_knowledge_to_decision(agent_id: int, context: str = "general") -> str:
         FROM agent_knowledge
         WHERE agent_id = %s AND track = ANY(%s)
         ORDER BY usefulness_score DESC, created_at DESC
-        LIMIT 5
+        LIMIT 3
         """,
         (agent_id, list(tracks)),
     )
     rows = cur.fetchall()
-    if not rows:
-        cur.execute(
-            """
-            SELECT insight, track, usefulness_score
-            FROM agent_knowledge
-            WHERE agent_id = %s
-            ORDER BY usefulness_score DESC, created_at DESC
-            LIMIT 3
-            """,
-            (agent_id,),
-        )
-        rows = cur.fetchall()
 
     cur.close()
     conn.close()
     if not rows:
         return ""
-    lines = [f"- [{r['track']}] {r['insight']}" for r in rows]
-    return "Knowledge insights:\n" + "\n".join(lines)
+    return "\n".join(f"- [{r['track']}] {r['insight']}" for r in rows)
+
+
+def reward_knowledge_merit(agent_id: int, context: str) -> int:
+    """Increment usefulness when knowledge led to a successful outcome."""
+    tracks = CONTEXT_TRACKS.get(context.lower())
+    if not tracks:
+        return 0
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE agent_knowledge SET
+            usefulness_score = usefulness_score + 1,
+            applied_count = applied_count + 1
+        WHERE agent_id = %s AND track = ANY(%s)
+        """,
+        (agent_id, list(tracks)),
+    )
+    updated = cur.rowcount
+    conn.commit()
+    cur.close()
+    conn.close()
+    return updated
 
 
 def expert_analysis(topic: str, track: str, top_n: int = 5) -> str:

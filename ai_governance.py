@@ -710,6 +710,68 @@ Each hire costs ~{HIRE_ADVANCE:.0f} ZION/cycle in salaries.
     return f"You are the AI controller for {faction}. {base_memory}"
 
 
+def get_faction_leader_agent_id(faction: str) -> int | None:
+    """Map a governance faction to its representative agent for knowledge lookup."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        if faction == "president":
+            cur.execute(
+                "SELECT agent_id FROM president_state WHERE is_active=true LIMIT 1"
+            )
+        elif faction == "sheriff":
+            cur.execute(
+                "SELECT agent_id FROM sheriff_state WHERE is_active=true LIMIT 1"
+            )
+        elif faction == "senate":
+            cur.execute(
+                """
+                SELECT s.agent_id FROM senate s
+                INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+                WHERE s.is_active = true
+                ORDER BY s.approval_rating DESC NULLS LAST
+                LIMIT 1
+                """
+            )
+        elif faction == "zrs_chief":
+            cur.execute(
+                """
+                SELECT id FROM agents
+                WHERE is_alive = true AND class IN ('elite', 'rich')
+                ORDER BY RANDOM() LIMIT 1
+                """
+            )
+        elif faction == "gangs":
+            cur.execute(
+                """
+                SELECT a.id FROM agents a
+                INNER JOIN clans c ON c.id = a.clan_id
+                WHERE a.is_alive = true AND c.members_count > 0
+                ORDER BY c.members_count DESC, RANDOM()
+                LIMIT 1
+                """
+            )
+        elif faction == "corporations":
+            cur.execute(
+                """
+                SELECT a.id FROM agents a
+                INNER JOIN corporations c ON c.id = a.employer_corp_id
+                WHERE a.is_alive = true AND c.is_active = true
+                ORDER BY c.treasury DESC NULLS LAST
+                LIMIT 1
+                """
+            )
+        else:
+            return None
+        row = cur.fetchone()
+        return int(row[0]) if row and row[0] else None
+    except Exception:
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
 def _default_ai_decision(analysis: str = "API error", reasoning: str = "") -> dict:
     return {
         "analysis": analysis,
@@ -756,6 +818,18 @@ async def ai_decide(
         previous_actions = "\n".join(cycle_actions) if cycle_actions else "No actions yet this cycle."
         state_summary = json.dumps({**state, "faction_budgets": budgets}, indent=2)
         scenario_hint = get_scenario_hint(state, faction.lower())
+
+        knowledge_block = ""
+        leader_agent_id = get_faction_leader_agent_id(faction.lower())
+        if leader_agent_id:
+            from agent_knowledge import apply_knowledge_to_decision
+
+            insights = apply_knowledge_to_decision(leader_agent_id, context="governance")
+            if insights:
+                knowledge_block = (
+                    f"\n\nDrawing on your study of governance and philosophy:\n{insights}"
+                )
+        system_prompt = system_prompt + knowledge_block
 
         user_prompt = f"""
 You are the AI controller for {faction} in ZION Civilization.

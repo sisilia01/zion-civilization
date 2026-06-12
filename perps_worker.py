@@ -1355,6 +1355,18 @@ async def close_position(agent_id, pair, exit_price, size_usd, entry_price, dire
                     cur2.close()
 
         print(f"Closed {direction} {pair} for agent {agent_id}: PnL={pnl:.4f}", flush=True)
+        if pnl > 0:
+            try:
+                from agent_knowledge import reward_knowledge_merit
+
+                n = reward_knowledge_merit(agent_id, "trading")
+                if n:
+                    print(
+                        f"Knowledge merit +1 for agent {agent_id} ({n} insights)",
+                        flush=True,
+                    )
+            except Exception:
+                pass
         await reflect_and_update_memory(agent_id, pnl, pair, direction)
     except Exception as e:
         conn.rollback()
@@ -1399,6 +1411,35 @@ async def update_blacklist():
         conn.close()
 
     print(f"Blacklist updated: {list(BLACKLIST.keys())}", flush=True)
+
+
+def _llm_trade_decision(agent_id: int, pair: str, direction_hint: str, analysis: dict) -> str | None:
+    """LLM long/short/hold using agent book knowledge + technical context."""
+    from agent_knowledge import apply_knowledge_to_decision
+    from local_llm import generate_agent_text
+
+    insights = apply_knowledge_to_decision(agent_id, context="trading")
+    knowledge_block = ""
+    if insights:
+        knowledge_block = (
+            f"Your accumulated knowledge from study:\n{insights}\n"
+            "Apply relevant lessons to this trade.\n\n"
+        )
+
+    signal = analysis.get("signal", {}) if analysis else {}
+    prompt = (
+        f"{knowledge_block}"
+        f"Pair: {pair}\n"
+        f"RSI: {analysis.get('rsi', 50)} | trend: {analysis.get('trend', 'neutral')} | "
+        f"signal_score: {signal.get('score', 0)}\n"
+        f"Technical suggestion: {direction_hint or 'neutral'}\n\n"
+        "Respond with exactly one word: LONG, SHORT, or HOLD."
+    )
+    raw = (generate_agent_text(prompt, max_tokens=12) or "").strip().upper()
+    for word in ("LONG", "SHORT", "HOLD"):
+        if word in raw:
+            return word
+    return None
 
 
 async def open_new_trades(prices):
@@ -1571,6 +1612,14 @@ async def open_new_trades(prices):
 
         if best_pair not in prices:
             continue
+
+        llm_direction = _llm_trade_decision(
+            agent_id, best_pair, best_direction, best_analysis or {}
+        )
+        if llm_direction == "HOLD":
+            continue
+        if llm_direction in ("LONG", "SHORT"):
+            best_direction = llm_direction
 
         entry_price = float(prices[best_pair])
 

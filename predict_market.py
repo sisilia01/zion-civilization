@@ -286,6 +286,33 @@ def generate_questions(cur):
     return qs
 
 
+def _forecast_with_llm(agent_id: int, question: str, domain: str) -> bool | None:
+    """LLM yes/no forecast with book-knowledge injection."""
+    from agent_knowledge import apply_knowledge_to_decision
+    from local_llm import generate_agent_text
+
+    insights = apply_knowledge_to_decision(agent_id, context="forecasting")
+    knowledge_block = ""
+    if insights:
+        knowledge_block = (
+            f"Your accumulated knowledge from study:\n{insights}\n"
+            "Apply relevant lessons to this forecast.\n\n"
+        )
+
+    prompt = (
+        f"{knowledge_block}"
+        f"Question: {question}\n"
+        f"Domain: {domain}\n\n"
+        "Will this resolve YES or NO? Respond with exactly YES or NO."
+    )
+    raw = (generate_agent_text(prompt, max_tokens=8) or "").strip().upper()
+    if "YES" in raw and "NO" not in raw:
+        return True
+    if "NO" in raw:
+        return False
+    return None
+
+
 def agents_predict(limit=300):
     """Active agents place forecasts. Their prediction is driven by intelligence:
     smarter agents are (hypothetically) better calibrated — a testable claim."""
@@ -310,7 +337,10 @@ def agents_predict(limit=300):
     for aid, intel, bal in agents:
         q = random.choice(qs)
         intel = intel or 5
-        prediction = random.random() < 0.5
+        domain = q.get("domain", q["event_type"])
+        prediction = _forecast_with_llm(aid, q["question"], domain)
+        if prediction is None:
+            prediction = random.random() < 0.5
         amount = round(min(float(bal) * 0.05, 20.0), 2)
         if amount < 1:
             continue
@@ -335,7 +365,7 @@ def settle_predictions():
     )
     conn.commit()
     cur.execute(
-        """SELECT id, question, prediction, created_at, event_type FROM bets
+        """SELECT id, agent_id, question, prediction, created_at, event_type FROM bets
         WHERE settled = false AND created_at < NOW() - INTERVAL '1 hour' LIMIT 500"""
     )
     due = cur.fetchall()
@@ -366,6 +396,14 @@ def settle_predictions():
             """,
             (outcome, b["id"]),
         )
+        agent_id = b.get("agent_id")
+        if agent_id and b["prediction"] == outcome:
+            try:
+                from agent_knowledge import reward_knowledge_merit
+
+                reward_knowledge_merit(agent_id, "forecasting")
+            except Exception:
+                pass
         settled += 1
     conn.commit()
     cur.close()
