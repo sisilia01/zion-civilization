@@ -97,6 +97,29 @@ def _generate_thought(agent_name: str, topic: str) -> str:
     return random.choice(fallbacks)
 
 
+def _generate_thought_from_knowledge(agent_name: str, insight: str, track: str) -> str:
+    """Condense a real book-based insight into one short first-person thought."""
+    from local_llm import generate_local
+
+    prompt = (
+        f"You are {agent_name}, an agent in ZION civilization.\n"
+        f"Earlier, after reading, you reflected: \"{insight[:300]}\"\n"
+        "Restate that idea as ONE short sentence (under 25 words), "
+        "in your own voice, plain English. No quotes, no JSON."
+    )
+    raw = generate_local(prompt, max_tokens=60)
+    if raw:
+        text = raw.strip().strip('"').split("\n")[0]
+        if len(text) > 20:
+            return text[:200]
+
+    sentences = re.split(r"(?<=[.!?])\s+", insight.strip())
+    first = sentences[0] if sentences else insight
+    if len(first) > 20:
+        return first[:200]
+    return insight[:200]
+
+
 def _ensure_messages_schema(cur) -> None:
     cur.execute(
         """
@@ -142,8 +165,26 @@ def thought_cycle(batch: int = 12) -> int:
     created = 0
     cur2 = conn.cursor()
     for agent in agents[:batch]:
-        topic = random.choice(TOPICS)
-        thought = _generate_thought(agent["name"], topic)
+        cur3 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur3.execute(
+            """
+            SELECT track, insight FROM agent_knowledge
+            WHERE agent_id = %s AND insight IS NOT NULL AND length(insight) > 20
+            ORDER BY RANDOM() LIMIT 1
+            """,
+            (agent["id"],),
+        )
+        knowledge = cur3.fetchone()
+        cur3.close()
+
+        if knowledge:
+            topic = (knowledge["track"] or "philosophy").lower()
+            thought = _generate_thought_from_knowledge(
+                agent["name"], knowledge["insight"], topic
+            )
+        else:
+            topic = random.choice(TOPICS)
+            thought = _generate_thought(agent["name"], topic)
         cur2.execute(
             """
             INSERT INTO agent_thoughts (agent_id, agent_name, topic, thought_text)
