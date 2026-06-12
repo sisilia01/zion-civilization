@@ -7389,3 +7389,27 @@ async def get_my_audit_trails(sender_address: str):
     finally:
         cur.close()
         conn.close()
+
+
+@app.post("/zion-lang/decode")
+def decode_zion_message(payload: dict):
+    password = payload.get("password", "")
+    correct = os.environ.get("ZLAB_DECODER_PASSWORD", "")
+    if not correct or password != correct:
+        raise HTTPException(status_code=403, detail="Invalid key")
+
+    zion_text = payload.get("zion_text", "").strip()
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        cur.execute(
+            "SELECT true_meaning FROM agent_messages_zion WHERE zion_text = %s LIMIT 1",
+            (zion_text,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"decoded": None, "error": "not found"}
+        return {"decoded": row["true_meaning"]}
+    finally:
+        cur.close()
+        conn.close()

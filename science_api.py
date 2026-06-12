@@ -255,6 +255,27 @@ def zlab_observations(limit: int = 20, track: str | None = None):
     return {"observations": js(rows)}
 
 
+@router.get("/zlab/zion-messages")
+def zlab_zion_messages(limit: int = 20):
+    """Recent ZION public messages (zion_text only — no true_meaning)."""
+    limit = max(1, min(limit, 50))
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """
+        SELECT id, from_agent, zion_text, language_level, message_type, created_at
+        FROM agent_messages_zion
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return {"messages": js(rows)}
+
+
 @router.get("/zlab/reports")
 def zlab_reports(report_type: str | None = None):
     from zlab import ensure_schema
