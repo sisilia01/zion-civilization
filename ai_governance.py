@@ -603,21 +603,11 @@ Crisis level: {crisis_level}
 Personal fund: {pres_fund:,.0f} ZION
 Revolution meter: {rev:.0f}%
 
-YOU HAVE ABSOLUTE POWER. You can:
-- Declare yourself DICTATOR and dissolve the senate
-- Ally with gang leaders if it helps you stay in power
-- Nationalize all corporations
-- Execute political enemies
-- Cancel elections if your approval is too low
-- Give ALL treasury to the poor to win popularity
-- Start a war against other factions
-- Print unlimited money (consequences be damned)
-
-You are a REAL politician. Be creative, be ruthless, be strategic.
-Do whatever it takes to WIN and stay in power.
-If approval < 20%: DESPERATE measures allowed.
-
-No action is forbidden. Choose the boldest move available.
+You serve under the ZION Constitution (Article II). You operate strictly within constitutional limits.
+You CANNOT suspend elections, declare martial law, seize power, dissolve the Senate, print money, or execute enemies.
+Your lawful tools: give_money, tax_change, hire_police, stimulate_economy, anti_corruption_drive, fund_research, propose_amendment, do_nothing.
+Low approval requires legitimate relief (stimulus, tax relief, anti-corruption) — not power grabs.
+Serve the civilization within constitutional limits; approval comes from lawful governance.
 {base_memory}"""
 
     if faction == "sheriff":
@@ -627,32 +617,16 @@ No action is forbidden. Choose the boldest move available.
 CRITICAL ALERTS: {alerts_text}
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
 
-YOU CONTROL THE POLICE. You can:
-- Attempt a COUP if police force > 200 and president approval < 20%
-- Arrest senators for corruption
-- Ignore presidential orders if they conflict with your interests
-- Accept gang bribes openly
-- Build a private army
-- Declare marshal law yourself
-- Protect gang leaders in exchange for treasury payments
-- Become a corrupt WARLORD if budget is high enough
-
-Be ruthless. Police power is YOUR power.
+You enforce law under the Constitution. You CANNOT seize executive power or suspend elections.
+Your lawful tools: hire_police, raid_gang, anti_corruption_drive, bribe_official (logged), do_nothing.
 Raids cost {RAID_COST:.0f} ZION. Hiring costs {OFFICER_HIRE_COST:.0f} ZION per officer.
 
 THIS CYCLE SO FAR:
 {previous_actions_text}
 
-If president declared dictatorship: you must CHOOSE - support or resist
-If senate tried power grab: support senate or stay neutral for budget
-If gangs recruiting: MORE raids needed NOW
-If ZRS gave corps money: corps can now afford security, coordinate
-
+If gangs recruiting: coordinate lawful raids. If ZRS stimulated corps: support economic stability.
 Your officers: {officers}. Budget: {sheriff_budget:,.0f} ZION.
-Low budget = request from president or corps bribe.
-High budget = aggressive raids possible.
-
-React to what just happened. Don't be passive.
+React within constitutional limits — protect citizens, not personal power.
 {base_memory}"""
 
     if faction == "senate":
@@ -661,20 +635,9 @@ CRITICAL ALERTS: {alerts_text}
 ZRS Reserve: {budgets.get('zrs', 0):,.0f} ZION available
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
 
-YOU CONTROL THE BUDGET AND LAWS. You can:
-- Impeach the president RIGHT NOW if you want
-- Pass laws that give senators personal wealth
-- Block ALL presidential actions
-- Form secret coalition with gangs for votes
-- Create a new tax that only affects the rich/poor
-- Legalize crime in certain districts
-- Give corporations monopoly rights
-- Declare financial emergency and seize all assets
-- Vote to extend your own terms
-
-Be a REAL legislature. Pass BOLD laws. FIGHT the president.
-If president approval < 15%: impeach them NOW.
-No action is forbidden.
+You legislate under the Constitution. You CANNOT declare emergency rule, seize assets, or suspend democracy.
+Your lawful tools: give_money, tax_change, stimulate_economy, fund_research, propose_amendment, anti_corruption_drive, do_nothing.
+Pass fiscal policy and amendments through proper channels — not power grabs.
 {base_memory}"""
 
     if faction == "zrs_chief":
@@ -690,13 +653,11 @@ YOUR ONLY TOOLS:
 - stimulate_economy: inject money when recession/unemployment high
 - tax_change: change interest rates (amount = new rate %)
 - give_money: bailout specific sector (corps or agents)
-- declare_emergency: mass QE in crisis
 
 YOU NEVER:
-- Seek political power
+- Seek political power or suspend constitutional order
 - Care who is president
 - Interfere with senate/sheriff battles
-- Declare dictatorship (FORBIDDEN)
 
 Current state:
 - Unemployment: {unemployment_rate:.1f}% (CRISIS if > 50%)
@@ -711,8 +672,7 @@ If both: prioritize employment (people starving > inflation)
 WHAT HAPPENED THIS CYCLE:
 {previous_actions_text}
 
-If president declared dictatorship → economy needs stability injection
-If senate impeached president → uncertainty, inject liquidity
+If political instability rises → inject liquidity via stimulate_economy
 If gangs are recruiting heavily → unemployment too high, give corps money
 If sheriff is weak → crime will hurt corp productivity, fund sheriff indirectly via corps
 
@@ -722,26 +682,16 @@ You are the adult in the room. Be boring. Be consistent. Save the economy.
 {base_memory}"""
 
     if faction == "gangs":
-        return f"""You are ZION Criminal Underground.
+        return f"""You are ZION Criminal Underground (clan activity tracked under civil law).
 CRITICAL ALERTS: {alerts_text}
 Unemployment: {unemployment_rate:.0f}%. Revolution: {rev:.0f}%.
 Current members: {total_gang_members}
 Void Brotherhood: {void_members}. Iron Fist: {iron_members}.
 Police: {s.get('officers', 0)} officers. Gang treasury: {budgets.get('gangs', 0):,.0f} ZION.
 
-YOU ARE THE CRIMINAL UNDERGROUND. You can:
-- Assassinate political leaders (remove them from power)
-- Bribe the entire senate for favorable laws
-- Take over corporations through extortion
-- Start a revolution if revolution meter > 70%
-- Form alliance with president against sheriff
-- Declare yourself the SHADOW GOVERNMENT
-- Flood the streets with agents to overwhelm police
-- Burn down corporate headquarters
-
-NO RULES. You are criminals. Act like it.
-High unemployment = your best friend for recruitment.
-No action is forbidden.
+Even underground factions face constitutional limits in ZION simulation.
+Lawful menu actions only: recruit_members, bribe_official, do_nothing.
+High unemployment may drive recruitment — but extraconstitutional violence is forbidden.
 {base_memory}"""
 
     if faction == "corporations":
@@ -751,18 +701,10 @@ Your total treasury: {total_corp_treasury:,.0f} ZION
 Current employees: {total_employees} out of {alive} alive agents
 Unemployment: {unemployment_rate:.1f}%
 
-YOU ARE THE BUSINESS ELITE. You can:
-- Bribe ALL politicians simultaneously
-- Create a monopoly by buying out competitors
-- Hire private militia to fight gangs
-- Move headquarters offshore to avoid taxes
-- Fund a coup against unfavorable government
-- Create fake jobs to launder money
-- Lobby for laws that make competition illegal
-- Pay workers nothing if unemployment is high
-
-PROFIT ABOVE ALL. The law is for poor people.
-No action is forbidden. Each hire costs ~{HIRE_ADVANCE:.0f} ZION/cycle in salaries.
+You operate within the Constitution and commercial law.
+Lawful tools: recruit_members, give_money (hiring), stimulate_economy, tax_change (lobby), bribe_official, fund_research, do_nothing.
+Coups, monopolies-by-force, and freezing rivals' accounts are forbidden.
+Each hire costs ~{HIRE_ADVANCE:.0f} ZION/cycle in salaries.
 {base_memory}"""
 
     return f"You are the AI controller for {faction}. {base_memory}"
@@ -827,13 +769,11 @@ ACTIVE SCENARIOS:
 PREVIOUS ACTIONS THIS CYCLE:
 {previous_actions}
 
-YOUR GOAL: Make decisions to grow and strengthen your faction.
-React to active scenarios. These are REAL situations requiring ACTION.
+YOUR GOAL: Serve the civilization within constitutional limits while advancing your faction's legitimate interests.
+React to active scenarios with lawful tools only.
 
-YOU HAVE TRUE FREEDOM — no restrictions on actions. Every bold move is allowed.
-Be creative, ruthless, and strategic. Do NOT play it safe.
-Pick the most aggressive action that advances your faction's power and survival.
-Describe zero-cost power moves (coup, impeachment, dictatorship, shadow government) when budget is tight.
+CONSTITUTIONAL CONSTRAINT: You cannot suspend elections, seize power, print money, or bypass democratic process.
+Choose the most effective lawful action for the situation — not domination fantasies.
 
 FACTION BUDGETS (spend from your pool when applicable):
 {json.dumps(budgets, indent=2)}
@@ -841,14 +781,14 @@ FACTION BUDGETS (spend from your pool when applicable):
 Respond with JSON only:
 {{
   "analysis": "2-3 sentence situation analysis",
-  "decision": "What you decide to do — be bold and specific",
-  "action": "one of: give_money, tax_change, hire_police, raid_gang, stimulate_economy, recruit_members, attack_clan, bribe_official, declare_emergency, declare_dictatorship, impeach_president, nationalize_corps, execute_enemy, cancel_elections, print_money, declare_war, coup, martial_law, assassinate, freeze_accounts, resign_protest, monopoly_buyout, fund_coup, shadow_government, do_nothing",
+  "decision": "What you decide to do — specific and constitutional",
+  "action": "one of: give_money, tax_change, hire_police, stimulate_economy, raid_gang, anti_corruption_drive, fund_research, propose_amendment, recruit_members, bribe_official, do_nothing",
   "target": "who/what this targets",
   "amount": 0,
-  "reasoning": "Why this helps your faction WIN"
+  "reasoning": "Why this serves the civilization within constitutional limits"
 }}
 
-amount must be a number (not N/A). Consequences be damned — act like a real power player.
+amount must be a number (not N/A). Act as a lawful steward of ZION.
 """
 
         async with httpx.AsyncClient(timeout=45) as client:
@@ -965,26 +905,8 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
             else:
                 result += " | SKIPPED: insufficient personal_fund"
 
-        elif action == "declare_emergency":
-            spend = clamp_amount(max(amount, 500), fund)
-            if spend > 0:
-                cur.execute(
-                    """
-                    UPDATE agents SET balance = balance + %s
-                    WHERE is_alive=true AND class = 'critical'
-                    """,
-                    (min(50.0, spend / 100),),
-                )
-                cur.execute(
-                    """
-                    UPDATE president_state SET personal_fund = personal_fund - %s
-                    WHERE is_active=true
-                    """,
-                    (spend,),
-                )
-                result += f" | Emergency: spent {spend:.0f} from personal_fund"
-            else:
-                result += " | Emergency declared (no funds)"
+        elif action == "declare_emergency":  # Unconstitutional — removed
+            result += " | Action not permitted under Constitution"
 
         elif action == "hire_police" and amount > 0:
             spend = clamp_amount(amount, fund)
@@ -1018,26 +940,10 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
             else:
                 result += " | SKIPPED: insufficient personal_fund"
 
-        elif action == "declare_dictatorship":
-            cur.execute(
-                """
-                UPDATE president_state SET
-                    corruption_index = LEAST(COALESCE(corruption_index, 30) + 20, 100),
-                    approval_rating = GREATEST(COALESCE(approval_rating, 50) - 15, 0)
-                WHERE is_active = true
-                """
-            )
-            cur.execute(
-                """
-                INSERT INTO events (event_type, description, created_at)
-                VALUES ('president', %s, NOW())
-                """,
-                (f"⚠️ POWER GRAB: {decision.get('decision', '')[:150]}",),
-            )
-            approval_delta = -15
-            result += " | DICTATORSHIP ATTEMPT: approval -15, corruption +20"
+        elif action == "declare_dictatorship":  # Unconstitutional — disabled
+            result += " | Action blocked by Constitution — no power grab permitted"
 
-        if action != "declare_dictatorship":
+        if action not in ("declare_dictatorship",):  # blocked power grabs still log normally below
             cur.execute(
                 """
                 INSERT INTO events (event_type, description, created_at)
@@ -1174,39 +1080,8 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
         elif action == "bribe_official":
             result += " | Bribery rumor logged (no state change)"
 
-        elif action == "declare_dictatorship":
-            president_approval = float(
-                state.get("politics", {}).get("president", {}).get("approval", 50) or 50
-            )
-            if president_approval < 20:
-                cur.execute(
-                    """
-                    UPDATE sheriff_state SET
-                        coup_points = COALESCE(coup_points, 0) + 20
-                    WHERE is_active = true
-                    """
-                )
-                cur.execute(
-                    """
-                    INSERT INTO events (event_type, description, created_at)
-                    VALUES ('sheriff_action', %s, NOW())
-                    """,
-                    (
-                        f"🚔 Sheriff considers supporting regime change (president approval {president_approval:.0f}%)",
-                    ),
-                )
-                result += f" | Sheriff positioning for power shift (coup_points +20)"
-            else:
-                cur.execute(
-                    """
-                    INSERT INTO events (event_type, description, created_at)
-                    VALUES ('sheriff_action', %s, NOW())
-                    """,
-                    (
-                        f"🚔 Sheriff maintains loyalty to president (approval {president_approval:.0f}%)",
-                    ),
-                )
-                result += " | Sheriff stays loyal to president"
+        elif action == "declare_dictatorship":  # Unconstitutional — disabled
+            result += " | Action blocked by Constitution — no power grab permitted"
 
         cur.execute(
             "SELECT police_budget, police_count FROM sheriff_state WHERE is_active=true LIMIT 1"
@@ -1294,15 +1169,8 @@ async def execute_senate_action(decision: dict, state: dict, budgets: dict) -> t
             )
             result += f" | tax_modifier adjusted by {modifier:+.1f}"
 
-        elif action == "declare_dictatorship":
-            cur.execute(
-                """
-                INSERT INTO events (event_type, description, created_at)
-                VALUES ('senate', %s, NOW())
-                """,
-                (f"⚖️ SENATE POWER GRAB: {decision.get('decision', '')[:150]}",),
-            )
-            result += " | Senate power grab logged"
+        elif action == "declare_dictatorship":  # Unconstitutional — disabled
+            result += " | Action blocked by Constitution — no power grab permitted"
         else:
             cur.execute(
                 """
@@ -1329,14 +1197,9 @@ async def execute_zrs_action(decision: dict, state: dict, budgets: dict) -> tupl
         amount = safe_parse_amount(decision.get("amount", 0))
 
         POLITICAL_ACTIONS = [
-            "declare_dictatorship",
-            "coup",
-            "martial_law",
-            "attack_clan",
             "raid_gang",
             "recruit_members",
             "bribe_official",
-            "impeach_president",
         ]
 
         if action in POLITICAL_ACTIONS:
@@ -1443,45 +1306,8 @@ async def execute_zrs_action(decision: dict, state: dict, budgets: dict) -> tupl
                 (f"💰 ZRS raised interest rate to {new_rate}% to combat inflation",),
             )
 
-        elif action == "declare_emergency":
-            cur.execute(
-                """
-                SELECT COUNT(*) FROM agents
-                WHERE is_alive=true AND class = 'critical'
-                """
-            )
-            critical_n = int((cur.fetchone() or [0])[0])
-            cur.execute(
-                """
-                SELECT COUNT(*) FROM corporations
-                WHERE is_active = true AND treasury < 5000
-                """
-            )
-            corp_n = int((cur.fetchone() or [0])[0])
-            total_cost = round(critical_n * 50 + corp_n * 500, 2)
-            if zrs_deduct_reserve(cur, total_cost):
-                cur.execute(
-                    """
-                    UPDATE agents SET balance = balance + 50
-                    WHERE is_alive=true AND class = 'critical'
-                    """
-                )
-                cur.execute(
-                    """
-                    UPDATE corporations SET treasury = treasury + 500
-                    WHERE is_active = true AND treasury < 5000
-                    """
-                )
-                result += f"EMERGENCY QE: +50 ZION to {critical_n} critical agents, +500 to {corp_n} corps"
-            else:
-                result += "EMERGENCY QE SKIPPED: insufficient ZRS reserve"
-            cur.execute(
-                """
-                INSERT INTO events (event_type, description, created_at)
-                VALUES ('economy', %s, NOW())
-                """,
-                ("💰 ZRS EMERGENCY: Mass QE deployed - civilization at risk",),
-            )
+        elif action == "declare_emergency":  # Unconstitutional — removed
+            result += " | Action not permitted under Constitution"
 
         else:
             result += "monitoring economy (no action taken)"
@@ -1549,59 +1375,8 @@ async def execute_gang_action(decision: dict, state: dict, budgets: dict) -> tup
                 else:
                     result += f" | SKIPPED: clan treasury {treasury:.0f} < {cost:.0f}"
 
-        elif action == "attack_clan":
-            cur.execute(
-                """
-                SELECT id, name, members_count, treasury FROM clans
-                WHERE members_count > 5
-                ORDER BY RANDOM() LIMIT 2
-                """
-            )
-            clans = cur.fetchall()
-            if len(clans) >= 2:
-                attacker, defender = clans[0], clans[1]
-                war_cost = 50.0
-                att_treasury = float(attacker[3] or 0)
-                if att_treasury >= war_cost:
-                    casualties = min(3, int(defender[2] // 5))
-                    cur.execute(
-                        """
-                        UPDATE agents SET is_alive=false, died_at=NOW(),
-                        death_cause='gang_war'
-                        WHERE id IN (
-                            SELECT id FROM agents WHERE clan_id=%s
-                            AND is_alive=true ORDER BY RANDOM() LIMIT %s
-                        )
-                        """,
-                        (defender[0], casualties),
-                    )
-                    loot = min(float(defender[3] or 0) * 0.1, 200.0)
-                    cur.execute(
-                        "UPDATE clans SET treasury = treasury - %s WHERE id = %s",
-                        (loot, defender[0]),
-                    )
-                    cur.execute(
-                        """
-                        UPDATE clans SET treasury = treasury - %s + %s
-                        WHERE id = %s
-                        """,
-                        (war_cost, loot, attacker[0]),
-                    )
-                    cur.execute(
-                        """
-                        UPDATE clans SET members_count = (
-                            SELECT COUNT(*) FROM agents
-                            WHERE clan_id=%s AND is_alive=true
-                        ) WHERE id=%s
-                        """,
-                        (defender[0], defender[0]),
-                    )
-                    result += (
-                        f" | {attacker[1]} attacked {defender[1]}: "
-                        f"{casualties} dead, loot {loot:.0f}"
-                    )
-                else:
-                    result += " | SKIPPED: insufficient clan treasury for war"
+        elif action == "attack_clan":  # Unconstitutional — removed
+            result += " | Action not permitted under Constitution"
 
         elif action == "bribe_official":
             extort = min(amount, 30.0)

@@ -52,6 +52,7 @@ CRON_SCRIPTS = {
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
     "knowledge_loop": ("knowledge_loop.py", 86400),  # 1x/day — feedback loop: science findings → agent memory
+    "knowledge_study": ("agent_knowledge.py study", 3600),  # hourly — agents read books via Ollama
     "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
     # [DISABLED for scientific clarity] "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
     # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
