@@ -66,6 +66,9 @@ CRON_SCRIPTS = {
     "crisis_response": ("crisis_response.py", 3600),   # 1h — govt reacts to catastrophes
     "zionwork":     ("zionwork.py",       1800),
     # Retired - replaced by senate.py + president.py + political_parties.py
+    "zion_speech":      ("zion_speech.py cycle", 3600),       # hourly — agents converse in ZION
+    "zion_evolution":   ("zion_evolution.py cycle", 3600),    # hourly — mixed speech + new words
+    "zion_lang_record": ("zion_lang_record.py", 86400),       # daily Walrus authorship record
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),

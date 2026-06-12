@@ -21,6 +21,7 @@ from civ_economics import (
     pick_birth_class,
 )
 from names_pool import generate_unique_name
+from zion_evolution import inherit_language_level
 
 OLD_AGE_DAYS = 100
 BIRTH_COST = 50.0
@@ -62,16 +63,17 @@ def run_birth_cycle():
             founder_name = birth_name(cur, gender)
             founder_class = pick_birth_class()
             child_share = round(founder_cost * 0.20, 2)
+            founder_lang = round(random.uniform(0.0, 0.1), 3)
             cur.execute(
                 """
                 INSERT INTO agents (
                     name, class, balance, parent_id, gender,
                     charisma, aggression, faith, intelligence, strength, loyalty,
-                    education_status, job_status, age_days, is_alive
+                    education_status, job_status, age_days, is_alive, language_level
                 ) VALUES (
                     %s, %s, %s, NULL, %s,
                     %s, %s, %s, %s, %s, %s,
-                    'child', 'unemployed', 0, TRUE
+                    'child', 'unemployed', 0, TRUE, %s
                 )
                 """,
                 (
@@ -85,6 +87,7 @@ def run_birth_cycle():
                     random.randint(1, 15),
                     random.randint(1, 15),
                     random.randint(1, 15),
+                    founder_lang,
                 ),
             )
         conn.commit()
@@ -183,16 +186,17 @@ def run_birth_cycle():
         child_name = birth_name(cur, gender)
         child_class = pick_birth_class()
 
+        child_lang = inherit_language_level(cur, parent["id"])
         cur.execute(
             """
                 INSERT INTO agents (
                     name, class, balance, parent_id, gender,
                     charisma, aggression, faith, intelligence, strength, loyalty,
-                    education_status, job_status, age_days, is_alive
+                    education_status, job_status, age_days, is_alive, language_level
                 ) VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
-                    'child', 'unemployed', 0, TRUE
+                    'child', 'unemployed', 0, TRUE, %s
                 ) RETURNING id
             """,
             (
@@ -202,6 +206,7 @@ def run_birth_cycle():
                 parent["id"],
                 gender,
                 *(_inh := _inherit(parent["id"])),
+                child_lang,
             ),
         )
         child_id = cur.fetchone()["id"]
