@@ -53,3 +53,10 @@ export type ResearchStats = {
   by_track: ResearchTrackStat[];
   daily: ResearchDailyCandle[];
 };
+
+export type TopBook = {
+  book_id: number;
+  title: string;
+  author: string;
+  agent_count: number;
+};

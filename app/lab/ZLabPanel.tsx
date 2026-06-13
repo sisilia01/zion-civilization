@@ -3,25 +3,21 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import { ThemeVideo } from "@/components/ThemeVideo";
 import { BlackHole } from "./BlackHole";
 import { SUBJECTS } from "./subjects";
 import {
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  Pie,
-  PieChart,
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  useXAxisScale,
-  useXAxisTicks,
-  useYAxisScale,
 } from "recharts";
-import type { EnglishEntry, GlyphMap, ResearchDailyCandle, ResearchStats, Stats, ZionEntry } from "./types";
+import type { EnglishEntry, GlyphMap, ResearchStats, Stats, TopBook, ZionEntry } from "./types";
 import {
   buildTransliterationMaps,
   prepareGlyphSvgs,
@@ -50,9 +46,18 @@ type KnowledgeReflection = {
   book_id: number;
 };
 
+function sanitizeInsight(text: string): string {
+  const bannedTerms = /gutenberg|z-?library|libgen|annas-archive/gi;
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !bannedTerms.test(sentence))
+    .join(" ")
+    .trim();
+}
+
 function buildMoveBlock(r: KnowledgeReflection): string[] {
   const WRAP = 58;
-  const words = r.insight.split(" ");
+  const words = sanitizeInsight(r.insight).split(" ");
   const lines: string[] = [];
   let current = "";
   for (const word of words) {
@@ -95,7 +100,6 @@ const statsStyle: CSSProperties = {
 };
 
 const tableShellStyle: CSSProperties = {
-  background: "#0a1628",
   border: "1px solid #1e3a5f",
   borderRadius: "4px",
   overflow: "hidden",
@@ -125,6 +129,11 @@ const screenStyle: CSSProperties = {
   color: "#e2e8f0",
 };
 
+const languageScreenStyle: CSSProperties = {
+  ...screenStyle,
+  height: "233px",
+};
+
 const badgeStyle: CSSProperties = {
   display: "inline-block",
   background: "rgba(0, 180, 216, 0.12)",
@@ -147,47 +156,132 @@ const undecodableStyle: CSSProperties = {
   opacity: 0.85,
 };
 
-const TRACK_COLORS = [
-  "#00b4d8",
-  "#48cae4",
-  "#90e0ef",
-  "#7209b7",
-  "#4361ee",
-  "#4cc9f0",
-  "#f72585",
-  "#ffd60a",
-  "#06ffa5",
-  "#fb8500",
-  "#8338ec",
-  "#ff006e",
-];
 
-const LEGEND_TOP_N = 6;
+function TopBooksPanel() {
+  const [books, setBooks] = useState<TopBook[]>([]);
+  const [animateBars, setAnimateBars] = useState(false);
 
-function parseHex(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  return [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
-}
+  useEffect(() => {
+    fetch("/api/lab/top-books", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: TopBook[]) => {
+        setBooks(Array.isArray(data) ? data : []);
+        requestAnimationFrame(() => setAnimateBars(true));
+      })
+      .catch(() => setBooks([]));
+  }, []);
 
-function rgbToHex(r: number, g: number, b: number): string {
-  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
-  return `#${[clamp(r), clamp(g), clamp(b)]
-    .map((n) => n.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
+  const maxCount = books.length ? Math.max(...books.map((b) => b.agent_count), 1) : 1;
 
-function lighten(hex: string, amount: number): string {
-  const [r, g, b] = parseHex(hex);
-  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
-}
-
-function darken(hex: string, amount: number): string {
-  const [r, g, b] = parseHex(hex);
-  return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount));
+  return (
+    <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
+      <div style={tableHeadStyle}>MOST-STUDIED ARCHIVES</div>
+      <div style={{ ...screenStyle, padding: "10px 12px 8px", height: "auto", minHeight: "240px" }}>
+        {books.length === 0 ? (
+          <div style={{ color: "#64748b", fontSize: "10px", fontFamily: mono }}>Loading archives…</div>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+            {books.slice(0, 5).map((book, idx) => {
+              const rank = idx + 1;
+              const targetPct = (book.agent_count / maxCount) * 100;
+              return (
+                <li
+                  key={book.book_id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "22px minmax(0, 1fr)",
+                    gap: "6px 8px",
+                    alignItems: "start",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: mono,
+                      fontSize: "10px",
+                      color: "#64748b",
+                      letterSpacing: "0.06em",
+                      lineHeight: 1.2,
+                      paddingTop: "1px",
+                    }}
+                  >
+                    #{rank}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#e2e8f0",
+                        lineHeight: 1.2,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {book.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "9px",
+                        color: "#64748b",
+                        marginTop: "1px",
+                        lineHeight: 1.2,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {book.author}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginTop: "4px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          height: "5px",
+                          background: "rgba(255,255,255,0.06)",
+                          borderRadius: "2px",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          className="topBookBar"
+                          style={{
+                            height: "100%",
+                            width: animateBars ? `${targetPct}%` : "0%",
+                            background: "#00ff88",
+                            borderRadius: "2px",
+                            transition: `width 1.2s ease-out ${rank * 0.1}s`,
+                          }}
+                        />
+                      </div>
+                      <span
+                        style={{
+                          fontFamily: mono,
+                          fontSize: "9px",
+                          letterSpacing: "0.08em",
+                          color: "#64748b",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {book.agent_count} AGENTS
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </GlassCard>
+  );
 }
 
 function easeOutQuad(t: number): number {
@@ -231,165 +325,23 @@ function useAnimatedNumber(value: number, duration = 1000): number {
   return display;
 }
 
-function todayIsoDate(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isZeroCandle(d: ResearchDailyCandle): boolean {
-  return d.open === 0 && d.high === 0 && d.low === 0 && d.close === 0;
-}
-
-function CandlesticksLayer({ data }: { data: ResearchDailyCandle[] }) {
-  const xScale = useXAxisScale();
-  const yScale = useYAxisScale();
-  const xTicks = useXAxisTicks();
-
-  if (!xScale || !yScale || !data?.length) return null;
-
-  let step = 14;
-  if (xTicks && xTicks.length >= 2) {
-    const p0 = xScale(xTicks[0].value, { position: "middle" });
-    const p1 = xScale(xTicks[1].value, { position: "middle" });
-    if (p0 != null && p1 != null) step = Math.abs(p1 - p0);
-  }
-  const candleW = Math.max(4, step * 0.6);
-
-  const today = todayIsoDate();
-  const lastIdx = data.length - 1;
-  let candleAnimIdx = 0;
-
+function PulseDot({ cx, cy }: { cx: number; cy: number }) {
   return (
-    <g className="zlab-candles">
-      <defs>
-        <linearGradient id="candleGreen" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#5effc0" />
-          <stop offset="50%" stopColor="#00ff88" />
-          <stop offset="100%" stopColor="#00b366" />
-        </linearGradient>
-        <linearGradient id="candleRed" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ff8a8a" />
-          <stop offset="50%" stopColor="#ef4444" />
-          <stop offset="100%" stopColor="#b91c1c" />
-        </linearGradient>
-      </defs>
-      {data.map((d, idx) => {
-        if (isZeroCandle(d)) return null;
-
-        const animIdx = candleAnimIdx;
-        candleAnimIdx += 1;
-
-        const cx = xScale(d.date, { position: "middle" });
-        if (cx == null) return null;
-
-        const yOpen = yScale(d.open);
-        const yClose = yScale(d.close);
-        const yHigh = yScale(d.high);
-        const yLow = yScale(d.low);
-        if (yOpen == null || yClose == null || yHigh == null || yLow == null) return null;
-
-        const bullish = d.close >= d.open;
-        const strokeColor = bullish ? "#00b366" : "#b91c1c";
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyH = Math.max(1, Math.abs(yClose - yOpen));
-        const isLive = idx === lastIdx && d.date === today;
-
-        return (
-          <g key={d.date}>
-            <line
-              x1={cx}
-              y1={yHigh}
-              x2={cx}
-              y2={yLow}
-              stroke={bullish ? "#00ff88" : "#ef4444"}
-              strokeWidth={1}
-            />
-            {isLive && (
-              <rect
-                className="zlabLiveCandleGlow"
-                x={cx - candleW / 2 - 2}
-                y={bodyTop - 2}
-                width={candleW + 4}
-                height={bodyH + 4}
-                fill="none"
-                stroke="#00ff88"
-                strokeWidth={1}
-              />
-            )}
-            <rect
-              className="candleBar"
-              x={cx - candleW / 2}
-              y={bodyTop}
-              width={candleW}
-              height={bodyH}
-              rx={1}
-              fill={bullish ? "url(#candleGreen)" : "url(#candleRed)"}
-              stroke={strokeColor}
-              strokeWidth={0.5}
-              style={{
-                transformBox: "fill-box",
-                transformOrigin: "center bottom",
-                animationDelay: `${animIdx * 100}ms`,
-                filter: bullish
-                  ? "drop-shadow(0 2px 4px rgba(0,255,136,0.25))"
-                  : "drop-shadow(0 2px 4px rgba(239,68,68,0.25))",
-              }}
-            />
-            {isLive && (
-              <text
-                x={cx + candleW / 2 + 6}
-                y={Math.max(bodyTop - 4, 12)}
-                fill="#00ff88"
-                fontSize={8}
-                fontFamily={mono}
-                className="zlabLiveLabel"
-              >
-                ● LIVE
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </g>
+    <circle
+      className="blinkDot"
+      cx={cx}
+      cy={cy}
+      r={3}
+      fill="#00ff88"
+      style={{ filter: "drop-shadow(0 0 3px rgba(0, 255, 136, 0.55))" }}
+    />
   );
 }
 
 function ResearchCharts({ research }: { research: ResearchStats }) {
-  const pieData = (research.by_track || []).map((t, i) => ({
-    name: t.track,
-    value: t.total_chunks,
-    pct: t.pct,
-    chunks_read: t.chunks_read,
-    total_chunks: t.total_chunks,
-    color: TRACK_COLORS[i % TRACK_COLORS.length],
-  }));
-
-  const sortedTracks = [...pieData].sort((a, b) => b.value - a.value);
-  const legendTop = sortedTracks.slice(0, LEGEND_TOP_N);
-  const legendRest = sortedTracks.slice(LEGEND_TOP_N);
-  const legendPayload = [
-    ...legendTop.map((entry) => ({
-      value: entry.name,
-      type: "square" as const,
-      color: entry.color,
-      id: entry.name,
-    })),
-    ...(legendRest.length > 0
-      ? [
-          {
-            value: `OTHER (${legendRest.length})`,
-            type: "square" as const,
-            color: "#64748b",
-            id: "OTHER",
-          },
-        ]
-      : []),
-  ];
-
-  const yMax = Math.max(...(research.daily || []).map((d) => d.high), 1) * 1.08;
+  const dailyData = research.daily || [];
+  const lastDailyEntry = dailyData[dailyData.length - 1];
+  const yMax = Math.max(...dailyData.map((d) => d.cumulative_insights), 1) * 1.08;
 
   const chartTooltipStyle: CSSProperties = {
     background: "#0a1628",
@@ -401,170 +353,72 @@ function ResearchCharts({ research }: { research: ResearchStats }) {
 
   return (
     <div className="zlabDualFeed" style={{ marginTop: "20px" }}>
-      <GlassCard style={{ ...tableShellStyle, padding: 0 }}>
-        <div style={tableHeadStyle}>DAILY RESEARCH ACTIVITY</div>
+      <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
+        <div style={tableHeadStyle}>RESEARCH PULSE</div>
         <div style={{ ...screenStyle, padding: "12px 8px 8px" }}>
           <div style={{ flex: 1, minHeight: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={research.daily}
-                margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
-              >
+              <AreaChart data={dailyData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+                <defs>
+                  <linearGradient id="pulseGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#00ff88" stopOpacity={0.12} />
+                    <stop offset="100%" stopColor="#00ff88" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="2 4"
+                  stroke="rgba(100,116,139,0.15)"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="date"
+                  stroke="#475569"
+                  tick={{ fontSize: 10, fill: "#64748b", fontFamily: mono }}
                   tickFormatter={(v: string) => (v?.length >= 10 ? v.slice(5) : v)}
-                  stroke="#1e3a5f"
-                  tick={{ fill: "#64748b", fontSize: 9, fontFamily: mono }}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  stroke="#1e3a5f"
-                  tick={{ fill: "#64748b", fontSize: 9, fontFamily: mono }}
+                  stroke="#475569"
+                  tick={{ fontSize: 10, fill: "#64748b", fontFamily: mono }}
                   domain={[0, yMax]}
                   width={42}
                   ticks={[0, yMax / 4, yMax / 2, (yMax * 3) / 4, yMax].map((v) => Math.round(v))}
-                  tickFormatter={(v: number) => String(Math.round(v))}
+                  tickFormatter={(v: number) => String(v)}
                 />
                 <Tooltip
                   contentStyle={chartTooltipStyle}
                   labelStyle={{ color: "#00b4d8" }}
-                  formatter={(value, name) => {
-                    if (name === "close") return [value, "cumulative insights"];
-                    return [value, String(name)];
-                  }}
+                  formatter={(value) => [value, "cumulative insights"]}
                 />
-                <CandlesticksLayer data={research.daily} />
-                <Line
-                  type="monotone"
-                  dataKey="close"
-                  stroke="transparent"
-                  strokeWidth={0}
+                <Area
+                  type="step"
+                  dataKey="cumulative_insights"
+                  stroke="#00ff88"
+                  strokeWidth={1.5}
+                  fill="url(#pulseGradient)"
+                  isAnimationActive
+                  animationDuration={1800}
+                  animationEasing="ease-out"
                   dot={false}
                   activeDot={false}
-                  isAnimationActive
-                  animationDuration={800}
-                  animationEasing="ease-out"
                 />
-              </ComposedChart>
+                {lastDailyEntry && (
+                  <ReferenceDot
+                    x={lastDailyEntry.date}
+                    y={lastDailyEntry.cumulative_insights}
+                    r={0}
+                    shape={(props) => (
+                      <PulseDot cx={props.cx ?? 0} cy={props.cy ?? 0} />
+                    )}
+                  />
+                )}
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
       </GlassCard>
 
-      <GlassCard style={{ ...tableShellStyle, padding: 0 }}>
-        <div style={tableHeadStyle}>LIBRARY COVERAGE BY DISCIPLINE</div>
-        <div style={{ ...screenStyle, padding: "8px" }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-                <defs>
-                  {pieData.map((entry, index) => (
-                    <linearGradient
-                      key={`grad-${index}`}
-                      id={`grad-${index}`}
-                      x1="0"
-                      y1="0"
-                      x2="1"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor={lighten(entry.color, 0.2)} />
-                      <stop offset="100%" stopColor={darken(entry.color, 0.2)} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="38%"
-                  cy="50%"
-                  innerRadius={48}
-                  outerRadius={78}
-                  paddingAngle={2}
-                  stroke="#0a1628"
-                  strokeWidth={1}
-                  isAnimationActive
-                  animationDuration={800}
-                  animationEasing="ease-out"
-                  style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))" }}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={`url(#grad-${index})`}
-                      stroke="#0a1628"
-                      strokeWidth={1}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={chartTooltipStyle}
-                  formatter={(_value, _name, item) => {
-                    const p = item?.payload as {
-                      name?: string;
-                      pct?: number;
-                      chunks_read?: number;
-                      total_chunks?: number;
-                    };
-                    const label = p?.name ?? "";
-                    return [
-                      `${label}: ${p?.total_chunks ?? 0} chunks, ${Number(p?.pct ?? 0).toFixed(2)}% read (${p?.chunks_read ?? 0} insights)`,
-                      "",
-                    ];
-                  }}
-                />
-                <Legend
-                  layout="vertical"
-                  align="right"
-                  verticalAlign="middle"
-                  iconType="square"
-                  wrapperStyle={{
-                    fontFamily: mono,
-                    fontSize: 9,
-                    color: "#64748b",
-                    paddingLeft: 4,
-                    lineHeight: "14px",
-                  }}
-                  content={() => (
-                    <ul
-                      style={{
-                        listStyle: "none",
-                        margin: 0,
-                        padding: 0,
-                        fontFamily: mono,
-                        fontSize: 9,
-                        color: "#64748b",
-                      }}
-                    >
-                      {legendPayload.map((entry) => (
-                        <li
-                          key={entry.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            marginBottom: 4,
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 8,
-                              height: 8,
-                              background: entry.color,
-                              flexShrink: 0,
-                            }}
-                          />
-                          <span>{entry.value}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </GlassCard>
+      <TopBooksPanel />
     </div>
   );
 }
@@ -918,7 +772,10 @@ function OcularInterfacePanels() {
 
   return (
     <div className="zlabOcularFeed">
-      <GlassCard className="zlabOcularLeft" style={{ ...tableShellStyle, padding: 0 }}>
+      <GlassCard
+        className={`${glassCardStyles.glassCardLab} zlabOcularLeft`}
+        style={{ ...tableShellStyle, padding: 0 }}
+      >
         <div style={tableHeadStyle}>AGENT_TERMINAL://observation_log.move</div>
         <div style={{ ...fadeWrapStyle, opacity: fadeOpacity }}>
           <AgentTerminal
@@ -932,7 +789,10 @@ function OcularInterfacePanels() {
         </div>
       </GlassCard>
 
-      <GlassCard className="zlabOcularRight" style={{ ...tableShellStyle, padding: 0 }}>
+      <GlassCard
+        className={`${glassCardStyles.glassCardLab} zlabOcularRight`}
+        style={{ ...tableShellStyle, padding: 0 }}
+      >
         <div style={tableHeadStyle}>{subject.title}</div>
         <div style={{ ...fadeWrapStyle, opacity: fadeOpacity }}>
           <SubjectFeed subject={subject} />
@@ -1044,7 +904,7 @@ function EnglishScreen({
     textLen <= 280 ? "12px" : "11px";
 
   return (
-    <div style={screenStyle}>
+    <div style={languageScreenStyle}>
       <div style={{ marginBottom: "10px", color: "#00b4d8", fontSize: "11px" }}>
         <span>{entry.agent_name}</span>
         {entry.topic && <span style={badgeStyle}>{entry.topic}</span>}
@@ -1104,7 +964,7 @@ function ZionScreen({
   return (
     <div
       style={{
-        ...screenStyle,
+        ...languageScreenStyle,
         userSelect: "text",
         WebkitUserSelect: "text",
         "--glyph-size": `${glyphSize}px`,
@@ -1238,27 +1098,23 @@ export default function ZLabPanel() {
             align-items: stretch;
           }
         }
-        @keyframes candleGrow {
-          from { transform: scaleY(0); }
-          to { transform: scaleY(1); }
+        @keyframes blinkDot {
+          0%, 49% {
+            opacity: 1;
+          }
+          50%, 100% {
+            opacity: 0;
+          }
         }
-        .candleBar {
-          transform-origin: center bottom;
-          animation: candleGrow 0.6s ease-out forwards;
+        .blinkDot {
+          animation: blinkDot 1s steps(2, jump-none) infinite;
+        }
+        .topBookBar {
+          filter: drop-shadow(0 0 3px rgba(0, 255, 136, 0.55));
         }
         @keyframes zlabLivePulse {
           0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.6); }
           50% { opacity: 0.4; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
-        }
-        @keyframes zlabCandleGlow {
-          0%, 100% { opacity: 0.9; filter: drop-shadow(0 0 3px rgba(0,255,136,0.85)); }
-          50% { opacity: 0.35; filter: drop-shadow(0 0 10px rgba(0,255,136,0.35)); }
-        }
-        .zlabLiveCandleGlow {
-          animation: zlabCandleGlow 2s ease-in-out infinite;
-        }
-        .zlabLiveLabel {
-          animation: zlabLivePulse 2s ease-in-out infinite;
         }
         @keyframes zlabGlyphAppear {
           from {
@@ -1362,9 +1218,6 @@ export default function ZLabPanel() {
           )}
         </p>
       )}
-      <p style={{ color: "#94a3b8", fontSize: "15px", margin: "0 0 20px" }}>
-        Live agent language transmission — English observations vs encoded ZION glyphs
-      </p>
 
       {stats && (
         <div style={statsStyle}>
@@ -1392,7 +1245,7 @@ export default function ZLabPanel() {
 
       {(englishQueue.length > 0 || zionQueue.length > 0) && (
         <div className="zlabDualFeed">
-          <GlassCard style={{ ...tableShellStyle, padding: 0 }}>
+          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
             <div style={tableHeadStyle}>OBSERVATIONS (EN)</div>
             {currentEnglish ? (
               <EnglishScreen
@@ -1402,11 +1255,11 @@ export default function ZLabPanel() {
                 onCycleComplete={advanceCycle}
               />
             ) : (
-              <div style={{ ...screenStyle, color: "#64748b" }}>Awaiting observation…</div>
+              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting observation…</div>
             )}
           </GlassCard>
 
-          <GlassCard style={{ ...tableShellStyle, padding: 0 }}>
+          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
             <div
               style={{
                 ...tableHeadStyle,
@@ -1437,7 +1290,7 @@ export default function ZLabPanel() {
                 translitMaps={translitMaps}
               />
             ) : (
-              <div style={{ ...screenStyle, color: "#64748b" }}>Awaiting transmission…</div>
+              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting transmission…</div>
             )}
           </GlassCard>
         </div>
