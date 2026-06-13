@@ -1,14 +1,17 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { LabGlobalParticles } from "./LabGlobalParticles";
 import ZLabPanel from "./ZLabPanel";
 
 export const dynamic = "force-dynamic";
 
 const pageStyle: CSSProperties = {
-  background: "#050d1a",
+  background: "transparent",
   minHeight: "100vh",
   color: "#e2e8f0",
   fontFamily: "Inter, system-ui, sans-serif",
+  position: "relative",
+  zIndex: 1,
 };
 
 const navStyle: CSSProperties = {
@@ -32,16 +35,19 @@ const wrapStyle: CSSProperties = {
 
 export default function ZLabPage() {
   return (
-    <div style={pageStyle}>
-      <nav style={navStyle} aria-label="Z-LAB navigation">
-        <Link href="/" style={{ color: "#94a3b8", textDecoration: "none" }}>
-          ← OBSERVATORY
-        </Link>
-        <span style={{ color: "#00b4d8" }}>Z-LAB</span>
-      </nav>
-      <div style={wrapStyle}>
-        <ZLabPanel />
+    <>
+      <LabGlobalParticles />
+      <div style={pageStyle} className="zlab-page">
+        <nav style={navStyle} aria-label="Z-LAB navigation">
+          <Link href="/" style={{ color: "#94a3b8", textDecoration: "none" }}>
+            ← OBSERVATORY
+          </Link>
+          <span style={{ color: "#00b4d8" }}>Z-LAB</span>
+        </nav>
+        <div style={wrapStyle}>
+          <ZLabPanel />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

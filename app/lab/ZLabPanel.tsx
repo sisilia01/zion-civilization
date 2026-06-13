@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
+import { ThemeVideo } from "@/components/ThemeVideo";
+import { BlackHole } from "./BlackHole";
+import { SUBJECTS } from "./subjects";
 import {
   Cell,
   ComposedChart,
@@ -32,6 +35,51 @@ const PAUSE_AFTER_MS = 6_000;
 const FEED_LIMIT = 30;
 const FEED_REFRESH_MS = 120_000;
 const RESEARCH_REFRESH_MS = 30_000;
+const TERMINAL_CHAR_MS = 13;
+const READING_MS = 3_000;
+const TRANSITION_MS = 600;
+const FALLBACK_MS = 15_000;
+
+type OcularPhase = "typing" | "reading" | "transitioning";
+
+type KnowledgeReflection = {
+  agent_id: number;
+  agent_name: string;
+  track: string;
+  insight: string;
+  book_id: number;
+};
+
+function buildMoveBlock(r: KnowledgeReflection): string[] {
+  const WRAP = 58;
+  const words = r.insight.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if ((current + " " + word).trim().length > WRAP) {
+      lines.push(current.trim());
+      current = word;
+    } else {
+      current = (current + " " + word).trim();
+    }
+  }
+  if (current) lines.push(current);
+
+  return [
+    "module zion::observation_log {",
+    "    use zion::knowledge::{Agent, Archive};",
+    "",
+    `    /// OBSERVER: ${r.agent_name} :: ARCHIVE[${r.track}] :: BOOK_${r.book_id}`,
+    `    /// ${"-".repeat(WRAP)}`,
+    ...lines.map((l) => `    /// ${l}`),
+    `    /// ${"-".repeat(WRAP)}`,
+    "",
+    "    public fun observe(agent: &Agent): Reflection {",
+    `        record(agent, ARCHIVE_${r.book_id})`,
+    "    }",
+    "}",
+  ];
+}
 
 const mono = '"IBM Plex Mono", monospace';
 
@@ -594,6 +642,306 @@ function TypewriterText({
   );
 }
 
+function MoveSyntaxText({ text, showCursor = false }: { text: string; showCursor?: boolean }) {
+  if (!text) return showCursor ? <span style={{ color: "#00b4d8" }}>|</span> : null;
+
+  const lines = text.split("\n");
+  return (
+    <>
+      {lines.map((line, lineIdx) => {
+        if (line.includes("///")) {
+          return (
+            <span key={`${lineIdx}-${line.length}`}>
+              {lineIdx > 0 && "\n"}
+              <span style={{ color: "#00ff88" }}>{line}</span>
+            </span>
+          );
+        }
+        const commentIdx = line.indexOf("//");
+        return (
+          <span key={`${lineIdx}-${line.length}`}>
+            {lineIdx > 0 && "\n"}
+            {commentIdx === -1 ? (
+              <span style={{ color: "#00ff88" }}>{line}</span>
+            ) : (
+              <>
+                <span style={{ color: "#00ff88" }}>{line.slice(0, commentIdx)}</span>
+                <span style={{ color: "#64748b" }}>{line.slice(commentIdx)}</span>
+              </>
+            )}
+          </span>
+        );
+      })}
+      {showCursor && <span style={{ color: "#00b4d8" }}>|</span>}
+    </>
+  );
+}
+
+function AgentTerminal({
+  reflection,
+  subjectKey,
+  loading,
+  unavailable,
+  phase,
+  onTypingComplete,
+}: {
+  reflection: KnowledgeReflection | null;
+  subjectKey: string;
+  loading: boolean;
+  unavailable: boolean;
+  phase: OcularPhase;
+  onTypingComplete: () => void;
+}) {
+  const [visibleLen, setVisibleLen] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completedRef = useRef(false);
+
+  const blockLines = reflection ? buildMoveBlock(reflection) : [];
+  const blockText = blockLines.length > 0 ? `${blockLines.join("\n")}\n` : "";
+
+  useEffect(() => {
+    setVisibleLen(0);
+    completedRef.current = false;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, [subjectKey]);
+
+  useEffect(() => {
+    if (phase !== "typing" || loading || unavailable || !blockText) return;
+
+    setVisibleLen(0);
+    completedRef.current = false;
+    let i = 0;
+
+    const interval = setInterval(() => {
+      i += 1;
+      setVisibleLen(i);
+      if (i >= blockText.length) {
+        clearInterval(interval);
+        intervalRef.current = null;
+        if (!completedRef.current) {
+          completedRef.current = true;
+          onTypingComplete();
+        }
+      }
+    }, TERMINAL_CHAR_MS);
+    intervalRef.current = interval;
+
+    return () => {
+      clearInterval(interval);
+      intervalRef.current = null;
+    };
+  }, [phase, subjectKey, blockText, loading, unavailable, onTypingComplete]);
+
+  useEffect(
+    () => () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    },
+    []
+  );
+
+  const terminalPreStyle: CSSProperties = {
+    margin: 0,
+    fontSize: "12px",
+    fontFamily: mono,
+    whiteSpace: "pre-wrap",
+    lineHeight: 1.5,
+    flex: 1,
+    overflow: "auto",
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...screenStyle, padding: "16px 14px" }}>
+        <pre style={terminalPreStyle}>
+          <MoveSyntaxText text="// loading archive..." />
+        </pre>
+      </div>
+    );
+  }
+
+  if (unavailable) {
+    return (
+      <div style={{ ...screenStyle, padding: "16px 14px" }}>
+        <pre style={terminalPreStyle}>
+          <MoveSyntaxText text="// archive unavailable" />
+        </pre>
+      </div>
+    );
+  }
+
+  const displayLen = phase === "typing" ? visibleLen : blockText.length;
+  const activeText = blockText.slice(0, displayLen);
+  const showCursor = phase === "typing" && visibleLen < blockText.length;
+
+  return (
+    <div style={{ ...screenStyle, padding: "16px 14px" }}>
+      <pre style={terminalPreStyle}>
+        <MoveSyntaxText text={activeText} showCursor={showCursor} />
+      </pre>
+    </div>
+  );
+}
+
+function SubjectFeed({ subject }: { subject: (typeof SUBJECTS)[number] }) {
+  return (
+    <div
+      style={{
+        ...screenStyle,
+        padding: 0,
+        overflow: "hidden",
+      }}
+    >
+      {subject.id === "cosmology" ? (
+        <BlackHole />
+      ) : (
+        <ThemeVideo src={subject.videoSrc} />
+      )}
+    </div>
+  );
+}
+
+const fadeWrapStyle: CSSProperties = {
+  opacity: 1,
+  transition: "opacity 0.6s ease",
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  minHeight: 0,
+};
+
+function OcularInterfacePanels() {
+  const [subjectIndex, setSubjectIndex] = useState(0);
+  const [phase, setPhase] = useState<OcularPhase>("typing");
+  const [fadeOpacity, setFadeOpacity] = useState(1);
+  const subject = SUBJECTS[subjectIndex];
+  const [reflectionsCache, setReflectionsCache] = useState<Record<string, KnowledgeReflection[]>>({});
+  const [lastGoodReflection, setLastGoodReflection] = useState<KnowledgeReflection | null>(null);
+  const fetchedSubjectsRef = useRef<Set<string>>(new Set());
+  const readingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingDoneRef = useRef(false);
+
+  const handleTypingComplete = useCallback(() => {
+    if (typingDoneRef.current) return;
+    typingDoneRef.current = true;
+    setPhase("reading");
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "typing") {
+      if (typingFallbackRef.current) {
+        clearTimeout(typingFallbackRef.current);
+        typingFallbackRef.current = null;
+      }
+      return;
+    }
+
+    typingDoneRef.current = false;
+    typingFallbackRef.current = setTimeout(() => {
+      handleTypingComplete();
+    }, FALLBACK_MS);
+
+    return () => {
+      if (typingFallbackRef.current) {
+        clearTimeout(typingFallbackRef.current);
+        typingFallbackRef.current = null;
+      }
+    };
+  }, [phase, subject.id, handleTypingComplete]);
+
+  useEffect(() => {
+    if (phase !== "reading") return;
+
+    if (readingTimerRef.current) clearTimeout(readingTimerRef.current);
+    readingTimerRef.current = setTimeout(() => {
+      setPhase("transitioning");
+    }, READING_MS);
+
+    return () => {
+      if (readingTimerRef.current) clearTimeout(readingTimerRef.current);
+    };
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "transitioning") return;
+
+    setFadeOpacity(0);
+    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current = setTimeout(() => {
+      setSubjectIndex((i) => (i + 1) % SUBJECTS.length);
+      setFadeOpacity(1);
+      setPhase("typing");
+    }, TRANSITION_MS);
+
+    return () => {
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+    };
+  }, [phase]);
+
+  useEffect(
+    () => () => {
+      if (readingTimerRef.current) clearTimeout(readingTimerRef.current);
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      if (typingFallbackRef.current) clearTimeout(typingFallbackRef.current);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (fetchedSubjectsRef.current.has(subject.id)) return;
+    fetchedSubjectsRef.current.add(subject.id);
+
+    fetch(`/api/lab/knowledge-reflections?tracks=${encodeURIComponent(subject.tracks)}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((data: KnowledgeReflection[]) => {
+        setReflectionsCache((prev) => ({ ...prev, [subject.id]: data }));
+        if (data.length > 0) {
+          setLastGoodReflection(data[0]);
+        }
+      })
+      .catch(() => setReflectionsCache((prev) => ({ ...prev, [subject.id]: [] })));
+  }, [subject.id, subject.tracks]);
+
+  const currentReflections = reflectionsCache[subject.id];
+  const reflectionToShow =
+    currentReflections && currentReflections.length > 0
+      ? currentReflections[0]
+      : lastGoodReflection;
+  const showLoading = currentReflections === undefined && !reflectionToShow;
+  const unavailable = currentReflections !== undefined && !reflectionToShow;
+
+  return (
+    <div className="zlabOcularFeed">
+      <GlassCard className="zlabOcularLeft" style={{ ...tableShellStyle, padding: 0 }}>
+        <div style={tableHeadStyle}>AGENT_TERMINAL://observation_log.move</div>
+        <div style={{ ...fadeWrapStyle, opacity: fadeOpacity }}>
+          <AgentTerminal
+            reflection={reflectionToShow}
+            subjectKey={subject.id}
+            loading={showLoading}
+            unavailable={unavailable}
+            phase={phase}
+            onTypingComplete={handleTypingComplete}
+          />
+        </div>
+      </GlassCard>
+
+      <GlassCard className="zlabOcularRight" style={{ ...tableShellStyle, padding: 0 }}>
+        <div style={tableHeadStyle}>{subject.title}</div>
+        <div style={{ ...fadeWrapStyle, opacity: fadeOpacity }}>
+          <SubjectFeed subject={subject} />
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
 function glyphIdsToTokens(glyphIds: number[]): string {
   return glyphIds.map((id) => `Z${glyphKey(id)}`).join(" ");
 }
@@ -943,6 +1291,26 @@ export default function ZLabPanel() {
           user-select: text;
           -webkit-user-select: text;
         }
+        .zlabOcularFeed {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          margin-top: 20px;
+        }
+        @media (min-width: 900px) {
+          .zlabOcularFeed {
+            flex-direction: row;
+            align-items: stretch;
+          }
+          .zlabOcularLeft {
+            flex: 1 1 60%;
+            min-width: 0;
+          }
+          .zlabOcularRight {
+            flex: 1 1 40%;
+            min-width: 0;
+          }
+        }
       `}</style>
 
       <h2
@@ -1076,6 +1444,8 @@ export default function ZLabPanel() {
       )}
 
       {research && <ResearchCharts research={research} />}
+
+      <OcularInterfacePanels />
     </section>
   );
 }

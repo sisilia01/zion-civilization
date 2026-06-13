@@ -6,6 +6,11 @@ html, body {
   padding: 0;
 }
 
+html:has(.zlab-page),
+body:has(.zlab-page) {
+  background: #050d1a !important;
+}
+
 :root {
   --bg-primary: #000000;
   --bg-secondary: #0a0a0a;
