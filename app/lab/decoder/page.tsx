@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { parseZionTokens, prepareGlyphSvgs } from "../zionTransliterate";
 
@@ -67,6 +67,20 @@ const btnStyle: CSSProperties = {
   cursor: "pointer",
   borderRadius: "3px",
 };
+
+async function verifyPassword(pw: string): Promise<boolean> {
+  if (!pw.trim()) return false;
+  try {
+    const res = await fetch("/api/zion-lang/decode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw, zion_text: "" }),
+    });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
 
 function glyphKey(id: number): string {
   return String(id).padStart(2, "0");
@@ -223,22 +237,14 @@ function MessageCard({
 
 export default function DecoderPage() {
   const [password, setPassword] = useState("");
-  const [storedPassword, setStoredPassword] = useState<string | null>(null);
+  const [sessionPassword, setSessionPassword] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [sessionChecking, setSessionChecking] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [messages, setMessages] = useState<ZionMessage[]>([]);
   const [glyphs, setGlyphs] = useState<GlyphMap>({});
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const initRef = useRef(false);
-
-  const verifyPassword = useCallback(async (pw: string): Promise<boolean> => {
-    const res = await fetch("/api/zion-lang/decode", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pw, zion_text: "" }),
-    });
-    return res.status !== 403;
-  }, []);
 
   const loadMessages = useCallback(async () => {
     setLoadingMessages(true);
@@ -253,6 +259,24 @@ export default function DecoderPage() {
     }
   }, []);
 
+  const unlockWithPassword = useCallback(
+    async (pw: string, persist: boolean) => {
+      const ok = await verifyPassword(pw);
+      if (!ok) {
+        if (persist) localStorage.removeItem(STORAGE_KEY);
+        setAuthenticated(false);
+        setSessionPassword(null);
+        return false;
+      }
+      if (persist) localStorage.setItem(STORAGE_KEY, pw);
+      setSessionPassword(pw);
+      setAuthenticated(true);
+      await loadMessages();
+      return true;
+    },
+    [loadMessages],
+  );
+
   useEffect(() => {
     fetch("/api/language/glyphs", { cache: "force-cache" })
       .then((r) => (r.ok ? r.json() : null))
@@ -263,38 +287,43 @@ export default function DecoderPage() {
   }, []);
 
   useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-    verifyPassword(saved).then((ok) => {
-      if (ok) {
-        setStoredPassword(saved);
-        loadMessages();
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
+    let cancelled = false;
+    (async () => {
+      setSessionChecking(true);
+      setAuthenticated(false);
+      setSessionPassword(null);
+
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const ok = await unlockWithPassword(saved, true);
+        if (!ok && !cancelled) {
+          setAuthError("Saved key expired or invalid");
+        }
       }
-    });
-  }, [verifyPassword, loadMessages]);
+
+      if (!cancelled) setSessionChecking(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [unlockWithPassword]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError(null);
-    const ok = await verifyPassword(password);
+    const ok = await unlockWithPassword(password, true);
     setAuthLoading(false);
-    if (ok) {
-      localStorage.setItem(STORAGE_KEY, password);
-      setStoredPassword(password);
-      loadMessages();
-    } else {
+    if (!ok) {
       setAuthError("Invalid key");
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEY);
-    setStoredPassword(null);
+    setSessionPassword(null);
+    setAuthenticated(false);
     setPassword("");
     setMessages([]);
   };
@@ -318,7 +347,9 @@ export default function DecoderPage() {
       <h1 style={titleStyle}>ZION LANGUAGE DECODER — PRIVATE ACCESS</h1>
       <p style={subtitleStyle}>Authorized personnel only · direct URL access</p>
 
-      {!storedPassword ? (
+      {sessionChecking ? (
+        <p style={{ color: "#64748b", textAlign: "center" }}>Verifying access…</p>
+      ) : !authenticated ? (
         <form
           onSubmit={handleLogin}
           style={{
@@ -380,14 +411,15 @@ export default function DecoderPage() {
             {!loadingMessages && messages.length === 0 && (
               <p style={{ color: "#64748b", textAlign: "center" }}>No ZION messages found.</p>
             )}
-            {messages.map((msg) => (
-              <MessageCard
-                key={msg.id}
-                message={msg}
-                glyphs={glyphs}
-                password={storedPassword}
-              />
-            ))}
+            {sessionPassword &&
+              messages.map((msg) => (
+                <MessageCard
+                  key={msg.id}
+                  message={msg}
+                  glyphs={glyphs}
+                  password={sessionPassword}
+                />
+              ))}
           </div>
         </>
       )}

@@ -27,3 +27,29 @@ export type Stats = {
   reports_on_walrus: number;
   total_reports: number;
 };
+
+export type ResearchTrackStat = {
+  track: string;
+  total_chunks: number;
+  chunks_read: number;
+  pct: number;
+};
+
+export type ResearchDailyCandle = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  insights_count: number;
+  avg_usefulness: number;
+  cumulative_insights: number;
+};
+
+export type ResearchStats = {
+  education_pct: number;
+  library: { chunks_read: number; total_chunks: number };
+  by_track: ResearchTrackStat[];
+  daily: ResearchDailyCandle[];
+};
