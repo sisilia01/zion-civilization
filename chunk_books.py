@@ -9,6 +9,8 @@ from pathlib import Path
 
 import psycopg2
 
+from text_utils import is_clean_text
+
 try:
     from openrouter_key import _load_env_file
 
@@ -132,6 +134,9 @@ def chunk_book(cur, book_id: int, file_path: str) -> int:
         return 0
 
     for part in parts:
+        chunk_text = part["chunk_text"]
+        if not is_clean_text(chunk_text):
+            continue
         cur.execute(
             """
             INSERT INTO book_chunks

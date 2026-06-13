@@ -58,6 +58,38 @@ VALID_TRACKS = {
     "ANTHROPOLOGY",
 }
 
+TITLE_TRACK_MAP = {
+    "shakespeare": "LITERATURE",
+    "wilde": "LITERATURE",
+    "dickens": "LITERATURE",
+    "twain": "LITERATURE",
+    "verne": "LITERATURE",
+    "wells": "LITERATURE",
+    "bible": "RELIGION",
+    "quran": "RELIGION",
+    "gita": "RELIGION",
+    "bitcoin": "BLOCKCHAIN",
+    "ethereum": "BLOCKCHAIN",
+    "sui": "BLOCKCHAIN",
+    "history": "HISTORY",
+    "war": "HISTORY",
+    "empire": "HISTORY",
+    "psychology": "PSYCHOLOGY",
+    "freud": "PSYCHOLOGY",
+    "philosophy": "PHILOSOPHY",
+    "kant": "PHILOSOPHY",
+    "nietzsche": "PHILOSOPHY",
+}
+
+
+def _title_keyword_classify(filename: str, excerpt: str = "") -> str | None:
+    stem = Path(filename).stem.lower().replace("_", " ")
+    blob = f"{stem} {excerpt[:500].lower()}"
+    for keyword, track in TITLE_TRACK_MAP.items():
+        if keyword in blob:
+            return track
+    return None
+
 
 def _read_first_chars(path: Path, n: int = 500) -> str:
     try:
@@ -77,9 +109,12 @@ def _keyword_classify(filename: str, excerpt: str = "") -> str | None:
 
 
 def _llm_classify(filename: str, excerpt: str) -> str:
+    hit = _title_keyword_classify(filename, excerpt)
+    if hit:
+        return hit
     key = get_openrouter_key()
     if not key:
-        return "SCIENCE"
+        return "LITERATURE"
     prompt = (
         f"Classify this book into ONE topic category: {filename}\n"
         f"First lines: {excerpt[:500]}\n"
@@ -107,7 +142,7 @@ def _llm_classify(filename: str, excerpt: str) -> str:
                     return track
     except Exception as e:
         print(f"[book_classifier] LLM error: {e}")
-    return "SCIENCE"
+    return _title_keyword_classify(filename, excerpt) or "LITERATURE"
 
 
 def classify_book(filename: str, excerpt: str | None = None) -> str:
@@ -117,6 +152,9 @@ def classify_book(filename: str, excerpt: str | None = None) -> str:
         excerpt = _read_first_chars(path)
     excerpt = excerpt or ""
     hit = _keyword_classify(filename, excerpt)
+    if hit:
+        return hit
+    hit = _title_keyword_classify(filename, excerpt)
     if hit:
         return hit
     return _llm_classify(filename, excerpt)
@@ -148,21 +186,27 @@ def sync_book_tracks(cur, verbose: bool = True) -> dict:
 
     for path in sorted(BOOKS_DIR.glob("*.txt")):
         fname = path.name
+        excerpt = _read_first_chars(path)
         if fname in known:
-            continue
-        track = classify_book(fname, _read_first_chars(path))
+            track = _keyword_classify(fname, excerpt) or _title_keyword_classify(fname, excerpt)
+            if not track:
+                continue
+        else:
+            track = classify_book(fname, excerpt)
         cur.execute(
             """
             INSERT INTO book_tracks (filename, track, auto_classified)
             VALUES (%s, %s, true)
-            ON CONFLICT (filename) DO NOTHING
+            ON CONFLICT (filename) DO UPDATE
+            SET track = EXCLUDED.track, auto_classified = true
             """,
             (fname, track),
         )
-        new_count += 1
-        track_counts[track] = track_counts.get(track, 0) + 1
-        if verbose:
-            print(f"[book_classifier] {fname} → {track}")
+        if fname not in known:
+            new_count += 1
+            track_counts[track] = track_counts.get(track, 0) + 1
+            if verbose:
+                print(f"[book_classifier] {fname} → {track}")
 
     cur.execute("SELECT track, COUNT(*) AS c FROM book_tracks GROUP BY track ORDER BY track")
     all_tracks = {r["track"]: int(r["c"]) for r in cur.fetchall()}

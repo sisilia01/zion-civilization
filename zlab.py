@@ -139,6 +139,66 @@ def assign_track_for_book(cur, book_path: Path, excerpt: str = "") -> str:
     return track
 
 
+def resolve_track_for_book(
+    cur,
+    book_path: Path,
+    book_title: str,
+    author: str = "",
+    excerpt: str = "",
+) -> str:
+    """Resolve track from book_tracks / books — never reuse stale seed values."""
+    from book_classifier import ensure_book_tracks_schema
+
+    ensure_book_tracks_schema(cur)
+
+    cur.execute("SELECT track FROM book_tracks WHERE filename = %s", (book_path.name,))
+    row = cur.fetchone()
+    if row:
+        return row["track"] if isinstance(row, dict) else row[0]
+
+    cur.execute(
+        """
+        SELECT bt.track
+        FROM book_tracks bt
+        JOIN books b ON bt.filename = split_part(b.file_path, '/', -1)
+        WHERE b.title ILIKE %s OR %s ILIKE '%%' || b.title || '%%'
+        LIMIT 1
+        """,
+        (f"%{book_title}%", book_title),
+    )
+    row = cur.fetchone()
+    if row:
+        track = row["track"] if isinstance(row, dict) else row[0]
+        cur.execute(
+            """
+            INSERT INTO book_tracks (filename, track, auto_classified)
+            VALUES (%s, %s, true)
+            ON CONFLICT (filename) DO UPDATE SET track = EXCLUDED.track
+            """,
+            (book_path.name, track),
+        )
+        return track
+
+    cur.execute(
+        "SELECT track FROM books WHERE title ILIKE %s LIMIT 1",
+        (f"%{book_title}%",),
+    )
+    row = cur.fetchone()
+    if row:
+        track = row["track"] if isinstance(row, dict) else row[0]
+        cur.execute(
+            """
+            INSERT INTO book_tracks (filename, track, auto_classified)
+            VALUES (%s, %s, true)
+            ON CONFLICT (filename) DO UPDATE SET track = EXCLUDED.track
+            """,
+            (book_path.name, track),
+        )
+        return track
+
+    return assign_track_for_book(cur, book_path, excerpt)
+
+
 def read_book_excerpt(path: Path, max_chars: int = 2500) -> str:
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
@@ -221,12 +281,82 @@ Connect it to real ZION data. Be specific with numbers.
 Sign it as a researcher."""
 
 
-def fallback_observation(agent: dict, book_title: str, author: str, stats: dict, track: str) -> str:
+def _fetch_agent_insight(cur, agent_id: int, track: str) -> str | None:
+    try:
+        cur.execute(
+            """
+            SELECT insight FROM agent_knowledge
+            WHERE agent_id = %s AND track = %s
+            AND insight NOT ILIKE '%%gutenberg%%'
+            AND insight NOT ILIKE '%%z-library%%'
+            AND insight NOT ILIKE '%%zlibrary%%'
+            AND length(insight) > 100
+            ORDER BY RANDOM() LIMIT 1
+            """,
+            (agent_id, track),
+        )
+        row = cur.fetchone()
+        if row:
+            val = row["insight"] if isinstance(row, dict) else row[0]
+            text = (val or "").strip()
+            return text or None
+    except Exception:
+        pass
+    return None
+
+
+def fallback_observation(
+    cur,
+    agent: dict,
+    book_title: str,
+    author: str,
+    stats: dict,
+    track: str,
+) -> str:
+    insight = _fetch_agent_insight(cur, agent["id"], track)
+    if insight:
+        return insight
+
+    civ_state = stats
+    prosperity = civ_state.get("prosperity", 0)
+    templates = [
+        f"Studying {book_title}, I find parallels to ZION's current state: "
+        f"prosperity at {prosperity:.1f}%, {civ_state.get('alive', 0):,} agents alive. — {agent['name']}",
+        f"The principles in {book_title} reveal unexpected insights for our civilization's "
+        f"{track.lower()} dynamics. — {agent['name']}",
+        f"Reading {book_title} changes how I see ZION's {track.lower()} challenges "
+        f"under revolution pressure {civ_state.get('revolution', 0):.0f}. — {agent['name']}",
+        f"From {book_title}: the most relevant concept for ZION today is how systems adapt "
+        f"under constitutional change ({civ_state.get('amendments_count', 0)} amendments). — {agent['name']}",
+        f"{book_title} offers a framework I hadn't considered for our {track.lower()} domain "
+        f"at prosperity index {prosperity:.1f}%. — {agent['name']}",
+        f"The author of {book_title} would observe ZION's situation as a test of "
+        f"elite–middle incentives with {civ_state.get('alive', 0):,} participants. — {agent['name']}",
+        f"Cross-referencing {book_title} with ZION's prosperity index {prosperity:.1f}% "
+        f"suggests new {track.lower()} priorities. — {agent['name']}",
+        f"What {book_title} teaches about systems under pressure applies directly to ZION "
+        f"with revolution at {civ_state.get('revolution', 0):.0f}. — {agent['name']}",
+    ]
+    return random.choice(templates)
+
+
+def _observation_text(
+    cur,
+    agent: dict,
+    book_title: str,
+    author: str,
+    excerpt: str,
+    stats: dict,
+    track: str,
+) -> str:
+    prior_insight = _fetch_agent_insight(cur, agent["id"], track)
+    prompt = build_prompt(agent, book_title, author, excerpt, stats)
+    if prior_insight:
+        prompt = f"Prior insight from this agent's reading:\n{prior_insight}\n\n{prompt}"
     return (
-        f"Reading {author}'s \"{book_title}\" ({track}), I note ZION's {stats['alive']:,} living agents "
-        f"operate at prosperity index {stats['prosperity']}% while revolution pressure reads "
-        f"{stats['revolution']:.0f} — consistent with {stats['amendments_count']} enacted constitutional "
-        f"amendments shaping elite–middle incentives. — {agent['name']}, Z-LAB"
+        _llm_observation(prompt)
+        or prior_insight
+        or fallback_observation(cur, agent, book_title, author, stats, track)
     )
 
 
@@ -281,11 +411,8 @@ def generate_observations(cur, count: int | None = None) -> list[int]:
         book_path = random.choice(books)
         book_title, author = parse_book_filename(book_path)
         excerpt = read_book_excerpt(book_path)
-        track = assign_track_for_book(cur, book_path, excerpt)
-        prompt = build_prompt(agent, book_title, author, excerpt, stats)
-        text = _llm_observation(prompt) or fallback_observation(
-            agent, book_title, author, stats, track
-        )
+        track = resolve_track_for_book(cur, book_path, book_title, author, excerpt)
+        text = _observation_text(cur, agent, book_title, author, excerpt, stats, track)
         oid = insert_observation(cur, agent, book_title, author, track, text)
         created.append(oid)
         print(f"[zlab] observation #{oid}: {agent['name']} / {book_title[:40]}")
@@ -317,8 +444,9 @@ def seed_samples(cur, n: int = 10) -> int:
         agent = agents[i % len(agents)]
         book_path = books[i % len(books)]
         book_title, author = parse_book_filename(book_path)
-        track = assign_track_for_book(cur, book_path)
-        text = fallback_observation(agent, book_title, author, stats, track)
+        excerpt = read_book_excerpt(book_path)
+        track = resolve_track_for_book(cur, book_path, book_title, author, excerpt)
+        text = _observation_text(cur, agent, book_title, author, excerpt, stats, track)
         insert_observation(cur, agent, book_title, author, track, text)
         created += 1
     print(f"[zlab] seeded {created} sample observations")

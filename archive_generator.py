@@ -11,11 +11,14 @@ import random
 import re
 import zipfile
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 
+import psycopg2
 import psycopg2.extras
 
 from book_classifier import BOOKS_DIR, get_books_for_track, list_discovered_tracks, sync_book_tracks
+from text_utils import is_clean_text
 from walrus import store_bytes
 from zlab import db_conn, ensure_schema, get_civ_stats, period_numbers
 
@@ -128,10 +131,80 @@ def _read_quote(filename: str, max_len: int = 220) -> str:
         return ""
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) < 80:
-        return text[:max_len]
-    start = random.randint(0, max(0, len(text) - max_len - 20))
-    snippet = text[start : start + max_len].strip()
-    return f'"{snippet}…"'
+        snippet = text[:max_len]
+        return f'"{snippet}…"' if is_clean_text(snippet) else ""
+
+    for _ in range(8):
+        start = random.randint(0, max(0, len(text) - max_len - 20))
+        snippet = text[start : start + max_len].strip()
+        if is_clean_text(snippet):
+            return f'"{snippet}…"'
+    return ""
+
+
+def _text_similarity(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def _replacement_insight(cur, observation: dict, track: str) -> str | None:
+    agent_id = observation.get("agent_id")
+    if not agent_id:
+        return None
+    try:
+        cur.execute(
+            """
+            SELECT insight FROM agent_knowledge
+            WHERE agent_id = %s AND track = %s
+            AND insight NOT ILIKE '%%gutenberg%%'
+            AND insight NOT ILIKE '%%z-library%%'
+            AND length(insight) > 80
+            ORDER BY RANDOM() LIMIT 1
+            """,
+            (agent_id, track),
+        )
+        row = cur.fetchone()
+        if row:
+            val = row["insight"] if isinstance(row, dict) else row[0]
+            return (val or "").strip() or None
+        cur.execute(
+            """
+            SELECT insight FROM agent_knowledge
+            WHERE track = %s
+            AND insight NOT ILIKE '%%gutenberg%%'
+            AND length(insight) > 80
+            ORDER BY RANDOM() LIMIT 1
+            """,
+            (track,),
+        )
+        row = cur.fetchone()
+        if row:
+            val = row["insight"] if isinstance(row, dict) else row[0]
+            return (val or "").strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _dedupe_observations(cur, observations: list[dict], track: str, threshold: float = 0.8) -> list[dict]:
+    """Skip or replace observations that are >80% similar to an earlier one."""
+    kept: list[dict] = []
+    kept_texts: list[str] = []
+    for obs in observations:
+        text = (obs.get("observation_text") or "").strip()
+        if not text:
+            continue
+        if any(_text_similarity(text, prev) >= threshold for prev in kept_texts):
+            alt = _replacement_insight(cur, obs, track)
+            if alt and not any(_text_similarity(alt, prev) >= threshold for prev in kept_texts):
+                obs = {**obs, "observation_text": alt}
+                text = alt
+            else:
+                continue
+        kept.append(obs)
+        kept_texts.append(text)
+    return kept
 
 
 def _observations_for_period(cur, track: str, report_type: str, week: int, month: int, year: int) -> list[dict]:
@@ -212,7 +285,9 @@ def _build_track_md(
     year: int,
     stats: dict,
 ) -> str:
-    observations = _observations_for_period(cur, track, report_type, week, month, year)
+    observations = _dedupe_observations(
+        cur, _observations_for_period(cur, track, report_type, week, month, year), track
+    )
     books = get_books_for_track(cur, track)
     books_read = sorted(
         {f"{o.get('book_title', '')} — {o.get('author', '')}" for o in observations if o.get("book_title")}
@@ -293,15 +368,33 @@ def _report_exists(cur, report_type: str, week: int, month: int, year: int) -> b
     return cur.fetchone() is not None
 
 
-def generate_archive_report(
+def _ensure_db_cursor(cur, conn):
+    """Reconnect if the DB connection went stale during long Walrus uploads."""
+    try:
+        if conn is None or conn.closed:
+            raise psycopg2.OperationalError("connection closed")
+        cur.execute("SELECT 1")
+        return cur, conn
+    except Exception:
+        if conn is not None and not conn.closed:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        conn = db_conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        return cur, conn
+
+
+def _generate_archive_report_body(
     cur,
-    report_type: str = "weekly",
-    week_number: int | None = None,
-    month_number: int | None = None,
-    year_number: int | None = None,
-    force: bool = False,
+    report_type: str,
+    week_number: int | None,
+    month_number: int | None,
+    year_number: int | None,
+    force: bool,
+    conn=None,
 ) -> dict | None:
-    ensure_archive_schema(cur)
     week, month, year = period_numbers()
     week_number = week_number or week
     month_number = month_number or month
@@ -362,6 +455,7 @@ def generate_archive_report(
         blob_id = result["blob_id"]
 
     files_json = [{"track": k, "filename": v} for k, v in sorted(track_files.items())]
+    cur, conn = _ensure_db_cursor(cur, conn)
     cur.execute(
         """
         INSERT INTO archive_reports
@@ -415,6 +509,42 @@ def generate_archive_report(
     }
 
 
+def generate_archive_report(
+    report_type: str = "weekly",
+    week_number: int | None = None,
+    month_number: int | None = None,
+    year_number: int | None = None,
+    force: bool = False,
+    *,
+    cur=None,
+) -> dict | None:
+    own_conn = cur is None
+    conn = None
+    if own_conn:
+        conn = db_conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        ensure_archive_schema(cur)
+        if own_conn:
+            conn.commit()
+        result = _generate_archive_report_body(
+            cur,
+            report_type,
+            week_number,
+            month_number,
+            year_number,
+            force,
+            conn=conn if own_conn else None,
+        )
+        if own_conn and result is not None:
+            conn.commit()
+        return result
+    finally:
+        if own_conn and conn is not None:
+            cur.close()
+            conn.close()
+
+
 def maybe_run_scheduled_reports(cur) -> list[dict]:
     """Check schedule and generate any due reports."""
     ensure_archive_schema(cur)
@@ -424,8 +554,10 @@ def maybe_run_scheduled_reports(cur) -> list[dict]:
     generated = []
     for rtype, col in [("weekly", "next_weekly_at"), ("monthly", "next_monthly_at"), ("annual", "next_annual_at")]:
         due = row.get(col)
+        if due and due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
         if due and now >= due:
-            rep = generate_archive_report(cur, report_type=rtype)
+            rep = generate_archive_report(report_type=rtype, cur=cur)
             if rep:
                 generated.append(rep)
     return generated
@@ -446,7 +578,7 @@ def main():
         result = sync_book_tracks(cur)
         print(result)
     elif args.now:
-        result = generate_archive_report(cur, report_type=args.now, force=args.force)
+        result = generate_archive_report(report_type=args.now, force=args.force, cur=cur)
         print(result)
     else:
         result = maybe_run_scheduled_reports(cur)

@@ -7,6 +7,7 @@ Standard Ebooks, arXiv papers. Rich AI-generated stubs for modern classics.
 """
 from __future__ import annotations
 
+import gzip
 import os
 import random
 import re
@@ -20,6 +21,7 @@ import requests
 
 from gutenberg_catalog import count_catalog_entries, lookup_gutenberg_id
 from rich_stubs import create_rich_stub_text, has_rich_stub
+from text_utils import is_clean_text
 
 BASE_DIR = Path(__file__).resolve().parent
 KNOWLEDGE_DIR = BASE_DIR / "knowledge_base"
@@ -2568,16 +2570,31 @@ def sleep_after_item() -> None:
 SESSION = init_http_session()
 
 
-def is_valid_text(content: bytes, min_chars: int = 500) -> bool:
+def decode_arxiv_bytes(content: bytes, content_type: str = "") -> str:
+    """Decode arXiv e-print bytes (plain text, gzip-compressed TeX, or PDF)."""
+    if content[:4] == b"%PDF":
+        return ""
+    if "gzip" in (content_type or "").lower() or content[:2] == b"\x1f\x8b":
+        try:
+            content = gzip.decompress(content)
+        except OSError:
+            return ""
     try:
-        text = content.decode("utf-8", errors="replace")
+        text = content.decode("utf-8", errors="ignore")
     except Exception:
+        return ""
+    return text
+
+
+def is_valid_text(content: bytes, min_chars: int = 500) -> bool:
+    if content[:4] == b"%PDF":
         return False
-    if len(text.strip()) < min_chars:
+    text = decode_arxiv_bytes(content)
+    if not text or len(text.strip()) < min_chars:
         return False
     if text.lstrip().startswith("<!DOCTYPE") or "<html" in text[:500].lower():
         return False
-    return True
+    return is_clean_text(text[:5000], min_printable_ratio=0.85, min_len=min(min_chars, 20))
 
 
 def extract_text_from_html(html: str) -> str:
@@ -2764,19 +2781,20 @@ def arxiv_id_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-def download_arxiv_paper(paper: dict) -> tuple[bytes | None, str]:
-    """Download arXiv paper text or PDF stub source. Returns (content, url)."""
+def download_arxiv_paper(paper: dict) -> tuple[bytes | None, str, str]:
+    """Download arXiv paper text or PDF. Returns (content, url, content_type)."""
     url = (paper.get("url") or "").strip()
     arxiv_id = arxiv_id_from_url(url)
     if not arxiv_id:
-        return None, url
+        return None, url, ""
     text_url = f"https://arxiv.org/e-print/{arxiv_id}"
     abs_url = f"https://arxiv.org/abs/{arxiv_id}"
     for fetch_url in (text_url, f"https://arxiv.org/pdf/{arxiv_id}.pdf"):
         try:
             resp = SESSION.get(fetch_url, timeout=HTTP_TIMEOUT)
             if resp.status_code == 200 and len(resp.content) > 200:
-                return resp.content, fetch_url
+                ctype = resp.headers.get("Content-Type", "")
+                return resp.content, fetch_url, ctype
         except requests.RequestException:
             continue
     try:
@@ -2784,10 +2802,10 @@ def download_arxiv_paper(paper: dict) -> tuple[bytes | None, str]:
         if resp.status_code == 200:
             body = extract_text_from_html(resp.text)
             if len(body) > 300:
-                return body.encode("utf-8"), abs_url
+                return body.encode("utf-8"), abs_url, "text/html"
     except requests.RequestException:
         pass
-    return None, abs_url
+    return None, abs_url, ""
 
 
 def paper_filename(title: str) -> str:
@@ -2835,7 +2853,7 @@ def download_paper_item(paper: dict, index: int, total: int) -> str:
 
     url = (paper.get("url") or "").strip()
     if "arxiv.org" in url.lower():
-        content, src_url = download_arxiv_paper(paper)
+        content, src_url, content_type = download_arxiv_paper(paper)
         sleep_arxiv()
         if content:
             if content[:4] == b"%PDF":
@@ -2845,8 +2863,9 @@ def download_paper_item(paper: dict, index: int, total: int) -> str:
                 )
                 dest.write_text(stub, encoding="utf-8")
             elif is_valid_text(content, min_chars=200):
+                text = decode_arxiv_bytes(content, content_type)
                 header = f"# {title}\n# Author: {paper.get('author', '')}\n# Source: {src_url}\n\n"
-                dest.write_text(header + content.decode("utf-8", errors="replace"), encoding="utf-8")
+                dest.write_text(header + text, encoding="utf-8")
             else:
                 stub = build_paper_stub(paper, source_note=f"arXiv content from {src_url}")
                 dest.write_text(stub, encoding="utf-8")

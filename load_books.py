@@ -9,6 +9,7 @@ from pathlib import Path
 import psycopg2
 
 from local_llm import generate_local
+from text_utils import is_clean_text
 
 try:
     from openrouter_key import _load_env_file
@@ -123,8 +124,15 @@ def load_books(force: bool = False) -> dict[str, int]:
             continue
 
         content = raw[:CONTENT_LIMIT].replace("\x00", "")
+        if not is_clean_text(content):
+            print(f"[load_books] skip {path.name}: binary or unreadable content")
+            continue
         fname = path.name
-        track = track_map.get(fname, "SCIENCE")
+        track = track_map.get(fname)
+        if not track:
+            from book_classifier import classify_book
+
+            track = classify_book(fname, content[:500])
         title = _title_from_path(path)
         author = _author_from_filename(fname)
         summary = _summarize(title, content)

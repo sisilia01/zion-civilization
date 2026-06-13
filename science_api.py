@@ -12,7 +12,7 @@ from decimal import Decimal
 from datetime import datetime
 from pathlib import Path
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 try:
@@ -239,6 +239,53 @@ def _build_research_daily_candles(daily_rows: list[dict], days: int = 14) -> lis
     return candles
 
 
+BOOK_DISPLAY_NAMES = {
+    18: {"title": "The Bible (King James Version)", "author": "—"},
+    1: {"title": "Twenty Thousand Leagues Under the Sea", "author": "Jules Verne"},
+    19: {"title": "Bleak House", "author": "Charles Dickens"},
+    3: {"title": "The Adventures of Huckleberry Finn", "author": "Mark Twain"},
+    4: {"title": "The Adventures of Sherlock Holmes", "author": "Arthur Conan Doyle"},
+    7: {"title": "Anabasis", "author": "Xenophon"},
+    6: {"title": "An Enquiry Concerning Human Understanding", "author": "David Hume"},
+    12: {"title": "Around the World in Eighty Days", "author": "Jules Verne"},
+}
+
+
+@router.get("/lab/top-books")
+def get_top_books():
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT b.id, b.title, b.author, COUNT(ak.agent_id) AS agent_count
+            FROM books b
+            JOIN agent_knowledge ak ON ak.book_id = b.id
+            GROUP BY b.id, b.title, b.author
+            ORDER BY agent_count DESC
+            LIMIT 5
+            """
+        )
+        result = []
+        for r in cur.fetchall():
+            book_id = r["id"]
+            display = BOOK_DISPLAY_NAMES.get(
+                book_id, {"title": r["title"], "author": r["author"]}
+            )
+            result.append(
+                {
+                    "book_id": book_id,
+                    "title": display["title"],
+                    "author": display["author"],
+                    "agent_count": int(r["agent_count"] or 0),
+                }
+            )
+        return js(result)
+    finally:
+        cur.close()
+        conn.close()
+
+
 @router.get("/lab/research-stats")
 def lab_research_stats():
     """Library coverage + per-track progress + daily research activity (OHLC)."""
@@ -308,6 +355,63 @@ def lab_research_stats():
     finally:
         cur.close()
         conn.close()
+
+
+@router.get("/lab/knowledge-reflections")
+def get_knowledge_reflections(tracks: str = Query(...)):
+    """Agent insights filtered by track(s) for AGENT_TERMINAL carousel."""
+    track_list = [t.strip() for t in tracks.split(",") if t.strip()]
+    if not track_list:
+        return []
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        placeholders = ",".join(["%s"] * len(track_list))
+        cur.execute(
+            f"""
+            SELECT ak.agent_id, a.name AS agent_name, ak.track, ak.insight, ak.book_id
+            FROM agent_knowledge ak
+            JOIN agents a ON a.id = ak.agent_id
+            WHERE ak.track IN ({placeholders})
+              AND ak.insight NOT ILIKE '%%gutenberg%%'
+              AND ak.insight NOT ILIKE '%%z-library%%'
+              AND ak.insight NOT ILIKE '%%zlibrary%%'
+              AND ak.insight NOT ILIKE '%%z-lib%%'
+              AND ak.insight NOT ILIKE '%%annas-archive%%'
+              AND ak.insight NOT ILIKE '%%libgen%%'
+            ORDER BY
+                CASE
+                    WHEN ak.insight ILIKE '%%black hole%%' THEN 0
+                    WHEN ak.insight ILIKE '%%relativity%%' OR ak.insight ILIKE '%%space-time%%'
+                         OR ak.insight ILIKE '%%time and space%%' THEN 1
+                    WHEN ak.insight ILIKE '%%gravity%%' OR ak.insight ILIKE '%%gravitation%%' THEN 2
+                    ELSE 3
+                END,
+                ak.agent_id
+            LIMIT 8
+            """,
+            track_list,
+        )
+        return [
+            {
+                "agent_id": r["agent_id"],
+                "agent_name": r["agent_name"],
+                "track": r["track"],
+                "insight": " ".join((r["insight"] or "").split()).strip(),
+                "book_id": r["book_id"],
+            }
+            for r in cur.fetchall()
+        ]
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/lab/singularity-reflections")
+def get_singularity_reflections():
+    """Legacy wrapper — cosmology/science insights for AGENT_TERMINAL."""
+    return get_knowledge_reflections(tracks="COSMOLOGY,SCIENCE")
 
 
 @router.get("/platform/strategies")
@@ -527,6 +631,13 @@ def archive_reports():
     rows = [dict(r) for r in cur.fetchall()]
     cur.execute("SELECT * FROM archive_schedule WHERE id = 1")
     schedule = dict(cur.fetchone() or {})
+    rows = _enrich_archive_report_rows(cur, rows)
+    cur.close()
+    conn.close()
+    return js({"reports": rows, "schedule": schedule})
+
+
+def _enrich_archive_report_rows(cur, rows: list[dict]) -> list[dict]:
     report_ids = [r["id"] for r in rows]
     track_files_by_report: dict[int, dict[str, dict]] = {}
     if report_ids:
@@ -541,8 +652,6 @@ def archive_reports():
         for tf in cur.fetchall():
             row = dict(tf)
             track_files_by_report.setdefault(row["report_id"], {})[row["track_name"]] = row
-    cur.close()
-    conn.close()
 
     for r in rows:
         if r.get("walrus_blob_id"):
@@ -569,7 +678,104 @@ def archive_reports():
             entry["download_filename"] = _archive_track_filename(r, track)
             enriched.append(entry)
         r["files"] = enriched
-    return js({"reports": rows, "schedule": schedule})
+    return rows
+
+
+@router.get("/archive/periods")
+def archive_periods():
+    """Weekly periods (Mon–Sun) with document counts for archive filter."""
+    from datetime import date, timedelta
+
+    from archive_generator import ensure_archive_schema
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    ensure_archive_schema(cur)
+    rows: list[dict] = []
+    try:
+        cur.execute(
+            """
+            SELECT DATE_TRUNC('week', created_at)::date AS week_start,
+                   COUNT(*)::int AS doc_count
+            FROM walrus_blobs
+            GROUP BY 1
+            ORDER BY week_start DESC
+            """
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    except Exception:
+        conn.rollback()
+    if not rows:
+        cur.execute(
+            """
+            SELECT DATE_TRUNC('week', created_at)::date AS week_start,
+                   COUNT(*)::int AS doc_count
+            FROM archive_reports
+            GROUP BY 1
+            ORDER BY week_start DESC
+            """
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+
+    periods = []
+    for r in rows:
+        raw = r.get("week_start")
+        if hasattr(raw, "date"):
+            week_start = raw.date().isoformat()
+        elif hasattr(raw, "isoformat"):
+            week_start = raw.isoformat()
+        else:
+            week_start = str(raw)[:10]
+        week_end = (date.fromisoformat(week_start) + timedelta(days=6)).isoformat()
+        periods.append(
+            {
+                "week_start": week_start,
+                "week_end": week_end,
+                "doc_count": int(r.get("doc_count") or 0),
+            }
+        )
+    return js(periods)
+
+
+@router.get("/archive/documents")
+def archive_documents(week: str = Query(..., description="Week start date YYYY-MM-DD (Monday)")):
+    """Archive reports/documents for a specific calendar week."""
+    from datetime import date, timedelta
+
+    from archive_generator import ensure_archive_schema
+
+    try:
+        week_start = date.fromisoformat(week.strip()[:10])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid week date; use YYYY-MM-DD") from exc
+    week_end_exclusive = week_start + timedelta(days=7)
+
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    ensure_archive_schema(cur)
+    cur.execute(
+        """
+        SELECT id, report_type, week_number, month_number, year_number,
+               walrus_blob_id, sha256, zip_filename, files_json, created_at
+        FROM archive_reports
+        WHERE created_at >= %s AND created_at < %s
+        ORDER BY created_at DESC
+        """,
+        (week_start, week_end_exclusive),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    rows = _enrich_archive_report_rows(cur, rows)
+    cur.close()
+    conn.close()
+    return js(
+        {
+            "week_start": week_start.isoformat(),
+            "week_end": (week_end_exclusive - timedelta(days=1)).isoformat(),
+            "documents": rows,
+        }
+    )
 
 
 def _archive_track_filename(report: dict, track: str) -> str:
