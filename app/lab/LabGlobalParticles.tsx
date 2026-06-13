@@ -13,13 +13,13 @@ const GLOBAL_BG_PARTICLES = {
   particles: {
     number: { value: 60 },
     color: {
-      value: "#00ff88",
+      value: { h: 152, s: 100, l: 50 },
       animation: { h: { enable: true, speed: 8, sync: true } },
     } as any,
     links: {
       enable: true,
       color: {
-        value: "#00ff88",
+        value: { h: 152, s: 100, l: 50 },
         animation: { h: { enable: true, speed: 8, sync: true } },
       } as any,
       distance: 150,

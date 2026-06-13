@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 
 type ArchiveFile = {
   track: string;
@@ -32,13 +34,20 @@ type Schedule = {
   next_annual_at?: string;
 };
 
-const colStyle: CSSProperties = {
+const panelShellStyle: CSSProperties = {
   flex: "1 1 280px",
-  background: "rgba(8, 18, 36, 0.85)",
+  minWidth: "260px",
   border: "1px solid #1e3a5f",
   borderRadius: "6px",
   padding: "16px",
-  minWidth: "260px",
+};
+
+const tracksPanelStyle: CSSProperties = {
+  marginBottom: "24px",
+  border: "1px solid #1e3a5f",
+  borderRadius: "6px",
+  padding: 0,
+  overflow: "hidden",
 };
 
 const badgeStyle: CSSProperties = {
@@ -111,7 +120,7 @@ function ReportColumn({
     : undefined;
 
   return (
-    <div style={colStyle}>
+    <GlassCard className={glassCardStyles.glassCard} style={panelShellStyle}>
       <div
         style={{
           fontFamily: '"IBM Plex Mono", monospace',
@@ -196,7 +205,7 @@ function ReportColumn({
           Walrus: {truncateBlob(report.walrus_blob_id ?? "")} ↗
         </a>
       )}
-    </div>
+    </GlassCard>
   );
 }
 
@@ -254,14 +263,7 @@ export default function ArchivePanel() {
         Complete historical record preserved on Walrus
       </p>
 
-      <div
-        style={{
-          marginBottom: "24px",
-          border: "1px solid #1e3a5f",
-          borderRadius: "6px",
-          background: "rgba(8, 18, 36, 0.65)",
-        }}
-      >
+      <GlassCard className={glassCardStyles.glassCard} style={tracksPanelStyle}>
         <button
           type="button"
           onClick={() => setTracksOpen((o) => !o)}
@@ -294,7 +296,7 @@ export default function ArchivePanel() {
             </p>
           </div>
         )}
-      </div>
+      </GlassCard>
 
       {loading && <p style={{ color: "#64748b" }}>Loading archive…</p>}
 
