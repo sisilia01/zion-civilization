@@ -28,6 +28,24 @@ WEEKLY_DAYS = 7
 MONTHLY_DAYS = 30
 ANNUAL_DAYS = 365
 
+REFUSAL_PATTERNS = [
+    "i cannot provide",
+    "i can't provide",
+    "cannot provide information",
+    "i'm not able to",
+    "i am not able to",
+    "can i help you with something else",
+    "as an ai",
+    "as a language model",
+]
+
+
+def is_valid_observation(text: str) -> bool:
+    if not text or len(text) < 50:
+        return False
+    text_lower = text.lower()
+    return not any(p in text_lower for p in REFUSAL_PATTERNS)
+
 
 def ensure_archive_schema(cur) -> None:
     ensure_schema(cur)
@@ -188,16 +206,20 @@ def _replacement_insight(cur, observation: dict, track: str) -> str | None:
 
 
 def _dedupe_observations(cur, observations: list[dict], track: str, threshold: float = 0.8) -> list[dict]:
-    """Skip or replace observations that are >80% similar to an earlier one."""
+    """Skip LLM refusals, then skip or replace observations that are >80% similar."""
     kept: list[dict] = []
     kept_texts: list[str] = []
     for obs in observations:
         text = (obs.get("observation_text") or "").strip()
-        if not text:
+        if not is_valid_observation(text):
             continue
         if any(_text_similarity(text, prev) >= threshold for prev in kept_texts):
             alt = _replacement_insight(cur, obs, track)
-            if alt and not any(_text_similarity(alt, prev) >= threshold for prev in kept_texts):
+            if (
+                alt
+                and is_valid_observation(alt)
+                and not any(_text_similarity(alt, prev) >= threshold for prev in kept_texts)
+            ):
                 obs = {**obs, "observation_text": alt}
                 text = alt
             else:
