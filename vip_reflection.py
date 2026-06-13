@@ -131,7 +131,6 @@ ACTIONS (choose exactly ONE):
 - cut_taxes: (-treasury, +approval)
 - anti_corruption: reduce corruption (+approval)
 - build_jobs: fund corporations (-treasury)
-- declare_emergency: boost police (-approval)
 - do_nothing
 
 Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
@@ -278,28 +277,14 @@ Respond ONLY JSON: {{"action":"...","reasoning":"one sentence","amount":0}}"""
                 total_cost,
                 priority="urgent",
             )
-    elif action == "declare_emergency":
-        cur.execute(
-            """
-            UPDATE president_state
-            SET approval_rating = GREATEST(10, approval_rating - 10)
-            WHERE is_active = true
-            """
-        )
-        cur.execute(
-            """
-            UPDATE sheriff_state
-            SET police_count = police_count + 20
-            WHERE is_active = true
-            """
-        )
+    elif action == "declare_emergency":  # Unconstitutional — no-op
         log_event(
             cur,
             pres["agent_id"],
             "president",
-            f"AI: President {pres['agent_name']} declares emergency — {reasoning}",
+            f"AI: President {pres['agent_name']} — declare_emergency blocked by Constitution",
             0,
-            priority="breaking",
+            priority="normal",
         )
 
     save_memory(cur, "president", vip_id, metrics, action, reasoning)

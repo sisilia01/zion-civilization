@@ -599,22 +599,12 @@ def execute_frs_directive(cur, ctx: dict | None = None) -> dict:
             (policy_mode,),
         )
         headline = f"FRS Chief {chief_name} corp QE: {total:.0f} ZION to {n} corporations"
-    elif action == "declare_emergency":
-        corp_qe = min(float(amount or 0), zrs_reserve(cur) - ZRS_RESERVE_FLOOR)
-        n_corp, corp_total = inject_to_corporations(
-            cur, max(0, corp_qe * 0.7), "is_active = true"
-        )
-        n_ag, ag_total = inject_to_agents(
-            cur, 40.0, "is_alive = true AND class IN ('poor', 'critical')"
-        )
-        moved = corp_total + ag_total
+    elif action == "declare_emergency":  # Unconstitutional — no power to declare emergency rule
         cur.execute(
-            "UPDATE zrs_state SET policy_mode = 'EMERGENCY', updated_at = NOW() WHERE id = 1"
+            "UPDATE zrs_state SET policy_mode = %s, updated_at = NOW() WHERE id = 1",
+            (policy_mode or "NORMAL",),
         )
-        headline = (
-            f"FRS Chief {chief_name} EMERGENCY QE: {corp_total:.0f} to {n_corp} corps, "
-            f"{ag_total:.0f} to {n_ag} agents"
-        )
+        headline = f"FRS Chief {chief_name}: declare_emergency blocked by Constitution (hold {policy_mode or 'NORMAL'})"
     else:
         cur.execute(
             "UPDATE zrs_state SET policy_mode = %s, updated_at = NOW() WHERE id = 1",

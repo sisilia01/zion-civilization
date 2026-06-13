@@ -195,10 +195,10 @@ def _rule_based_directive(cur, ctx: dict) -> dict:
     if unemployment > 80 or inflation > 30:
         qe = min(100_000.0, max(0, reserve - ZRS_RESERVE_FLOOR) * 0.10)
         return {
-            "action": "declare_emergency",
+            "action": "stimulate_economy",
             "amount": qe,
-            "policy_mode": "CRISIS",
-            "reasoning": f"Crisis: unemployment {unemployment:.0f}%, inflation {inflation:.1f}%",
+            "policy_mode": "RECESSION",
+            "reasoning": f"High unemployment {unemployment:.0f}%, inflation {inflation:.1f}% — lawful corp QE",
         }
 
     # RECESSION: unemployment > 50% — QE to corps only
@@ -224,10 +224,10 @@ def _rule_based_directive(cur, ctx: dict) -> dict:
     if ctx.get("senate", {}).get("emergency_session"):
         qe = min(30_000.0, max(0, reserve - ZRS_RESERVE_FLOOR) * 0.03)
         return {
-            "action": "declare_emergency",
+            "action": "stimulate_economy",
             "amount": qe,
-            "policy_mode": "EMERGENCY",
-            "reasoning": "Senate emergency session — humanitarian QE",
+            "policy_mode": "RECESSION",
+            "reasoning": "Senate emergency session — lawful humanitarian corp QE",
         }
 
     return {

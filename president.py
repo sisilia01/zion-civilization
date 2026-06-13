@@ -133,8 +133,6 @@ def decide_action(cur, data: dict) -> str:
         weights["FUND_POLICE"] = weights.get("FUND_POLICE", 1) * 3
     elif ai_action == "stimulate_economy":
         weights["STIMULUS"] = weights.get("STIMULUS", 1) * 3
-    elif ai_action == "declare_emergency":
-        weights["FUND_POLICE"] = weights.get("FUND_POLICE", 1) * 2
     elif ai_action == "tax_change":
         weights["TAX_RELIEF"] = weights.get("TAX_RELIEF", 1) * 2
 

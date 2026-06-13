@@ -886,7 +886,43 @@ async def ai_decide(
                 knowledge_block = (
                     f"\n\nDrawing on your study of governance and philosophy:\n{insights}"
                 )
-        system_prompt = system_prompt + knowledge_block
+
+        duty_block = ""
+        from constitutional_duties import (
+            DUTY_ROLES,
+            get_duty_reminder,
+            get_triggered_duties,
+            merge_indicators_from_state,
+            normalize_role,
+        )
+
+        role_key = normalize_role(faction)
+        if role_key in DUTY_ROLES:
+            econ_indicators: dict = {}
+            try:
+                econ_conn = get_conn()
+                econ_cur = get_cursor(econ_conn)
+                try:
+                    econ_indicators = fetch_economic_indicators(econ_cur)
+                finally:
+                    econ_cur.close()
+                    econ_conn.close()
+            except Exception:
+                econ_indicators = {}
+            indicators = merge_indicators_from_state(
+                econ_indicators, state, cycle_actions
+            )
+            duty_text = get_duty_reminder(role_key, indicators)
+            if duty_text:
+                duty_block = f"\n\n{duty_text}"
+                n_trig = len(get_triggered_duties(role_key, indicators))
+                print(
+                    f"  [constitutional duties] {faction}: "
+                    f"unemployment={float(indicators.get('unemployment_rate') or 0):.1f}% "
+                    f"triggered={n_trig}",
+                    flush=True,
+                )
+        system_prompt = system_prompt + knowledge_block + duty_block
 
         user_prompt = f"""
 You are the AI controller for {faction} in ZION Civilization.
