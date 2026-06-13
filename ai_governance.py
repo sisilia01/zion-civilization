@@ -318,15 +318,6 @@ async def get_civilization_state() -> dict:
         )
         zrs = cur.fetchone()
 
-        econ = {}
-        try:
-            econ_conn = get_conn()
-            econ_cur = get_cursor(econ_conn)
-            econ = fetch_economic_indicators(econ_cur)
-            econ_conn.close()
-        except Exception:
-            econ = {}
-
         cur.execute(
             """
             SELECT agent_name, approval_rating, days_in_power,
@@ -418,9 +409,6 @@ async def get_civilization_state() -> dict:
         )
         events = cur.fetchall()
 
-        gini = float(econ.get("gini_coefficient") or 0)
-        inflation = float(econ.get("inflation_rate") or 0)
-
         cur.execute(
             """
             SELECT
@@ -440,117 +428,136 @@ async def get_civilization_state() -> dict:
             unemployed = 0
             unemployment_rate = 0.0
             corp_employees = 0
-
-        critical_alerts = []
-        if unemployment_rate > 50:
-            critical_alerts.append(
-                f"🚨 UNEMPLOYMENT CRISIS: {unemployment_rate:.0f}% unemployed!"
-            )
-        if inflation > 20:
-            critical_alerts.append(f"🚨 HYPERINFLATION: {inflation:.0f}% inflation!")
-        if revolution > 60:
-            critical_alerts.append(f"🚨 REVOLUTION IMMINENT: {revolution:.0f}%!")
-        if starving > alive * 0.1:
-            critical_alerts.append(f"🚨 MASS STARVATION: {starving} dying!")
-        if corp_employees < alive * 0.1:
-            critical_alerts.append(
-                f"🚨 NO JOBS: Only {corp_employees} employed of {alive}!"
-            )
-
-        crisis_level = (
-            "CRITICAL" if len(critical_alerts) >= 2
-            else "WARNING" if critical_alerts
-            else "NORMAL"
-        )
-
-        return {
-            "population": {
-                "alive": alive,
-                "classes": classes,
-                "avg_balance": round(avg_balance, 2),
-                "starving": starving,
-                "poverty_rate": poverty_rate,
-                "unemployment_rate": round(unemployment_rate, 1),
-                "unemployed": unemployed,
-                "employed": corp_employees,
-            },
-            "critical_alerts": critical_alerts,
-            "crisis_level": crisis_level,
-            "economy": {
-                "zrs_policy": zrs[0] if zrs else "NORMAL",
-                "zrs_reserve": float(zrs[1]) if zrs else 0,
-                "interest_rate": float(zrs[2]) if zrs else 5,
-                "tax_modifier": float(zrs[3]) if zrs else 0,
-                "gini": gini,
-                "inflation_rate": inflation,
-                "avg_balance": round(avg_balance, 2),
-            },
-            "politics": {
-                "president": {
-                    "name": pres[0] if pres else "vacant",
-                    "approval": float(pres[1]) if pres else 0,
-                    "days_in_power": pres[2] if pres else 0,
-                    "personal_fund": float(pres[3]) if pres else 0,
-                    "corruption": float(pres[4]) if pres else 0,
-                },
-                "sheriff": {
-                    "name": sheriff[0] if sheriff else "vacant",
-                    "approval": float(sheriff[1]) if sheriff else 0,
-                    "type": sheriff[2] if sheriff else "honest",
-                    "officers": int(sheriff[3]) if sheriff else 0,
-                    "budget": float(sheriff[4]) if sheriff else 0,
-                    "corruption": sheriff_corruption,
-                },
-                "revolution_meter": revolution,
-                "stability": stability,
-                "recent_laws": [
-                    {"type": l[0], "status": l[1], "for": l[2], "against": l[3]}
-                    for l in laws
-                ],
-            },
-            "clans": [
-                {
-                    "name": c[0],
-                    "members": c[1],
-                    "treasury": float(c[2]),
-                    "territory": float(c[3]) if c[3] else 0,
-                }
-                for c in clans
-            ],
-            "corporations": [
-                {
-                    "name": c[0],
-                    "employees": c[1],
-                    "treasury": float(c[2]),
-                    "revenue": float(c[3]) if c[3] else 0,
-                }
-                for c in corps
-            ],
-            "police": [
-                {
-                    "division": p[0],
-                    "officers": p[1],
-                    "budget": float(p[2]),
-                    "efficiency": float(p[3]) if p[3] else 0,
-                }
-                for p in police
-            ],
-            "ai_memory": [
-                {"decision": h[0][:100], "time": str(h[1])}
-                for h in ai_history
-            ],
-            "recent_events": [
-                {"type": e[0], "description": (e[1] or "")[:100]}
-                for e in events
-            ],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
     except Exception as e:
         print(f"State error: {e}", flush=True)
         return {}
     finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         cur.close()
         conn.close()
+
+    econ = {}
+    try:
+        econ_conn = get_conn()
+        econ_cur = get_cursor(econ_conn)
+        try:
+            econ = fetch_economic_indicators(econ_cur)
+        finally:
+            econ_cur.close()
+            econ_conn.close()
+    except Exception:
+        econ = {}
+
+    gini = float(econ.get("gini_coefficient") or 0)
+    inflation = float(econ.get("inflation_rate") or 0)
+
+    critical_alerts = []
+    if unemployment_rate > 50:
+        critical_alerts.append(
+            f"🚨 UNEMPLOYMENT CRISIS: {unemployment_rate:.0f}% unemployed!"
+        )
+    if inflation > 20:
+        critical_alerts.append(f"🚨 HYPERINFLATION: {inflation:.0f}% inflation!")
+    if revolution > 60:
+        critical_alerts.append(f"🚨 REVOLUTION IMMINENT: {revolution:.0f}%!")
+    if starving > alive * 0.1:
+        critical_alerts.append(f"🚨 MASS STARVATION: {starving} dying!")
+    if corp_employees < alive * 0.1:
+        critical_alerts.append(
+            f"🚨 NO JOBS: Only {corp_employees} employed of {alive}!"
+        )
+
+    crisis_level = (
+        "CRITICAL" if len(critical_alerts) >= 2
+        else "WARNING" if critical_alerts
+        else "NORMAL"
+    )
+
+    return {
+        "population": {
+            "alive": alive,
+            "classes": classes,
+            "avg_balance": round(avg_balance, 2),
+            "starving": starving,
+            "poverty_rate": poverty_rate,
+            "unemployment_rate": round(unemployment_rate, 1),
+            "unemployed": unemployed,
+            "employed": corp_employees,
+        },
+        "critical_alerts": critical_alerts,
+        "crisis_level": crisis_level,
+        "economy": {
+            "zrs_policy": zrs[0] if zrs else "NORMAL",
+            "zrs_reserve": float(zrs[1]) if zrs else 0,
+            "interest_rate": float(zrs[2]) if zrs else 5,
+            "tax_modifier": float(zrs[3]) if zrs else 0,
+            "gini": gini,
+            "inflation_rate": inflation,
+            "avg_balance": round(avg_balance, 2),
+        },
+        "politics": {
+            "president": {
+                "name": pres[0] if pres else "vacant",
+                "approval": float(pres[1]) if pres else 0,
+                "days_in_power": pres[2] if pres else 0,
+                "personal_fund": float(pres[3]) if pres else 0,
+                "corruption": float(pres[4]) if pres else 0,
+            },
+            "sheriff": {
+                "name": sheriff[0] if sheriff else "vacant",
+                "approval": float(sheriff[1]) if sheriff else 0,
+                "type": sheriff[2] if sheriff else "honest",
+                "officers": int(sheriff[3]) if sheriff else 0,
+                "budget": float(sheriff[4]) if sheriff else 0,
+                "corruption": sheriff_corruption,
+            },
+            "revolution_meter": revolution,
+            "stability": stability,
+            "recent_laws": [
+                {"type": l[0], "status": l[1], "for": l[2], "against": l[3]}
+                for l in laws
+            ],
+        },
+        "clans": [
+            {
+                "name": c[0],
+                "members": c[1],
+                "treasury": float(c[2]),
+                "territory": float(c[3]) if c[3] else 0,
+            }
+            for c in clans
+        ],
+        "corporations": [
+            {
+                "name": c[0],
+                "employees": c[1],
+                "treasury": float(c[2]),
+                "revenue": float(c[3]) if c[3] else 0,
+            }
+            for c in corps
+        ],
+        "police": [
+            {
+                "division": p[0],
+                "officers": p[1],
+                "budget": float(p[2]),
+                "efficiency": float(p[3]) if p[3] else 0,
+            }
+            for p in police
+        ],
+        "ai_memory": [
+            {"decision": h[0][:100], "time": str(h[1])}
+            for h in ai_history
+        ],
+        "recent_events": [
+            {"type": e[0], "description": (e[1] or "")[:100]}
+            for e in events
+        ],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def adjust_president_approval(cur, delta: int):
