@@ -71,11 +71,63 @@ def ensure_schema(cur) -> None:
     )
 
 
-def next_unread_chunk(agent_id: int, cur=None) -> dict[str, Any] | None:
+def next_unread_chunk(agent_id: int, cur=None, *, exclude: set[tuple[int, int]] | None = None) -> dict[str, Any] | None:
     """
-    Return the next chunk this agent has not read.
-    Prioritizes in-progress books (continue where left off), then new books.
+    Return the next chunk not yet read by any agent (civilization-wide).
+    ``exclude`` skips chunks already reserved in the current batch.
     """
+    own_conn = cur is None
+    if own_conn:
+        conn = db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        ensure_schema_safe(cur)
+        conn.commit()
+
+    params: list[Any] = []
+    exclude_clause = ""
+    if exclude:
+        pairs = list(exclude)
+        placeholders = ", ".join("(%s, %s)" for _ in pairs)
+        exclude_clause = f"AND (bc.book_id, bc.chunk_index) NOT IN ({placeholders})"
+        for book_id, chunk_index in pairs:
+            params.extend([book_id, chunk_index])
+
+    cur.execute(
+        f"""
+        SELECT bc.id AS chunk_id, bc.book_id, bc.chunk_index, bc.chunk_text,
+               bc.word_count, b.title, b.track, b.author
+        FROM book_chunks bc
+        JOIN books b ON b.id = bc.book_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM reading_progress rp
+            WHERE rp.book_id = bc.book_id
+              AND rp.chunk_index = bc.chunk_index
+        )
+        {exclude_clause}
+        ORDER BY bc.book_id, bc.chunk_index
+        LIMIT 1
+        """,
+        params,
+    )
+    row = cur.fetchone()
+
+    if own_conn:
+        cur.connection.close()
+
+    return dict(row) if row else None
+
+
+def assign_unread_chunks_batch(
+    agent_ids: list[int],
+    cur=None,
+) -> dict[int, dict[str, Any]]:
+    """
+    Assign one distinct civilization-unread chunk per agent for a single cycle.
+    Chunks are ordered cover-to-cover (book_id, chunk_index) without repeats.
+    """
+    if not agent_ids:
+        return {}
+
     own_conn = cur is None
     if own_conn:
         conn = db()
@@ -91,31 +143,24 @@ def next_unread_chunk(agent_id: int, cur=None) -> dict[str, Any] | None:
         JOIN books b ON b.id = bc.book_id
         WHERE NOT EXISTS (
             SELECT 1 FROM reading_progress rp
-            WHERE rp.agent_id = %s
-              AND rp.book_id = bc.book_id
+            WHERE rp.book_id = bc.book_id
               AND rp.chunk_index = bc.chunk_index
         )
-        ORDER BY
-            CASE WHEN EXISTS (
-                SELECT 1 FROM reading_progress rp2
-                WHERE rp2.agent_id = %s AND rp2.book_id = bc.book_id
-            ) THEN 0 ELSE 1 END,
-            (
-                SELECT MAX(rp3.read_at) FROM reading_progress rp3
-                WHERE rp3.agent_id = %s AND rp3.book_id = bc.book_id
-            ) DESC NULLS LAST,
-            bc.book_id,
-            bc.chunk_index
-        LIMIT 1
+        ORDER BY bc.book_id, bc.chunk_index
+        LIMIT %s
         """,
-        (agent_id, agent_id, agent_id),
+        (len(agent_ids),),
     )
-    row = cur.fetchone()
+    chunks = [dict(row) for row in cur.fetchall()]
+    assignments = {
+        agent_id: chunk
+        for agent_id, chunk in zip(agent_ids, chunks)
+    }
 
     if own_conn:
         cur.connection.close()
 
-    return dict(row) if row else None
+    return assignments
 
 
 def record_chunk_read(

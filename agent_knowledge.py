@@ -189,19 +189,19 @@ def agent_reads_chunk(agent_id: int, chunk: dict) -> str | None:
 
 
 def read_chunk_cycle(batch: int = 30) -> int:
-    """Each agent reads their next unread chunk — cover-to-cover over many cycles."""
+    """Each agent reads a distinct civilization-unread chunk — cover-to-cover over many cycles."""
     from chunk_books import ensure_schema_safe as ensure_chunks_schema
-    from reading_progress import ensure_schema_safe as ensure_reading_schema, next_unread_chunk
+    from reading_progress import ensure_schema_safe as ensure_reading_schema, assign_unread_chunks_batch
 
     conn = db()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     ensure_schema_safe(cur)
     ensure_chunks_schema(cur)
     ensure_reading_schema(cur)
     conn.commit()
 
-    cur.execute("SELECT COUNT(*) FROM book_chunks")
-    if int(cur.fetchone()[0] or 0) == 0:
+    cur.execute("SELECT COUNT(*) AS n FROM book_chunks")
+    if int((cur.fetchone() or {}).get("n") or 0) == 0:
         print("[agent_knowledge] no book chunks — run chunk_books.py first")
         cur.close()
         conn.close()
@@ -218,7 +218,7 @@ def read_chunk_cycle(batch: int = 30) -> int:
             """,
             (batch,),
         )
-        agent_ids = [r[0] for r in cur.fetchall()]
+        agent_ids = [int(r["id"]) for r in cur.fetchall()]
     except psycopg2.Error:
         conn.rollback()
     if not agent_ids:
@@ -232,13 +232,15 @@ def read_chunk_cycle(batch: int = 30) -> int:
             """,
             (batch,),
         )
-        agent_ids = [r[0] for r in cur.fetchall()]
+        agent_ids = [int(r["agent_id"]) for r in cur.fetchall()]
+
+    assignments = assign_unread_chunks_batch(agent_ids, cur)
     cur.close()
     conn.close()
 
     created = 0
     for agent_id in agent_ids:
-        chunk = next_unread_chunk(agent_id)
+        chunk = assignments.get(agent_id)
         if not chunk:
             continue
         insight = agent_reads_chunk(agent_id, chunk)

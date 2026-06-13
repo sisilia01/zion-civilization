@@ -185,6 +185,131 @@ def trading_psych():
     from academy import analyze_trading_psychology
     return js(analyze_trading_psychology())
 
+
+def _build_research_daily_candles(daily_rows: list[dict], days: int = 14) -> list[dict]:
+    """OHLC on cumulative insights_count so candles show visible high/low spread."""
+    from datetime import date, timedelta
+
+    by_day: dict[date, dict] = {}
+    for row in daily_rows:
+        raw = row.get("day")
+        if raw is None:
+            continue
+        day_key = raw.date() if hasattr(raw, "date") else raw
+        by_day[day_key] = {
+            "insights_count": int(row.get("insights_count") or 0),
+            "avg_usefulness": float(row.get("avg_usefulness") or 0),
+        }
+
+    end = date.today()
+    start = end - timedelta(days=days - 1)
+    cumulative = 0
+    prev_close = 0.0
+    candles: list[dict] = []
+
+    d = start
+    while d <= end:
+        bucket = by_day.get(d)
+        day_count = int(bucket["insights_count"]) if bucket else 0
+        day_avg = float(bucket["avg_usefulness"]) if bucket else 0.0
+
+        open_ = float(prev_close)
+        close = open_ + float(day_count)
+        # Wick extends slightly beyond body for visual separation on active days.
+        wick_pad = max(day_count * 0.08, 1.0) if day_count else 0.0
+        high = max(open_, close) + wick_pad
+        low = max(0.0, min(open_, close) - (wick_pad * 0.5 if day_count else 0.0))
+
+        candles.append(
+            {
+                "date": d.isoformat(),
+                "open": round(open_, 2),
+                "high": round(high, 2),
+                "low": round(low, 2),
+                "close": round(close, 2),
+                "volume": day_count,
+                "insights_count": day_count,
+                "avg_usefulness": round(day_avg, 3),
+                "cumulative_insights": round(close, 2),
+            }
+        )
+        prev_close = close
+        d += timedelta(days=1)
+
+    return candles
+
+
+@router.get("/lab/research-stats")
+def lab_research_stats():
+    """Library coverage + per-track progress + daily research activity (OHLC)."""
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            """
+            SELECT b.track,
+                   COUNT(DISTINCT (bc.book_id, bc.chunk_index)) AS total_chunks,
+                   COUNT(DISTINCT CASE
+                       WHEN rp.id IS NOT NULL THEN (bc.book_id, bc.chunk_index)
+                   END) AS chunks_read
+            FROM books b
+            JOIN book_chunks bc ON bc.book_id = b.id
+            LEFT JOIN reading_progress rp
+              ON rp.book_id = bc.book_id AND rp.chunk_index = bc.chunk_index
+            GROUP BY b.track
+            ORDER BY total_chunks DESC
+            """
+        )
+        by_track = []
+        read_chunks = 0
+        total_chunks = 0
+        for row in cur.fetchall():
+            t_total = int(row.get("total_chunks") or 0)
+            t_read = int(row.get("chunks_read") or 0)
+            total_chunks += t_total
+            read_chunks += t_read
+            pct = round(t_read / t_total * 100, 2) if t_total else 0.0
+            by_track.append(
+                {
+                    "track": row.get("track") or "UNKNOWN",
+                    "total_chunks": t_total,
+                    "chunks_read": t_read,
+                    "pct": pct,
+                }
+            )
+
+        education_pct = round(read_chunks / total_chunks * 100, 2) if total_chunks else 0.0
+
+        cur.execute(
+            """
+            SELECT DATE(created_at) AS day,
+                   COUNT(*) AS insights_count,
+                   COALESCE(AVG(usefulness_score), 0) AS avg_usefulness
+            FROM agent_knowledge
+            WHERE created_at >= CURRENT_DATE - INTERVAL '13 days'
+            GROUP BY DATE(created_at)
+            ORDER BY day
+            """
+        )
+        daily_rows = [dict(r) for r in cur.fetchall()]
+        daily = _build_research_daily_candles(daily_rows, days=14)
+
+        return js(
+            {
+                "education_pct": education_pct,
+                "library": {
+                    "chunks_read": read_chunks,
+                    "total_chunks": total_chunks,
+                },
+                "by_track": by_track,
+                "daily": daily,
+            }
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
 @router.get("/platform/strategies")
 def platform_strategies():
     """Open platform: AI-invented strategies humans can study/apply (transparent, no profit promise)."""
