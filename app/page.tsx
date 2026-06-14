@@ -11097,22 +11097,34 @@ export default function Home() {
     }
   }, [fetchWalrusEventsFromAPI]);
 
+  const conversationsGenerateOnceRef = useRef(false);
+
   const fetchConversations = useCallback(async () => {
+    try {
+      const res = await fetch("/conversations");
+      const data = await res.json();
+      if (Array.isArray(data)) setConversations(data);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const generateConversationsIfEmpty = useCallback(async () => {
+    if (conversationsGenerateOnceRef.current) return;
     try {
       const res = await fetch("/conversations");
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         setConversations(data);
-      } else {
-        await fetch("/api/generate_conversations", { method: "POST" });
-        const res2 = await fetch("/conversations");
-        const data2 = await res2.json();
-        if (Array.isArray(data2)) setConversations(data2);
+        return;
       }
+      conversationsGenerateOnceRef.current = true;
+      await fetch("/api/generate_conversations", { method: "POST" });
+      await fetchConversations();
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [fetchConversations]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -13627,7 +13639,7 @@ export default function Home() {
   }, [faucetCooldownEndsAt]);
 
   useEffect(() => {
-    const t = window.setInterval(() => void fetchConversations(), 60000);
+    const t = window.setInterval(() => void fetchConversations(), 300000);
     return () => clearInterval(t);
   }, [fetchConversations]);
 
@@ -13722,7 +13734,7 @@ export default function Home() {
 
     const wave2Timer = window.setTimeout(() => {
       void loadWave2Data();
-      void fetchConversations();
+      void generateConversationsIfEmpty();
     }, 100);
 
     const wave3Timer = window.setTimeout(() => {
@@ -13743,6 +13755,7 @@ export default function Home() {
     loadWave1Data,
     loadWave2Data,
     loadWave3WalrusBlobs,
+    generateConversationsIfEmpty,
     fetchConversations,
     fetchSenateLaws,
     fetchPoliticalEconomy,
