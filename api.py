@@ -6062,6 +6062,19 @@ async def get_eco_pol():
             FROM president_state WHERE is_active = true LIMIT 1
         """)
         pres = cur.fetchone()
+        from amendment_enforcer import get_param
+
+        term_limit_days = int(get_param("term_limit_days", 30))
+        ticks_per_day = int(get_param("governance_ticks_per_day", 24))
+        if pres:
+            pres = dict(pres)
+            ticks = int(pres.get("days_in_power") or 0)
+            pres["term_limit_days"] = term_limit_days
+            pres["governance_ticks_per_day"] = ticks_per_day
+            pres["term_day"] = min(
+                term_limit_days,
+                max(1, (ticks + ticks_per_day - 1) // ticks_per_day),
+            )
 
         cur.execute("""
             SELECT agent_name, sheriff_type, approval_rating,
