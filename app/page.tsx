@@ -30,14 +30,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import ClassIcon3D from "@/components/ClassIcon3D";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
 import { LiveMetricsBar } from "@/components/LiveMetricsBar";
 import glassCardStyles from "@/components/GlassCard.module.css";
 import { ConstitutionBanner } from "@/components/ConstitutionBanner";
-import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+import { computeProsperity } from "@/lib/computeProsperity";
 import { useHeaderStats } from "@/hooks/useHeaderStats";
 import { filterAndDedupeActivityLog, filterGovernanceBranchLog } from "@/lib/governanceActivityLog";
 import { parseWireResponse, type WireNewsItem } from "@/lib/wire-news";
@@ -52,6 +51,38 @@ const ParticleField = dynamic(
         aria-hidden
       />
     ),
+  },
+);
+
+const LivingPlanet = dynamic(
+  () => import("@/components/LivingPlanet").then((m) => m.LivingPlanet),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#000000",
+          color: "#00ff88",
+          fontSize: "12px",
+          fontFamily: "monospace",
+        }}
+      >
+        INITIALIZING PLANET...
+      </div>
+    ),
+  },
+);
+
+const ClassIcon3D = dynamic(
+  () => import("@/components/ClassIcon3D").then((m) => m.ClassIcon3D),
+  {
+    ssr: false,
+    loading: () => <div style={{ width: "100%", height: "100%" }} />,
   },
 );
 import {

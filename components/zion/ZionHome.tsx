@@ -44,7 +44,7 @@ import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
-import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+import { computeProsperity } from "@/lib/computeProsperity";
 import {
   filterAndDedupeActivityLog,
   filterGovernanceBranchLog,
@@ -59,6 +59,30 @@ const ParticleField = dynamic(
         style={{ position: "absolute", inset: 0, background: "#000000" }}
         aria-hidden
       />
+    ),
+  },
+);
+
+const LivingPlanet = dynamic(
+  () => import("@/components/LivingPlanet").then((m) => m.LivingPlanet),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#000000",
+          color: "#00ff88",
+          fontSize: "12px",
+          fontFamily: "monospace",
+        }}
+      >
+        INITIALIZING PLANET...
+      </div>
     ),
   },
 );

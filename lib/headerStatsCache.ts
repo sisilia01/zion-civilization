@@ -1,4 +1,4 @@
-import { computeProsperity } from "@/components/LivingPlanet";
+import { computeProsperity } from "@/lib/computeProsperity";
 
 export const CACHE_KEY = "zion_header_stats";
 export const CACHE_TTL = 5 * 60 * 60 * 1000;

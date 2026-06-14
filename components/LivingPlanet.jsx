@@ -10,19 +10,6 @@ import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createCometVfx } from "./vfx/cometVfx";
 
-export function computeProsperity({
-  unemployment = 0,
-  revolution = 0,
-  poverty = 0,
-  population = 0,
-}) {
-  const employScore = Math.max(0, 1 - unemployment / 100);
-  const stabilityScore = Math.max(0, 1 - revolution / 100);
-  const wealthScore = Math.max(0, 1 - poverty / 100);
-  const popScore = Math.min(1, population / 20000);
-  return employScore * 0.35 + stabilityScore * 0.25 + wealthScore * 0.25 + popScore * 0.15;
-}
-
 /** Same scale as computeProsperity popScore — 0..1 normalized population. */
 export function normalizePopulation(population = 0) {
   return Math.min(1, Math.max(0, population / 20000));
