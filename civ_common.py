@@ -196,6 +196,7 @@ def ensure_schema(cur):
             ("losses", "INTEGER DEFAULT 0"),
             ("members_count", "INTEGER DEFAULT 0"),
             ("treasury", "NUMERIC(20,2) DEFAULT 0"),
+            ("status", "VARCHAR(20) DEFAULT 'ACTIVE'"),
         ],
     )
 

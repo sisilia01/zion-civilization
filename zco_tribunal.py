@@ -44,6 +44,15 @@ async def ask_judge(model, amendment, tally, retries=3):
         await asyncio.sleep(2)
     return result
 
+def _parse_judge_json(content: str) -> dict:
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.endswith("```"):
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+    return json.loads(text)
+
 async def _ask_judge_once(model, amendment, tally):
     user = f"""AMENDMENT: {amendment['title']}
 DESCRIPTION: {amendment['description']}
@@ -64,7 +73,7 @@ Judge the legitimacy of recording this as a constitutional amendment."""
             )
             data = r.json()
             content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
+            return _parse_judge_json(content)
     except Exception as e:
         return {"verdict":"error","reason":str(e)[:100]}
 

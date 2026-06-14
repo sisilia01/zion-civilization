@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from civ_common import OFFICER_SALARY_PER_CYCLE
+
 TriggerFn = Callable[[dict[str, Any]], bool]
 
 DUTY_ROLES = frozenset({"president", "senate", "sheriff", "zrs_chief", "frs_chief"})
@@ -34,6 +36,14 @@ def _crime_high(ind: dict[str, Any]) -> bool:
     crime_pct = float(ind.get("crime_pct") or 0)
     crime_rate = float(ind.get("crime_rate") or 0)
     return crime_pct > 25.0 or crime_rate > 0.25
+
+
+def _police_budget_insufficient(ind: dict[str, Any]) -> bool:
+    officers = int(ind.get("police_officers") or ind.get("sheriff_officers") or 0)
+    budget = float(ind.get("police_budget") or 0)
+    if officers <= 0:
+        return False
+    return budget < officers * OFFICER_SALARY_PER_CYCLE
 
 
 def _inflation_high(ind: dict[str, Any]) -> bool:
@@ -69,6 +79,11 @@ CONSTITUTIONAL_DUTIES: dict[str, list[dict[str, Any]]] = {
             "trigger": _corruption_high,
             "tools": ["anti_corruption_drive"],
         },
+        {
+            "duty": "Fund police force — officers quitting unpaid",
+            "trigger": _police_budget_insufficient,
+            "tools": ["hire_police", "give_money"],
+        },
     ],
     "senate": [
         {
@@ -82,6 +97,11 @@ CONSTITUTIONAL_DUTIES: dict[str, list[dict[str, Any]]] = {
             "duty": "Restore order — hire police and conduct lawful raids when crime is elevated",
             "trigger": _crime_high,
             "tools": ["hire_police", "raid_gang", "anti_corruption_drive"],
+        },
+        {
+            "duty": "Fund police force — officers quitting unpaid",
+            "trigger": _police_budget_insufficient,
+            "tools": ["hire_police"],
         },
     ],
     "zrs_chief": [
@@ -137,6 +157,8 @@ def merge_indicators_from_state(
     indicators.setdefault("poverty_pct", float(pop.get("poverty_rate") or 0))
     indicators.setdefault("unemployment_rate", float(pop.get("unemployment_rate") or 0))
     indicators.setdefault("corruption_index", float(pres.get("corruption") or 0))
+    indicators.setdefault("police_budget", float(sher.get("budget") or sher.get("police_budget") or indicators.get("police_budget") or 0))
+    indicators.setdefault("police_officers", int(sher.get("officers") or sher.get("police_count") or indicators.get("police_officers") or 0))
     indicators.setdefault("inflation_rate", float(eco.get("inflation_rate") or indicators.get("inflation_rate") or 0))
     indicators.setdefault("revolution_meter", float(pol.get("revolution_meter") or 0))
     indicators["cycle_actions"] = list(cycle_actions or [])
@@ -183,7 +205,9 @@ def get_duty_reminder(role: str, current_indicators: dict[str, Any]) -> str:
         f"poverty={float(ind.get('poverty_pct') or 0):.1f}%, "
         f"inflation={float(ind.get('inflation_rate') or 0):.1f}%, "
         f"corruption={float(ind.get('corruption_index') or 0):.1f}, "
-        f"crime={float(ind.get('crime_pct') or ind.get('crime_rate') or 0):.1f}%"
+        f"crime={float(ind.get('crime_pct') or ind.get('crime_rate') or 0):.1f}%, "
+        f"police_budget={float(ind.get('police_budget') or 0):.0f} "
+        f"(need {int(ind.get('police_officers') or 0) * OFFICER_SALARY_PER_CYCLE} for payroll)"
     )
 
     parts = [

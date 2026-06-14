@@ -2652,7 +2652,7 @@ def get_clans():
     cur.execute(
         """
         SELECT id, name, treasury, members_count, wins, losses FROM clans
-        WHERE members_count > 0 OR treasury > 0
+        WHERE members_count > 0
         ORDER BY treasury DESC
         """
     )
@@ -5550,7 +5550,8 @@ async def get_frs_stats():
         president = cur.fetchone()
 
         cur.execute("""
-            SELECT policy_mode, COALESCE(reserve, 0) AS reserve, tax_modifier, loans_frozen
+            SELECT policy_mode, COALESCE(reserve, 0) AS reserve, tax_modifier, loans_frozen,
+                   COALESCE(interest_rate, 0) AS interest_rate
             FROM zrs_state WHERE id = 1
         """)
         zrs_state = cur.fetchone()
@@ -5601,20 +5602,14 @@ async def get_frs_stats():
             status = zrs_latest["state"]
         if poor_pct > 0.4 and status == "NORMAL":
             status = "CRISIS"
-        interest_rate = {
-            "BOOM": 10.0,
-            "NORMAL": 5.0,
-            "RECESSION": 3.0,
-            "CRISIS": 0.0,
-            "DEPRESSION": 0.0,
-            "HYPERINFLATION": 0.0,
-        }.get(str(status), 5.0)
+        interest_rate = float((zrs_state or {}).get("interest_rate") or 0)
 
         government = {
             "president": dict(president) if president else None,
             "zrs": {
                 "policy_mode": (zrs_state or {}).get("policy_mode"),
                 "reserve": round(float((zrs_state or {}).get("reserve") or 0), 2),
+                "interest_rate": interest_rate,
                 "tax_modifier": float((zrs_state or {}).get("tax_modifier") or 0),
                 "loans_frozen": bool((zrs_state or {}).get("loans_frozen")),
                 "latest_action": dict(zrs_latest) if zrs_latest else None,
@@ -5649,6 +5644,60 @@ async def get_frs_stats():
     finally:
         cur.close()
         db.close()
+
+@app.get("/constitution/stats")
+@app.get("/api/constitution/stats")
+async def get_constitution_stats():
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM amendments WHERE status = 'enacted'"
+        )
+        enacted = int((cur.fetchone() or {}).get("c") or 0)
+        cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
+        alive = int((cur.fetchone() or {}).get("c") or 0)
+        return {"enacted_amendments": enacted, "alive_agents": alive}
+    finally:
+        cur.close()
+        db.close()
+
+
+@app.get("/governance/header")
+@app.get("/api/governance/header")
+async def get_governance_header():
+    from ai_governance import get_civilization_state
+    from constitutional_duties import get_triggered_duties, merge_indicators_from_state
+    from civ_economics import fetch_economic_indicators
+
+    db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT COUNT(*) AS c FROM amendments WHERE status = 'voting'")
+        voting_count = int((cur.fetchone() or {}).get("c") or 0)
+
+        state = await get_civilization_state()
+        econ_indicators = fetch_economic_indicators(cur, db)
+        indicators = merge_indicators_from_state(econ_indicators, state, [])
+
+        president_triggered = get_triggered_duties("president", indicators)
+        sheriff_triggered = get_triggered_duties("sheriff", indicators)
+
+        duty_parts: list[str] = []
+        for role, triggered in (("President", president_triggered), ("Sheriff", sheriff_triggered)):
+            if triggered:
+                duty_parts.append(f"{role}: {'; '.join(d['duty'] for d in triggered)}")
+
+        return {
+            "active_duties": " | ".join(duty_parts) if duty_parts else "None",
+            "amendments_in_voting": voting_count,
+            "president_duties": [d["duty"] for d in president_triggered],
+            "sheriff_duties": [d["duty"] for d in sheriff_triggered],
+        }
+    finally:
+        cur.close()
+        db.close()
+
 
 # ============ SENATE & PARTIES (ECO-POL dashboard) ============
 @app.get("/senate")
@@ -6269,7 +6318,21 @@ def _wire_type_from_event(description: str, event_type: str, priority=None) -> s
 
 def _trim_wire(items: list, limit: int = 15) -> list:
     items.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
-    return items[:limit]
+    seen: set[str] = set()
+    deduped: list = []
+    for item in items:
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        item_id = item.get("id")
+        key = f"id:{item_id}" if item_id is not None else text
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
 
 
 @app.get("/police-wire")
@@ -6316,7 +6379,7 @@ async def get_corporate_wire():
         )
         cur.execute(
             """
-            SELECT description, event_type, priority, created_at FROM events
+            SELECT id, description, event_type, priority, created_at FROM events
             WHERE event_type = ANY(%s)
             ORDER BY created_at DESC LIMIT 20
             """,
@@ -6325,13 +6388,16 @@ async def get_corporate_wire():
         for r in cur.fetchall():
             if r.get("description"):
                 items.append(
-                    _wire_item(
-                        r["description"],
-                        _wire_type_from_event(
-                            r["description"], r["event_type"], r.get("priority")
+                    {
+                        **_wire_item(
+                            r["description"],
+                            _wire_type_from_event(
+                                r["description"], r["event_type"], r.get("priority")
+                            ),
+                            r["created_at"],
                         ),
-                        r["created_at"],
-                    )
+                        "id": r.get("id"),
+                    }
                 )
 
         cur.execute(

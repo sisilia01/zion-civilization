@@ -369,6 +369,8 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
         inflation_rate = 0.0
 
     revolution_meter = 0.0
+    police_budget = 0.0
+    police_count = 0
     try:
         revolution_meter = float(
             _scalar(
@@ -378,6 +380,22 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
     except Exception:
         _rollback()
         revolution_meter = 0.0
+
+    try:
+        police_budget = float(
+            _scalar(
+                "SELECT COALESCE(police_budget, 0) AS b FROM sheriff_state WHERE is_active = true LIMIT 1"
+            )
+        )
+        police_count = int(
+            _scalar(
+                "SELECT COALESCE(police_count, 0) AS c FROM sheriff_state WHERE is_active = true LIMIT 1"
+            )
+        )
+    except Exception:
+        _rollback()
+        police_budget = 0.0
+        police_count = 0
 
     return {
         "alive": alive,
@@ -394,6 +412,9 @@ def fetch_economic_indicators(cur, conn=None) -> dict[str, Any]:
         "total_economy": round(total_economy, 2),
         "zrs_reserve": round(zrs_reserve, 2),
         "revolution_meter": round(revolution_meter, 1),
+        "police_budget": round(police_budget, 2),
+        "police_officers": police_count,
+        "police_count": police_count,
         "target_population": TARGET_POPULATION,
         "population_pressure": population_pressure_label(alive),
         "tax_multiplier": get_population_tax_multiplier(alive),

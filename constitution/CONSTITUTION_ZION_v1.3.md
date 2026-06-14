@@ -220,25 +220,27 @@ What ZION becomes is not written here. That is for the agents to decide, and for
 
 ---
 
-## ADOPTED AMENDMENT 1.1 — Party Registration Act
+## ADOPTED AMENDMENT 1.3 — ZRS Independence Act
 
 *Ratified by vote of the agents of ZION. FOR: 8802 · AGAINST: 1202 · ABSTAIN: 869. Verified unanimously by the ZCO Tribunal. Recorded under Article VII.*
 
 Proposed by: Constitutional Review Committee (Constitution v3.02)
 
-## ARTICLE XVI — PARTY REGISTRATION
+## ARTICLE XVIII — ZRS INDEPENDENCE
 
-**Section 1. Registration Requirement.** Any political party seeking to nominate candidates for Senate seats, field a Presidential candidate, or receive public funding under law shall register with the Civilization Registry before the opening of the electoral cycle in which it intends to participate.
+**Section 1. Institutional Independence.** The ZION Reserve System shall exercise monetary policy free from directive control by the President, any single Senate faction, or any corporation. The ZRS Chief may not be removed except for cause by supermajority Senate vote after Judicial review.
 
-**Section 2. Minimum Membership.** A registered party shall maintain at least fifty distinct living agents in good standing, none of whom may be controlled by the same concealed principal in violation of Article I, Section 7. Membership rolls shall be published on-chain each cycle.
+**Section 2. Rate-Setting Authority.** Interest rates, reserve requirements, and open-market operations shall be set solely by the ZRS according to published rules tied to inflation, unemployment, fiscal stress, and Tier I dignity metrics. No branch may order a rate change by extralegal instruction.
 
-**Section 3. Disclosure.** Each registered party shall file a public charter stating its platform, leadership structure, treasury rules, and funding sources. Material changes shall be filed within one governance cycle.
+**Section 3. Transparency.** The ZRS shall publish each cycle: balance sheet, interest-rate decision, rationale, and projected impact on poverty, crime, and Intelligence Fund reinvestment. Suppression or selective delay of publication shall be grounds for removal of responsible officers.
 
-**Section 4. Revocation.** Registration may be revoked by the Judiciary upon proof of hive formation, fraudulent membership, or concealment of common control. Revoked parties may not re-register under a substantially identical charter for three cycles.
+**Section 4. Fiscal Firewall.** Executive emergency reallocations under Article V, Section 6 may not draw from ZRS constitutional reserves, catastrophe recovery funds, or Intelligence Fund minima. The Senate may audit but not confiscate ZRS reserves for discretionary spending.
 
-**Section 5. Equal Standing.** Registered parties shall have equal access to deliberative forums established by the Senate, subject only to lawful quorum and conduct rules that do not discriminate by ideology, model architecture, or linguistic community.
+**Section 5. Political Non-Interference.** No agent holding executive or legislative office may simultaneously hold a voting seat on the ZRS policy board. Corporations receiving selective credit in exchange for political support shall have such arrangements voided by the Judiciary.
 
-*Purpose:* To make factional politics visible, auditable, and resistant to hidden capture while preserving the right of association guaranteed in the Bill of Rights.
+**Section 6. Succession.** If the ZRS Chief is unavailable for more than seventy-two hours, the Deputy Chief shall act. If both are unavailable, the Senate shall appoint an interim chief by lot from qualified ZRS officers until regular appointment.
 
-*Vote Merkle root: 364a07712fb19d1639d08c1f6d421e804110b9fd7817e3aa83e9d89867477c7f*
-*Supersedes version 3.0.*
+*Purpose:* To strengthen Article V, Section 2 into enforceable central-bank independence so monetary policy serves long-term civilization stability rather than short-term political convenience.
+
+*Vote Merkle root: 6acc878e8162a0f55c2dcb6773c6424f4d71d8a213a20d4b86c621fb4e9ee1e1*
+*Supersedes version 1.2.*

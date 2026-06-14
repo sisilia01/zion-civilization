@@ -416,7 +416,7 @@ def layoff_to_gangs(cur, corp_id: int, corp_name: str, count: int):
     if not agents:
         return
     cur.execute(
-        "SELECT id, name FROM clans WHERE members_count >= 0 ORDER BY RANDOM() LIMIT 1"
+        "SELECT id, name FROM clans WHERE members_count > 0 ORDER BY RANDOM() LIMIT 1"
     )
     clan = cur.fetchone()
     if not clan:

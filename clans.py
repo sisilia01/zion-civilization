@@ -86,9 +86,14 @@ def gang_retaliation_wave(cur) -> int:
         )
         if clan_id:
             cur.execute(
-                "UPDATE clans SET treasury = treasury + %s WHERE id = %s",
-                (steal, clan_id),
+                "SELECT id FROM clans WHERE id = %s AND members_count > 0",
+                (clan_id,),
             )
+            if cur.fetchone():
+                cur.execute(
+                    "UPDATE clans SET treasury = treasury + %s WHERE id = %s",
+                    (steal, clan_id),
+                )
         hit += 1
     cur.execute(
         """
@@ -160,6 +165,14 @@ def sync_member_counts(cur):
         )
         """
     )
+    cur.execute(
+        """
+        UPDATE clans SET status = CASE
+            WHEN members_count > 0 THEN 'ACTIVE'
+            ELSE 'DISBANDED'
+        END
+        """
+    )
 
 
 def recruit_poor(cur):
@@ -173,7 +186,7 @@ def recruit_poor(cur):
     )
     recruits = cur.fetchall()
     cur.execute(
-        "SELECT id, name, treasury FROM clans WHERE members_count >= 0 ORDER BY treasury DESC"
+        "SELECT id, name, treasury FROM clans WHERE members_count > 0 ORDER BY treasury DESC"
     )
     clans = cur.fetchall()
     if not clans:
@@ -400,7 +413,7 @@ def dissolve_empty_clans(cur):
             zrs_add_reserve(cur, remainder)
         cur.execute("DELETE FROM clan_territory WHERE clan_id = %s", (clan["id"],))
         cur.execute(
-            "UPDATE clans SET treasury = 0, members_count = 0 WHERE id = %s",
+            "UPDATE clans SET treasury = 0, members_count = 0, status = 'DISBANDED' WHERE id = %s",
             (clan["id"],),
         )
 
