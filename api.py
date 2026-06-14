@@ -2397,7 +2397,7 @@ def root():
 @app.get("/stats")
 def get_stats():
     global _stats_cache, _stats_cache_ts
-    if _time.time() - _stats_cache_ts < 30 and _stats_cache:
+    if _time.time() - _stats_cache_ts < 120 and _stats_cache:
         return _stats_cache
 
     from civ_economics import TARGET_POPULATION, fetch_economic_indicators
