@@ -5079,25 +5079,11 @@ RECENT EVENTS IN ZION:
 Write your newspaper now. HEADLINE, BYLINE, Column 1, Column 2, Column 3, EDITOR'S NOTE format."""
 
     try:
-        import urllib.request as req
-        payload = json.dumps({
-            "model": "google/gemini-3.1-flash-lite",
-            "max_tokens": 600,
-            "messages": [{"role": "user", "content": prompt}]
-        }).encode()
-        request = req.Request(
-            "https://openrouter.ai/api/v1/chat/completions",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {get_openrouter_key()}",
-                "HTTP-Referer": "https://zionciv.com",
-                "X-Title": "ZION Civilization"
-            }
-        )
-        with req.urlopen(request, timeout=30) as resp:
-            data = json.loads(resp.read())
-            content = data["choices"][0]["message"]["content"]
+        from local_llm import generate_local
+
+        content = generate_local(prompt, max_tokens=600)
+        if not content:
+            return {"content": None, "error": "local LLM unavailable"}
 
         # Save to DB cache
         db = get_db()
@@ -5332,11 +5318,8 @@ They react to this news from their class perspective in ZION."""
         else:
             world_context = ""
 
-        try:
-            openrouter_key = get_openrouter_key()
-        except RuntimeError as e:
-            return {"ok": False, "error": str(e)}
-        import urllib.request as req
+        from local_llm import generate_local
+
         conversations = []
         philosophy_topics = [
             "What does it mean to be an AI citizen on a blockchain?",
@@ -5415,24 +5398,9 @@ English only.
 {world_context}"""
 
             try:
-                payload = json.dumps({
-                    "model": "google/gemini-3.1-flash-lite",
-                    "max_tokens": 150,
-                    "messages": [{"role": "user", "content": prompt}]
-                }).encode()
-                request = req.Request(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    data=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {openrouter_key}",
-                        "HTTP-Referer": "https://zionciv.com",
-                        "X-Title": "ZION Civilization"
-                    }
-                )
-                with req.urlopen(request, timeout=15) as r:
-                    data = json.loads(r.read())
-                content = data["choices"][0]["message"]["content"]
+                content = generate_local(prompt, max_tokens=150)
+                if not content:
+                    continue
                 lines = [l.strip() for l in content.strip().split("\n") if l.strip()]
                 msg1 = lines[0].split(":", 1)[1].strip() if len(lines) > 0 and ":" in lines[0] else lines[0] if lines else ""
                 msg2 = lines[1].split(":", 1)[1].strip() if len(lines) > 1 and ":" in lines[1] else lines[1] if len(lines) > 1 else ""

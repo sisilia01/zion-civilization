@@ -6,33 +6,18 @@ import hashlib
 import os
 from datetime import datetime, timezone
 
-import httpx
 import psycopg2.extras
 
-from zlab import db_conn, ensure_schema, get_openrouter_key, period_numbers, MODEL
+from local_llm import generate_local
+from zlab import db_conn, ensure_schema, period_numbers
 from walrus import store_bytes
 
 WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space/v1/blobs"
 
 
 def _llm_report(prompt: str) -> str | None:
-    key = get_openrouter_key()
-    if not key:
-        return None
     try:
-        with httpx.Client(timeout=90) as client:
-            r = client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}"},
-                json={
-                    "model": MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 1800,
-                    "temperature": 0.5,
-                },
-            )
-            r.raise_for_status()
-            return (r.json()["choices"][0]["message"]["content"] or "").strip()
+        return generate_local(prompt, max_tokens=1800)
     except Exception as e:
         print(f"[zlab-report] LLM error: {e}")
         return None
