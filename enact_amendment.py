@@ -30,12 +30,44 @@ CONST_DIR = os.path.expanduser("~/zion_backend/constitution")
 
 def db(): return psycopg2.connect(**DB)
 
+def ensure_constitution_schema():
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """ALTER TABLE constitution_versions
+           ADD COLUMN IF NOT EXISTS amendment_id INTEGER
+           REFERENCES amendments(id)"""
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
 def latest_version():
-    conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM constitution_versions ORDER BY id DESC LIMIT 1")
-    v=cur.fetchone(); cur.close(); conn.close(); return v
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """SELECT cv.*
+           FROM constitution_versions cv
+           WHERE (split_part(cv.version, '.', 1)::int * 100
+                  + split_part(cv.version, '.', 2)::int) = (
+             SELECT MAX(split_part(version, '.', 1)::int * 100
+                        + split_part(version, '.', 2)::int)
+             FROM constitution_versions
+           )
+           ORDER BY cv.id DESC
+           LIMIT 1"""
+    )
+    v = cur.fetchone()
+    cur.close()
+    conn.close()
+    return v
+
+def next_version(prev_ver: str) -> str:
+    major, minor = prev_ver.split(".", 1)
+    return f"{major}.{int(minor) + 1}"
 
 def enact(amendment_id):
+    ensure_constitution_schema()
     conn=db(); cur=conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("SELECT * FROM amendments WHERE id=%s",(amendment_id,))
     a=cur.fetchone()
@@ -62,10 +94,11 @@ def enact(amendment_id):
 
     prev = latest_version()
     prev_sha = prev['sha256']; prev_ver = prev['version']
-    new_ver = f"1.{int(prev_ver.split('.')[1])+1}" if '.' in prev_ver else "1.1"
+    new_ver = next_version(prev_ver)
 
-    # Build new constitution version: old text + adopted amendment appended
-    with open(f"{CONST_DIR}/CONSTITUTION_ZION_v1.0.md","r",encoding="utf-8") as f:
+    # Build new constitution version: current text + adopted amendment appended
+    prev_path = f"{CONST_DIR}/CONSTITUTION_ZION_v{prev_ver}.md"
+    with open(prev_path, "r", encoding="utf-8") as f:
         base = f.read()
     amendment_block = f"""
 
@@ -124,9 +157,9 @@ def enact(amendment_id):
 
     # Save new version to lineage table
     cur2=conn.cursor()
-    cur2.execute("""INSERT INTO constitution_versions (version,sha256,blob_id,prev_sha256)
-                    VALUES (%s,%s,%s,%s) ON CONFLICT (sha256) DO NOTHING""",
-                 (new_ver,new_sha,blob_id,prev_sha))
+    cur2.execute("""INSERT INTO constitution_versions (version, sha256, blob_id, prev_sha256, amendment_id)
+                    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (sha256) DO NOTHING""",
+                 (new_ver, new_sha, blob_id, prev_sha, amendment_id))
     cur2.execute("UPDATE amendments SET status='enacted', blob_id=%s WHERE id=%s",(blob_id,amendment_id))
     conn.commit(); cur.close(); cur2.close(); conn.close()
 
