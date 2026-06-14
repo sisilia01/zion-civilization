@@ -947,7 +947,10 @@ function DistrictMapPanel() {
       }
     };
     void load();
-    const id = window.setInterval(() => void load(), 30000);
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      void load();
+    }, 30000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -9865,7 +9868,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const t = window.setInterval(() => void loadCoreData(false), 30000);
+    const t = window.setInterval(() => {
+      if (document.hidden) return;
+      void loadCoreData(false);
+    }, 30000);
     return () => clearInterval(t);
   }, [loadCoreData]);
 
@@ -10350,7 +10356,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => void fetchSenateLaws(), 30000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      void fetchSenateLaws();
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchSenateLaws]);
 
@@ -10380,6 +10389,7 @@ export default function Home() {
 
   useEffect(() => {
     const peInterval = setInterval(() => {
+      if (document.hidden) return;
       void fetchPoliticalEconomy();
     }, 30_000);
     return () => clearInterval(peInterval);
@@ -10887,7 +10897,10 @@ export default function Home() {
     };
 
     fetchPrices();
-    const t = setInterval(fetchPrices, 2000);
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      void fetchPrices();
+    }, 2000);
     return () => clearInterval(t);
   }, [activeTab]);
 
@@ -11064,7 +11077,10 @@ export default function Home() {
       if (updated) setZionBetSelectedMarket(updated);
     };
     void refreshDetailPrices();
-    const interval = window.setInterval(() => void refreshDetailPrices(), 5000);
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      void refreshDetailPrices();
+    }, 5000);
     return () => clearInterval(interval);
   }, [zionBetSelectedMarket?.id, loadZionBetMarkets]);
 
@@ -13614,7 +13630,10 @@ export default function Home() {
       }
     };
     void fetchSuiPrice();
-    const interval = setInterval(() => void fetchSuiPrice(), 60000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      void fetchSuiPrice();
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -13640,6 +13659,7 @@ export default function Home() {
     }
 
     const pollMyBets = () => {
+      if (document.hidden) return;
       void fetch(`/api/my_bets/${encodeURIComponent(account.address!)}`)
         .then((r) => r.json())
         .then((data) => {
@@ -13670,7 +13690,10 @@ export default function Home() {
   }, [faucetCooldownEndsAt]);
 
   useEffect(() => {
-    const t = window.setInterval(() => void fetchConversations(), 300000);
+    const t = window.setInterval(() => {
+      if (document.hidden) return;
+      void fetchConversations();
+    }, 300000);
     return () => clearInterval(t);
   }, [fetchConversations]);
 
@@ -13756,7 +13779,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const t = setInterval(() => void loadLeaderboard(), 30000);
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      void loadLeaderboard();
+    }, 30000);
     return () => clearInterval(t);
   }, [loadLeaderboard]);
 
