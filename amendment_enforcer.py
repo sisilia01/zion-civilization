@@ -26,6 +26,8 @@ DB = {
 DEFAULT_PARAMS = {
     "top_tax_rate": 0.35,
     "min_tax_rate": 0.05,
+    "term_limit_days": 30,
+    "governance_ticks_per_day": 24,
     "term_limit_hours": 720,
     "basic_income": 0.0,
     "wealth_tax_rate": 0.0,
@@ -56,7 +58,7 @@ CHANGE_TYPE_MAP = {
         "min_tax_rate": -0.01,
     },
     "governance": {
-        "term_limit_hours": -168,
+        "term_limit_days": -7,
     },
     "rights_expansion": {
         "basic_income": 2.0,
@@ -70,6 +72,8 @@ CHANGE_TYPE_MAP = {
 PARAM_BOUNDS = {
     "top_tax_rate": (0.05, 0.75),
     "min_tax_rate": (0.0, 0.25),
+    "term_limit_days": (7, 90),
+    "governance_ticks_per_day": (12, 48),
     "term_limit_hours": (168, 2160),
     "basic_income": (0.0, 50.0),
     "wealth_tax_rate": (0.0, 0.25),

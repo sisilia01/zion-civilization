@@ -5548,6 +5548,19 @@ async def get_frs_stats():
             FROM president_state WHERE is_active = true LIMIT 1
         """)
         president = cur.fetchone()
+        from amendment_enforcer import get_param
+
+        term_limit_days = int(get_param("term_limit_days", 30))
+        ticks_per_day = int(get_param("governance_ticks_per_day", 24))
+        if president:
+            president = dict(president)
+            ticks = int(president.get("days_in_power") or 0)
+            president["term_limit_days"] = term_limit_days
+            president["governance_ticks_per_day"] = ticks_per_day
+            president["term_day"] = min(
+                term_limit_days,
+                max(1, (ticks + ticks_per_day - 1) // ticks_per_day),
+            )
 
         cur.execute("""
             SELECT policy_mode, COALESCE(reserve, 0) AS reserve, tax_modifier, loans_frozen,
@@ -6581,6 +6594,8 @@ async def get_clan_wire():
 # ============ PRESIDENT ============
 @app.get("/president/state")
 async def get_president_state():
+    from amendment_enforcer import get_param
+
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -6590,9 +6605,31 @@ async def get_president_state():
             FROM president_state WHERE is_active = true LIMIT 1
         """)
         row = cur.fetchone()
+        term_limit_days = int(get_param("term_limit_days", 30))
+        ticks_per_day = int(get_param("governance_ticks_per_day", 24))
         if row:
-            return dict(row)
-        return {"agent_name": "No President", "approval_rating": 0, "is_dictator": False, "term_number": 0, "days_in_power": 0, "party": "none", "police_fund": 0, "personal_fund": 0}
+            out = dict(row)
+            ticks = int(out.get("days_in_power") or 0)
+            out["term_limit_days"] = term_limit_days
+            out["governance_ticks_per_day"] = ticks_per_day
+            out["term_day"] = min(
+                term_limit_days,
+                max(1, (ticks + ticks_per_day - 1) // ticks_per_day),
+            )
+            return out
+        return {
+            "agent_name": "No President",
+            "approval_rating": 0,
+            "is_dictator": False,
+            "term_number": 0,
+            "days_in_power": 0,
+            "term_day": 0,
+            "term_limit_days": term_limit_days,
+            "governance_ticks_per_day": ticks_per_day,
+            "party": "none",
+            "police_fund": 0,
+            "personal_fund": 0,
+        }
     finally:
         cur.close()
         db.close()

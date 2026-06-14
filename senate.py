@@ -105,7 +105,6 @@ PARTY_LAW_STANCE = {
         "TAX_REDUCTION": True,
         "STIMULUS_PACKAGE": False,
         "BASIC_INCOME": False,
-        "MARTIAL_LAW": False,  # Unconstitutional
         "AMNESTY": False,
         "NATIONALIZATION": None,
         "WEALTH_TAX": False,
@@ -113,14 +112,12 @@ PARTY_LAW_STANCE = {
         "CORPORATE_DEREGULATION": True,
         "HIRE_POLICE": True,
         "EDUCATION_FUND": False,
-        "ELECTION_DELAY": False,
     },
     "reform": {
         "TAX_REFORM": None,
         "TAX_REDUCTION": False,
         "STIMULUS_PACKAGE": True,
         "BASIC_INCOME": True,
-        "MARTIAL_LAW": False,
         "AMNESTY": True,
         "NATIONALIZATION": True,
         "WEALTH_TAX": True,
@@ -128,7 +125,6 @@ PARTY_LAW_STANCE = {
         "CORPORATE_DEREGULATION": False,
         "HIRE_POLICE": False,
         "EDUCATION_FUND": True,
-        "ELECTION_DELAY": False,
     },
 }
 
@@ -137,7 +133,6 @@ LAW_TITLES = {
     "TAX_REDUCTION": "Tax Cut Act",
     "STIMULUS_PACKAGE": "Economic Stimulus Package",
     "BASIC_INCOME": "Basic Income Act",
-    # "MARTIAL_LAW": "Martial Law Authorization",  # Removed
     "AMNESTY": "National Amnesty Decree",
     "NATIONALIZATION": "Emergency Nationalization Bill",
     "WEALTH_TAX": "Wealth Tax Act",
@@ -145,7 +140,6 @@ LAW_TITLES = {
     "CORPORATE_DEREGULATION": "Corporate Deregulation Act",
     "HIRE_POLICE": "Police Funding Act",
     "EDUCATION_FUND": "Education Fund Act",
-    "ELECTION_DELAY": "Election Postponement Act",
 }
 
 
@@ -588,7 +582,7 @@ def pass_threshold(cur, law_type: str | None = None) -> int:
     if n <= 0:
         return 999
     lt = (law_type or "").upper()
-    important_laws = {"MARTIAL_LAW", "NATIONALIZE", "NATIONALIZATION"}
+    important_laws = {"NATIONALIZE", "NATIONALIZATION"}
     constitutional_laws = {"DISSOLVE", "DISSOLVE_SENATE"}
     if lt in constitutional_laws:
         ratio = 0.75
@@ -1186,8 +1180,6 @@ def choose_law_for_president(cur, president: dict) -> str:
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = true")
     total = max(int(cur.fetchone()["c"] or 1), 1)
     poverty_pct = poor / total * 100
-    approval = int(president.get("approval_rating") or 50)
-    corruption = float(president.get("corruption_index") or 30)
     party = president_party_id(president)
 
     weights = {
@@ -1195,7 +1187,6 @@ def choose_law_for_president(cur, president: dict) -> str:
         "TAX_REDUCTION": 18 if party == "consensus" else 4,
         "STIMULUS_PACKAGE": 20 if poverty_pct > 30 else 5,
         "BASIC_INCOME": 20 if party == "reform" and poverty_pct > 25 else 6,
-        "MARTIAL_LAW": 0,
         "AMNESTY": 18 if poverty_pct > 25 else 6,
         "NATIONALIZATION": 12,
         "WEALTH_TAX": 22 if party == "reform" else 8,
@@ -1203,10 +1194,7 @@ def choose_law_for_president(cur, president: dict) -> str:
         "CORPORATE_DEREGULATION": 22 if party == "consensus" else 8,
         "HIRE_POLICE": 20 if party == "consensus" else 5,
         "EDUCATION_FUND": 18 if party == "reform" else 5,
-        "ELECTION_DELAY": 30 if approval < 25 else 3,
     }
-    if corruption > 60:
-        weights["ELECTION_DELAY"] += 15
     pool = list(weights.keys())
     w = [weights[k] for k in pool]
     return random.choices(pool, weights=w, k=1)[0]
@@ -1577,25 +1565,6 @@ def execute_law_effect(cur, law: dict, president: dict) -> bool:
             priority="urgent",
         )
 
-    elif law_type == "ELECTION_DELAY":
-        cur.execute(
-            """
-            UPDATE president_state
-            SET election_delayed = true,
-                days_in_power = GREATEST(0, COALESCE(days_in_power, 0) - 5),
-                approval_rating = GREATEST(5, COALESCE(approval_rating, 50) - 20)
-            WHERE is_active = true
-            """
-        )
-        log_event(
-            cur,
-            pid,
-            "senate",
-            f"ELECTION DELAY: President {pname} postpones vote — outrage (-20 approval)",
-            0,
-            priority="breaking",
-        )
-
     return True
 
 
@@ -1640,7 +1609,6 @@ def senate_vote(cur, law_id: int):
     law_type = (law.get("law_type") or "").upper()
     threshold = pass_threshold(cur, law_type)
     requires_supermajority = law_type in {
-        # "MARTIAL_LAW",  # Removed — unconstitutional
         "NATIONALIZE",
         "NATIONALIZATION",
         "DISSOLVE",
@@ -1677,14 +1645,6 @@ def senate_vote(cur, law_id: int):
         votes_for,
         priority=priority,
     )
-
-
-def dissolve_senate(cur, president: dict):
-    return None  # Unconstitutional — disabled (Article II Sec.3)
-
-
-def declare_dictatorship(cur, president: dict, sheriff: dict):
-    return None  # Unconstitutional — disabled (Article II Sec.3)
 
 
 def call_election(cur, president: dict):
@@ -1739,22 +1699,7 @@ def veto_senate_law(cur, president: dict):
 def presidential_actions(cur, president: dict):
     if not president:
         return
-    sheriff = get_sheriff(cur)
     approval = int(president.get("approval_rating") or 50)
-    is_dictator = president.get("is_dictator") or president.get("dictatorship_mode")
-
-    if is_dictator and random.random() < 0.15:
-        dissolve_senate(cur, president)
-        return
-
-    if (
-        approval < 20
-        and sheriff
-        and sheriff.get("sheriff_type") == "corrupt"
-        and random.random() < 0.12
-    ):
-        declare_dictatorship(cur, president, sheriff)
-        return
 
     if approval < 15 and random.random() < 0.08:
         call_election(cur, president)
@@ -2130,10 +2075,6 @@ def cancel_all_pending_laws(cur):
     )
 
 
-def check_coup(cur):
-    return False  # Unconstitutional — disabled
-
-
 def should_run_scheduled_election(cur, president: dict) -> bool:
     if not president:
         return True
@@ -2147,14 +2088,12 @@ def should_run_scheduled_election(cur, president: dict) -> bool:
             """
         )
         return False
-    hours = int(
-        president.get("hours_in_power")
-        if president.get("hours_in_power") is not None
-        else president.get("days_in_power") or 0
-    )
+    ticks = int(president.get("days_in_power") or 0)
     approval = int(president.get("approval_rating") or 50)
-    term_limit = int(get_param("term_limit_hours", 720))
-    return hours > term_limit or approval < 10
+    term_limit_days = int(get_param("term_limit_days", 30))
+    ticks_per_day = int(get_param("governance_ticks_per_day", 24))
+    term_limit_ticks = term_limit_days * ticks_per_day
+    return ticks > term_limit_ticks or approval < 10
 
 
 def run_governance_tick(cur, ctx: dict) -> dict:
@@ -2229,7 +2168,6 @@ def run_governance_tick(cur, ctx: dict) -> dict:
 
     scores = compute_power_scores(cur)
     run_power_struggles(cur, scores)
-    check_coup(cur)
 
     president = get_president(cur)
     if president and should_run_scheduled_election(cur, president):
@@ -2320,7 +2258,6 @@ def main():
 
         scores = compute_power_scores(cur)
         run_power_struggles(cur, scores)
-        check_coup(cur)
 
         president = get_president(cur)
         if president and should_run_scheduled_election(cur, president):

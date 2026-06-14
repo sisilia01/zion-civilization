@@ -23,10 +23,7 @@ from civ_common import (
     sync_police_divisions,
 )
 from civ_governance import (
-    check_anti_dictator_coup,
     check_compliance,
-    check_dictator_mode,
-    check_sheriff_self_coup,
     get_sheriff_compliance_metrics,
     issue_president_orders,
     sheriff_compliance_actionable,
@@ -823,12 +820,6 @@ def main():
                 sync_police_divisions(cur)
 
         president = get_president(cur)
-        cur.execute("SELECT * FROM sheriff_state WHERE is_active = true LIMIT 1")
-        sheriff_row = cur.fetchone()
-
-        if president and sheriff_row:
-            # Dictator mode disabled — unconstitutional (Article II Sec.3)
-            check_sheriff_self_coup(cur, sheriff_row, president)
 
         conn.commit()
         print("\n✅ President cycle complete!")

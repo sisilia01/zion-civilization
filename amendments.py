@@ -174,15 +174,17 @@ def run_vote(amendment_id, change_type, sample_limit=None):
     conn.commit(); cur.close(); cur2.close(); conn.close()
 
     total = sum(tally.values())
-    pct = (tally['for']/total*100) if total else 0
+    cast = tally["for"] + tally["against"]
+    passed = cast > 0 and tally["for"] > tally["against"]
+    pct = (tally["for"] / cast * 100) if cast else 0.0
     print(f"\n=== VOTE COMPLETE — Amendment {amendment_id} ===")
     print(f"  Voters: {total}")
-    print(f"  FOR:     {tally['for']} ({pct:.1f}%)")
+    print(f"  FOR:     {tally['for']} ({pct:.1f}% of cast)")
     print(f"  AGAINST: {tally['against']}")
     print(f"  ABSTAIN: {tally['abstain']}")
     print(f"  Merkle root: {root}")
-    print(f"  Passed (>50% for): {'YES' if pct > 50 else 'NO'}")
-    return {'tally':tally, 'merkle_root':root, 'passed': pct > 50, 'total': total}
+    print(f"  Passed (FOR > AGAINST among cast): {'YES' if passed else 'NO'}")
+    return {'tally':tally, 'merkle_root':root, 'passed': passed, 'total': total}
 
 if __name__ == "__main__":
     import sys

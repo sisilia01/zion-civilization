@@ -58,7 +58,8 @@ async def _ask_judge_once(model, amendment, tally):
 DESCRIPTION: {amendment['description']}
 TYPE: {amendment['change_type']}
 VOTE TALLY (counted by code): FOR={tally['for']} AGAINST={tally['against']} ABSTAIN={tally['abstain']}
-THRESHOLD: simple majority of non-abstain votes.
+PASS RULE (applied by code): amendment passes only if FOR > AGAINST among non-abstain votes.
+THRESHOLD: simple majority of non-abstain votes (FOR must exceed AGAINST).
 Judge the legitimacy of recording this as a constitutional amendment."""
     try:
         async with httpx.AsyncClient(timeout=45) as client:

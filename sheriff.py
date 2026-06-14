@@ -35,7 +35,6 @@ from civ_common import (
     sync_police_divisions,
 )
 from civ_governance import (
-    attempt_coup,
     process_sheriff_orders,
     record_last_sheriff_agent,
 )
@@ -527,7 +526,6 @@ def sheriff_actions(sheriff):
 
     elif stype == "enforcement":
         print("Sheriff tick: constitutional enforcement check", flush=True)
-        # Junta actively builds military power
         if budget > 80:
             new_cops = random.randint(5, 15)
             hire_bonus = 8.0
@@ -565,16 +563,6 @@ def sheriff_actions(sheriff):
                      f"🚔 Sheriff dept recovered {seized:.0f} ZION in lawful asset forfeiture from {clan_target['name']}.",
                      seized)
             print("constitutional enforcement check")
-        
-        if approval < 30 or random.random() < 0.1:
-            return None  # Unconstitutional — disabled
-        log_event(
-            sid,
-            "sheriff_action",
-            f"Sheriff {name} (ENFORCEMENT) monitoring situation. Approval: {approval}%",
-            0,
-        )
-        approval_change = -5
 
     if force_raid:
         print("Sheriff tick: force_raid — AI ordered raid...", flush=True)
@@ -771,7 +759,6 @@ def run_governance_tick(tick_cur, ctx: dict) -> dict:
                 print("Sheriff tick: constitutional enforcement check", flush=True)
                 cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
                 president = cur.fetchone()
-                _sheriff_step("Sheriff tick: attempt_coup...", attempt_coup, cur, sheriff, president)
                 _sheriff_step("Sheriff tick: check_interaction_with_president...", check_interaction_with_president)
                 if sheriff.get("sheriff_type") == "corrupt" and random.random() < 0.15:
                     corrupt_flag = True
@@ -852,9 +839,6 @@ def main():
         sheriff = get_sheriff()
         process_sheriff_orders(cur, sheriff)
         sheriff = get_sheriff()
-        cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
-        president = cur.fetchone()
-        attempt_coup(cur, sheriff, president)
         check_interaction_with_president()
         check_term_end(sheriff)
         if not is_uprising_active(cur) and not is_martial_law_active(cur):

@@ -73,7 +73,7 @@ def enact(amendment_id):
     a=cur.fetchone()
     if not a: print("Amendment not found"); return
     if a['votes_for'] <= a['votes_against']:
-        print("Amendment did not pass."); return
+        print("Amendment did not pass (FOR must exceed AGAINST among cast votes)."); return
 
     # Verify tribunal unanimously approved (constitutional requirement Article IV)
     cur2 = conn.cursor()

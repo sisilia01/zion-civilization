@@ -236,62 +236,6 @@ def process_sheriff_orders(cur, sheriff):
         return 0, 0
 
 
-def _execute_order(cur, sheriff, otype, payload):
-    if otype == "ATTACK_GANG":
-        gang = payload.get("gang_name", "unknown gang")
-        deaths = random.randint(2, 12)
-        cur.execute(
-            """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'gang_war'
-            WHERE is_alive = true AND clan_id IN (SELECT id FROM clans WHERE name = %s)
-            AND id IN (SELECT id FROM agents WHERE is_alive = true ORDER BY RANDOM() LIMIT %s)
-            """,
-            (gang, deaths),
-        )
-        return f"Raid on {gang} complete — {deaths} casualties"
-
-    if otype == "INCREASE_PATROL":
-        cost = float(payload.get("cost", 200))
-        officers = int(payload.get("officers", 10))
-        cur.execute(
-            "UPDATE president_state SET police_fund = GREATEST(0, police_fund - %s) WHERE is_active = true",
-            (cost,),
-        )
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_count = police_count + %s,
-                police_budget = police_budget + %s
-            WHERE is_active = true
-            """,
-            (officers, cost * 0.5),
-        )
-        return f"Added {officers} officers ({cost:.0f} ZION from state)"
-
-    if otype == "ARREST_CORRUPT_AGENT":
-        name = payload.get("name")
-        cur.execute(
-            """
-            UPDATE agents SET is_alive = false, died_at = NOW(), death_cause = 'executed'
-            WHERE name = %s AND is_alive = true
-            """,
-            (name,),
-        )
-        return f"Agent {name} arrested for corruption"
-
-    if otype == "PROTECT_CORP":
-        corp = payload.get("corp_name", "")
-        cur.execute(
-            """
-            UPDATE corporations SET police_protection = true
-            WHERE name = %s AND is_active = true
-            """,
-            (corp,),
-        )
-        return f"5 officers assigned to guard {corp}"
-
-    return f"Executed {otype}"
-
-
 def check_compliance(cur, president):
     """President cannot fire Sheriff — independence under Article XVII.
 
@@ -332,23 +276,3 @@ def check_compliance(cur, president):
         WHERE is_active = true
         """
     )
-
-
-def attempt_coup(cur, sheriff, president):
-    """Disabled — unconstitutional (Constitution Article II Sec.3 + Article III)."""
-    return False
-
-
-def check_dictator_mode(cur, president, sheriff) -> bool:
-    """Disabled — no automatic dictator promotion."""
-    return False
-
-
-def check_anti_dictator_coup(cur, president, sheriff) -> bool:
-    """Disabled — unconstitutional dictator struggle events removed."""
-    return False
-
-
-def check_sheriff_self_coup(cur, sheriff, president) -> bool:
-    """Disabled — sheriff cannot seize executive power."""
-    return False
