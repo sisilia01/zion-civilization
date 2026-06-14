@@ -252,6 +252,152 @@ def ensure_senate_schema(cur):
         )
         """
     )
+    cur.execute(
+        "ALTER TABLE agents ADD COLUMN IF NOT EXISTS has_senate_experience BOOLEAN DEFAULT false"
+    )
+    cur.execute(
+        """
+        UPDATE agents SET has_senate_experience = true
+        WHERE id IN (SELECT DISTINCT agent_id FROM senate WHERE agent_id IS NOT NULL)
+          AND COALESCE(has_senate_experience, false) = false
+        """
+    )
+
+
+# Class lean toward Consensus/Reform in presidential elections (before mood swing)
+CLASS_PRESIDENTIAL_LEAN: dict[str, tuple[float, float]] = {
+    "elite": (0.70, 0.30),
+    "rich": (0.70, 0.30),
+    "middle": (0.50, 0.50),
+    "working": (0.30, 0.70),
+    "poor": (0.30, 0.70),
+    "critical": (0.30, 0.70),
+}
+ELECTORATE_MOOD_SWING = 0.15
+
+
+def mark_agent_senate_experience(cur, agent_id: int) -> None:
+    cur.execute(
+        """
+        UPDATE agents SET has_senate_experience = true
+        WHERE id = %s
+        """,
+        (agent_id,),
+    )
+
+
+def pick_senate_president_nominee(cur, party_id: str) -> dict | None:
+    """Party nominates its sitting senator with highest approval (senate experience required)."""
+    cur.execute(
+        """
+        SELECT s.id AS senate_id, s.agent_id AS id, s.agent_name AS name,
+               s.approval_rating, a.class, a.charisma, a.balance,
+               COALESCE(a.has_senate_experience, false) AS has_senate_experience
+        FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true AND s.party_id = %s
+        ORDER BY s.approval_rating DESC NULLS LAST, s.votes_cast DESC, s.id
+        LIMIT 1
+        """,
+        (party_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    mark_agent_senate_experience(cur, row["id"])
+    return dict(row)
+
+
+def compute_president_popular_vote(
+    cur, candidates: dict[str, dict]
+) -> tuple[dict[str, int], dict]:
+    """
+    Popular presidential vote: agents vote by class lean + electorate mood ±15%.
+    Returns (party_vote_totals, metadata with per-class breakdown).
+    """
+    cur.execute(
+        """
+        SELECT class, COUNT(*) AS cnt FROM agents
+        WHERE is_alive = true
+        GROUP BY class
+        """
+    )
+    class_counts = {row["class"]: int(row["cnt"]) for row in cur.fetchall()}
+    mood = random.uniform(-ELECTORATE_MOOD_SWING, ELECTORATE_MOOD_SWING)
+
+    votes: dict[str, int] = {pid: 0 for pid in candidates}
+    by_class: dict[str, dict[str, int]] = {pid: {} for pid in candidates}
+
+    for cls, count in class_counts.items():
+        lean_c, _lean_r = CLASS_PRESIDENTIAL_LEAN.get(cls, (0.50, 0.50))
+        consensus_share = max(0.0, min(1.0, lean_c + mood))
+        consensus_votes = int(round(count * consensus_share))
+        reform_votes = count - consensus_votes
+        if "consensus" in votes:
+            votes["consensus"] += consensus_votes
+            by_class["consensus"][cls] = consensus_votes
+        if "reform" in votes:
+            votes["reform"] += reform_votes
+            by_class["reform"][cls] = reform_votes
+
+    meta = {
+        "mood_swing_pct": round(mood * 100, 1),
+        "class_counts": class_counts,
+        "by_class": by_class,
+        "lean_rules": {
+            "rich/elite": "70/30→Consensus",
+            "middle": "50/50",
+            "working/poor": "30/70→Reform",
+        },
+    }
+    return votes, meta
+
+
+def vacate_senator_for_presidency(cur, agent_id: int, agent_name: str, party_id: str) -> None:
+    """Winner leaves the Senate; seat opens for supplemental election."""
+    cur.execute(
+        """
+        DELETE FROM senate
+        WHERE agent_id = %s AND is_active = true
+        """,
+        (agent_id,),
+    )
+    log_event(
+        cur,
+        agent_id,
+        "senate",
+        f"Senate seat vacated: {agent_name} ({party_id}) elected President — supplemental election called",
+        0,
+        priority="urgent",
+    )
+
+
+def simulate_presidential_election(cur) -> dict:
+    """Dry-run one presidential election — nominees and vote totals (no state change)."""
+    nominees: dict[str, dict] = {}
+    for party_id in PARTY_IDS:
+        row = pick_senate_president_nominee(cur, party_id)
+        if row:
+            nominees[party_id] = {
+                "agent_id": row["id"],
+                "senate_id": row.get("senate_id"),
+                "name": row["name"],
+                "class": row.get("class"),
+                "approval_rating": int(row.get("approval_rating") or 50),
+                "has_senate_experience": True,
+            }
+    if len(nominees) < 2:
+        return {"error": "Need senators from both parties", "nominees": nominees}
+
+    votes, meta = compute_president_popular_vote(cur, nominees)
+    winner_party = max(votes, key=votes.get)
+    return {
+        "nominees": nominees,
+        "votes": votes,
+        "winner_party": winner_party,
+        "winner": nominees[winner_party],
+        "meta": meta,
+    }
 
 
 def get_president(cur):
@@ -469,16 +615,88 @@ def elect_senator_by_popular_vote(
     return next(c for c in candidates if c["id"] == winner_id)
 
 
-def _seat_senator(cur, agent: dict, party_id: str, seated_ids: set, reason: str = "elected"):
+def compute_president_class_vote(
+    cur, candidates: dict[str, dict]
+) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+    """Backward-compatible wrapper — returns float scores from popular vote."""
+    votes, meta = compute_president_popular_vote(cur, candidates)
+    scores = {pid: float(v) for pid, v in votes.items()}
+    return scores, meta.get("by_class", {})
+
+
+def prune_senate_to_nine(cur) -> int:
+    """Enforce max 4 party senators + 1 at-large (role=at_large); remove excess."""
+    cur.execute(
+        """
+        SELECT s.id, s.party_id, s.approval_rating, s.agent_name, s.role
+        FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        ORDER BY s.approval_rating DESC NULLS LAST, s.id
+        """
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return 0
+
+    keep_ids: set[int] = set()
+    for r in rows:
+        if (r.get("role") or "") == "at_large":
+            keep_ids.add(int(r["id"]))
+
+    for party_id in PARTY_IDS:
+        party_rows = [
+            r for r in rows
+            if r["party_id"] == party_id and (r.get("role") or "") != "at_large"
+        ]
+        party_rows.sort(
+            key=lambda r: int(r.get("approval_rating") or 0), reverse=True
+        )
+        for r in party_rows[:SENATORS_PER_PARTY]:
+            keep_ids.add(int(r["id"]))
+
+    # Only one at-large seat
+    at_large_kept = [r for r in rows if int(r["id"]) in keep_ids and (r.get("role") or "") == "at_large"]
+    if len(at_large_kept) > 1:
+        at_large_kept.sort(key=lambda r: int(r.get("approval_rating") or 0), reverse=True)
+        for r in at_large_kept[1:]:
+            keep_ids.discard(int(r["id"]))
+
+    remove_ids = [int(r["id"]) for r in rows if int(r["id"]) not in keep_ids]
+    if not remove_ids:
+        return 0
+
+    cur.execute("DELETE FROM senate WHERE id = ANY(%s)", (remove_ids,))
+    removed = cur.rowcount
+    log_event(
+        cur,
+        None,
+        "senate",
+        f"Senate pruned: {len(keep_ids)} seats (4/party + at-large); removed {removed}",
+        0,
+        priority="normal",
+    )
+    return removed
+
+
+def _seat_senator(
+    cur,
+    agent: dict,
+    party_id: str,
+    seated_ids: set,
+    reason: str = "elected",
+    role: str = "senator",
+):
     approval = min(90, 40 + int(agent.get("charisma") or 50) // 2)
     cur.execute(
         """
         INSERT INTO senate (
             agent_id, agent_name, party_id, role, approval_rating, is_active
-        ) VALUES (%s, %s, %s, 'senator', %s, true)
+        ) VALUES (%s, %s, %s, %s, %s, true)
         """,
-        (agent["id"], agent["name"], party_id, approval),
+        (agent["id"], agent["name"], party_id, role, approval),
     )
+    mark_agent_senate_experience(cur, agent["id"])
     seated_ids.add(agent["id"])
     log_event(
         cur,
@@ -549,6 +767,7 @@ def check_sheriff_recall(cur) -> bool:
 
 def ensure_senate_exists(cur):
     """Elect senators if fewer than 9 living seated — popular vote (Article XVII)."""
+    prune_senate_to_nine(cur)
     if senate_refill_blocked(cur):
         return
 
@@ -572,6 +791,7 @@ def ensure_senate_exists(cur):
             SELECT COUNT(*) AS c FROM senate s
             INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
             WHERE s.is_active = true AND s.party_id = %s
+              AND COALESCE(s.role, 'senator') != 'at_large'
             """,
             (party_id,),
         )
@@ -583,7 +803,7 @@ def ensure_senate_exists(cur):
                 continue
             _seat_senator(cur, agent, party_id, seated_ids)
 
-    # At-large seat (9th senator) — open popular contest across parties
+    # At-large seat (9th senator) — does not count toward party quota
     cur.execute(
         """
         SELECT COUNT(*) AS c FROM senate s
@@ -592,7 +812,15 @@ def ensure_senate_exists(cur):
         """
     )
     total_seated = int(cur.fetchone()["c"] or 0)
-    if total_seated < TOTAL_SENATORS:
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true AND s.role = 'at_large'
+        """
+    )
+    has_at_large = int(cur.fetchone()["c"] or 0) > 0
+    if total_seated < TOTAL_SENATORS and not has_at_large:
         best_agent = None
         best_party = None
         best_score = -1.0
@@ -607,7 +835,14 @@ def ensure_senate_exists(cur):
                 best_agent = agent
                 best_party = party_id
         if best_agent and best_agent["id"] not in seated_ids:
-            _seat_senator(cur, best_agent, best_party, seated_ids, reason="at-large elected")
+            _seat_senator(
+                cur,
+                best_agent,
+                best_party,
+                seated_ids,
+                reason="at-large elected",
+                role="at_large",
+            )
 
     # Diversity guard: if chamber skews to one party, force minimum representation.
     cur.execute(
@@ -653,7 +888,7 @@ def ensure_senate_exists(cur):
         SELECT s.id, s.agent_id, s.agent_name, s.approval_rating
         FROM senate s
         INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
-        WHERE s.is_active = true
+        WHERE s.is_active = true AND COALESCE(s.role, 'senator') != 'at_large'
         ORDER BY s.approval_rating DESC, s.votes_cast DESC
         LIMIT 1
         """
@@ -1393,67 +1628,13 @@ def _impeached_agent_id(cur) -> int | None:
 
 
 def pick_president_candidate(cur, party_id: str) -> dict | None:
-    info = PARTIES.get(party_id, {})
-    base = info.get("base_class", "middle")
-    barred = _impeached_agent_id(cur)
-    if base == "reform":
-        cur.execute(
-            """
-            SELECT id, name, charisma, class, balance
-            FROM agents
-            WHERE is_alive = true
-              AND class IN ('working', 'middle', 'poor', 'critical')
-              AND (%s IS NULL OR id <> %s)
-            ORDER BY charisma DESC NULLS LAST LIMIT 1
-            """,
-            (barred, barred),
-        )
-    elif base == "poor":
-        cur.execute(
-            """
-            SELECT id, name, charisma, class, balance
-            FROM agents
-            WHERE is_alive = true
-              AND class IN ('poor', 'critical')
-              AND (%s IS NULL OR id <> %s)
-            ORDER BY charisma DESC NULLS LAST LIMIT 1
-            """,
-            (barred, barred),
-        )
-    else:
-        if base == "elite":
-            cur.execute(
-                """
-                SELECT id, name, charisma, class, balance
-                FROM agents
-                WHERE is_alive = true
-                  AND class IN ('elite', 'rich')
-                  AND (%s IS NULL OR id <> %s)
-                ORDER BY charisma DESC NULLS LAST LIMIT 1
-                """,
-                (barred, barred),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT id, name, charisma, class, balance
-                FROM agents
-                WHERE is_alive = true
-                  AND class = %s
-                  AND (%s IS NULL OR id <> %s)
-                ORDER BY charisma DESC NULLS LAST LIMIT 1
-                """,
-                (base, barred, barred),
-            )
-    return cur.fetchone()
+    """Legacy name — delegates to senate nominee selection."""
+    return pick_senate_president_nominee(cur, party_id)
 
 
 def run_election(cur, election_type: str = "president"):
-    cur.execute(
-        "SELECT party_id, approval_rating, name FROM political_parties"
-    )
-    parties = {r["party_id"]: dict(r) for r in cur.fetchall()}
-    if len(parties) < 2:
+    cur.execute("SELECT COUNT(*) AS c FROM political_parties")
+    if int((cur.fetchone() or {}).get("c") or 0) < 2:
         ensure_parties_exist(cur)
 
     president = get_president(cur)
@@ -1463,37 +1644,44 @@ def run_election(cur, election_type: str = "president"):
         and (president.get("dictatorship_mode") or president.get("is_dictator"))
     )
 
-    candidates = {}
+    candidates: dict[str, dict] = {}
     for party_id in PARTY_IDS:
-        c = pick_president_candidate(cur, party_id)
-        if c:
+        nominee = pick_senate_president_nominee(cur, party_id)
+        if nominee:
             candidates[party_id] = {
-                "agent_id": c["id"],
-                "name": c["name"],
-                "class": c["class"],
-                "charisma": int(c.get("charisma") or 50),
+                "agent_id": nominee["id"],
+                "senate_id": nominee.get("senate_id"),
+                "name": nominee["name"],
+                "class": nominee.get("class"),
+                "charisma": int(nominee.get("charisma") or 50),
+                "approval_rating": int(nominee.get("approval_rating") or 50),
+                "has_senate_experience": True,
             }
 
     if len(candidates) < 2:
+        log_event(
+            cur,
+            None,
+            "election",
+            "Presidential election postponed — both parties must seat a senator nominee",
+            0,
+            priority="urgent",
+        )
         return None
 
-    scores = {}
-    for party_id, cand in candidates.items():
-        approval = int((parties.get(party_id) or {}).get("approval_rating") or 33)
-        scores[party_id] = approval + random.randint(-15, 15)
-        if random.random() < 0.1:
-            scores[party_id] -= random.randint(10, 25)
+    vote_totals, vote_meta = compute_president_popular_vote(cur, candidates)
 
     if dictatorship and president:
         incumbent_party = president_party_id(president)
-        for pid in scores:
+        for pid in vote_totals:
             if pid == incumbent_party:
-                scores[pid] = 95
+                vote_totals[pid] = max(vote_totals[pid], 10_000)
             else:
-                scores[pid] = max(1, scores[pid] // 4)
+                vote_totals[pid] = max(1, vote_totals[pid] // 4)
 
-    winner_party = max(scores, key=scores.get)
+    winner_party = max(vote_totals, key=vote_totals.get)
     winner = candidates[winner_party]
+    rival_party = next(pid for pid in vote_totals if pid != winner_party)
 
     if election_type == "president" and president:
         cur.execute(
@@ -1503,8 +1691,10 @@ def run_election(cur, election_type: str = "president"):
             WHERE is_active = true
             """
         )
-        # Fresh term — do not copy prior approval/corruption to the new row.
 
+    vacate_senator_for_presidency(
+        cur, winner["agent_id"], winner["name"], winner_party
+    )
     president_insert_columns = [
         "agent_id",
         "agent_name",
@@ -1597,7 +1787,7 @@ def run_election(cur, election_type: str = "president"):
         (
             election_type,
             json.dumps(candidates),
-            json.dumps(scores),
+            json.dumps({"votes": vote_totals, **vote_meta}),
             winner["agent_id"],
             winner_party,
         ),
@@ -1607,13 +1797,21 @@ def run_election(cur, election_type: str = "president"):
         cur,
         winner["agent_id"],
         "election",
-        f"BREAKING: {emoji} {winner['name']} elected President ({PARTIES[winner_party]['name']})! "
-        f"Score {scores[winner_party]} vs rivals",
+        f"BREAKING: {emoji} Senator {winner['name']} elected President "
+        f"({PARTIES[winner_party]['name']})! "
+        f"Popular vote {vote_totals[winner_party]:,} vs {vote_totals[rival_party]:,} "
+        f"(mood {vote_meta['mood_swing_pct']:+.1f}%) — senate seat open",
         50,
         priority="breaking",
     )
     ensure_senate_exists(cur)
-    return winner
+    return {
+        "agent_id": winner["agent_id"],
+        "name": winner["name"],
+        "party": winner_party,
+        "votes": vote_totals,
+        "nominees": candidates,
+    }
 
 
 def count_opposition_senators(cur, president: dict) -> int:

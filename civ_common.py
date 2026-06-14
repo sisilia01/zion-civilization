@@ -164,6 +164,8 @@ def ensure_schema(cur):
             ("prays", "BOOLEAN DEFAULT false"),
             ("health", "INTEGER DEFAULT 100"),
             ("infected", "BOOLEAN DEFAULT false"),
+            ("has_senate_experience", "BOOLEAN DEFAULT false"),
+            ("party", "VARCHAR(20)"),
         ],
     )
     cur.execute("ALTER TABLE corporations ADD COLUMN IF NOT EXISTS debt NUMERIC(20,2) DEFAULT 0")

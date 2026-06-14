@@ -619,7 +619,7 @@ def ensure_martial_law_consistency(cur):
 
 
 def ensure_president_exists(cur):
-    """Fill vacant or dead-president office via senate election (not legacy blue bootstrap)."""
+    """Fill vacant office via presidential election (senator nominees + popular class vote)."""
     president = get_president(cur)
     if president:
         cur.execute(
