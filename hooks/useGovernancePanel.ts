@@ -59,6 +59,8 @@ export function useGovernancePanel() {
           party: president.party ?? "reform",
           approval_rating: Number(president.approval_rating) || 50,
           days_in_power: Number(president.days_in_power) || 0,
+          term_day: Number(president.term_day) || 1,
+          term_limit_days: Number(president.term_limit_days) || 30,
           personal_fund: Number(president.personal_fund) || 0,
           corruption_index: Number(president.corruption_index) || 0,
         });

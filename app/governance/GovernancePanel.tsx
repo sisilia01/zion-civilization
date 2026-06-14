@@ -209,7 +209,8 @@ export function GovernancePanel() {
                       <tr>
                         <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td>
                         <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
-                          Day {Number(presidentState.days_in_power ?? 0)}
+                          Day {Number(presidentState.term_day ?? presidentState.days_in_power ?? 0)} /{" "}
+                          {Number(presidentState.term_limit_days ?? 30)}
                         </td>
                       </tr>
                       <tr>

@@ -60,6 +60,9 @@ export function getPartyColor(party: string) {
   ) {
     return REFORM_PARTY_COLOR;
   }
+  if (p === "independent" || p.includes("undecided")) {
+    return "rgba(148, 163, 184, 0.95)";
+  }
   return "rgba(255,255,255,0.4)";
 }
 
@@ -169,7 +172,7 @@ export function formatEventTime(ts: string): string {
   }
 }
 
-export const GOVERNANCE_PARTY_IDS = ["consensus", "reform"] as const;
+export const GOVERNANCE_PARTY_IDS = ["consensus", "reform", "independent"] as const;
 
 export function normalizePartyId(partyId: string | undefined): string {
   const key = (partyId || "reform").toLowerCase();
@@ -180,11 +183,17 @@ export function filterGovernanceParties<T extends { party_id?: string; name?: st
   const seen = new Set<string>();
   const out: T[] = [];
   for (const party of parties) {
-    const id = normalizePartyId(String(party.party_id || party.name || ""));
-    if (!GOVERNANCE_PARTY_IDS.includes(id as (typeof GOVERNANCE_PARTY_IDS)[number]) || seen.has(id)) continue;
+    const raw = String(party.party_id || party.name || "").toLowerCase();
+    const id =
+      raw === "independent" || raw.includes("undecided")
+        ? "independent"
+        : normalizePartyId(raw);
+    if (!GOVERNANCE_PARTY_IDS.includes(id as (typeof GOVERNANCE_PARTY_IDS)[number]) || seen.has(id)) {
+      continue;
+    }
     seen.add(id);
     out.push({ ...party, party_id: id });
-    if (out.length >= 2) break;
+    if (out.length >= 3) break;
   }
   return out;
 }
