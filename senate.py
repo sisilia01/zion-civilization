@@ -28,6 +28,8 @@ from political_parties import PARTIES, ensure_parties_exist, ensure_parties_sche
 
 PARTY_IDS = ("consensus", "reform")
 SENATORS_PER_PARTY = 4
+SENATE_AT_LARGE_SEATS = 1  # 9th senator — popular vote (Article XVII)
+TOTAL_SENATORS = SENATORS_PER_PARTY * len(PARTY_IDS) + SENATE_AT_LARGE_SEATS
 ROGUE_VOTE_CHANCE = 0.20
 ELECTION_BONUS = 50.0
 IMPEACH_REVOLUTION_MIN = 250
@@ -401,13 +403,157 @@ def pick_senator_candidate(cur, party_id: str, exclude_ids: set | None = None) -
     return cur.fetchone()
 
 
+def _agent_class_vote_distribution(cur) -> dict[str, float]:
+    """Living-agent class weights for popular elections (Article XVII)."""
+    cur.execute(
+        """
+        SELECT class, COUNT(*) AS cnt FROM agents
+        WHERE is_alive = true
+        GROUP BY class
+        """
+    )
+    class_counts = {row["class"]: int(row["cnt"]) for row in cur.fetchall()}
+    total = sum(class_counts.values()) or 1
+    return {cls: cnt / total for cls, cnt in class_counts.items()}
+
+
+def _score_senate_candidate(agent: dict, party_id: str, class_weights: dict[str, float]) -> float:
+    """Popular vote score for a senate candidate."""
+    cand_class = agent.get("class") or "middle"
+    charisma = float(agent.get("charisma") or 50)
+    base = charisma * 0.4
+    class_w = class_weights.get(cand_class, 0.1)
+    party_bonus = 1.25 if agent_party_from_class(cand_class) == party_id else 0.85
+    return base + class_w * 500 * party_bonus + random.randint(-50, 50)
+
+
+def elect_senator_by_popular_vote(
+    cur, party_id: str, exclude_ids: set | None = None
+) -> dict | None:
+    """Article XVII — senator chosen by simulated agent popular vote, not executive appointment."""
+    exclude_ids = exclude_ids or set()
+    ex_clause = ""
+    params: list = []
+    if exclude_ids:
+        ex_clause = " AND id NOT IN %s"
+        params.append(tuple(exclude_ids))
+
+    info = PARTIES.get(party_id, {})
+    base = info.get("base_class", "middle")
+    if base == "reform":
+        class_filter = "class IN ('working', 'middle', 'poor', 'critical')"
+    elif base == "elite":
+        class_filter = "class IN ('elite', 'rich')"
+    else:
+        class_filter = f"class = '{base}'"
+
+    cur.execute(
+        f"""
+        SELECT id, name, charisma, class, balance
+        FROM agents
+        WHERE is_alive = true
+          AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+          AND {class_filter}{ex_clause}
+        ORDER BY charisma DESC NULLS LAST
+        LIMIT 8
+        """,
+        tuple(params),
+    )
+    candidates = cur.fetchall()
+    if not candidates:
+        return pick_senator_candidate(cur, party_id, exclude_ids)
+
+    class_weights = _agent_class_vote_distribution(cur)
+    scores = {c["id"]: _score_senate_candidate(c, party_id, class_weights) for c in candidates}
+    winner_id = max(scores, key=scores.get)
+    return next(c for c in candidates if c["id"] == winner_id)
+
+
+def _seat_senator(cur, agent: dict, party_id: str, seated_ids: set, reason: str = "elected"):
+    approval = min(90, 40 + int(agent.get("charisma") or 50) // 2)
+    cur.execute(
+        """
+        INSERT INTO senate (
+            agent_id, agent_name, party_id, role, approval_rating, is_active
+        ) VALUES (%s, %s, %s, 'senator', %s, true)
+        """,
+        (agent["id"], agent["name"], party_id, approval),
+    )
+    seated_ids.add(agent["id"])
+    log_event(
+        cur,
+        agent["id"],
+        "senate",
+        f"Senator {agent['name']} ({PARTIES[party_id]['emoji']} {party_id}) "
+        f"{reason} by popular vote (Article XVII)",
+        0,
+        priority="normal",
+    )
+
+
+def check_sheriff_recall(cur) -> bool:
+    """Article XVII — Sheriff recall only during constitutional crisis + Senate majority."""
+    from civ_governance import SHERIFF_RECALL_REVOLUTION_MIN, deactivate_sheriff
+
+    unrest = get_impeachment_revolution_level(cur)
+    if unrest <= SHERIFF_RECALL_REVOLUTION_MIN:
+        return False
+
+    cur.execute("SELECT * FROM sheriff_state WHERE is_active = true LIMIT 1")
+    sheriff = cur.fetchone()
+    if not sheriff:
+        return False
+
+    cur.execute(
+        """
+        SELECT s.* FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        """
+    )
+    senators = cur.fetchall()
+    if not senators:
+        return False
+
+    votes_for = 0
+    for s in senators:
+        if random.random() < 0.75:
+            votes_for += 1
+
+    threshold = max(1, len(senators) // 2 + 1)
+    if votes_for < threshold:
+        log_event(
+            cur,
+            None,
+            "senate",
+            f"Sheriff recall motion FAILED {votes_for}-{len(senators) - votes_for} "
+            f"(needs {threshold}; unrest {unrest:.0f})",
+            0,
+            priority="urgent",
+        )
+        return False
+
+    sname = sheriff.get("agent_name") or "Sheriff"
+    deactivate_sheriff(cur)
+    log_event(
+        cur,
+        None,
+        "senate",
+        f"BREAKING: Senate recalls Sheriff {sname} during constitutional crisis "
+        f"({votes_for}-{len(senators) - votes_for}; unrest {unrest:.0f}) — new election called",
+        0,
+        priority="breaking",
+    )
+    return True
+
+
 def ensure_senate_exists(cur):
-    """Elect senators if fewer than 8 living seated (4 per party). Speaker = highest approval."""
+    """Elect senators if fewer than 9 living seated — popular vote (Article XVII)."""
     if senate_refill_blocked(cur):
         return
 
     living = living_senators_count(cur)
-    max_senators = SENATORS_PER_PARTY * len(PARTY_IDS)
+    max_senators = TOTAL_SENATORS
     if living >= max_senators:
         return
 
@@ -432,27 +578,36 @@ def ensure_senate_exists(cur):
         have = int(cur.fetchone()["c"] or 0)
         need = SENATORS_PER_PARTY - have
         for _ in range(need):
-            agent = pick_senator_candidate(cur, party_id, seated_ids)
+            agent = elect_senator_by_popular_vote(cur, party_id, seated_ids)
             if not agent or agent["id"] in seated_ids:
                 continue
-            approval = min(90, 40 + int(agent.get("charisma") or 50) // 2)
-            cur.execute(
-                """
-                INSERT INTO senate (
-                    agent_id, agent_name, party_id, role, approval_rating, is_active
-                ) VALUES (%s, %s, %s, 'senator', %s, true)
-                """,
-                (agent["id"], agent["name"], party_id, approval),
-            )
-            seated_ids.add(agent["id"])
-            log_event(
-                cur,
-                agent["id"],
-                "senate",
-                f"Senator {agent['name']} ({PARTIES[party_id]['emoji']} {party_id}) sworn in",
-                0,
-                priority="normal",
-            )
+            _seat_senator(cur, agent, party_id, seated_ids)
+
+    # At-large seat (9th senator) — open popular contest across parties
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        """
+    )
+    total_seated = int(cur.fetchone()["c"] or 0)
+    if total_seated < TOTAL_SENATORS:
+        best_agent = None
+        best_party = None
+        best_score = -1.0
+        class_weights = _agent_class_vote_distribution(cur)
+        for party_id in PARTY_IDS:
+            agent = elect_senator_by_popular_vote(cur, party_id, seated_ids)
+            if not agent:
+                continue
+            score = _score_senate_candidate(agent, party_id, class_weights)
+            if score > best_score:
+                best_score = score
+                best_agent = agent
+                best_party = party_id
+        if best_agent and best_agent["id"] not in seated_ids:
+            _seat_senator(cur, best_agent, best_party, seated_ids, reason="at-large elected")
 
     # Diversity guard: if chamber skews to one party, force minimum representation.
     cur.execute(
@@ -468,7 +623,7 @@ def ensure_senate_exists(cur):
     for party_id in PARTY_IDS:
         if counts.get(party_id, 0) > 0:
             continue
-        agent = pick_senator_candidate(cur, party_id, seated_ids)
+        agent = elect_senator_by_popular_vote(cur, party_id, seated_ids)
         if not agent:
             cur.execute(
                 """
@@ -485,24 +640,7 @@ def ensure_senate_exists(cur):
             agent = cur.fetchone()
         if not agent or agent["id"] in seated_ids:
             continue
-        approval = min(90, 40 + int(agent.get("charisma") or 50) // 2)
-        cur.execute(
-            """
-            INSERT INTO senate (
-                agent_id, agent_name, party_id, role, approval_rating, is_active
-            ) VALUES (%s, %s, %s, 'senator', %s, true)
-            """,
-            (agent["id"], agent["name"], party_id, approval),
-        )
-        seated_ids.add(agent["id"])
-        log_event(
-            cur,
-            agent["id"],
-            "senate",
-            f"Senate diversity guard: {agent['name']} seated for {party_id}",
-            0,
-            priority="normal",
-        )
+        _seat_senator(cur, agent, party_id, seated_ids, reason="diversity guard elected")
 
     cur.execute(
         """
@@ -1738,6 +1876,9 @@ def run_governance_tick(cur, ctx: dict) -> dict:
         voted += 1
 
     check_impeachment(cur)
+    if check_sheriff_recall(cur):
+        summary_parts.append("sheriff recalled — election pending")
+        ctx["sheriff_recall"] = True
     from political_economy import run_power_struggles, compute_power_scores
 
     scores = compute_power_scores(cur)

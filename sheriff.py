@@ -795,6 +795,10 @@ def run_governance_tick(tick_cur, ctx: dict) -> dict:
             print("Sheriff tick: no active sheriff — calling election...", flush=True)
             _sheriff_step("Sheriff tick: run_sheriff_election...", run_sheriff_election)
             sheriff = get_sheriff()
+        elif ctx.get("sheriff_recall"):
+            print("Sheriff tick: Senate recall — calling election...", flush=True)
+            _sheriff_step("Sheriff tick: run_sheriff_election (recall)...", run_sheriff_election, True)
+            sheriff = get_sheriff()
 
         if sheriff:
             if sheriff["approval_rating"] <= 0:

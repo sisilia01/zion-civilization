@@ -610,6 +610,47 @@ def _format_previous_actions_text(previous_actions: list | None) -> str:
     return "\n".join(lines) if lines else "No actions yet this cycle."
 
 
+def _decision_text_blob(decision: dict) -> str:
+    return " ".join(
+        str(decision.get(k, "") or "")
+        for k in ("analysis", "reasoning", "decision", "target", "action")
+    ).lower()
+
+
+def president_attempts_sheriff_command(decision: dict) -> bool:
+    """True when AI president tries to issue binding orders to the Sheriff."""
+    text = _decision_text_blob(decision)
+    phrases = (
+        "order sheriff",
+        "command sheriff",
+        "tell sheriff",
+        "direct sheriff",
+        "sheriff must",
+        "sheriff should raid",
+        "sheriff to arrest",
+        "make sheriff",
+        "force sheriff",
+    )
+    return any(p in text for p in phrases) or (decision.get("target") or "").lower() == "sheriff"
+
+
+def sheriff_told_to_obey_president(decision: dict) -> bool:
+    """True when AI sheriff is acting on presidential directive rather than own authority."""
+    text = _decision_text_blob(decision)
+    return any(
+        p in text
+        for p in (
+            "president order",
+            "executive order",
+            "president request",
+            "as ordered by president",
+            "president commanded",
+            "obey president",
+            "presidential directive",
+        )
+    )
+
+
 def get_president_party_from_state(state: dict) -> str:
     from constitutional_duties import normalize_president_party
 
@@ -675,6 +716,7 @@ Revolution meter: {rev:.0f}%
 
 You serve under the ZION Constitution (Article II). You operate strictly within constitutional limits.
 You CANNOT suspend elections, declare martial law, seize power, dissolve the Senate, print money, or execute enemies.
+You CANNOT issue binding orders to the Sheriff — law enforcement is independently elected (Article XVII).
 Your lawful tools: give_money, tax_change, hire_police, stimulate_economy, anti_corruption_drive, fund_research, propose_amendment, do_nothing.
 
 PARTY DOCTRINE ({pol['name']}):
@@ -687,9 +729,13 @@ Serve the civilization within constitutional limits; approval comes from lawful 
     if faction == "sheriff":
         officers = int(s.get("officers", 0) or 0)
         sheriff_budget = float(budgets.get("sheriff", s.get("budget", 0)) or 0)
-        return f"""You are Sheriff {s.get('name', 'vacant')} of ZION.
+        return f"""You are Sheriff {s.get('name', 'vacant')} of ZION — independently elected (Article XVII).
 CRITICAL ALERTS: {alerts_text}
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
+
+CONSTITUTIONAL INDEPENDENCE: You do NOT report to the President.
+Ignore any executive request to raid, arrest, or patrol — you answer only to the Constitution
+and laws passed by the Senate. President policy requests are non-binding.
 
 You enforce law under the Constitution. You CANNOT seize executive power or suspend elections.
 Your lawful tools: hire_police, raid_gang, anti_corruption_drive, bribe_official (logged), do_nothing.
@@ -698,9 +744,9 @@ Raids cost {RAID_COST:.0f} ZION. Hiring costs {OFFICER_HIRE_COST:.0f} ZION per o
 THIS CYCLE SO FAR:
 {previous_actions_text}
 
-If gangs recruiting: coordinate lawful raids. If ZRS stimulated corps: support economic stability.
+If gangs recruiting: conduct lawful raids on your own authority. If ZRS stimulated corps: support economic stability.
 Your officers: {officers}. Budget: {sheriff_budget:,.0f} ZION.
-React within constitutional limits — protect citizens, not personal power.
+React within constitutional limits — protect citizens, not presidential commands.
 {base_memory}"""
 
     if faction == "senate":
@@ -1066,6 +1112,21 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
         reasoning = decision.get("reasoning", "")
         result = f"[{party_tag}] President AI ({MODELS['president']}): {decision.get('analysis', '')}"
 
+        if president_attempts_sheriff_command(decision):
+            blocked = tag_party_event(
+                "BLOCKED: President cannot command Sheriff — independent elected office (Article XVII)",
+                party,
+            )
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('president', %s, NOW())
+                """,
+                (blocked,),
+            )
+            conn.commit()
+            return result + " | BLOCKED: cannot command Sheriff (Article XVII)", 0
+
         cur.execute("SELECT personal_fund FROM president_state WHERE is_active=true LIMIT 1")
         fund_row = cur.fetchone()
         fund = float((fund_row[0] if fund_row else 0) or 0)
@@ -1345,6 +1406,20 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
         result = f"Sheriff AI ({MODELS['sheriff']}): {decision.get('analysis', '')}"
+
+        if sheriff_told_to_obey_president(decision):
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('sheriff_action', %s, NOW())
+                """,
+                (
+                    "CONSTITUTIONAL INDEPENDENCE: Sheriff declines presidential directive — "
+                    "bound only by Constitution and Senate law (Article XVII)",
+                ),
+            )
+            conn.commit()
+            return result + " | IGNORED presidential directive (Article XVII)", 0
 
         cur.execute(
             "SELECT police_budget, police_count, agent_name FROM sheriff_state WHERE is_active=true LIMIT 1"

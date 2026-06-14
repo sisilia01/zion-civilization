@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""President ↔ Sheriff orders, compliance, coup, revolution."""
+"""President ↔ Sheriff — constitutional separation (Article XVII).
+
+Sheriff is independently elected. President may issue policy REQUESTS only;
+Sheriff is not operationally subordinate to the Executive.
+"""
 import json
 import random
 
@@ -15,6 +19,7 @@ ORDER_TYPES = [
 
 MIN_SHERIFF_TENURE_DAYS = 3
 COMPLIANCE_FIRE_THRESHOLD = 0.30
+SHERIFF_RECALL_REVOLUTION_MIN = 250
 
 
 def get_sheriff_compliance_metrics(cur) -> dict:
@@ -91,7 +96,7 @@ def deactivate_sheriff(cur):
 
 
 def issue_president_orders(cur, president):
-    """President issues 1-3 direct orders per cycle based on situation."""
+    """President issues non-binding policy requests — Sheriff may ignore (Article XVII)."""
     if not president:
         return 0
 
@@ -114,16 +119,17 @@ def issue_president_orders(cur, president):
             INSERT INTO sheriff_orders (president_id, order_type, payload, status)
             VALUES (%s, 'ATTACK_GANG', %s, 'pending')
             """,
-            (pid, json.dumps({"gang_name": top_gang["name"]})),
+            (pid, json.dumps({"gang_name": top_gang["name"], "binding": False})),
         )
         issued += 1
         log_event(
             cur,
             pid,
             "president",
-            f"President {pname} orders: Attack {top_gang['name']} immediately!",
+            f"President {pname} REQUESTS (non-binding): investigate {top_gang['name']} — "
+            f"Sheriff acts independently under Article XVII",
             0,
-            priority="urgent",
+            priority="normal",
         )
 
     if float(president.get("police_fund") or 0) > 200:
@@ -132,7 +138,7 @@ def issue_president_orders(cur, president):
             INSERT INTO sheriff_orders (president_id, order_type, payload, status)
             VALUES (%s, 'INCREASE_PATROL', %s, 'pending')
             """,
-            (pid, json.dumps({"officers": 10, "cost": 200})),
+            (pid, json.dumps({"officers": 10, "cost": 200, "binding": False})),
         )
         issued += 1
 
@@ -151,7 +157,7 @@ def issue_president_orders(cur, president):
                 INSERT INTO sheriff_orders (president_id, order_type, payload, status)
                 VALUES (%s, 'ARREST_CORRUPT_AGENT', %s, 'pending')
                 """,
-                (pid, json.dumps({"name": target["name"]})),
+                (pid, json.dumps({"name": target["name"], "binding": False})),
             )
             issued += 1
 
@@ -166,12 +172,12 @@ def issue_president_orders(cur, president):
 
 
 def process_sheriff_orders(cur, sheriff):
+    """Sheriff reviews president requests — constitutionally independent, does not obey."""
     print("process_sheriff_orders: starting...", flush=True)
     if not sheriff:
         print("process_sheriff_orders: no sheriff, skipping", flush=True)
         return 0, 0
 
-    stype = sheriff.get("sheriff_type") or "honest"
     sname = sheriff.get("agent_name") or "Sheriff"
     executed = 0
     ignored = 0
@@ -184,60 +190,30 @@ def process_sheriff_orders(cur, sheriff):
             """
         )
         orders = cur.fetchall()
-        print(f"process_sheriff_orders: found {len(orders)} pending orders", flush=True)
+        print(f"process_sheriff_orders: found {len(orders)} pending requests", flush=True)
 
         for order in orders:
-            print(f"process_sheriff_orders: processing order id={order.get('id')} type={order.get('order_type')}", flush=True)
             oid = order["id"]
             otype = order["order_type"]
-            payload = order["payload"] or {}
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-
-            if stype == "corrupt" and random.random() < 0.45:
-                cur.execute(
-                    """
-                    UPDATE sheriff_orders SET status = 'faked', faked = true,
-                        result_text = %s, executed_at = NOW()
-                    WHERE id = %s
-                    """,
-                    (f"Sheriff {sname} reported success (faked)", oid),
-                )
-                ignored += 1
-                if otype == "ATTACK_GANG" and payload.get("gang_name"):
-                    log_event(
-                        cur,
-                        sheriff["agent_id"],
-                        "sheriff_action",
-                        f"TIP-OFF: Gang {payload['gang_name']} warned before raid!",
-                        0,
-                        priority="urgent",
-                    )
-                continue
-
-            if stype == "enforcement" and random.random() < 0.35:
-                ignored += 1
-                cur.execute(
-                    "UPDATE sheriff_orders SET status = 'ignored', executed_at = NOW() WHERE id = %s",
-                    (oid,),
-                )
-                continue
-
-            print(f"process_sheriff_orders: executing order {oid} ({otype})...", flush=True)
-            result = _execute_order(cur, sheriff, otype, payload)
             cur.execute(
                 """
-                UPDATE sheriff_orders SET status = 'executed', result_text = %s, executed_at = NOW()
+                UPDATE sheriff_orders SET status = 'ignored_constitutional',
+                    result_text = %s, executed_at = NOW()
                 WHERE id = %s
                 """,
-                (result, oid),
+                (
+                    f"Sheriff {sname} declines executive request ({otype}) — "
+                    f"independent office under Article XVII; bound only by Constitution and Senate law",
+                    oid,
+                ),
             )
-            executed += 1
+            ignored += 1
             log_event(
                 cur,
                 sheriff["agent_id"],
                 "sheriff_action",
-                f"Sheriff {sname}: {result}",
+                f"CONSTITUTIONAL INDEPENDENCE: Sheriff {sname} ignores President's "
+                f"{otype} request — not subordinate to Executive",
                 0,
                 priority="normal",
             )
@@ -252,7 +228,7 @@ def process_sheriff_orders(cur, sheriff):
             (executed, ignored),
         )
 
-        print(f"process_sheriff_orders: done — executed={executed} ignored={ignored}", flush=True)
+        print(f"process_sheriff_orders: done — ignored={ignored} (constitutional)", flush=True)
         return executed, ignored
 
     except Exception as e:
@@ -317,54 +293,31 @@ def _execute_order(cur, sheriff, otype, payload):
 
 
 def check_compliance(cur, president):
+    """President cannot fire Sheriff — independence under Article XVII.
+
+    Low compliance on non-binding requests is logged only.
+    Sheriff removal requires constitutional crisis + Senate recall vote.
+    """
     if not president:
         return
 
     metrics = get_sheriff_compliance_metrics(cur)
     if not metrics["measurable"]:
-        return  # no orders in 24h — compliance cannot be measured
+        return
 
     rate = metrics["compliance_rate_raw"]
     pname = president["agent_name"]
 
-    if rate < COMPLIANCE_FIRE_THRESHOLD and metrics["tenure_ok"]:
-        deactivate_sheriff(cur)
+    if metrics["tenure_ok"] and rate is not None and rate < 0.50:
         log_event(
             cur,
             president["agent_id"],
-            "sheriff_action",
-            f"INSUBORDINATION: President {pname} fires Sheriff! Compliance {rate*100:.0f}% — emergency election!",
+            "president",
+            f"President {pname} notes Sheriff independence — "
+            f"executive requests not fulfilled ({rate*100:.0f}% compliance). "
+            f"Removal requires Senate recall during constitutional crisis (Art. XVII).",
             0,
-            priority="breaking",
-        )
-        cur.execute(
-            "UPDATE president_state SET compliance_low_cycles = 0, orders_given_cycle = 0 WHERE is_active = true"
-        )
-        return
-
-    if metrics["tenure_ok"] and rate < 0.50:
-        cur.execute(
-            """
-            UPDATE president_state SET compliance_low_cycles = COALESCE(compliance_low_cycles, 0) + 1
-            WHERE is_active = true
-            """
-        )
-        cur.execute(
-            "SELECT compliance_low_cycles FROM president_state WHERE is_active = true"
-        )
-        low = int(cur.fetchone()["compliance_low_cycles"] or 0)
-        if low >= 3:
-            log_event(
-                cur,
-                president["agent_id"],
-                "president",
-                f"President {pname} declares INSUBORDINATION! Sheriff compliance {rate*100:.0f}% for 3 cycles.",
-                0,
-                priority="breaking",
-            )
-    else:
-        cur.execute(
-            "UPDATE president_state SET compliance_low_cycles = 0 WHERE is_active = true"
+            priority="normal",
         )
 
     cur.execute(

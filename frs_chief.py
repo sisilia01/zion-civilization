@@ -24,50 +24,18 @@ OPENROUTER_KEY = os.getenv("OPENROUTER_KEY", "")
 
 
 def ensure_frs_chief(cur):
-    """Ensure FRS Chief exists - auto-nominate if empty."""
+    """Ensure FRS Chief table exists — do NOT bypass president nomination + Senate confirmation."""
     ensure_schema(cur)
-    cur.execute("SELECT is_active FROM frs_chief_state WHERE id = 1")
+    cur.execute("SELECT confirmation_status FROM frs_chief_state WHERE id = 1")
     row = cur.fetchone()
-    is_active = (row or {}).get("is_active") if isinstance(row, dict) else (row[0] if row else False)
-    if is_active:
-        return
-
-    cur.execute(
-        """
-        SELECT id, name FROM agents
-        WHERE is_alive = true
-        AND class IN ('rich', 'elite', 'middle')
-        ORDER BY balance DESC LIMIT 1
-        """
-    )
-    agent = cur.fetchone()
-    if not agent:
-        cur.execute("SELECT id, name FROM agents WHERE is_alive = true LIMIT 1")
-        agent = cur.fetchone()
-
-    if not agent:
-        return
-
-    agent_id = agent["id"] if isinstance(agent, dict) else agent[0]
-    agent_name = agent["name"] if isinstance(agent, dict) else agent[1]
-
-    cur.execute(
-        """
-        UPDATE frs_chief_state SET
-            agent_id = %s,
-            chief_name = %s,
-            nominated_by = NULL,
-            confirmation_status = 'confirmed',
-            term_cycles_remaining = %s,
-            cycles_served = 0,
-            is_active = true,
-            confirmed_at = NOW(),
-            updated_at = NOW()
-        WHERE id = 1
-        """,
-        (agent_id, agent_name, FRS_TERM_CYCLES),
-    )
-    print(f"FRS Chief auto-nominated: {agent_name}", flush=True)
+    if not row:
+        cur.execute(
+            """
+            INSERT INTO frs_chief_state (id, confirmation_status, is_active)
+            VALUES (1, 'vacant', false)
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
 
 
 def get_frs_chief(cur) -> dict:
