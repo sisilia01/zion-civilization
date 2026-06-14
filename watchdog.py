@@ -32,6 +32,7 @@ CRON_SCRIPTS = {
     "governance":        ("governance_tick.py", 1800),   # 30 min — canonical government cycle
     "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
     "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
+    "party_choice": ("party_choice.py cycle", 3600),  # 1 hour — autonomous party affiliation
     "birth":        ("birth.py",          1800),   # 30 min
     "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
     "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)

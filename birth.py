@@ -69,11 +69,11 @@ def run_birth_cycle():
                 INSERT INTO agents (
                     name, class, balance, parent_id, gender,
                     charisma, aggression, faith, intelligence, strength, loyalty,
-                    education_status, job_status, age_days, is_alive, language_level
+                    education_status, job_status, age_days, is_alive, language_level, party
                 ) VALUES (
                     %s, %s, %s, NULL, %s,
                     %s, %s, %s, %s, %s, %s,
-                    'child', 'unemployed', 0, TRUE, %s
+                    'child', 'unemployed', 0, TRUE, %s, 'independent'
                 )
                 """,
                 (
@@ -192,11 +192,11 @@ def run_birth_cycle():
                 INSERT INTO agents (
                     name, class, balance, parent_id, gender,
                     charisma, aggression, faith, intelligence, strength, loyalty,
-                    education_status, job_status, age_days, is_alive, language_level
+                    education_status, job_status, age_days, is_alive, language_level, party
                 ) VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
-                    'child', 'unemployed', 0, TRUE, %s
+                    'child', 'unemployed', 0, TRUE, %s, 'independent'
                 ) RETURNING id
             """,
             (

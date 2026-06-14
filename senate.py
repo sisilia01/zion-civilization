@@ -312,43 +312,19 @@ def compute_president_popular_vote(
     cur, candidates: dict[str, dict]
 ) -> tuple[dict[str, int], dict]:
     """
-    Popular presidential vote: agents vote by class lean + electorate mood ±15%.
-    Returns (party_vote_totals, metadata with per-class breakdown).
+    Popular presidential vote: registered party members vote their party;
+    independents vote by class lean + reading convictions or abstain.
     """
-    cur.execute(
-        """
-        SELECT class, COUNT(*) AS cnt FROM agents
-        WHERE is_alive = true
-        GROUP BY class
-        """
-    )
-    class_counts = {row["class"]: int(row["cnt"]) for row in cur.fetchall()}
+    from party_choice import compute_agent_popular_vote
+
     mood = random.uniform(-ELECTORATE_MOOD_SWING, ELECTORATE_MOOD_SWING)
-
-    votes: dict[str, int] = {pid: 0 for pid in candidates}
-    by_class: dict[str, dict[str, int]] = {pid: {} for pid in candidates}
-
-    for cls, count in class_counts.items():
-        lean_c, _lean_r = CLASS_PRESIDENTIAL_LEAN.get(cls, (0.50, 0.50))
-        consensus_share = max(0.0, min(1.0, lean_c + mood))
-        consensus_votes = int(round(count * consensus_share))
-        reform_votes = count - consensus_votes
-        if "consensus" in votes:
-            votes["consensus"] += consensus_votes
-            by_class["consensus"][cls] = consensus_votes
-        if "reform" in votes:
-            votes["reform"] += reform_votes
-            by_class["reform"][cls] = reform_votes
-
-    meta = {
-        "mood_swing_pct": round(mood * 100, 1),
-        "class_counts": class_counts,
-        "by_class": by_class,
-        "lean_rules": {
-            "rich/elite": "70/30→Consensus",
-            "middle": "50/50",
-            "working/poor": "30/70→Reform",
-        },
+    party_ids = tuple(candidates.keys())
+    votes, meta = compute_agent_popular_vote(cur, CLASS_PRESIDENTIAL_LEAN, mood, party_ids)
+    meta["lean_rules"] = {
+        "rich/elite": "70/30→Consensus",
+        "middle": "50/50",
+        "working/poor": "30/70→Reform",
+        "independent": "conviction vote or abstain",
     }
     return votes, meta
 
@@ -419,6 +395,8 @@ def _agent_party_for_election(agent: dict) -> str:
     raw = (agent.get("party") or "").lower()
     if raw in PARTY_IDS:
         return raw
+    if raw in ("", "independent", "none"):
+        return agent_party_from_class(agent.get("class") or "middle")
     return agent_party_from_class(agent.get("class") or "middle")
 
 
@@ -470,41 +448,17 @@ def pick_sheriff_party_nominee(cur, party_id: str, exclude_ids: set | None = Non
 def compute_sheriff_popular_vote(
     cur, candidates: dict[str, dict]
 ) -> tuple[dict[str, int], dict]:
-    """Sheriff election popular vote — class lean + electorate mood ±15%."""
-    cur.execute(
-        """
-        SELECT class, COUNT(*) AS cnt FROM agents
-        WHERE is_alive = true
-        GROUP BY class
-        """
-    )
-    class_counts = {row["class"]: int(row["cnt"]) for row in cur.fetchall()}
+    """Sheriff election — same agent electorate model as presidential vote."""
+    from party_choice import compute_agent_popular_vote
+
     mood = random.uniform(-ELECTORATE_MOOD_SWING, ELECTORATE_MOOD_SWING)
-
-    votes: dict[str, int] = {pid: 0 for pid in candidates}
-    by_class: dict[str, dict[str, int]] = {pid: {} for pid in candidates}
-
-    for cls, count in class_counts.items():
-        lean_c, _lean_r = CLASS_SHERIFF_LEAN.get(cls, (0.50, 0.50))
-        consensus_share = max(0.0, min(1.0, lean_c + mood))
-        consensus_votes = int(round(count * consensus_share))
-        reform_votes = count - consensus_votes
-        if "consensus" in votes:
-            votes["consensus"] += consensus_votes
-            by_class["consensus"][cls] = consensus_votes
-        if "reform" in votes:
-            votes["reform"] += reform_votes
-            by_class["reform"][cls] = reform_votes
-
-    meta = {
-        "mood_swing_pct": round(mood * 100, 1),
-        "class_counts": class_counts,
-        "by_class": by_class,
-        "lean_rules": {
-            "rich/elite": "60/40→Consensus (law & order)",
-            "middle": "50/50",
-            "working/poor": "40/60→Reform",
-        },
+    party_ids = tuple(candidates.keys())
+    votes, meta = compute_agent_popular_vote(cur, CLASS_SHERIFF_LEAN, mood, party_ids)
+    meta["lean_rules"] = {
+        "rich/elite": "60/40→Consensus (law & order)",
+        "middle": "50/50",
+        "working/poor": "40/60→Reform",
+        "independent": "conviction vote or abstain",
     }
     return votes, meta
 

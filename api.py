@@ -5767,7 +5767,7 @@ async def get_senate():
 
 @app.get("/political_parties")
 async def get_political_parties():
-    from political_parties import compute_party_poll_shares
+    from party_choice import enrich_parties_election_poll
 
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -5806,8 +5806,7 @@ async def get_political_parties():
                     reas = mem.get("reasoning") or ""
                     p["last_action"] = f"{dec}: {reas}".strip(": ")
             parties.append(p)
-        compute_party_poll_shares(parties)
-        return parties
+        return enrich_parties_election_poll(cur, parties)
     finally:
         cur.close()
         db.close()
