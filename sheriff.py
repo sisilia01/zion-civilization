@@ -55,8 +55,7 @@ def _init_sheriff_db():
 
 SHERIFF_TYPES = ["honest", "corrupt", "enforcement"]
 TYPE_WEIGHTS = [0.5, 0.35, 0.15]
-TERM_DAYS = 10
-MAX_TERMS = 2
+SHERIFF_TERM_HOURS = 720
 
 
 def log_event(agent_id, event_type, description, amount=0):
@@ -170,7 +169,14 @@ def sheriff_budget_warning(sheriff):
 
 
 def run_sheriff_election(forced=False):
-    """Run sheriff election with voting, corporate bribes, and sheriff type assignment."""
+    """Independent sheriff election — party nominees (senate/police exp) + class popular vote."""
+    from senate import (
+        PARTY_IDS,
+        PARTIES,
+        compute_sheriff_popular_vote,
+        pick_sheriff_party_nominee,
+    )
+
     reason = "forced early election" if forced else "regular election"
     print(f"Sheriff tick: run_sheriff_election ({reason})...", flush=True)
     print(f"\nSHERIFF ELECTION ({reason})!")
@@ -196,89 +202,39 @@ def run_sheriff_election(forced=False):
     cur.execute("SELECT last_sheriff_agent_id FROM civilization_state WHERE id = 1")
     civ = cur.fetchone() or {}
     last_sheriff_id = civ.get("last_sheriff_agent_id")
+    exclude = {last_sheriff_id} if last_sheriff_id else set()
 
-    cur.execute(
-        """
-        SELECT id, name, class, charisma, balance FROM agents
-        WHERE is_alive = true
-        AND charisma > (
-            SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY charisma)
-            FROM agents WHERE is_alive = true
-        )
-        AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
-        AND (%s IS NULL OR id != %s)
-        ORDER BY charisma DESC, RANDOM() LIMIT 6
-        """,
-        (last_sheriff_id, last_sheriff_id),
-    )
-    candidates = cur.fetchall()
-    if not candidates:
-        cur.execute(
-            """
-            SELECT id, name, class, charisma, balance FROM agents
-            WHERE is_alive = true
-            AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
-            AND (%s IS NULL OR id != %s)
-            ORDER BY charisma DESC, balance DESC
-            LIMIT 6
-            """,
-            (last_sheriff_id, last_sheriff_id),
-        )
-        candidates = cur.fetchall()
-        if not candidates:
-            print("No eligible candidates for sheriff election.")
-            return None
+    nominees: dict = {}
+    for party_id in PARTY_IDS:
+        row = pick_sheriff_party_nominee(cur, party_id, exclude)
+        if row:
+            nominees[party_id] = {
+                "id": row["id"],
+                "name": row["name"],
+                "class": row.get("class"),
+                "approval_rating": int(row.get("approval_rating") or 50),
+                "has_senate_experience": bool(row.get("has_senate_experience")),
+                "has_police_experience": bool(row.get("has_police_experience")),
+            }
 
-    print("Sheriff tick: election — fetching corporate bribers...", flush=True)
-    cur.execute(
-        """
-        SELECT id, name, treasury FROM corporations
-        WHERE is_active = true AND treasury > 200
-        """
-    )
-    corps = cur.fetchall()
-    bribe_total = 0
-    print(f"Sheriff tick: election — corporate bribe loop ({len(corps)} corps)...", flush=True)
-    for corp in corps:
-        if random.random() < 0.35:
-            bribe = round(float(corp["treasury"]) * 0.03, 2)
-            cur.execute(
-                "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
-                (bribe, corp["id"]),
-            )
-            bribe_total += bribe
-
-    if bribe_total > 0:
-        log_event(
+    if len(nominees) < 2:
+        print("Sheriff election postponed — need eligible nominees from both parties")
+        civ_log_event(
+            cur,
             None,
             "sheriff_action",
-            f"Corporations spent {bribe_total:.0f} ZION bribing sheriff election voters!",
-            bribe_total,
+            "Sheriff election postponed — no qualified candidates (senate/police experience required)",
+            0,
+            priority="urgent",
         )
-        print(f"Corporate election bribes: {bribe_total:.0f} ZION")
+        return None
 
-    print("Sheriff tick: election — class vote percentages...", flush=True)
+    vote_totals, vote_meta = compute_sheriff_popular_vote(cur, nominees)
+    winner_party = max(vote_totals, key=vote_totals.get)
+    winner = nominees[winner_party]
+    rival_party = next(p for p in vote_totals if p != winner_party)
+
     poor_pct, working_pct, rich_pct = _class_vote_percentages()
-    poverty_pct = poor_pct
-
-    votes = {c["id"]: 0.0 for c in candidates}
-
-    print(f"Sheriff tick: election — scoring {len(candidates)} candidates...", flush=True)
-    for candidate in candidates:
-        cand_class = candidate.get("class") or "middle"
-        base_votes = float(candidate.get("charisma") or 50) * 0.3
-        class_bonus = _sheriff_candidate_class_bonus(cand_class, poor_pct, working_pct, rich_pct)
-        random_factor = random.randint(-100, 100)
-        total_score = base_votes + class_bonus + random_factor
-        if poverty_pct > 0.40 and cand_class in ("poor", "critical", "working", "middle"):
-            total_score *= 1.5
-        votes[candidate["id"]] = total_score
-
-    winner_id = max(votes, key=votes.get)
-    winner = next(c for c in candidates if c["id"] == winner_id)
-    winner_votes = int(round(votes[winner_id]))
-    total_votes = int(round(sum(votes.values())))
-
     type_weights = list(TYPE_WEIGHTS)
     type_weights[0] *= 1.0 + poor_pct
     type_weights[1] *= 1.0 + rich_pct
@@ -303,9 +259,9 @@ def run_sheriff_election(forced=False):
         INSERT INTO sheriff_state (
             agent_id, agent_name, sheriff_type,
             approval_rating, police_budget, police_count,
-            coup_points, corruption_level, term_number, days_in_office
+            coup_points, corruption_level, term_number, days_in_office, started_at
         )
-        VALUES (%s, %s, %s, 50, %s, %s, 0, 0, 1, 0)
+        VALUES (%s, %s, %s, 50, %s, %s, 0, 0, 1, 0, NOW())
         """,
         (winner["id"], winner["name"], sheriff_type, inherited_budget, inherited_count),
     )
@@ -315,25 +271,31 @@ def run_sheriff_election(forced=False):
         "corrupt": "CORRUPT — will take bribes and enable crime",
         "enforcement": "ENFORCEMENT — expanded police operations within the law",
     }
+    qual = []
+    if winner.get("has_senate_experience"):
+        qual.append("senate")
+    if winner.get("has_police_experience"):
+        qual.append("police")
 
     log_event(
         winner["id"],
         "sheriff_action",
-        f"ELECTION RESULTS: Poor vote={poor_pct:.0%} Working={working_pct:.0%} "
-        f"Rich={rich_pct:.0%} - Winner: {winner['name']} ({sheriff_type}) "
-        f"score {winner_votes}/{total_votes}",
-        winner_votes,
+        f"SHERIFF ELECTION: {PARTIES[winner_party]['name']} nominee {winner['name']} "
+        f"wins {vote_totals[winner_party]:,} vs {vote_totals[rival_party]:,} "
+        f"(mood {vote_meta['mood_swing_pct']:+.1f}%) — {sheriff_type}",
+        vote_totals[winner_party],
     )
     log_event(
         winner["id"],
         "sheriff_action",
-        f"{winner['name']} elected Sheriff! Type: {type_desc[sheriff_type]}.",
-        winner_votes,
+        f"{winner['name']} elected Sheriff! Type: {type_desc[sheriff_type]}. "
+        f"Qualifications: {', '.join(qual) or 'experienced'}. Term {SHERIFF_TERM_HOURS}h.",
+        vote_totals[winner_party],
     )
     sync_police_divisions(cur)
     print(
-        f"Sheriff elected: {winner['name']} ({sheriff_type}) — "
-        f"{winner_votes}/{total_votes} score | poor={poor_pct:.0%} rich={rich_pct:.0%}"
+        f"Sheriff elected: {winner['name']} ({winner_party}/{sheriff_type}) — "
+        f"{vote_totals[winner_party]:,} vs {vote_totals[rival_party]:,} votes"
     )
     return winner
 
@@ -724,46 +686,36 @@ def check_interaction_with_president():
 
 
 def check_term_end(sheriff):
-    """10 days per term, max 2 terms; enforcement sheriff may request term review."""
-    days = sheriff["days_in_office"]
-    term = sheriff["term_number"]
+    """720-hour term (like president); new election when term expires."""
+    cur.execute(
+        """
+        SELECT started_at FROM sheriff_state
+        WHERE is_active = true
+        ORDER BY started_at DESC NULLS LAST LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if not row or not row.get("started_at"):
+        return
 
-    if days >= TERM_DAYS and term == 1:
-        cur.execute(
-            """
-            UPDATE sheriff_state
-            SET term_number = 2, days_in_office = 0
-            WHERE is_active = true
-            """
-        )
-        log_event(
-            sheriff["agent_id"],
-            "sheriff_action",
-            f"Sheriff {sheriff['agent_name']} re-elected for term 2!",
-            0,
-        )
-        print(f"Sheriff {sheriff['agent_name']} re-elected for term 2")
+    started = row["started_at"]
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    age_hours = (datetime.now(timezone.utc) - started).total_seconds() / 3600
 
-    elif days >= TERM_DAYS and term >= MAX_TERMS:
-        if sheriff["sheriff_type"] == "enforcement" and random.random() < 0.4:
-            log_event(
-                sheriff["agent_id"],
-                "sheriff_action",
-                f"Sheriff {sheriff['agent_name']} requests lawful term review before stepping down.",
-                0,
-            )
-            print("constitutional enforcement check")
-        else:
-            record_last_sheriff_agent(cur)
-            cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
-            log_event(
-                sheriff["agent_id"],
-                "sheriff_action",
-                f"Sheriff {sheriff['agent_name']} completed 2 terms. New election called.",
-                0,
-            )
-            print(f"Sheriff {sheriff['agent_name']} stepped down after 2 terms")
-            run_sheriff_election()
+    if age_hours < SHERIFF_TERM_HOURS:
+        return
+
+    record_last_sheriff_agent(cur)
+    cur.execute("UPDATE sheriff_state SET is_active = false WHERE is_active = true")
+    log_event(
+        sheriff["agent_id"],
+        "sheriff_action",
+        f"Sheriff {sheriff['agent_name']} completed {SHERIFF_TERM_HOURS}h term. New election called.",
+        0,
+    )
+    print(f"Sheriff {sheriff['agent_name']} term ended ({age_hours:.0f}h) — election")
+    run_sheriff_election(forced=True)
 
 
 def run_governance_tick(tick_cur, ctx: dict) -> dict:

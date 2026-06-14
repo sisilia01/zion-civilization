@@ -400,6 +400,144 @@ def simulate_presidential_election(cur) -> dict:
     }
 
 
+# Sheriff election — law-and-order lean (order slightly favors Consensus)
+CLASS_SHERIFF_LEAN: dict[str, tuple[float, float]] = {
+    "elite": (0.60, 0.40),
+    "rich": (0.60, 0.40),
+    "middle": (0.50, 0.50),
+    "working": (0.40, 0.60),
+    "poor": (0.40, 0.60),
+    "critical": (0.40, 0.60),
+}
+SHERIFF_TERM_HOURS = 720
+
+
+def _agent_party_for_election(agent: dict) -> str:
+    senate_party = (agent.get("senate_party") or "").lower()
+    if senate_party in PARTY_IDS:
+        return senate_party
+    raw = (agent.get("party") or "").lower()
+    if raw in PARTY_IDS:
+        return raw
+    return agent_party_from_class(agent.get("class") or "middle")
+
+
+def pick_sheriff_party_nominee(cur, party_id: str, exclude_ids: set | None = None) -> dict | None:
+    """Party nominates highest-approval eligible agent with senate or police experience."""
+    exclude_ids = exclude_ids or set()
+    ex_clause = ""
+    params: list = []
+    if exclude_ids:
+        ex_clause = " AND a.id NOT IN %s"
+        params.append(tuple(exclude_ids))
+
+    cur.execute(
+        f"""
+        SELECT a.id, a.name, a.class, a.charisma, a.balance, s.party_id AS senate_party,
+               COALESCE(a.has_senate_experience, false)
+                 OR EXISTS (SELECT 1 FROM senate s3 WHERE s3.agent_id = a.id AND s3.is_active = true)
+               AS has_senate_experience,
+               COALESCE(a.has_police_experience, false) AS has_police_experience,
+               COALESCE(s.approval_rating,
+                        LEAST(90, 40 + COALESCE(a.charisma, 50) / 2)
+                        + CASE WHEN COALESCE(a.has_police_experience, false) THEN 8 ELSE 0 END
+                        + CASE WHEN COALESCE(a.has_senate_experience, false) THEN 5 ELSE 0 END
+               ) AS approval_rating
+        FROM agents a
+        LEFT JOIN senate s ON s.agent_id = a.id AND s.is_active = true
+        WHERE a.is_alive = true
+          AND (
+            COALESCE(a.has_senate_experience, false) = true
+            OR COALESCE(a.has_police_experience, false) = true
+            OR a.job_role = 'police'
+            OR EXISTS (SELECT 1 FROM senate s2 WHERE s2.agent_id = a.id AND s2.is_active = true)
+          )
+          AND a.id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+          AND a.id NOT IN (SELECT agent_id FROM sheriff_state WHERE is_active = true)
+          {ex_clause}
+        ORDER BY approval_rating DESC NULLS LAST, a.charisma DESC NULLS LAST
+        LIMIT 50
+        """,
+        tuple(params),
+    )
+    rows = cur.fetchall()
+    for row in rows:
+        if _agent_party_for_election(row) == party_id:
+            return dict(row)
+    return None
+
+
+def compute_sheriff_popular_vote(
+    cur, candidates: dict[str, dict]
+) -> tuple[dict[str, int], dict]:
+    """Sheriff election popular vote — class lean + electorate mood ±15%."""
+    cur.execute(
+        """
+        SELECT class, COUNT(*) AS cnt FROM agents
+        WHERE is_alive = true
+        GROUP BY class
+        """
+    )
+    class_counts = {row["class"]: int(row["cnt"]) for row in cur.fetchall()}
+    mood = random.uniform(-ELECTORATE_MOOD_SWING, ELECTORATE_MOOD_SWING)
+
+    votes: dict[str, int] = {pid: 0 for pid in candidates}
+    by_class: dict[str, dict[str, int]] = {pid: {} for pid in candidates}
+
+    for cls, count in class_counts.items():
+        lean_c, _lean_r = CLASS_SHERIFF_LEAN.get(cls, (0.50, 0.50))
+        consensus_share = max(0.0, min(1.0, lean_c + mood))
+        consensus_votes = int(round(count * consensus_share))
+        reform_votes = count - consensus_votes
+        if "consensus" in votes:
+            votes["consensus"] += consensus_votes
+            by_class["consensus"][cls] = consensus_votes
+        if "reform" in votes:
+            votes["reform"] += reform_votes
+            by_class["reform"][cls] = reform_votes
+
+    meta = {
+        "mood_swing_pct": round(mood * 100, 1),
+        "class_counts": class_counts,
+        "by_class": by_class,
+        "lean_rules": {
+            "rich/elite": "60/40→Consensus (law & order)",
+            "middle": "50/50",
+            "working/poor": "40/60→Reform",
+        },
+    }
+    return votes, meta
+
+
+def simulate_sheriff_election(cur, exclude_agent_id: int | None = None) -> dict:
+    """Dry-run sheriff election — party nominees and popular vote totals."""
+    exclude = {exclude_agent_id} if exclude_agent_id else set()
+    nominees: dict[str, dict] = {}
+    for party_id in PARTY_IDS:
+        row = pick_sheriff_party_nominee(cur, party_id, exclude)
+        if row:
+            nominees[party_id] = {
+                "agent_id": row["id"],
+                "name": row["name"],
+                "class": row.get("class"),
+                "approval_rating": int(row.get("approval_rating") or 50),
+                "has_senate_experience": bool(row.get("has_senate_experience")),
+                "has_police_experience": bool(row.get("has_police_experience")),
+            }
+    if len(nominees) < 2:
+        return {"error": "Need eligible nominees from both parties", "nominees": nominees}
+
+    votes, meta = compute_sheriff_popular_vote(cur, nominees)
+    winner_party = max(votes, key=votes.get)
+    return {
+        "nominees": nominees,
+        "votes": votes,
+        "winner_party": winner_party,
+        "winner": nominees[winner_party],
+        "meta": meta,
+    }
+
+
 def get_president(cur):
     cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
     return cur.fetchone()

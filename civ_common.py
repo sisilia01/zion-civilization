@@ -165,6 +165,7 @@ def ensure_schema(cur):
             ("health", "INTEGER DEFAULT 100"),
             ("infected", "BOOLEAN DEFAULT false"),
             ("has_senate_experience", "BOOLEAN DEFAULT false"),
+            ("has_police_experience", "BOOLEAN DEFAULT false"),
             ("party", "VARCHAR(20)"),
         ],
     )
@@ -515,6 +516,38 @@ def ensure_schema(cur):
             )
         except Exception:
             pass
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS police_assignments (
+            id SERIAL PRIMARY KEY,
+            agent_id INTEGER NOT NULL REFERENCES agents(id),
+            division_name VARCHAR(30) DEFAULT 'PATROL',
+            assigned_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(agent_id)
+        )
+        """
+    )
+    cur.execute(
+        "ALTER TABLE agents ADD COLUMN IF NOT EXISTS has_police_experience BOOLEAN DEFAULT false"
+    )
+    cur.execute(
+        """
+        INSERT INTO police_assignments (agent_id, division_name)
+        SELECT id, COALESCE(NULLIF(job_role, ''), 'PATROL')
+        FROM agents
+        WHERE is_alive = true
+          AND job_role = 'police'
+        ON CONFLICT (agent_id) DO NOTHING
+        """
+    )
+    cur.execute(
+        """
+        UPDATE agents SET has_police_experience = true
+        WHERE (job_role = 'police' OR id IN (SELECT agent_id FROM police_assignments))
+          AND COALESCE(has_police_experience, false) = false
+        """
+    )
 
     cur.execute(
         """
@@ -1142,6 +1175,25 @@ def process_revolution_cycle(cur, president: dict) -> dict:
         "change": reason,
         "rebels_won": rebels_won,
     }
+
+
+def mark_agent_police_experience(cur, agent_id: int, division_name: str = "PATROL") -> None:
+    """Record police service — qualifies agent for sheriff candidacy."""
+    cur.execute(
+        """
+        UPDATE agents SET has_police_experience = true, job_role = 'police'
+        WHERE id = %s
+        """,
+        (agent_id,),
+    )
+    cur.execute(
+        """
+        INSERT INTO police_assignments (agent_id, division_name)
+        VALUES (%s, %s)
+        ON CONFLICT (agent_id) DO UPDATE SET division_name = EXCLUDED.division_name
+        """,
+        (agent_id, division_name),
+    )
 
 
 def sync_police_divisions(cur):

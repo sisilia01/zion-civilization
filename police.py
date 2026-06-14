@@ -16,6 +16,7 @@ from civ_common import (
     is_martial_law_active,
     is_uprising_active,
     log_event,
+    mark_agent_police_experience,
     restore_after_martial_law,
     sync_police_divisions,
 )
@@ -69,6 +70,7 @@ def sync_police_force_to_population(cur) -> int:
             (row["id"],),
         )
         hired += 1
+        mark_agent_police_experience(cur, row["id"], "PATROL")
     if hired <= 0:
         return 0
     new_count = current + hired
