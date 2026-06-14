@@ -17,7 +17,6 @@ export const LAB_NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: "chat", label: "FIELD NOTES" },
   { id: "zionbet", label: "PREDICTION ENGINE" },
   { id: "treasury", label: "GOVERNANCE" },
-  { id: "research", label: "RESEARCH" },
   { id: "constitution", label: "CONSTITUTION" },
   { id: "lab", label: "LAB" },
   { id: "archive", label: "ARCHIVE" },

@@ -1,5 +1,8 @@
 "use client";
 
+import type { CSSProperties, ReactNode } from "react";
+import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import {
   cleanActivityDescription,
   ecoFormatZionShort,
@@ -12,6 +15,76 @@ import {
   renderPoliticalWireText,
 } from "@/lib/governanceFormat";
 import { useGovernancePanel } from "@/hooks/useGovernancePanel";
+
+const mono = '"IBM Plex Mono", monospace';
+const accent = "#00b4d8";
+const textPrimary = "#e2e8f0";
+const textMuted = "rgba(226, 232, 240, 0.45)";
+const textDim = "rgba(226, 232, 240, 0.35)";
+
+const govCardShell: CSSProperties = {
+  border: "1px solid rgba(30, 58, 95, 0.6)",
+  borderRadius: "8px",
+  color: textPrimary,
+  fontFamily: mono,
+};
+
+function GovGlassCard({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  return (
+    <GlassCard className={glassCardStyles.glassCardLab} style={{ ...govCardShell, ...style }}>
+      {children}
+    </GlassCard>
+  );
+}
+
+const sectionTitleStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: "11px",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: accent,
+  marginBottom: 12,
+};
+
+const cardLabelStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: "11px",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: accent,
+  marginBottom: 12,
+};
+
+const tableLabelStyle: CSSProperties = {
+  color: textMuted,
+  fontSize: 11,
+  padding: "3px 0",
+  fontFamily: mono,
+};
+
+const tableValueStyle: CSSProperties = {
+  color: textPrimary,
+  fontSize: 13,
+  textAlign: "right",
+  fontFamily: mono,
+};
+
+const thStyle: CSSProperties = {
+  textAlign: "left",
+  padding: "8px 0",
+  fontSize: 11,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: accent,
+  fontWeight: 400,
+  fontFamily: mono,
+};
 
 export function GovernancePanel() {
   const {
@@ -54,113 +127,119 @@ export function GovernancePanel() {
   const hudCorruption = Number(presidentState?.corruption_index ?? 0);
 
   return (
-    <div className="ecoTermRoot">
-      <div className="ecoHudWrap">
-        <header className="ecoHudHeader">
-          <h2>GOVERNANCE INSTRUMENT</h2>
-          <p>Economic indicators · Political structures · Central bank telemetry</p>
-          {governanceHeader ? (
-            <>
-              <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: "0.72rem",
-                  letterSpacing: "0.08em",
-                  color: "rgba(255,255,255,0.55)",
-                }}
-              >
-                ACTIVE DUTIES: {governanceHeader.active_duties}
-              </p>
-              <p
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "0.72rem",
-                  letterSpacing: "0.08em",
-                  color: "rgba(255,255,255,0.55)",
-                }}
-              >
-                AMENDMENTS IN VOTING: {governanceHeader.amendments_in_voting}
-              </p>
-            </>
-          ) : null}
-        </header>
+    <div className="ecoTermRoot" style={{ position: "relative", zIndex: 1, background: "transparent" }}>
+      <div className="ecoHudWrap" style={{ position: "relative", zIndex: 1, background: "transparent" }}>
+        <GovGlassCard style={{ marginBottom: 12, padding: "14px 18px" }}>
+          <header className="ecoHudHeader">
+            <h2>GOVERNANCE INSTRUMENT</h2>
+            <p>Economic indicators · Political structures · Central bank telemetry</p>
+            {governanceHeader ? (
+              <>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    fontSize: "11px",
+                    letterSpacing: "0.08em",
+                    color: textMuted,
+                    fontFamily: mono,
+                  }}
+                >
+                  ACTIVE DUTIES: {governanceHeader.active_duties}
+                </p>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: "11px",
+                    letterSpacing: "0.08em",
+                    color: textMuted,
+                    fontFamily: mono,
+                  }}
+                >
+                  AMENDMENTS IN VOTING: {governanceHeader.amendments_in_voting}
+                </p>
+              </>
+            ) : null}
+          </header>
+        </GovGlassCard>
 
         {(ecoPolData || frsStats || politicalEconomy) && (
           <div
             className="ecoDashLayout"
             style={{
-              background: "#0a0a0f",
-              color: "rgba(255,255,255,0.75)",
-              fontFamily: '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+              background: "transparent",
+              color: textPrimary,
+              fontFamily: mono,
               fontSize: 12,
+              position: "relative",
+              zIndex: 1,
             }}
           >
-            <div
-              style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.28)",
-                letterSpacing: 2,
-                marginBottom: 10,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {renderPoliticalWireText(ecoPolTickerMessages[0]?.text ?? "LIVE ECO-POL FEED")}
-            </div>
+            <GovGlassCard style={{ padding: "8px 14px", marginBottom: 10 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: textDim,
+                  letterSpacing: "0.1em",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  fontFamily: mono,
+                }}
+              >
+                {renderPoliticalWireText(ecoPolTickerMessages[0]?.text ?? "LIVE ECO-POL FEED")}
+              </div>
+            </GovGlassCard>
 
-            <div
+            <GovGlassCard
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 gap: 24,
-                padding: "12px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.08)",
+                padding: "12px 16px",
                 marginBottom: 16,
               }}
             >
               <div>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>POVERTY</span>
-                <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>POVERTY</span>
+                <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8, fontFamily: mono }}>
                   {Number(povertyPct).toFixed(1)}%
                 </span>
               </div>
               <div>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CRIME</span>
-                <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>CRIME</span>
+                <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8, fontFamily: mono }}>
                   {(peCrimeRate <= 1 ? peCrimeRate * 100 : peCrimeRate).toFixed(1)}%
                 </span>
               </div>
               <div>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>GINI</span>
-                <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>GINI</span>
+                <span style={{ color: textPrimary, fontSize: 16, fontWeight: 600, marginLeft: 8, fontFamily: mono }}>
                   {Number(peGini).toFixed(2)}
                 </span>
               </div>
               <div>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>UNEMPLOYED</span>
-                <span style={{ color: "#ff8800", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
+                <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>UNEMPLOYED</span>
+                <span style={{ color: "#ff8800", fontSize: 16, fontWeight: 600, marginLeft: 8, fontFamily: mono }}>
                   {Number(peUnemployment).toFixed(1)}%
                 </span>
               </div>
               <div>
-                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CORRUPTION</span>
+                <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>CORRUPTION</span>
                 <span
                   style={{
-                    color: hudCorruption > 50 ? "#ff4444" : "rgba(255,255,255,0.72)",
+                    color: hudCorruption > 50 ? "#ff4444" : textPrimary,
                     fontSize: 16,
                     fontWeight: 600,
                     marginLeft: 8,
+                    fontFamily: mono,
                   }}
                 >
                   {Math.round(hudCorruption)}%
                 </span>
               </div>
-            </div>
+            </GovGlassCard>
 
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 }}>
-              GOVERNMENT
-            </div>
+            <div style={{ ...sectionTitleStyle, marginTop: 0 }}>GOVERNMENT</div>
             <div
               style={{
                 display: "grid",
@@ -171,55 +250,51 @@ export function GovernancePanel() {
               {presidentState && (() => {
                 const partyUi = presidentPartyDisplay(String(presidentState.party));
                 return (
-                <div
+                <GovGlassCard
                   style={{
                     padding: 16,
-                    border: `1px solid ${partyColorWithAlpha(partyUi.color, 0.45)}`,
-                    boxShadow: `0 0 12px ${partyColorWithAlpha(partyUi.color, 0.12)}`,
-                    borderRadius: 4,
+                    border: `1px solid ${partyColorWithAlpha(partyUi.color, 0.35)}`,
                   }}
                 >
-                  <div style={{ fontSize: 11, color: partyUi.color, marginBottom: 12, letterSpacing: 2 }}>EXECUTIVE</div>
-                  <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
+                  <div style={{ ...cardLabelStyle, color: partyUi.color }}>EXECUTIVE</div>
+                  <div style={{ fontSize: 15, color: textPrimary, fontWeight: 600, marginBottom: 4, fontFamily: mono }}>
                     {String(presidentState.agent_name)}
                   </div>
-                  <div style={{ fontSize: 11, color: partyUi.color, marginBottom: 12, fontWeight: 600 }}>
+                  <div style={{ fontSize: 11, color: partyUi.color, marginBottom: 12, fontWeight: 600, fontFamily: mono }}>
                     {partyUi.label}
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <tbody>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td>
+                        <td style={tableLabelStyle}>APPROVAL</td>
                         <td
                           style={{
+                            ...tableValueStyle,
                             color: Number(presidentState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444",
-                            fontSize: 13,
-                            textAlign: "right",
                           }}
                         >
                           {Number(presidentState.approval_rating ?? 0)}%
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>FUND</td>
-                        <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
+                        <td style={tableLabelStyle}>FUND</td>
+                        <td style={tableValueStyle}>
                           {Math.round(Number(presidentState.personal_fund ?? 0)).toLocaleString("en-US")}
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td>
-                        <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
+                        <td style={tableLabelStyle}>TERM</td>
+                        <td style={tableValueStyle}>
                           Day {Number(presidentState.term_day ?? presidentState.days_in_power ?? 0)} /{" "}
                           {Number(presidentState.term_limit_days ?? 30)}
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>CORRUPTION</td>
+                        <td style={tableLabelStyle}>CORRUPTION</td>
                         <td
                           style={{
-                            color: Number(presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : "rgba(255,255,255,0.72)",
-                            fontSize: 13,
-                            textAlign: "right",
+                            ...tableValueStyle,
+                            color: Number(presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : textPrimary,
                           }}
                         >
                           {Math.round(Number(presidentState.corruption_index ?? 0))}%
@@ -227,130 +302,99 @@ export function GovernancePanel() {
                       </tr>
                     </tbody>
                   </table>
-                </div>
+                </GovGlassCard>
                 );
               })()}
 
               {sheriffState && (
-                <div
-                  style={{
-                    padding: 16,
-                    border: "1px solid rgba(120, 160, 80, 0.4)",
-                    boxShadow: "0 0 12px rgba(120, 160, 80, 0.08)",
-                    borderRadius: 4,
-                  }}
-                >
-                  <div style={{ fontSize: 11, color: "#78a050", marginBottom: 12, letterSpacing: 2 }}>ENFORCEMENT</div>
-                  <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
+                <GovGlassCard style={{ padding: 16 }}>
+                  <div style={cardLabelStyle}>ENFORCEMENT</div>
+                  <div style={{ fontSize: 15, color: textPrimary, fontWeight: 600, marginBottom: 4, fontFamily: mono }}>
                     {String(sheriffState.agent_name)}
                   </div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: textMuted, marginBottom: 12, fontFamily: mono }}>
                     {String(sheriffState.sheriff_type || "none").toUpperCase()}
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <tbody>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td>
+                        <td style={tableLabelStyle}>APPROVAL</td>
                         <td
                           style={{
+                            ...tableValueStyle,
                             color: Number(sheriffState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444",
-                            fontSize: 13,
-                            textAlign: "right",
                           }}
                         >
                           {Number(sheriffState.approval_rating ?? 0)}%
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>OFFICERS</td>
-                        <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
+                        <td style={tableLabelStyle}>OFFICERS</td>
+                        <td style={tableValueStyle}>
                           {Number(sheriffState.police_count ?? 0).toLocaleString("en-US")}
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>BUDGET</td>
-                        <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
+                        <td style={tableLabelStyle}>BUDGET</td>
+                        <td style={tableValueStyle}>
                           {Math.round(Number(sheriffState.police_budget ?? 0)).toLocaleString("en-US")}
                         </td>
                       </tr>
                       <tr>
-                        <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td>
-                        <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
-                          Day {Number(sheriffState.days_in_office ?? 0)}
-                        </td>
+                        <td style={tableLabelStyle}>TERM</td>
+                        <td style={tableValueStyle}>Day {Number(sheriffState.days_in_office ?? 0)}</td>
                       </tr>
                     </tbody>
                   </table>
-                </div>
+                </GovGlassCard>
               )}
 
-              <div
-                style={{
-                  padding: 16,
-                  border: "1px solid rgba(180, 190, 200, 0.4)",
-                  boxShadow: "0 0 12px rgba(180, 190, 200, 0.08)",
-                  borderRadius: 4,
-                }}
-              >
+              <GovGlassCard style={{ padding: 16 }}>
                 {frsChief && (
-                  <div
-                    style={{
-                      background: "#0a0a0a",
-                      border: "1px solid #1a2a1a",
-                      borderRadius: "8px",
-                      padding: "10px 14px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    <div style={{ color: "#444", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
-                      FRS CHIEF (INDEPENDENT)
-                    </div>
-                    <div style={{ color: "#00ff41", fontSize: "0.78rem", fontFamily: "monospace", fontWeight: "bold" }}>
+                  <GovGlassCard style={{ padding: "10px 14px", marginBottom: "8px" }}>
+                    <div style={{ ...cardLabelStyle, marginBottom: 4, fontSize: "10px" }}>FRS CHIEF (INDEPENDENT)</div>
+                    <div style={{ color: accent, fontSize: "0.78rem", fontFamily: mono, fontWeight: "bold" }}>
                       {frsChief.name}
                     </div>
-                    <div style={{ color: "#555", fontSize: "0.62rem", fontFamily: "monospace" }}>
+                    <div style={{ color: textMuted, fontSize: "0.62rem", fontFamily: mono }}>
                       Term: {frsChief.cycles_served}/{frsChief.max_cycles} cycles
                       {frsChief.confirmed ? " • Senate confirmed" : " • Pending confirmation"}
                     </div>
-                  </div>
+                  </GovGlassCard>
                 )}
-                <div style={{ fontSize: 11, color: "#b4bec8", marginBottom: 12, letterSpacing: 2 }}>CENTRAL BANK</div>
-                <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>ZRS</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
+                <div style={cardLabelStyle}>CENTRAL BANK</div>
+                <div style={{ fontSize: 15, color: textPrimary, fontWeight: 600, marginBottom: 4, fontFamily: mono }}>ZRS</div>
+                <div style={{ fontSize: 11, color: textMuted, marginBottom: 12, fontFamily: mono }}>
                   {String(zrsState).toUpperCase()}
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <tbody>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RESERVE</td>
-                      <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>
-                        {ecoFormatZionShort(Number(zrsReserve))}
-                      </td>
+                      <td style={tableLabelStyle}>RESERVE</td>
+                      <td style={tableValueStyle}>{ecoFormatZionShort(Number(zrsReserve))}</td>
                     </tr>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RATE</td>
-                      <td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{zrsRate}%</td>
+                      <td style={tableLabelStyle}>RATE</td>
+                      <td style={tableValueStyle}>{zrsRate}%</td>
                     </tr>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PHASE</td>
+                      <td style={tableLabelStyle}>PHASE</td>
                       <td
                         style={{
+                          ...tableValueStyle,
                           color:
-                            pePhase === "BOOM" ? "#00ff88" : pePhase === "DEPRESSION" ? "#ff4444" : "rgba(255,255,255,0.72)",
-                          fontSize: 13,
-                          textAlign: "right",
+                            pePhase === "BOOM" ? "#00ff88" : pePhase === "DEPRESSION" ? "#ff4444" : textPrimary,
                         }}
                       >
                         {pePhase}
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td>
+                      <td style={tableLabelStyle}>METER</td>
                       <td
                         style={{
-                          color: meter >= 80 ? "#ff4444" : meter >= 30 ? "rgba(255,255,255,0.72)" : "#00ff88",
-                          fontSize: 13,
-                          textAlign: "right",
+                          ...tableValueStyle,
+                          color: meter >= 80 ? "#ff4444" : meter >= 30 ? textPrimary : "#00ff88",
                         }}
                       >
                         {Math.round(meter)}%
@@ -358,22 +402,18 @@ export function GovernancePanel() {
                     </tr>
                   </tbody>
                 </table>
-              </div>
+              </GovGlassCard>
 
-              <div
+              <GovGlassCard
                 style={{
                   padding: 16,
-                  border: meter > 30 ? "1px solid rgba(255, 60, 60, 0.4)" : "1px solid rgba(0, 255, 136, 0.2)",
-                  boxShadow: meter > 30 ? "0 0 12px rgba(255, 60, 60, 0.08)" : "0 0 12px rgba(0, 255, 136, 0.08)",
-                  borderRadius: 4,
+                  border: meter > 30 ? "1px solid rgba(255, 60, 60, 0.35)" : "1px solid rgba(30, 58, 95, 0.6)",
                 }}
               >
                 <div
                   style={{
-                    fontSize: 11,
-                    color: meter > 30 ? "#ff4444" : "#00ff88",
-                    marginBottom: 12,
-                    letterSpacing: 2,
+                    ...cardLabelStyle,
+                    color: meter > 30 ? "#ff6b6b" : accent,
                   }}
                 >
                   STABILITY
@@ -381,36 +421,33 @@ export function GovernancePanel() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <tbody>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td>
+                      <td style={tableLabelStyle}>METER</td>
                       <td
                         style={{
+                          ...tableValueStyle,
                           color: meter > 30 ? "#ff4444" : "#00ff88",
-                          fontSize: 13,
-                          textAlign: "right",
                         }}
                       >
                         {Math.round(meter)}%
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PRESSURE</td>
+                      <td style={tableLabelStyle}>PRESSURE</td>
                       <td
                         style={{
-                          color: peRevPressure > 100 ? "#ff4444" : "rgba(255,255,255,0.72)",
-                          fontSize: 13,
-                          textAlign: "right",
+                          ...tableValueStyle,
+                          color: peRevPressure > 100 ? "#ff4444" : textPrimary,
                         }}
                       >
                         {Math.round(peRevPressure)}
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>POVERTY</td>
+                      <td style={tableLabelStyle}>POVERTY</td>
                       <td
                         style={{
-                          color: Number(povertyPct) > 40 ? "#ff4444" : "rgba(255,255,255,0.72)",
-                          fontSize: 13,
-                          textAlign: "right",
+                          ...tableValueStyle,
+                          color: Number(povertyPct) > 40 ? "#ff4444" : textPrimary,
                         }}
                       >
                         {Number(povertyPct).toFixed(1)}%
@@ -418,23 +455,13 @@ export function GovernancePanel() {
                     </tr>
                   </tbody>
                 </table>
-              </div>
+              </GovGlassCard>
             </div>
 
             {partiesData.length > 0 && (
               <>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.3)",
-                    letterSpacing: 3,
-                    marginBottom: 12,
-                    marginTop: 24,
-                  }}
-                >
-                  ELECTION POLL
-                </div>
-                <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 12 }}>
+                <div style={sectionTitleStyle}>ELECTION POLL</div>
+                <GovGlassCard style={{ padding: 12 }}>
                   {filterGovernanceParties(partiesData).map((party) => {
                     const rating = Number(party.poll_pct ?? party.approval_rating ?? 0);
                     const partyColor = getPartyColor(String(party.party_id || party.name || ""));
@@ -448,11 +475,19 @@ export function GovernancePanel() {
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
+                            fontFamily: mono,
                           }}
                         >
                           {String(party.name)}
                         </div>
-                        <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 4,
+                            background: "rgba(30, 58, 95, 0.4)",
+                            borderRadius: 2,
+                          }}
+                        >
                           <div
                             style={{
                               width: `${Math.max(0, Math.min(100, rating))}%`,
@@ -462,45 +497,35 @@ export function GovernancePanel() {
                             }}
                           />
                         </div>
-                        <div style={{ width: 40, fontSize: 12, color: partyColor, textAlign: "right" }}>
+                        <div
+                          style={{
+                            width: 40,
+                            fontSize: 12,
+                            color: partyColor,
+                            textAlign: "right",
+                            fontFamily: mono,
+                          }}
+                        >
                           {Math.round(rating)}%
                         </div>
                       </div>
                     );
                   })}
-                </div>
+                </GovGlassCard>
               </>
             )}
 
             {senateData && (
               <>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.3)",
-                    letterSpacing: 3,
-                    marginBottom: 12,
-                    marginTop: 24,
-                  }}
-                >
-                  SENATE
-                </div>
-                <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "8px 12px" }}>
+                <div style={sectionTitleStyle}>SENATE</div>
+                <GovGlassCard style={{ padding: "8px 12px" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                        <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
-                          SENATOR
-                        </th>
-                        <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
-                          PARTY
-                        </th>
-                        <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
-                          APPROVAL
-                        </th>
-                        <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
-                          ROLE
-                        </th>
+                      <tr style={{ borderBottom: "1px solid rgba(30, 58, 95, 0.6)" }}>
+                        <th style={thStyle}>SENATOR</th>
+                        <th style={thStyle}>PARTY</th>
+                        <th style={{ ...thStyle, textAlign: "right" }}>APPROVAL</th>
+                        <th style={{ ...thStyle, textAlign: "right" }}>ROLE</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -515,8 +540,19 @@ export function GovernancePanel() {
                           const partyColor = partyUi.color;
                           const partyBorder = `2px solid ${partyColorWithAlpha(partyColor, 0.55)}`;
                           return (
-                            <tr key={`${sen.agent_name}-${sen.party_id}-${idx}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                              <td style={{ padding: "8px 0 8px 8px", borderLeft: partyBorder, fontSize: 13, color: "#fff" }}>
+                            <tr
+                              key={`${sen.agent_name}-${sen.party_id}-${idx}`}
+                              style={{ borderBottom: "1px solid rgba(30, 58, 95, 0.25)" }}
+                            >
+                              <td
+                                style={{
+                                  padding: "8px 0 8px 8px",
+                                  borderLeft: partyBorder,
+                                  fontSize: 13,
+                                  color: textPrimary,
+                                  fontFamily: mono,
+                                }}
+                              >
                                 {String(sen.agent_name)}
                               </td>
                               <td style={{ padding: "8px 0" }}>
@@ -528,11 +564,20 @@ export function GovernancePanel() {
                                   fontSize: 13,
                                   color: approvalValue > 50 ? "#00ff88" : "#ff4444",
                                   textAlign: "right",
+                                  fontFamily: mono,
                                 }}
                               >
                                 {approvalValue}%
                               </td>
-                              <td style={{ padding: "8px 0", fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "right" }}>
+                              <td
+                                style={{
+                                  padding: "8px 0",
+                                  fontSize: 11,
+                                  color: textMuted,
+                                  textAlign: "right",
+                                  fontFamily: mono,
+                                }}
+                              >
                                 {role === "SPEAKER" ? "SPEAKER" : "SEN."}
                               </td>
                             </tr>
@@ -540,13 +585,11 @@ export function GovernancePanel() {
                         })}
                     </tbody>
                   </table>
-                </div>
+                </GovGlassCard>
               </>
             )}
 
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>
-              ACTIVITY LOG
-            </div>
+            <div style={sectionTitleStyle}>ACTIVITY LOG</div>
             <div
               style={{
                 display: "grid",
@@ -560,29 +603,38 @@ export function GovernancePanel() {
                 { label: "SENATE", items: senateEventsDisplay, accent: "senate" as const },
                 { label: "ZRS", items: zrsEventsDisplay, accent: "zrs" as const },
               ].map((col) => (
-                <div
+                <GovGlassCard
                   key={col.label}
-                  style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}
+                  style={{
+                    padding: 10,
+                    minHeight: 220,
+                  }}
                 >
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>
+                  <div
+                    style={{
+                      ...cardLabelStyle,
+                      marginBottom: 10,
+                      fontSize: "10px",
+                    }}
+                  >
                     {col.label}
                   </div>
                   {col.items.length === 0 ? (
-                    <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
+                    <div style={{ fontSize: 12, color: textDim, fontFamily: mono }}>No activity</div>
                   ) : (
                     col.items.map((action, i) => {
                       const text = cleanActivityDescription(action.description);
                       const time = formatEventTime(action.created_at) || "—";
                       const color =
                         col.accent === "zrs"
-                          ? "#00ff41"
+                          ? accent
                           : col.accent === "senate"
                             ? action.event_type === "senate_law"
                               ? "#ffd93d"
-                              : "#888"
+                              : textMuted
                             : /BREAKING/i.test(text)
                               ? "#ff4444"
-                              : "rgba(255,255,255,0.7)";
+                              : textPrimary;
                       return (
                         <div
                           key={`${col.label}-${i}`}
@@ -590,11 +642,20 @@ export function GovernancePanel() {
                             display: "flex",
                             gap: 8,
                             padding: "5px 0",
-                            borderBottom: "1px solid rgba(255,255,255,0.04)",
+                            borderBottom: "1px solid rgba(30, 58, 95, 0.25)",
                           }}
                         >
-                          <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, minWidth: 38 }}>{time}</span>
-                          <span style={{ color, fontSize: 12 }}>
+                          <span
+                            style={{
+                              color: textDim,
+                              fontSize: 10,
+                              minWidth: 38,
+                              fontFamily: mono,
+                            }}
+                          >
+                            {time}
+                          </span>
+                          <span style={{ color, fontSize: 12, fontFamily: mono }}>
                             {text}
                             {"count" in action && Number(action.count) > 1 ? ` ×${action.count}` : ""}
                           </span>
@@ -602,7 +663,7 @@ export function GovernancePanel() {
                       );
                     })
                   )}
-                </div>
+                </GovGlassCard>
               ))}
             </div>
           </div>

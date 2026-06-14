@@ -11,33 +11,29 @@ const GLOBAL_BG_PARTICLES = {
   background: { color: "transparent" },
   fpsLimit: 60,
   particles: {
-    number: { value: 120 },
-    color: {
-      value: { h: 152, s: 100, l: 50 },
-      animation: { h: { enable: true, speed: 8, sync: true } },
+    number: { value: 390 },
+    paint: {
+      color: {
+        value: { h: 185, s: 75, l: 55 },
+        animation: { h: { enable: true, speed: 8, sync: true } },
+      },
+      fill: { enable: true },
     } as any,
     links: {
       enable: true,
-      color: {
-        value: { h: 152, s: 100, l: 50 },
-        animation: { h: { enable: true, speed: 8, sync: true } },
-      } as any,
-      distance: 120,
-      opacity: 0.15,
-      triangles: {
-        enable: true,
-        opacity: 0.05,
-      },
+      color: { value: "hsl(185, 75%, 55%)" },
+      distance: 130,
+      opacity: 0.105,
     },
     move: {
       enable: true,
-      speed: 0.6,
+      speed: 0.2,
       random: true,
       direction: "none",
-      outModes: { default: "bounce" },
+      outModes: { default: "out" },
     },
-    size: { value: 2 },
-    opacity: { value: 0.4 },
+    size: { value: 1.2 },
+    opacity: { value: 0.462 },
   },
 } as ISourceOptions;
 

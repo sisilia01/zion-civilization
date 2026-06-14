@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ZionPage } from "@/components/zion/ZionPage";
+import { PredictionEnginePanel } from "./PredictionEnginePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PredictionEnginePage() {
-  return <ZionPage activeTab="zionbet" />;
+  return <PredictionEnginePanel />;
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import { LabGlobalParticles } from "@/app/lab/LabGlobalParticles";
 import { GovernancePanel } from "./GovernancePanel";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +11,12 @@ export const metadata: Metadata = {
 };
 
 const pageStyle: CSSProperties = {
-  background: "#050d1a",
+  background: "transparent",
   minHeight: "100vh",
   color: "#e2e8f0",
   fontFamily: '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+  position: "relative",
+  zIndex: 1,
 };
 
 const navStyle: CSSProperties = {
@@ -23,25 +26,40 @@ const navStyle: CSSProperties = {
   maxWidth: "56rem",
   margin: "0 auto",
   padding: "16px 24px",
-  borderBottom: "1px solid rgba(143, 168, 200, 0.2)",
+  borderBottom: "1px solid rgba(0, 180, 216, 0.2)",
   fontSize: "11px",
   letterSpacing: "0.12em",
+  position: "relative",
+  zIndex: 1,
 };
 
 const wrapStyle: CSSProperties = {
   maxWidth: "90rem",
   margin: "0 auto",
   padding: "32px 20px 48px",
+  position: "relative",
+  zIndex: 1,
+};
+
+const pageBgStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 0,
+  background: "#050d1a",
+  pointerEvents: "none",
 };
 
 export default function GovernancePage() {
   return (
     <>
+      <div style={pageBgStyle} aria-hidden />
+      <LabGlobalParticles />
       <style>{`
         .governance-page {
           --bg-primary: #050d1a;
-          --text-primary: rgba(255, 255, 255, 0.92);
-          --text-secondary: rgba(255, 255, 255, 0.55);
+          --text-primary: #e2e8f0;
+          --text-secondary: rgba(226, 232, 240, 0.55);
+          --accent: #00b4d8;
           --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
         }
         .governance-page .ecoTermRoot {
@@ -50,22 +68,24 @@ export default function GovernancePage() {
         .governance-page .ecoHudWrap {
           position: relative;
           padding: 16px 18px;
+          background: transparent;
         }
         .governance-page .ecoDashLayout {
           display: flex;
           flex-direction: column;
           gap: 12px;
           margin-top: 8px;
+          background: transparent;
         }
         .governance-page .ecoHudHeader {
-          margin-bottom: 10px;
+          margin-bottom: 0;
         }
         .governance-page .ecoHudHeader h2 {
           margin: 0;
-          color: var(--text-primary);
+          color: #00b4d8;
           font-family: var(--font-mono);
-          font-size: 12px;
-          letter-spacing: 0.18em;
+          font-size: 11px;
+          letter-spacing: 0.1em;
           text-transform: uppercase;
           font-weight: 500;
         }
@@ -79,7 +99,7 @@ export default function GovernancePage() {
       `}</style>
       <div style={pageStyle} className="governance-page">
         <nav style={navStyle} aria-label="Governance navigation">
-          <Link href="/" style={{ color: "#8fa8c8", textDecoration: "none" }}>
+          <Link href="/" style={{ color: "#00b4d8", textDecoration: "none" }}>
             ← OBSERVATORY
           </Link>
           <span style={{ color: "#94a3b8" }}>GOVERNANCE INSTRUMENT</span>

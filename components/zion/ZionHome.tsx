@@ -37,13 +37,13 @@ import { Observatory } from "@/components/tabs/Observatory";
 import { FieldNotes } from "@/components/tabs/FieldNotes";
 import { PredictionEngine } from "@/components/tabs/PredictionEngine";
 import { Privacy } from "@/components/tabs/Privacy";
-import { Press } from "@/components/tabs/Press";
 import { Lab } from "@/components/tabs/Lab";
 import { Archive } from "@/components/tabs/Archive";
 import { Constitution } from "@/components/tabs/Constitution";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
 import {
   filterAndDedupeActivityLog,
@@ -2580,58 +2580,48 @@ function ZionBetMarketCardItem({
   onBetYes: (e: MouseEvent) => void;
   onBetNo: (e: MouseEvent) => void;
 }) {
-  const [hovered, setHovered] = useState(false);
   const resolvedImageUrl = (imageUrl ?? marketApi.image_url)?.trim() || null;
   const showCryptoIcon = isDeepbookCryptoMarket(marketApi.id);
   const displayEmoji = iconEmoji ?? zionbetCardFallbackEmoji(marketApi, betTab);
-  const cardBase: CSSProperties = {
-    position: "relative",
-    display: "flex",
-    flexDirection: "column",
-    background: showCryptoIcon
-      ? "linear-gradient(135deg, rgba(255,215,0,0.08) 0%, rgba(20,20,20,1) 100%)"
-      : "#0d1117",
-    borderRadius: "10px",
-    padding: "14px 16px",
-    cursor: "pointer",
-    transition: "all 0.15s ease",
-    ...(showCryptoIcon
-      ? {
-          border: "2px solid #FFD700",
-          boxShadow:
-            "0 0 20px rgba(255, 215, 0, 0.6), inset 0 0 20px rgba(255, 215, 0, 0.05)",
-        }
-      : { border: "1px solid #1e2d3d" }),
-  };
-  const cardStyle: CSSProperties = hovered
-    ? showCryptoIcon
-      ? {
-          ...cardBase,
-          boxShadow:
-            "0 0 28px rgba(255, 215, 0, 0.75), inset 0 0 24px rgba(255, 215, 0, 0.08)",
-        }
-      : {
-          ...cardBase,
-          borderColor: "#4DA2FF",
-          boxShadow: "0 0 0 1px #4DA2FF22, 0 4px 16px rgba(77,162,255,0.08)",
-        }
-    : cardBase;
+  const cardShellClass = [
+    "zionBetMarketCard",
+    isZionCard ? "zionBetMarketCard--zion" : "",
+    showCryptoIcon ? "zionBetMarketCard--deepbook" : "",
+    glassCardStyles.glassCardLab,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <article
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
+    <GlassCard
+      className={cardShellClass}
+      style={{
+        padding: "14px 16px",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        cursor: "pointer",
+        ...(isZionCard ? { borderLeft: "3px solid #16a34a" } : {}),
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={cardStyle}
     >
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
       {isZionCard ? (
         <span
           style={{
@@ -2749,7 +2739,8 @@ function ZionBetMarketCardItem({
           {noButtonLabel ?? `NO ${100 - yes}¢`}
         </button>
       </div>
-    </article>
+      </div>
+    </GlassCard>
   );
 }
 
@@ -8825,273 +8816,6 @@ function ZionBetMarketDetail({
   );
 }
 
-/** Press papers — module scope so effects never see a new array identity each render. */
-type PressNewspaper = {
-  id: string;
-  name: string;
-  subtitle: string;
-  icon: string;
-  accentColor: string;
-  bgPattern: string;
-  borderColor: string;
-  relevantTypes: string[];
-  keywords: string[];
-  persona: string;
-  bodyFont: string;
-  mastheadFont: string;
-  vipOnly?: boolean;
-  silverMin?: number;
-  goldMin?: number;
-};
-
-const newspapers: PressNewspaper[] = [
-  {
-    id: "ziontimes",
-    name: "ZION TIMES",
-    subtitle: "The Paper of Record",
-    icon: "🗞️",
-    accentColor: "#c8a96e",
-    bgPattern: "#0a0800",
-    borderColor: "#c8a96e",
-    relevantTypes: ["election", "work", "clan", "revolt", "tax"],
-    keywords: ["senate", "election", "corrupt", "clan", "tax", "collect"],
-    persona:
-      "You are the chief editor of ZION TIMES, the civilization's paper of record — inspired by the New York Times. You cover corruption, political failures, senate elections, clan wars, and government inaction with sharp investigative journalism. Be critical, factual, authoritative.",
-    bodyFont: "'Source Serif 4', serif",
-    mastheadFont: "'Playfair Display', serif",
-  },
-  {
-    id: "economist",
-    name: "THE ZION ECONOMIST",
-    subtitle: "Markets · Taxes · Growth",
-    icon: "📊",
-    accentColor: "#e8e8e8",
-    bgPattern: "#00080a",
-    borderColor: "#e8e8e8",
-    relevantTypes: ["tax", "work", "lottery", "birth", "death"],
-    keywords: ["zion", "tax", "earn", "balance", "wealth", "poor", "rich"],
-    persona:
-      "You are the chief editor of THE ZION ECONOMIST. You analyze the civilization's economy: tax revenue, wealth inequality, birth rates vs death rates, ZION token flows. Use real numbers. Be analytical like The Economist magazine. Cover what taxes actually funded, wealth concentration.",
-    bodyFont: "'Courier Prime', monospace",
-    mastheadFont: "'Oswald', sans-serif",
-  },
-  {
-    id: "prophet",
-    name: "PROPHET'S VOICE",
-    subtitle: "Visions · Omens · Prophecy",
-    icon: "🔮",
-    accentColor: "#a78bfa",
-    bgPattern: "#08000a",
-    borderColor: "#a78bfa",
-    relevantTypes: ["prayer", "catastrophe", "death", "neo"],
-    keywords: ["prophet", "pray", "NEO", "watches", "storm", "catastrophe"],
-    persona:
-      "You are the scribe of the PROPHET'S VOICE. You write about the Prophet's visions, spiritual omens, NEO's mysterious movements, and prophecies about the civilization's future. Be mystical, dramatic, ominous. Quote the Prophet directly. Reference signs and portents.",
-    bodyFont: "'IM Fell English', serif",
-    mastheadFont: "'IM Fell English', serif",
-  },
-  {
-    id: "slums",
-    name: "THE GUTTER GAZETTE",
-    subtitle: "From the Streets · No Gods No Masters",
-    icon: "✊",
-    accentColor: "#ff4141",
-    bgPattern: "#0a0000",
-    borderColor: "#ff4141",
-    relevantTypes: ["death", "revolt", "work", "tax"],
-    keywords: ["poor", "died", "dead", "tax", "collect", "inequality"],
-    persona:
-      "You are the editor of THE GUTTER GAZETTE — the underground socialist newspaper of ZION. You write about the suffering of poor agents, deaths from poverty, inequality, how the rich exploit the poor, and how conditions are breeding revolution and anarchy. Be angry, passionate, socialist. Write exactly 3 columns separated by 'Column 1:', 'Column 2:', 'Column 3:' labels. Each column must be in English only, 60-80 words.",
-    bodyFont: "'Courier Prime', monospace",
-    mastheadFont: "'Special Elite', cursive",
-  },
-  {
-    id: "betinsider",
-    name: "BET INSIDER",
-    subtitle: "Odds · Analysis · Winners",
-    icon: "💰",
-    accentColor: "#00d4ff",
-    bgPattern: "#00080a",
-    borderColor: "#00d4ff",
-    relevantTypes: ["bet", "lottery", "market"],
-    keywords: ["bet", "won", "lottery", "odds", "market"],
-    persona:
-      "You are the editor of BET INSIDER. You analyze ZionBet markets, odds, big wins, losing streaks, and betting patterns. Give hot tips, analyze which events to bet on, cover lottery winners. Be like a sports betting analyst — sharp, data-driven, with insider feel.",
-    bodyFont: "'Courier Prime', monospace",
-    mastheadFont: "'Oswald', sans-serif",
-  },
-  {
-    id: "vip",
-    name: "VIP INTEL",
-    subtitle: "🔒 Encrypted · Silver & Gold Only",
-    icon: "👁️",
-    accentColor: "#ffd700",
-    bgPattern: "#0a0800",
-    borderColor: "#ffd700",
-    relevantTypes: ["election", "catastrophe", "clan", "revolt", "prayer", "lottery"],
-    keywords: ["NEO", "prophet", "elite", "clan", "catastrophe"],
-    persona:
-      "You are the anonymous source behind VIP INTEL — an encrypted intelligence briefing for ZION's wealthiest citizens. You provide insider analysis: which clans are about to collapse, upcoming catastrophes, political maneuvers, betting edge. Be like a hedge fund analyst meets spy thriller.",
-    bodyFont: "'Source Serif 4', serif",
-    mastheadFont: "'Playfair Display', serif",
-    vipOnly: true,
-    silverMin: 0.1,
-    goldMin: 1,
-  },
-];
-
-const PRESS_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-
-function readPressCache(newspaperId: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const pressCache = localStorage.getItem(`press_${newspaperId}`);
-    if (!pressCache) return null;
-    const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
-    if (Date.now() - ts < PRESS_CACHE_TTL_MS && typeof content === "string") return content;
-  } catch {
-    /* ignore bad cache */
-  }
-  return null;
-}
-
-function readAllPressCaches(): Record<string, string> {
-  const articles: Record<string, string> = {};
-  for (const newspaper of newspapers) {
-    const content = readPressCache(newspaper.id);
-    if (content) articles[newspaper.id] = content;
-  }
-  return articles;
-}
-
-function renderArticle(
-  text: string,
-  ac: string,
-  border: string,
-  bodyFont: string,
-  sealEncrypted?: boolean,
-  isMobile?: boolean
-) {
-  const clean = text.replace(/\*\*/g, "");
-
-  const headlineMatch = clean.match(/HEADLINE:\s*["«»""]?([\s\S]+?)["«»""]?(?:\r?\n|BYLINE|$)/i);
-  const headline = headlineMatch?.[1]?.replace(/["«»""]/g, "").trim() ?? "";
-
-  const bylineMatch = clean.match(/BYLINE:\s*([\s\S]+?)(?=\n|---|Column\s*2|EDITOR['']S\s*NOTE|$)/i);
-  const byline = bylineMatch?.[1]?.trim() ?? "";
-
-  const editorMatch = clean.match(/EDITOR['']S\s*NOTE:\s*([\s\S]+?)$/im);
-  const editorNote = editorMatch?.[1]?.trim() ?? "";
-
-  const col1Match = clean.match(/Column\s*1[:\s*]*\s*([\s\S]+?)(?=Column\s*2|---|EDITOR['']S\s*NOTE|$)/i);
-  const col2Match = clean.match(/Column\s*2[:\s*]*\s*([\s\S]+?)(?=Column\s*3|---|EDITOR['']S\s*NOTE|$)/i);
-  const col3Match = clean.match(/Column\s*3[:\s*]*\s*([\s\S]+?)(?=---|EDITOR['']S\s*NOTE|$)/i);
-
-  const col1 = col1Match?.[1]?.trim() ?? "";
-  const col2 = col2Match?.[1]?.trim() ?? "";
-  const col3 = col3Match?.[1]?.trim() ?? "";
-
-  const columns = [col1, col2, col3].filter((c) => c.length > 10);
-
-  const borderSoft = border.length === 7 ? `${border}44` : border;
-
-  return (
-    <div>
-      {headline ? (
-        <h2
-          style={{
-            color: ac,
-            fontFamily: bodyFont,
-            fontSize: "1.3rem",
-            fontWeight: "bold",
-            lineHeight: 1.4,
-            marginBottom: "8px",
-            textTransform: "uppercase",
-          }}
-        >
-          {headline}
-          {sealEncrypted ? (
-            <span
-              style={{
-                background: "rgba(139,92,246,0.2)",
-                color: "#a78bfa",
-                fontSize: "0.6rem",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                fontFamily: "monospace",
-                marginLeft: "8px",
-                verticalAlign: "middle",
-                textTransform: "none",
-                fontWeight: 600,
-                letterSpacing: "0.04em",
-              }}
-            >
-              🔒 SEAL ENCRYPTED
-            </span>
-          ) : null}
-        </h2>
-      ) : null}
-      {byline ? (
-        <p
-          style={{
-            color: "#888",
-            fontFamily: bodyFont,
-            fontStyle: "italic",
-            fontSize: "0.85rem",
-            marginBottom: "16px",
-            borderBottom: `1px solid ${border}`,
-            paddingBottom: "12px",
-          }}
-        >
-          {byline}
-        </p>
-      ) : null}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            columns.length >= 3
-              ? isMobile
-                ? "1fr"
-                : "1fr 1fr 1fr"
-              : columns.length === 2
-                ? isMobile
-                  ? "1fr"
-                  : "1fr 1fr"
-                : "1fr",
-          gap: "24px",
-          marginBottom: "20px",
-        }}
-      >
-        {(columns.length > 0 ? columns : [clean]).map((col, i) => (
-          <p
-            key={i}
-            style={{
-              color: "#ccc",
-              fontFamily: bodyFont,
-              fontSize: "0.9rem",
-              lineHeight: 1.8,
-              margin: 0,
-              textAlign: "justify",
-              borderLeft: i > 0 ? `1px solid ${borderSoft}` : "none",
-              paddingLeft: i > 0 ? "20px" : 0,
-            }}
-          >
-            {col}
-          </p>
-        ))}
-      </div>
-      {editorNote ? (
-        <div style={{ borderLeft: `3px solid ${ac}`, paddingLeft: "12px", marginTop: "16px" }}>
-          <p style={{ color: "#aaa", fontFamily: bodyFont, fontStyle: "italic", fontSize: "0.82rem", margin: 0 }}>
-            <strong style={{ color: ac }}>Editor&apos;s Note:</strong> {editorNote}
-          </p>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
   SWAT: "⚔️ COMBAT",
   "ANTI-TAX": "💰 ENFORCEMENT",
@@ -9667,7 +9391,7 @@ const decryptNote = async (
   }
 };
 
-export function ZionHome({ activeTab }: { activeTab: TabId }) {
+export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; standalone?: boolean }) {
   const router = useRouter();
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -10087,12 +9811,8 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
   } | null>(null);
   const [showVIP, setShowVIP] = useState(false);
 
-  const [pressArticles, setPressArticles] = useState<Record<string, string>>({});
-  const [pressLoading, setPressLoading] = useState<Record<string, boolean>>({});
-  const [activeNewspaper, setActiveNewspaper] = useState("ziontimes");
   const [suiBalance, setSuiBalance] = useState(0);
   const [usdcBalance, setUsdcBalance] = useState(0);
-  const [pressSuiChecked, setPressSuiChecked] = useState(false);
   const [zcoDecisions, setZcoDecisions] = useState<ZcoDecision[]>([]);
   const [zcoLoading, setZcoLoading] = useState(false);
   const [zcoLastUpdated, setZcoLastUpdated] = useState<Date | null>(null);
@@ -10583,8 +10303,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
   }, []);
 
   useEffect(() => {
-    // Clear old press cache to force server-side caching
-    newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
     localStorage.removeItem('conv_cache');
   }, []);
 
@@ -10640,8 +10358,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
       setSuiBalance(balance);
     } catch {
       setSuiBalance(0);
-    } finally {
-      setPressSuiChecked(true);
     }
   }, [account?.address]);
 
@@ -10661,127 +10377,14 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
 
   useEffect(() => {
     if (account?.address) {
-      setPressSuiChecked(false);
       void checkVipStatus();
       void fetchUsdcBalance();
     } else {
       setSuiBalance(0);
       setUsdcBalance(0);
-      setPressSuiChecked(false);
     }
   }, [account?.address, checkVipStatus, fetchUsdcBalance]);
 
-  const vipCanRead = useMemo(() => {
-    const vipPaper = newspapers.find((n) => n.id === "vip");
-    const silverMin = vipPaper?.silverMin ?? 0.1;
-    return Boolean(account?.address && pressSuiChecked && suiBalance >= silverMin);
-  }, [account?.address, pressSuiChecked, suiBalance]);
-
-  const generateArticle = useCallback(async (newspaper: PressNewspaper) => {
-    // 1. Check server cache first
-    try {
-      const serverRes = await fetch(`/api/press/${newspaper.id}`);
-      const serverData = await serverRes.json();
-      if (serverData.cached && serverData.content) {
-        setPressArticles((prev) => ({ ...prev, [newspaper.id]: serverData.content }));
-        // Also save to localStorage as local backup
-        localStorage.setItem(`press_${newspaper.id}`, JSON.stringify({ content: serverData.content, ts: Date.now() }));
-        return;
-      }
-    } catch { /* ignore */ }
-
-    // 2. Check localStorage fallback
-    try {
-      const pressCache = localStorage.getItem(`press_${newspaper.id}`);
-      if (pressCache) {
-        const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
-        if (Date.now() - ts < PRESS_CACHE_TTL_MS) {
-          setPressArticles((prev) => ({ ...prev, [newspaper.id]: content }));
-          return;
-        }
-      }
-    } catch { /* ignore */ }
-
-    // 3. Generate new article
-    setPressLoading((prev) => ({ ...prev, [newspaper.id]: true }));
-    try {
-      const [eventsRes, statsRes] = await Promise.all([fetch("/api/events?limit=20"), fetch("/api/stats")]);
-      const eventsRaw = await eventsRes.json();
-      const stats = (await statsRes.json()) as Record<string, unknown>;
-
-      type EvRow = { type?: string; description?: string; amount?: number };
-      const events: EvRow[] = Array.isArray(eventsRaw)
-        ? (eventsRaw as EvRow[])
-        : Array.isArray((eventsRaw as { events?: EvRow[] }).events)
-          ? (eventsRaw as { events: EvRow[] }).events
-          : [];
-
-      const tLower = (s: string | undefined) => (s ?? "").toLowerCase();
-      const relevantEvents = events
-        .filter(
-          (e) =>
-            newspaper.relevantTypes.some((rt) => tLower(e.type) === rt || tLower(e.type).includes(rt)) ||
-            newspaper.keywords.some((k) => tLower(e.description).includes(k.toLowerCase())),
-        )
-        .slice(0, 8);
-
-      const parsedStats = parseApiStatsResponse(stats);
-      const alive = parsedStats.alive;
-      const deathsToday = parsedStats.deaths_today;
-      const totalZion = parsedStats.total_zion;
-      const activeClans = parsedStats.active_clans;
-
-      const aiRes = await fetch("/api/generate_press", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newspaper_id: newspaper.id,
-          persona: newspaper.persona,
-          relevant_events: relevantEvents.map((e) => `[${e.type}] ${e.description}`).join("\n") || "- Civilization continues its eternal struggle",
-          alive,
-          deaths_today: deathsToday,
-          total_zion: totalZion,
-          active_clans: activeClans,
-        }),
-      });
-      const aiData = (await aiRes.json()) as { content?: string };
-      const content = aiData.content ?? "";
-      console.log("PRESS AI RESPONSE:", content.slice(0, 100));
-
-      if (content) {
-        setPressArticles((prev) => ({ ...prev, [newspaper.id]: content }));
-        // Save to server (6h cache)
-        console.log("PRESS CONTENT LENGTH:", content.length, "ID:", newspaper.id);
-        fetch(`/api/press/${newspaper.id}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
-        }).then(r => r.json()).then(d => console.log("PRESS SAVE:", d)).catch(e => console.error("PRESS SAVE ERROR:", e));
-        // Save to localStorage
-        localStorage.setItem(`press_${newspaper.id}`, JSON.stringify({ content, ts: Date.now() }));
-      }
-    } catch { /* ignore */ } finally {
-      setPressLoading((prev) => ({ ...prev, [newspaper.id]: false }));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab !== "press") return;
-    newspapers.forEach((newspaper) => {
-      if (!newspaper.vipOnly) {
-        void generateArticle(newspaper);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- batch on tab open; generateArticle stable
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab === "press" && activeNewspaper === "vip" && vipCanRead && !pressArticles["vip"] && !pressLoading["vip"]) {
-      const vipPaper = newspapers.find((n) => n.id === "vip");
-      if (vipPaper) void generateArticle(vipPaper);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- VIP article when tab/newspaper/access line up; generateArticle is stable
-  }, [activeTab, activeNewspaper, vipCanRead]);
 
   const zionBetSourceList = useMemo(() => markets, [markets]);
 
@@ -14753,7 +14356,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     POLICE_DIVISION_DESCRIPTIONS,
     POLICE_DIVISION_ROLE_BADGES,
     POLY_TABS,
-    PRESS_CACHE_TTL_MS,
     ParticleField,
     PowerGameBar,
     ResponsiveContainer,
@@ -14839,7 +14441,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     ZionTermLabel,
     ZionTermValue,
     account,
-    activeNewspaper,
     addressKeyBytes,
     agentClasses,
     agents,
@@ -14862,10 +14463,14 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     betCurrency,
     betLoading,
     betModal,
+    setBetModal,
     betResult,
     betSort,
+    setBetSort,
     betTab,
+    setBetTab,
     betTimeframe,
+    setBetTimeframe,
     betTimeframeCounts,
     buildAnnounceTransaction,
     buildRegisterTransaction,
@@ -14932,6 +14537,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     deepbookOracles,
     deepbookVault,
     detailMarket,
+    setDetailMarket,
     detailOverlayMounted,
     disconnect,
     ecoEconomicPhaseColor,
@@ -14991,7 +14597,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     frsStats,
     gearColorIdx,
     gearIntervalRef,
-    generateArticle,
     generateNonce,
     generateRandomness,
     generateStealthMetaAddress,
@@ -15060,7 +14665,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     myAgentSearch,
     myBets,
     myBetsRef,
-    newspapers,
     normalizePoliceDivision,
     notarizeResult,
     notifyMyBetsSettlements,
@@ -15097,17 +14701,11 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     presidentActionsDisplay,
     presidentPartyDisplay,
     presidentState,
-    pressArticles,
-    pressLoading,
-    pressSuiChecked,
     prevDeathsRef,
     prevPrices,
     priceChanges,
-    readAllPressCaches,
-    readPressCache,
     referralLink,
     refreshZionAchievements,
-    renderArticle,
     renderAuthToolbar,
     renderPoliticalWireText,
     renderZionWalletProfileMenu,
@@ -15139,6 +14737,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     showTokenModal,
     showUserMenu,
     showVIP,
+    setShowVIP,
     showWalletMenu,
     signAndExecute,
     signAndExecuteTransaction,
@@ -15187,7 +14786,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     useZionbetBetDisplayQuestion,
     userPoints,
     vipAccess,
-    vipCanRead,
     vipFeedDisplay,
     vipMemoryFeed,
     walletAddress,
@@ -15235,6 +14833,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     zionBetPlacing,
     zionBetResolvesAtIso,
     zionBetSelectedMarket,
+    setZionBetSelectedMarket,
     zionBetSourceList,
     zionBetStats,
     zionBetTfKeyFromZionMarket,
@@ -15337,8 +14936,8 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
 
   return (
     <ZionTabProvider value={tabCtx}>
-    <main className="page">
-      <BackgroundGrid />
+    <main className="page" style={standalone ? { background: "transparent", position: "relative", zIndex: 1 } : undefined}>
+      {!standalone && <BackgroundGrid />}
       {(showWalletMenu || showUserMenu) && (
         <div
           onClick={() => {
@@ -15349,6 +14948,18 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           aria-hidden
         />
       )}
+      {standalone ? (
+        <>
+          <BackgroundGrid />
+          <div className="belowHeroShell prediction-engine-shell">
+            <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
+              <div className="tabPanels">
+                <PredictionEngine />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
       <SharedLayout
         isMobile={isMobile}
         experimentRunTime={experimentRunTime}
@@ -15364,8 +14975,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           {activeTab === "constitution" && <Constitution />}
 
           {activeTab === "chat" && <FieldNotes />}
-
-          {activeTab === "zionbet" && <PredictionEngine />}
 
           {activeTab === "leaderboard" && (
             <section className="leaderboardSection">
@@ -16559,14 +16168,13 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
             </div>
           )}
 
-          {activeTab === "press" && <Press />}
-
           {activeTab === "lab" && <Lab />}
           {activeTab === "research" && <Lab />}
           {activeTab === "archive" && <Archive />}
       </SharedLayout>
+      )}
 
-        {chatAgent ? (
+        {!standalone && chatAgent ? (
           <div
             className="chatModalBackdrop"
             role="presentation"
@@ -16631,7 +16239,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           </div>
         ) : null}
 
-      <style jsx>{`
+      <style jsx global>{`
         .page {
           position: relative;
           min-height: 100vh;
@@ -17206,6 +16814,47 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           padding-bottom: 24px;
           font-family: var(--font-sans);
           color: var(--text-primary);
+          position: relative;
+          z-index: 2;
+          pointer-events: auto;
+        }
+        .prediction-engine-shell {
+          position: relative;
+          z-index: 2;
+          pointer-events: auto;
+        }
+        .prediction-engine-shell .tabPanels {
+          position: relative;
+          z-index: 2;
+          pointer-events: auto;
+        }
+        .prediction-engine-shell .zionBetCatTabActive,
+        .prediction-engine-shell .zionBetCatTabActive.zionBetCatTabActive--zion {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: var(--accent);
+          color: var(--text-primary);
+        }
+        .prediction-engine-shell .zionBetTimeframeItem--active {
+          background: rgba(255, 255, 255, 0.08) !important;
+          color: #f0f6fc !important;
+        }
+        .prediction-engine-shell .zionBetTimeframeItem:hover:not(.zionBetTimeframeItem--active) {
+          background: rgba(255, 255, 255, 0.05) !important;
+        }
+        .prediction-engine-shell .zionBetToast {
+          color: #e6edf3;
+        }
+        .prediction-engine-shell .zionBetToastDisclaimer {
+          color: rgba(255, 255, 255, 0.55);
+        }
+        .prediction-engine-shell .zionBetToast--success {
+          color: #86efac;
+        }
+        .prediction-engine-shell .zionBetToast--error {
+          color: #fca5a5;
+        }
+        .prediction-engine-shell .zionBetToast--warning {
+          color: #fcd34d;
         }
         .zionBetHeader {
           margin: 0 0 20px;
@@ -17614,6 +17263,9 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           margin: 0 0 16px;
           padding-bottom: 0;
           border-bottom: none;
+          position: relative;
+          z-index: 3;
+          pointer-events: auto;
         }
         .zionBetCatTab {
           padding: 6px 12px;
@@ -17627,6 +17279,9 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           font-weight: 500;
           letter-spacing: 0.08em;
           text-transform: uppercase;
+          position: relative;
+          z-index: 3;
+          pointer-events: auto;
         }
         .zionBetCatTab:hover {
           color: var(--text-primary);
@@ -17678,20 +17333,8 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           flex-direction: column;
           height: 100%;
           min-height: 0;
-          padding: 12px 14px;
-          border-radius: 8px;
-          border: 1px solid var(--zb-card-border, #e5e7eb);
-          background: var(--zb-card-bg, #ffffff);
           cursor: pointer;
-          transition: box-shadow 0.15s ease;
           box-sizing: border-box;
-          box-shadow: none;
-        }
-        .zionBetMarketCard:hover {
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-        }
-        .zionBetMarketCard--zion {
-          border-left: 3px solid #16a34a;
         }
         .zionBetMarketCardZionBadge {
           position: absolute;

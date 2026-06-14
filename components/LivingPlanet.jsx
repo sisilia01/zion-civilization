@@ -1628,8 +1628,60 @@ export function LivingPlanet({
 
   const initDoneRef = useRef(false);
   const resizeRef = useRef(/** @type {(() => void) | null} */ (null));
+  const viewportRef = useRef(null);
+  const canvasElRef = useRef(/** @type {HTMLCanvasElement | null} */ (null));
+  const controlsRef = useRef(/** @type {import("three/examples/jsm/controls/OrbitControls.js").OrbitControls | null} */ (null));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fsBtnHover, setFsBtnHover] = useState(false);
+  const [interactionActive, setInteractionActive] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasElRef.current;
+    const controls = controlsRef.current;
+    if (canvas) {
+      canvas.style.pointerEvents = interactionActive ? "auto" : "none";
+      canvas.style.cursor = interactionActive ? "grab" : "";
+    }
+    if (controls) {
+      controls.enabled = interactionActive;
+    }
+  }, [interactionActive]);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!interactionActive) return;
+      const root = containerRef.current;
+      if (root && !root.contains(e.target)) {
+        setInteractionActive(false);
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setInteractionActive(false);
+      }
+    };
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [interactionActive]);
+
+  const handlePlanetActivate = useCallback((e) => {
+    if (!interactionActive) {
+      e.stopPropagation();
+      setInteractionActive(true);
+    }
+  }, [interactionActive]);
+
+  const handlePassiveWheel = useCallback(
+    (e) => {
+      if (interactionActive) return;
+      window.scrollBy({ top: e.deltaY, left: e.deltaX, behavior: "auto" });
+    },
+    [interactionActive]
+  );
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -1658,7 +1710,8 @@ export function LivingPlanet({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || initDoneRef.current) return;
+    const viewport = viewportRef.current;
+    if (!container || !viewport || initDoneRef.current) return;
     initDoneRef.current = true;
 
     let disposed = false;
@@ -1705,9 +1758,13 @@ export function LivingPlanet({
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
       renderer.domElement.style.display = "block";
-      container.appendChild(renderer.domElement);
+      renderer.domElement.style.pointerEvents = "none";
+      viewport.appendChild(renderer.domElement);
+      canvasElRef.current = renderer.domElement;
 
       const controls = new OrbitControls(camera, renderer.domElement);
+      controlsRef.current = controls;
+      controls.enabled = false;
       controls.target.set(0, 0, 0);
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
@@ -2145,6 +2202,7 @@ export function LivingPlanet({
         spaceFx.dispose();
         cometVfx.dispose();
         controls.dispose();
+        controlsRef.current = null;
         if (loadedTextures) {
           Object.values(loadedTextures).forEach((tex) => tex.dispose());
         }
@@ -2153,15 +2211,16 @@ export function LivingPlanet({
           composer.renderTarget2?.dispose();
         }
         renderer?.dispose();
-        if (renderer?.domElement?.parentNode === container) {
-          container.removeChild(renderer.domElement);
+        canvasElRef.current = null;
+        if (renderer?.domElement?.parentNode === viewport) {
+          viewport.removeChild(renderer.domElement);
         }
       };
     } catch (e) {
       console.error("[init] CRASHED:", e);
       initDoneRef.current = false;
-      if (renderer?.domElement?.parentNode === container) {
-        container.removeChild(renderer.domElement);
+      if (renderer?.domElement?.parentNode === viewport) {
+        viewport.removeChild(renderer.domElement);
       }
       renderer?.dispose();
     }
@@ -2190,11 +2249,47 @@ export function LivingPlanet({
         background: "#000",
       }}
     >
+      <div
+        ref={viewportRef}
+        role="presentation"
+        onClick={handlePlanetActivate}
+        onWheel={handlePassiveWheel}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 1,
+          cursor: interactionActive ? "grab" : "default",
+          boxShadow: interactionActive ? "inset 0 0 0 1px rgba(0, 180, 216, 0.45)" : "none",
+          transition: "box-shadow 0.2s ease",
+        }}
+      />
+      {!interactionActive && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: showHud && civilizationData ? 52 : 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 3,
+            pointerEvents: "none",
+            fontFamily: "monospace",
+            fontSize: 10,
+            letterSpacing: "0.08em",
+            color: "rgba(0, 180, 216, 0.55)",
+            textTransform: "uppercase",
+          }}
+        >
+          Click to interact
+        </div>
+      )}
       <button
         type="button"
         aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
         title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
-        onClick={toggleFullscreen}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFullscreen();
+        }}
         onMouseEnter={() => setFsBtnHover(true)}
         onMouseLeave={() => setFsBtnHover(false)}
         style={{

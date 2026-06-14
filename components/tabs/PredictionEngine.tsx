@@ -1,8 +1,11 @@
 // @ts-nocheck
 "use client";
 
-
+import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import { useZionTab } from "@/components/zion/ZionTabContext";
+
+const peGlass = glassCardStyles.glassCardLab;
 
 export function PredictionEngine() {
   const {
@@ -71,26 +74,31 @@ export function PredictionEngine() {
                 </p>
               </header>
               {zionBetToast ? (
-                <div className="zionBetToast" role="status">
-                  {typeof zionBetToast === "string" ? (
-                    zionBetToast
-                  ) : (
-                    <>
-                      <div>{zionBetToast.message}</div>
-                      {zionBetToast.disclaimer ? (
-                        <div className="zionBetToastDisclaimer">{zionBetToast.disclaimer}</div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
+                <GlassCard className={peGlass} style={{ marginBottom: 18, padding: "12px 14px" }}>
+                  <div className="zionBetToast" role="status" style={{ margin: 0, padding: 0, border: "none", background: "transparent", boxShadow: "none" }}>
+                    {typeof zionBetToast === "string" ? (
+                      zionBetToast
+                    ) : (
+                      <>
+                        <div>{zionBetToast.message}</div>
+                        {zionBetToast.disclaimer ? (
+                          <div className="zionBetToastDisclaimer">{zionBetToast.disclaimer}</div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </GlassCard>
               ) : null}
               {zionBetNotify ? (
-                <div
-                  className={`zionBetToast zionBetToast--${zionBetNotify.type}`}
-                  role="status"
-                >
-                  {zionBetNotify.message}
-                </div>
+                <GlassCard className={peGlass} style={{ marginBottom: 18, padding: "12px 14px" }}>
+                  <div
+                    className={`zionBetToast zionBetToast--${zionBetNotify.type}`}
+                    role="status"
+                    style={{ margin: 0, padding: 0, border: "none", background: "transparent", boxShadow: "none" }}
+                  >
+                    {zionBetNotify.message}
+                  </div>
+                </GlassCard>
               ) : null}
               {zionBetSelectedMarket ? (
                 <ZionBetMarketDetail
@@ -113,31 +121,34 @@ export function PredictionEngine() {
                 />
               ) : (
                 <>
-                  <div
-                    role="tablist"
-                    aria-label="ZionBet market groups"
-                    style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: "16px" }}
-                  >
-                    {(
-                      Object.entries(ZIONBET_TAB_LABELS) as [ZionbetBetTab, string][]
-                    ).map(([key, label]) => {
-                      const active = betTab === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          className={`zionBetCatTab${active ? " zionBetCatTabActive" : ""}`}
-                          onClick={() => setBetTab(key)}
-                        >
-                          {label} ({zionbetTabCounts[key]})
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div
-                    className="instrument-panel"
+                  <GlassCard className={peGlass} style={{ marginBottom: 16, padding: "10px 14px" }}>
+                    <div
+                      role="tablist"
+                      aria-label="ZionBet market groups"
+                      className="zionBetCatTabs"
+                      style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 0 }}
+                    >
+                      {(
+                        Object.entries(ZIONBET_TAB_LABELS) as [ZionbetBetTab, string][]
+                      ).map(([key, label]) => {
+                        const active = betTab === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            className={`zionBetCatTab${active ? " zionBetCatTabActive" : ""}`}
+                            onClick={() => setBetTab(key)}
+                          >
+                            {label} ({zionbetTabCounts[key]})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+                  <GlassCard
+                    className={peGlass}
                     style={{
                       padding: "16px",
                       marginBottom: "20px",
@@ -219,19 +230,14 @@ export function PredictionEngine() {
                         >
                           {VIP_MARKETS.filter((m) => (vipAccess?.isGold ? true : m.tier === "silver")).map(
                             (market) => (
-                              <div
+                              <GlassCard
                                 key={market.id}
+                                className={peGlass}
                                 style={{
-                                  border:
-                                    market.tier === "gold"
-                                      ? "1px solid rgba(255,215,0,0.4)"
-                                      : "1px solid rgba(170,170,170,0.3)",
-                                  borderRadius: "10px",
                                   padding: "12px",
-                                  background:
-                                    market.tier === "gold"
-                                      ? "rgba(255,215,0,0.03)"
-                                      : "rgba(170,170,170,0.02)",
+                                  ...(market.tier === "gold"
+                                    ? { borderLeft: "3px solid rgba(255, 215, 0, 0.45)" }
+                                    : { borderLeft: "3px solid rgba(170, 170, 170, 0.35)" }),
                                 }}
                               >
                                 <div
@@ -286,10 +292,10 @@ export function PredictionEngine() {
                                     NO {market.noOdds}¢
                                   </button>
                                 </div>
-                                <div style={{ color: "#333", fontSize: "0.65rem", marginTop: "6px" }}>
+                                <div style={{ color: "#8b9ab1", fontSize: "0.65rem", marginTop: "6px" }}>
                                   Min: {market.minBet.toLocaleString()} · Max: {market.maxBet.toLocaleString()} ZION
                                 </div>
-                              </div>
+                              </GlassCard>
                             )
                           )}
                         </div>
@@ -297,19 +303,19 @@ export function PredictionEngine() {
                     ) : null}
 
                     {!walletAddress.trim() ? (
-                      <div style={{ color: "#555", fontSize: "0.75rem", marginTop: "8px" }}>
+                      <div style={{ color: "#8b9ab1", fontSize: "0.75rem", marginTop: "8px" }}>
                         Connect wallet to check VIP access
                       </div>
                     ) : null}
-                  </div>
+                  </GlassCard>
                   {betTab === "crypto" ? (
-                  <div style={{
-                    background: "linear-gradient(135deg, #0a0a1a 0%, #0d1117 100%)",
-                    border: "1px solid #1a3a5c",
-                    borderRadius: "12px",
-                    padding: "20px",
-                    marginBottom: "24px",
-                  }}>
+                  <GlassCard
+                    className={peGlass}
+                    style={{
+                      padding: "20px",
+                      marginBottom: "24px",
+                    }}
+                  >
                     <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"16px"}}>
                       <span style={{fontSize:"1.2rem"}}>⚡</span>
                       <h3 style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"1rem", margin:0, letterSpacing:"2px"}}>
@@ -322,14 +328,9 @@ export function PredictionEngine() {
                     </div>
                     <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:"12px"}}>
                       {deepbookOracles.length === 0 ? (
-                        <p style={{color:"#333", fontFamily:"monospace", fontSize:"0.8rem"}}>Loading DeepBook oracles...</p>
+                        <p style={{ color: "#8b9ab1", fontFamily: "monospace", fontSize: "0.8rem" }}>Loading DeepBook oracles...</p>
                       ) : deepbookOracles.map((oracle) => (
-                        <div key={oracle.oracle_id} style={{
-                          background:"#0a0f1a",
-                          border:"1px solid #1a3a5c",
-                          borderRadius:"8px",
-                          padding:"14px",
-                        }}>
+                        <GlassCard key={oracle.oracle_id} className={peGlass} style={{ padding: "14px" }}>
                           <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}}>
                             <span style={{color:"#4DA2FF", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.9rem"}}>
                               {oracle.underlying_asset}/USD
@@ -345,10 +346,10 @@ export function PredictionEngine() {
                           <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1.3rem", fontWeight:"bold", marginBottom:"4px"}}>
                             ${oracle.spot_price ? oracle.spot_price.toLocaleString() : "—"}
                           </div>
-                          <div style={{color:"#555", fontFamily:"monospace", fontSize:"0.7rem"}}>
+                          <div style={{ color: "#8b9ab1", fontFamily: "monospace", fontSize: "0.7rem" }}>
                             Expires: {oracle.expiry_date}
                           </div>
-                          <div style={{color:"#333", fontFamily:"monospace", fontSize:"0.6rem", marginTop:"4px"}}>
+                          <div style={{ color: "#6b7a8f", fontFamily: "monospace", fontSize: "0.6rem", marginTop: "4px" }}>
                             Oracle: {oracle.oracle_id.slice(0,8)}...
                           </div>
                           <div style={{marginTop:"10px", display:"flex", gap:"8px"}}>
@@ -411,42 +412,93 @@ export function PredictionEngine() {
                               📉 PUT -5%
                             </button>
                           </div>
-                        </div>
+                        </GlassCard>
                       ))}
                     </div>
                     {deepbookVault && (
-                      <div style={{
-                        display:"grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap:"10px",
-                        marginTop:"16px", padding:"14px", background:"#050a10",
-                        borderRadius:"8px", border:"1px solid #1a3a5c"
-                      }}>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>VAULT TVL</div>
-                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${(deepbookVault.vault_value / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
-                          </div>
+                      <GlassCard
+                        className={peGlass}
+                        style={{
+                          marginTop: "16px",
+                          padding: "14px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: "24px",
+                            flexWrap: "wrap",
+                            width: "100%",
+                          }}
+                        >
+                          {[
+                            {
+                              label: "VAULT TVL",
+                              value: `$${(deepbookVault.vault_value / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+                              valueColor: "#fff",
+                            },
+                            {
+                              label: "PLP PRICE",
+                              value: `$${deepbookVault.plp_share_price.toFixed(4)}`,
+                              valueColor: "#00ff41",
+                            },
+                            {
+                              label: "UTILIZATION",
+                              value: `${(deepbookVault.utilization * 100).toFixed(3)}%`,
+                              valueColor: "#ffaa00",
+                            },
+                            {
+                              label: "LIQUIDITY",
+                              value: `$${(deepbookVault.available_liquidity / 1e6).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+                              valueColor: "#fff",
+                            },
+                          ].map((stat, i, arr) => (
+                            <div
+                              key={stat.label}
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: "2px",
+                                flexShrink: 0,
+                                ...(i < arr.length - 1
+                                  ? {
+                                      borderRight: "1px solid rgba(100,116,139,0.3)",
+                                      paddingRight: "24px",
+                                    }
+                                  : {}),
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "9px",
+                                  color: "#64748b",
+                                  letterSpacing: "0.15em",
+                                  textTransform: "uppercase",
+                                  fontFamily: "monospace",
+                                }}
+                              >
+                                {stat.label}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "15px",
+                                  color: stat.valueColor,
+                                  fontWeight: "bold",
+                                  fontFamily: "monospace",
+                                }}
+                              >
+                                {stat.value}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>PLP PRICE</div>
-                          <div style={{color:"#00ff41", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${deepbookVault.plp_share_price.toFixed(4)}
-                          </div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>UTILIZATION</div>
-                          <div style={{color:"#ffaa00", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            {(deepbookVault.utilization * 100).toFixed(3)}%
-                          </div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{color:"#4DA2FF", fontFamily:"monospace", fontSize:"0.65rem", marginBottom:"4px"}}>LIQUIDITY</div>
-                          <div style={{color:"#fff", fontFamily:"monospace", fontSize:"1rem", fontWeight:"bold"}}>
-                            ${(deepbookVault.available_liquidity / 1e6).toLocaleString(undefined, {maximumFractionDigits:0})}
-                          </div>
-                        </div>
-                      </div>
+                      </GlassCard>
                     )}
-                    <div style={{marginTop:"12px", padding:"8px 12px", background:"#050a10", borderRadius:"6px", display:"flex", gap:"16px"}}>
+                    <GlassCard className={peGlass} style={{ marginTop: "12px", padding: "8px 12px" }}>
+                      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
                       <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         📦 Package: 0xf5ea2b37...
                       </span>
@@ -456,8 +508,9 @@ export function PredictionEngine() {
                       <span style={{color:"#66ff99", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         ✓ Testnet Live
                       </span>
-                    </div>
-                  </div>
+                      </div>
+                    </GlassCard>
+                  </GlassCard>
                   ) : null}
                   <div style={{ marginBottom: "24px" }}>
                       <>
@@ -483,28 +536,12 @@ export function PredictionEngine() {
                           >
                             Markets
                           </h3>
-                          <label
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                              fontSize: 12,
-                              color: "#8b9ab1",
-                            }}
-                          >
+                          <label className="zionBetSortLabel">
                             Sort by
                             <select
+                              className="zionBetSortSelect"
                               value={betSort}
                               onChange={(e) => setBetSort(e.target.value as ZionbetSortKey)}
-                              style={{
-                                background: "#0d1117",
-                                border: "1px solid #1e2d3d",
-                                color: "#8b9ab1",
-                                borderRadius: "6px",
-                                fontSize: 12,
-                                padding: "5px 10px",
-                                cursor: "pointer",
-                              }}
                             >
                               <option value="volume">Volume ↓</option>
                               <option value="ending">Ending soon</option>
@@ -520,13 +557,11 @@ export function PredictionEngine() {
                           }}
                         >
                           {betTab === "crypto" ? (
-                          <div
+                          <GlassCard
+                            className={peGlass}
                             style={{
                               width: "180px",
                               flexShrink: 0,
-                              background: "#0d1117",
-                              border: "1px solid #1e2d3d",
-                              borderRadius: "10px",
                               padding: "8px",
                               position: "sticky",
                               top: "80px",
@@ -539,18 +574,13 @@ export function PredictionEngine() {
                                   key={tf}
                                   role="button"
                                   tabIndex={0}
+                                  className={`zionBetTimeframeItem${active ? " zionBetTimeframeItem--active" : ""}`}
                                   onClick={() => setBetTimeframe(tf)}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" || e.key === " ") {
                                       e.preventDefault();
                                       setBetTimeframe(tf);
                                     }
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (!active) e.currentTarget.style.background = "#1a2535";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (!active) e.currentTarget.style.background = "transparent";
                                   }}
                                   style={{
                                     display: "flex",
@@ -560,7 +590,6 @@ export function PredictionEngine() {
                                     borderRadius: "8px",
                                     cursor: "pointer",
                                     marginBottom: "2px",
-                                    background: active ? "#1e2d3d" : "transparent",
                                     color: active ? "#e6edf3" : "#8b9ab1",
                                   }}
                                 >
@@ -594,7 +623,7 @@ export function PredictionEngine() {
                                 </div>
                               );
                             })}
-                          </div>
+                          </GlassCard>
                           ) : null}
                           <div style={{ flex: 1 }}>
                             {zionbetTabLoading[betTab] ? (
