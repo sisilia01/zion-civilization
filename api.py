@@ -6277,23 +6277,76 @@ async def get_eco_pol():
         db.close()
 
 
-@app.get("/sheriff-log")
-async def get_sheriff_log():
+_GOVERNANCE_ACTIVITY_NOISE_SQL = """
+    AND description NOT LIKE '[TICK #%%'
+    AND description NOT LIKE '%%QE: 0 ZION to 0%%'
+"""
+
+
+def _fetch_governance_activity(event_type_clause: str, limit: int = 10):
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("""
-            SELECT description, created_at FROM events
-            WHERE event_type IN ('sheriff_action', 'sheriff_election', 'sheriff_order',
-                                 'sheriff_arrest', 'insubordination', 'election', 'sheriff')
-              AND (event_type != 'election' OR description ILIKE '%%Sheriff%%')
-            ORDER BY created_at DESC LIMIT 10
-        """)
-        rows = cur.fetchall()
-        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+        cur.execute(
+            f"""
+            SELECT description, created_at, event_type FROM events
+            WHERE {event_type_clause}
+            {_GOVERNANCE_ACTIVITY_NOISE_SQL}
+            ORDER BY created_at DESC LIMIT %s
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
     finally:
         cur.close()
         db.close()
+
+
+@app.get("/president-activity")
+async def get_president_activity():
+    rows = _fetch_governance_activity("event_type = 'president'")
+    return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+
+
+@app.get("/sheriff-activity")
+async def get_sheriff_activity():
+    rows = _fetch_governance_activity("event_type = 'sheriff'")
+    return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
+
+
+@app.get("/senate-activity")
+async def get_senate_activity():
+    rows = _fetch_governance_activity("event_type = 'senate'")
+    items = [
+        {
+            "description": row["description"],
+            "created_at": str(row["created_at"]),
+            "event_type": row.get("event_type") or "senate",
+        }
+        for row in rows
+    ]
+    return {"success": True, "actions": items}
+
+
+@app.get("/zrs-activity")
+async def get_zrs_activity():
+    rows = _fetch_governance_activity(
+        "event_type IN ('zrs', 'frs_chief', 'central_bank')"
+    )
+    items = [
+        {
+            "description": row["description"],
+            "created_at": str(row["created_at"]),
+            "event_type": row.get("event_type") or "zrs",
+        }
+        for row in rows
+    ]
+    return {"success": True, "actions": items}
+
+
+@app.get("/sheriff-log")
+async def get_sheriff_log():
+    return await get_sheriff_activity()
 
 
 def _wire_item(text: str, item_type: str = "info", ts=None) -> dict:
@@ -6545,137 +6598,20 @@ async def get_president_state():
         cur.close()
         db.close()
 
+
 @app.get("/president/actions")
 async def get_president_actions():
-    db = get_db()
-    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        cur.execute("""
-            SELECT description, created_at FROM events
-            WHERE event_type IN ('president', 'president_action')
-            ORDER BY created_at DESC LIMIT 10
-        """)
-        rows = cur.fetchall()
-        return [{"description": r["description"], "created_at": str(r["created_at"])} for r in rows]
-    finally:
-        cur.close()
-        db.close()
+    return await get_president_activity()
 
 
 @app.get("/senate/actions")
 async def get_senate_actions():
-    """Senate activity log — events, law votes, budget actions."""
-    db = get_db()
-    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        items: list[dict] = []
-
-        cur.execute("""
-            SELECT description, created_at FROM events
-            WHERE event_type IN ('senate', 'senate_law', 'economy', 'senate_budget')
-               OR LOWER(description) LIKE '%senate%'
-               OR LOWER(description) LIKE '%law passed%'
-               OR LOWER(description) LIKE '%bill%'
-               OR LOWER(description) LIKE '%vote%'
-               OR (event_type = 'election' AND description ILIKE '%senate%')
-            ORDER BY created_at DESC LIMIT 12
-        """)
-        for row in cur.fetchall():
-            items.append({
-                "description": row["description"],
-                "created_at": str(row["created_at"]),
-            })
-
-        cur.execute("""
-            SELECT title, law_type, status, votes_for, votes_against,
-                   COALESCE(voted_at, proposed_at) AS ts
-            FROM senate_laws
-            ORDER BY COALESCE(voted_at, proposed_at) DESC NULLS LAST, id DESC
-            LIMIT 8
-        """)
-        for row in cur.fetchall():
-            title = row.get("title") or (row.get("law_type") or "law").replace("_", " ").title()
-            status = (row.get("status") or "unknown").upper()
-            vf = int(row.get("votes_for") or 0)
-            va = int(row.get("votes_against") or 0)
-            ts = row.get("ts")
-            items.append({
-                "description": f"🏛 {title}: {status} ({vf}-{va})",
-                "created_at": str(ts) if ts else "",
-            })
-
-        items = [i for i in items if i.get("created_at")]
-        items.sort(key=lambda x: x["created_at"], reverse=True)
-        seen: set[str] = set()
-        deduped: list[dict] = []
-        for item in items:
-            key = item["description"]
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(item)
-            if len(deduped) >= 10:
-                break
-        return {"success": True, "actions": deduped}
-    finally:
-        cur.close()
-        db.close()
+    return await get_senate_activity()
 
 
 @app.get("/zrs/actions")
 async def get_zrs_actions():
-    """ZRS / central bank activity log for ECO-POL dashboard."""
-    db = get_db()
-    cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        items: list[dict] = []
-
-        cur.execute("""
-            SELECT description, created_at, event_type FROM events
-            WHERE event_type IN ('economy', 'zrs', 'frs')
-               OR LOWER(description) LIKE '%zrs%'
-               OR LOWER(description) LIKE '%frs chief%'
-               OR LOWER(description) LIKE '%reserve%'
-            ORDER BY created_at DESC LIMIT 12
-        """)
-        for row in cur.fetchall():
-            items.append({
-                "description": row["description"],
-                "created_at": str(row["created_at"]),
-                "event_type": row.get("event_type") or "economy",
-            })
-
-        cur.execute("""
-            SELECT state, action_taken, amount, news_headline, created_at
-            FROM zrs_policy
-            ORDER BY created_at DESC NULLS LAST, id DESC
-            LIMIT 5
-        """)
-        for row in cur.fetchall():
-            headline = row.get("news_headline") or row.get("action_taken") or "ZRS policy update"
-            ts = row.get("created_at")
-            items.append({
-                "description": f"ZRS {row.get('state', 'NORMAL')}: {headline}",
-                "created_at": str(ts) if ts else "",
-                "event_type": "economy",
-            })
-
-        items = [i for i in items if i.get("created_at")]
-        items.sort(key=lambda x: x["created_at"], reverse=True)
-        seen: set[str] = set()
-        deduped: list[dict] = []
-        for item in items:
-            key = item["description"]
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(item)
-            if len(deduped) >= 10:
-                break
-        return {"success": True, "actions": deduped}
-    finally:
-        cur.close()
-        db.close()
+    return await get_zrs_activity()
 
 
 @app.get("/corporations")

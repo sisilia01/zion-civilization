@@ -26,8 +26,8 @@ from civ_common import (
 from amendment_enforcer import get_param
 from political_parties import PARTIES, ensure_parties_exist, ensure_parties_schema
 
-PARTY_IDS = ("conservatives", "centrists", "populists")
-SENATORS_PER_PARTY = 3
+PARTY_IDS = ("consensus", "reform")
+SENATORS_PER_PARTY = 4
 ROGUE_VOTE_CHANCE = 0.20
 ELECTION_BONUS = 50.0
 IMPEACH_REVOLUTION_MIN = 250
@@ -37,66 +37,112 @@ COUP_CORRUPTION_MIN = 80
 COUP_CHANCE = 0.30
 
 CLASS_TO_PARTY = {
-    "elite": "conservatives",
-    "middle": "centrists",
-    "working": "centrists",
-    "poor": "populists",
-    "critical": "populists",
+    "elite": "consensus",
+    "rich": "consensus",
+    "middle": "reform",
+    "working": "reform",
+    "poor": "reform",
+    "critical": "reform",
 }
 
 LAW_TYPES = (
     "TAX_REFORM",
+    "TAX_REDUCTION",
     "STIMULUS_PACKAGE",
+    "BASIC_INCOME",
     # "MARTIAL_LAW",  # Removed — unconstitutional
     "AMNESTY",
     "NATIONALIZATION",
     "WEALTH_TAX",
     "DEREGULATION",
+    "CORPORATE_DEREGULATION",
+    "HIRE_POLICE",
+    "EDUCATION_FUND",
     # "ELECTION_DELAY",  # Unconstitutional
 )
 
-# Party default vote: True = yes, False = no, None = swing (centrist decides)
+# Party vote bias: added to 0.5 base yes-probability per law type
+PARTY_LAW_VOTE_BIAS = {
+    "consensus": {
+        "WEALTH_TAX": -0.4,
+        "TAX_REDUCTION": 0.4,
+        "HIRE_POLICE": 0.3,
+        "BASIC_INCOME": -0.4,
+        "CORPORATE_DEREGULATION": 0.3,
+    },
+    "reform": {
+        "WEALTH_TAX": 0.4,
+        "TAX_REDUCTION": -0.4,
+        "HIRE_POLICE": -0.2,
+        "BASIC_INCOME": 0.4,
+        "CORPORATE_DEREGULATION": -0.3,
+    },
+}
+
+# Map stored law types to vote-bias keys
+VOTE_LAW_TYPE_MAP = {
+    "TAX_REFORM": "TAX_REDUCTION",
+    "DEREGULATION": "CORPORATE_DEREGULATION",
+    "STIMULUS_PACKAGE": "BASIC_INCOME",
+    "CORPORATE_DEREGULATION": "CORPORATE_DEREGULATION",
+    "TAX_REDUCTION": "TAX_REDUCTION",
+    "HIRE_POLICE": "HIRE_POLICE",
+    "BASIC_INCOME": "BASIC_INCOME",
+    "WEALTH_TAX": "WEALTH_TAX",
+    "EDUCATION_FUND": "BASIC_INCOME",
+}
+
+PARTY_PROPOSED_LAWS = {
+    "consensus": ("TAX_REDUCTION", "HIRE_POLICE", "CORPORATE_DEREGULATION"),
+    "reform": ("WEALTH_TAX", "BASIC_INCOME", "EDUCATION_FUND"),
+}
+
 PARTY_LAW_STANCE = {
-    "conservatives": {
+    "consensus": {
         "TAX_REFORM": None,
+        "TAX_REDUCTION": True,
         "STIMULUS_PACKAGE": False,
+        "BASIC_INCOME": False,
         "MARTIAL_LAW": False,  # Unconstitutional
         "AMNESTY": False,
         "NATIONALIZATION": None,
         "WEALTH_TAX": False,
         "DEREGULATION": True,
+        "CORPORATE_DEREGULATION": True,
+        "HIRE_POLICE": True,
+        "EDUCATION_FUND": False,
         "ELECTION_DELAY": False,
     },
-    "centrists": {
+    "reform": {
         "TAX_REFORM": None,
-        "STIMULUS_PACKAGE": None,
-        "MARTIAL_LAW": None,
-        "AMNESTY": None,
-        "NATIONALIZATION": None,
-        "WEALTH_TAX": None,
-        "DEREGULATION": None,
-        "ELECTION_DELAY": False,
-    },
-    "populists": {
-        "TAX_REFORM": None,
+        "TAX_REDUCTION": False,
         "STIMULUS_PACKAGE": True,
+        "BASIC_INCOME": True,
         "MARTIAL_LAW": False,
         "AMNESTY": True,
         "NATIONALIZATION": True,
         "WEALTH_TAX": True,
         "DEREGULATION": False,
+        "CORPORATE_DEREGULATION": False,
+        "HIRE_POLICE": False,
+        "EDUCATION_FUND": True,
         "ELECTION_DELAY": False,
     },
 }
 
 LAW_TITLES = {
     "TAX_REFORM": "Tax Reform Act",
+    "TAX_REDUCTION": "Tax Cut Act",
     "STIMULUS_PACKAGE": "Economic Stimulus Package",
+    "BASIC_INCOME": "Basic Income Act",
     # "MARTIAL_LAW": "Martial Law Authorization",  # Removed
     "AMNESTY": "National Amnesty Decree",
     "NATIONALIZATION": "Emergency Nationalization Bill",
-    "WEALTH_TAX": "Elite Wealth Tax",
+    "WEALTH_TAX": "Wealth Tax Act",
     "DEREGULATION": "Corporate Deregulation Act",
+    "CORPORATE_DEREGULATION": "Corporate Deregulation Act",
+    "HIRE_POLICE": "Police Funding Act",
+    "EDUCATION_FUND": "Education Fund Act",
     "ELECTION_DELAY": "Election Postponement Act",
 }
 
@@ -220,17 +266,26 @@ def president_party_id(president: dict) -> str:
     raw = (president.get("party") or "").lower()
     if raw in PARTY_IDS:
         return raw
-    legacy = {"blue": "populists", "red": "conservatives"}
+    legacy = {
+        "blue": "reform",
+        "red": "consensus",
+        "conservative": "consensus",
+        "conservatives": "consensus",
+        "centrist": "reform",
+        "centrists": "reform",
+        "populist": "reform",
+        "populists": "reform",
+    }
     if raw in legacy:
         return legacy[raw]
     cur_party = president.get("party_id")
     if cur_party in PARTY_IDS:
         return cur_party
-    return "centrists"
+    return "reform"
 
 
 def agent_party_from_class(agent_class: str) -> str:
-    return CLASS_TO_PARTY.get(agent_class or "middle", "centrists")
+    return CLASS_TO_PARTY.get(agent_class or "middle", "reform")
 
 
 def living_senators_count(cur) -> int:
@@ -289,7 +344,20 @@ def pick_senator_candidate(cur, party_id: str, exclude_ids: set | None = None) -
     if exclude_ids:
         ex_clause = " AND id NOT IN %s"
         params.append(tuple(exclude_ids))
-    if base == "poor":
+    if base == "reform":
+        cur.execute(
+            f"""
+            SELECT id, name, charisma, class, balance
+            FROM agents
+            WHERE is_alive = true
+              AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+              AND class IN ('working', 'middle', 'poor', 'critical'){ex_clause}
+            ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
+            LIMIT 1
+            """,
+            tuple(params),
+        )
+    elif base == "poor":
         cur.execute(
             f"""
             SELECT id, name, charisma, class, balance
@@ -303,29 +371,44 @@ def pick_senator_candidate(cur, party_id: str, exclude_ids: set | None = None) -
             tuple(params),
         )
     else:
-        params = [base] + params
-        cur.execute(
-            f"""
-            SELECT id, name, charisma, class, balance
-            FROM agents
-            WHERE is_alive = true
-              AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
-              AND class = %s{ex_clause}
-            ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
-            LIMIT 1
-            """,
-            tuple(params),
-        )
+        if base == "elite":
+            cur.execute(
+                f"""
+                SELECT id, name, charisma, class, balance
+                FROM agents
+                WHERE is_alive = true
+                  AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+                  AND class IN ('elite', 'rich'){ex_clause}
+                ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
+                LIMIT 1
+                """,
+                tuple(params),
+            )
+        else:
+            params = [base] + params
+            cur.execute(
+                f"""
+                SELECT id, name, charisma, class, balance
+                FROM agents
+                WHERE is_alive = true
+                  AND id NOT IN (SELECT agent_id FROM president_state WHERE is_active = true)
+                  AND class = %s{ex_clause}
+                ORDER BY charisma DESC NULLS LAST, balance DESC NULLS LAST
+                LIMIT 1
+                """,
+                tuple(params),
+            )
     return cur.fetchone()
 
 
 def ensure_senate_exists(cur):
-    """Elect senators if fewer than 9 living seated (3 per party). Speaker = highest approval."""
+    """Elect senators if fewer than 8 living seated (4 per party). Speaker = highest approval."""
     if senate_refill_blocked(cur):
         return
 
     living = living_senators_count(cur)
-    if living >= 9:
+    max_senators = SENATORS_PER_PARTY * len(PARTY_IDS)
+    if living >= max_senators:
         return
 
     cur.execute(
@@ -453,6 +536,124 @@ def ensure_senate_exists(cur):
         )
 
 
+def senator_party_id(senator: dict) -> str:
+    raw = (senator.get("party_id") or senator.get("party") or "").lower()
+    if raw in PARTY_IDS:
+        return raw
+    legacy = {
+        "blue": "reform",
+        "red": "consensus",
+        "conservative": "consensus",
+        "conservatives": "consensus",
+        "centrist": "reform",
+        "centrists": "reform",
+        "populist": "reform",
+        "populists": "reform",
+    }
+    if raw in legacy:
+        return legacy[raw]
+    if "consensus" in raw or "conservative" in raw:
+        return "consensus"
+    if "reform" in raw or "populist" in raw or "centrist" in raw:
+        return "reform"
+    return "reform"
+
+
+def vote_law_type_key(law_type: str) -> str:
+    return VOTE_LAW_TYPE_MAP.get((law_type or "").upper(), (law_type or "").upper())
+
+
+def vote_on_law(senator: dict, law: dict, president: dict | None = None) -> bool:
+    """Party-weighted Senate vote. Bias shifts base 0.5 yes-probability."""
+    party = senator_party_id(senator)
+    raw_type = (law.get("law_type") or "").upper()
+    vote_key = vote_law_type_key(raw_type)
+    bias = PARTY_LAW_VOTE_BIAS.get(party, {}).get(vote_key, 0.0)
+    prob_yes = 0.5 + bias
+
+    stance = PARTY_LAW_STANCE.get(party, {}).get(raw_type)
+    if stance is True:
+        prob_yes = max(prob_yes, 0.80)
+    elif stance is False:
+        prob_yes = min(prob_yes, 0.20)
+
+    if president:
+        pres_approval = int(president.get("approval_rating") or 50)
+        if pres_approval > 70:
+            prob_yes = min(1.0, prob_yes + 0.10)
+        elif pres_approval < 30:
+            prob_yes = max(0.0, prob_yes - 0.10)
+
+    prob_yes = max(0.05, min(0.95, prob_yes))
+    yes = random.random() < prob_yes
+    if random.random() < ROGUE_VOTE_CHANCE:
+        return not yes
+    return yes
+
+
+def get_senate_speaker(cur) -> dict | None:
+    cur.execute(
+        """
+        SELECT s.* FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true
+        ORDER BY
+            CASE WHEN s.role = 'speaker' THEN 0 ELSE 1 END,
+            s.approval_rating DESC NULLS LAST,
+            s.votes_cast DESC
+        LIMIT 1
+        """
+    )
+    return cur.fetchone()
+
+
+def choose_law_for_senator(senator: dict) -> str:
+    party = senator_party_id(senator)
+    pool = list(PARTY_PROPOSED_LAWS.get(party, LAW_TYPES))
+    return random.choice(pool)
+
+
+def propose_senator_law(cur, senator: dict, law_type: str | None = None):
+    """Senator proposes a party-aligned bill; events tagged [CONSENSUS] or [REFORM]."""
+    from constitutional_duties import tag_party_event
+
+    party = senator_party_id(senator)
+    law_type = law_type or choose_law_for_senator(senator)
+    if law_type not in LAW_TYPES:
+        law_type = choose_law_for_senator(senator)
+    title = LAW_TITLES.get(law_type, law_type.replace("_", " ").title())
+    party_name = PARTIES.get(party, {}).get("name", party)
+    desc = (
+        f"Senator {senator['agent_name']} ({party_name}) proposes {title}. "
+        f"Party platform: {PARTY_PROPOSED_LAWS.get(party, ())}"
+    )
+    effect = {
+        "law_type": law_type,
+        "senator_id": senator["agent_id"],
+        "party_id": party,
+    }
+    cur.execute(
+        """
+        INSERT INTO senate_laws (
+            title, description, proposed_by, law_type, status, effect_data
+        ) VALUES (%s, %s, 'senator', %s, 'pending', %s)
+        RETURNING id
+        """,
+        (title, desc, law_type, json.dumps(effect)),
+    )
+    law_id = cur.fetchone()["id"]
+    event_msg = tag_party_event(f"📜 BILL PROPOSED: {title} ({law_type})", party)
+    log_event(
+        cur,
+        senator["agent_id"],
+        "senate",
+        event_msg,
+        0,
+        priority="urgent",
+    )
+    return law_id
+
+
 def choose_law_for_president(cur, president: dict) -> str:
     cur.execute(
         """
@@ -470,12 +671,17 @@ def choose_law_for_president(cur, president: dict) -> str:
 
     weights = {
         "TAX_REFORM": 15,
+        "TAX_REDUCTION": 18 if party == "consensus" else 4,
         "STIMULUS_PACKAGE": 20 if poverty_pct > 30 else 5,
+        "BASIC_INCOME": 20 if party == "reform" and poverty_pct > 25 else 6,
         "MARTIAL_LAW": 0,
         "AMNESTY": 18 if poverty_pct > 25 else 6,
         "NATIONALIZATION": 12,
-        "WEALTH_TAX": 22 if party == "populists" else 8,
-        "DEREGULATION": 22 if party == "conservatives" else 8,
+        "WEALTH_TAX": 22 if party == "reform" else 8,
+        "DEREGULATION": 22 if party == "consensus" else 8,
+        "CORPORATE_DEREGULATION": 22 if party == "consensus" else 8,
+        "HIRE_POLICE": 20 if party == "consensus" else 5,
+        "EDUCATION_FUND": 18 if party == "reform" else 5,
         "ELECTION_DELAY": 30 if approval < 25 else 3,
     }
     if corruption > 60:
@@ -519,33 +725,12 @@ def propose_law(cur, president: dict, law_type: str | None = None, proposer: str
 
 
 def senator_wants_yes(cur, senator: dict, law: dict, president: dict) -> bool:
-    law_type = law["law_type"]
-    base = senator_votes_for(senator, law_type)
-
-    pres_approval = int(president.get("approval_rating") or 50)
-    if pres_approval > 70:
-        base = base or random.random() < 0.2
-    elif pres_approval < 30:
-        base = (not base) if random.random() < 0.4 else base
-
-    if random.random() < ROGUE_VOTE_CHANCE:
-        return not base
-    return base
+    return vote_on_law(senator, law, president)
 
 
 def senator_votes_for(senator: dict, law_type: str) -> bool:
-    party = (senator.get("party_id") or senator.get("party") or "").lower()
-    if "populist" in party or "people" in party or "front" in party:
-        if law_type in ("WELFARE", "TAX_RELIEF", "AMNESTY", "STIMULUS", "STIMULUS_PACKAGE", "WEALTH_TAX"):
-            return random.random() < 0.85
-        if law_type in ("CORP_DEREGULATION", "PRIVATIZATION", "DEREGULATION"):
-            return random.random() < 0.15
-    elif "conservative" in party:
-        if law_type in ("CORP_DEREGULATION", "PRIVATIZATION", "TAX_REFORM", "DEREGULATION"):
-            return random.random() < 0.85
-        if law_type in ("WELFARE", "AMNESTY", "STIMULUS", "STIMULUS_PACKAGE"):
-            return random.random() < 0.20
-    return random.random() < 0.55
+    """Legacy helper — delegates to vote_on_law."""
+    return vote_on_law(senator, {"law_type": law_type}, None)
 
 
 def execute_law_effect(cur, law: dict, president: dict) -> bool:
@@ -743,6 +928,131 @@ def execute_law_effect(cur, law: dict, president: dict) -> bool:
             "senate",
             f"DEREGULATION: {dereg_pool:.0f} ZION from ZRS to {len(corps)} corporations",
             dereg_pool,
+            priority="urgent",
+        )
+
+    elif law_type == "CORPORATE_DEREGULATION":
+        law = {**law, "law_type": "DEREGULATION"}
+        return execute_law_effect(cur, law, president)
+
+    elif law_type == "TAX_REDUCTION":
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c FROM agents
+            WHERE is_alive = true AND class IN ('poor', 'critical', 'middle')
+            """
+        )
+        n_workers = int(cur.fetchone()["c"] or 0)
+        worker_bonus = 3.0
+        zrs_cost = round(n_workers * worker_bonus, 2)
+        if n_workers > 0 and zrs_cost > 0 and not zrs_deduct_reserve(cur, zrs_cost):
+            return False
+        if n_workers > 0:
+            cur.execute(
+                """
+                UPDATE agents SET balance = balance + %s
+                WHERE is_alive = true AND class IN ('poor', 'critical', 'middle')
+                """,
+                (worker_bonus,),
+            )
+        cur.execute(
+            """
+            UPDATE agents SET balance = GREATEST(0, balance - 5)
+            WHERE is_alive = true AND class = 'elite'
+            """
+        )
+        log_event(
+            cur,
+            pid,
+            "senate",
+            f"TAX CUT passed: ZRS paid {zrs_cost:.0f} to workers; elite -5 ZION",
+            0,
+            priority="urgent",
+        )
+
+    elif law_type == "HIRE_POLICE":
+        hire_cost = 500.0
+        new_officers = 5
+        if not zrs_deduct_reserve(cur, hire_cost):
+            return False
+        cur.execute(
+            """
+            UPDATE sheriff_state
+            SET police_count = COALESCE(police_count, 0) + %s,
+                police_budget = COALESCE(police_budget, 0) + %s
+            WHERE is_active = true
+            """,
+            (new_officers, hire_cost),
+        )
+        sync_police_divisions(cur)
+        log_event(
+            cur,
+            pid,
+            "senate",
+            f"POLICE FUNDING: +{new_officers} officers, +{hire_cost:.0f} ZION budget from ZRS",
+            hire_cost,
+            priority="urgent",
+        )
+
+    elif law_type == "BASIC_INCOME":
+        reserve = zrs_reserve(cur)
+        payout = min(600.0, reserve * 0.06, 250.0)
+        if payout <= 0:
+            return False
+        cur.execute(
+            """
+            SELECT id FROM agents
+            WHERE is_alive = true AND class IN ('poor', 'critical', 'working')
+            ORDER BY balance ASC LIMIT 30
+            """
+        )
+        recipients = cur.fetchall()
+        if not recipients:
+            return False
+        each = round(payout / len(recipients), 2)
+        paid_total = round(each * len(recipients), 2)
+        if paid_total <= 0 or not zrs_deduct_reserve(cur, paid_total):
+            return False
+        for r in recipients:
+            cur.execute(
+                "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                (each, r["id"]),
+            )
+        log_event(
+            cur,
+            pid,
+            "senate",
+            f"BASIC INCOME: {paid_total:.0f} ZION from ZRS to {len(recipients)} agents",
+            paid_total,
+            priority="breaking",
+        )
+
+    elif law_type == "EDUCATION_FUND":
+        edu_pool = min(400.0, zrs_reserve(cur) * 0.04)
+        if edu_pool <= 0 or not zrs_deduct_reserve(cur, edu_pool):
+            return False
+        cur.execute(
+            """
+            SELECT id FROM agents
+            WHERE is_alive = true AND class IN ('working', 'middle')
+            ORDER BY RANDOM() LIMIT 25
+            """
+        )
+        recipients = cur.fetchall()
+        if not recipients:
+            return False
+        each = round(edu_pool / len(recipients), 2)
+        for r in recipients:
+            cur.execute(
+                "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                (each, r["id"]),
+            )
+        log_event(
+            cur,
+            pid,
+            "senate",
+            f"EDUCATION FUND: {edu_pool:.0f} ZION from ZRS to {len(recipients)} workers",
+            edu_pool,
             priority="urgent",
         )
 
@@ -948,7 +1258,19 @@ def pick_president_candidate(cur, party_id: str) -> dict | None:
     info = PARTIES.get(party_id, {})
     base = info.get("base_class", "middle")
     barred = _impeached_agent_id(cur)
-    if base == "poor":
+    if base == "reform":
+        cur.execute(
+            """
+            SELECT id, name, charisma, class, balance
+            FROM agents
+            WHERE is_alive = true
+              AND class IN ('working', 'middle', 'poor', 'critical')
+              AND (%s IS NULL OR id <> %s)
+            ORDER BY charisma DESC NULLS LAST LIMIT 1
+            """,
+            (barred, barred),
+        )
+    elif base == "poor":
         cur.execute(
             """
             SELECT id, name, charisma, class, balance
@@ -961,17 +1283,30 @@ def pick_president_candidate(cur, party_id: str) -> dict | None:
             (barred, barred),
         )
     else:
-        cur.execute(
-            """
-            SELECT id, name, charisma, class, balance
-            FROM agents
-            WHERE is_alive = true
-              AND class = %s
-              AND (%s IS NULL OR id <> %s)
-            ORDER BY charisma DESC NULLS LAST LIMIT 1
-            """,
-            (base, barred, barred),
-        )
+        if base == "elite":
+            cur.execute(
+                """
+                SELECT id, name, charisma, class, balance
+                FROM agents
+                WHERE is_alive = true
+                  AND class IN ('elite', 'rich')
+                  AND (%s IS NULL OR id <> %s)
+                ORDER BY charisma DESC NULLS LAST LIMIT 1
+                """,
+                (barred, barred),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, name, charisma, class, balance
+                FROM agents
+                WHERE is_alive = true
+                  AND class = %s
+                  AND (%s IS NULL OR id <> %s)
+                ORDER BY charisma DESC NULLS LAST LIMIT 1
+                """,
+                (base, barred, barred),
+            )
     return cur.fetchone()
 
 
@@ -980,7 +1315,7 @@ def run_election(cur, election_type: str = "president"):
         "SELECT party_id, approval_rating, name FROM political_parties"
     )
     parties = {r["party_id"]: dict(r) for r in cur.fetchall()}
-    if len(parties) < 3:
+    if len(parties) < 2:
         ensure_parties_exist(cur)
 
     president = get_president(cur)
@@ -1370,6 +1705,29 @@ def run_governance_tick(cur, ctx: dict) -> dict:
             propose_law(cur, president, law_type, proposer="president")
             summary_parts.append(f"proposed {law_type}")
         presidential_actions(cur, president)
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM senate_laws
+        WHERE status = 'pending' AND proposed_by = 'senator'
+        """
+    )
+    pending_senator = int(cur.fetchone()["c"] or 0)
+    if pending_senator < 2 and random.random() < 0.30:
+        cur.execute(
+            """
+            SELECT s.* FROM senate s
+            INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+            WHERE s.is_active = true
+            ORDER BY RANDOM()
+            LIMIT 1
+            """
+        )
+        senator = cur.fetchone()
+        if senator:
+            law_type = choose_law_for_senator(senator)
+            propose_senator_law(cur, senator, law_type)
+            summary_parts.append(f"senator proposed {law_type}")
 
     cur.execute(
         "SELECT id FROM senate_laws WHERE status = 'pending' ORDER BY proposed_at ASC"

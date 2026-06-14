@@ -161,9 +161,8 @@ def run_economic_sims():
 def run_political_sims():
     for i in range(100):
         parties = [
-            {"party_id": "conservatives", "approval_rating": random.randint(20, 80), "members_count": random.randint(100, 5000)},
-            {"party_id": "centrists", "approval_rating": random.randint(20, 80), "members_count": random.randint(100, 5000)},
-            {"party_id": "populists", "approval_rating": random.randint(20, 80), "members_count": random.randint(100, 5000)},
+            {"party_id": "consensus", "approval_rating": random.randint(20, 80), "members_count": random.randint(100, 5000)},
+            {"party_id": "reform", "approval_rating": random.randint(20, 80), "members_count": random.randint(100, 5000)},
         ]
         compute_party_poll_shares(parties)
         total = sum(p["poll_pct"] for p in parties)

@@ -1802,7 +1802,7 @@ def transfer_power(
     )
 
     if new_agent_id and new_agent_name:
-        party = new_party or "centrists"
+        party = new_party or "reform"
         cur.execute(
             """
             INSERT INTO president_state (

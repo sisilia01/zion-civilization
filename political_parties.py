@@ -1,32 +1,25 @@
 #!/usr/bin/env python3
 """
-ZION Political Parties — три партии по классам
-Conservatives (Elite), Centrists (Middle), Populists (Poor)
+ZION Political Parties — две партии по классам
+Consensus (Elite), Reform (Working/Middle/Poor)
 """
 from datetime import datetime
 from civ_common import get_conn, get_cursor, log_event
 
 PARTIES = {
-    "conservatives": {
-        "name": "Conservative Party",
-        "emoji": "🎩",
+    "consensus": {
+        "name": "Consensus Party",
+        "emoji": "🏛️",
         "base_class": "elite",
-        "ideology": "Low taxes, free market, protect capital",
+        "ideology": "Order, tradition, low taxes",
         "color": "gold",
     },
-    "centrists": {
-        "name": "Centrist Alliance", 
-        "emoji": "⚖️",
-        "base_class": "middle",
-        "ideology": "Stability, business growth, balanced taxes",
+    "reform": {
+        "name": "Reform Party",
+        "emoji": "⚡",
+        "base_class": "reform",
+        "ideology": "Progress, equality, social programs",
         "color": "blue",
-    },
-    "populists": {
-        "name": "People's Front",
-        "emoji": "✊",
-        "base_class": "poor",
-        "ideology": "Wealth redistribution, worker rights, free food",
-        "color": "red",
     },
 }
 
@@ -42,7 +35,7 @@ def ensure_parties_schema(cur):
             leader_agent_id INTEGER,
             leader_name TEXT,
             treasury NUMERIC DEFAULT 0,
-            approval_rating INTEGER DEFAULT 33,
+            approval_rating INTEGER DEFAULT 50,
             members_count INTEGER DEFAULT 0,
             wins INTEGER DEFAULT 0,
             losses INTEGER DEFAULT 0,
@@ -80,11 +73,18 @@ def ensure_parties_exist(cur):
         if cur.fetchone():
             continue
         # Найти лидера из соответствующего класса
-        cur.execute("""
-            SELECT id, name FROM agents 
-            WHERE is_alive=true AND class=%s
-            ORDER BY balance DESC, charisma DESC LIMIT 1
-        """, (info["base_class"],))
+        if info["base_class"] == "reform":
+            cur.execute("""
+                SELECT id, name FROM agents 
+                WHERE is_alive=true AND class IN ('working','middle','poor','critical')
+                ORDER BY balance DESC, charisma DESC LIMIT 1
+            """)
+        else:
+            cur.execute("""
+                SELECT id, name FROM agents 
+                WHERE is_alive=true AND class=%s
+                ORDER BY balance DESC, charisma DESC LIMIT 1
+            """, (info["base_class"],))
         leader = cur.fetchone()
         leader_id = leader["id"] if leader else None
         leader_name = leader["name"] if leader else "Unknown"
@@ -92,58 +92,49 @@ def ensure_parties_exist(cur):
         cur.execute("""
             INSERT INTO political_parties 
             (party_id, name, emoji, ideology, base_class, leader_agent_id, leader_name, treasury, approval_rating)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, 33)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 0, 50)
         """, (party_id, info["name"], info["emoji"], info["ideology"], 
               info["base_class"], leader_id, leader_name))
         print(f"  Created party: {info['emoji']} {info['name']} — leader: {leader_name}")
 
 def update_party_members(cur):
-    """Обновляем членство — агенты автоматически в партии своего класса"""
-    for party_id, info in PARTIES.items():
-        base_class = info["base_class"]
-        if base_class == "poor":
-            cur.execute("""
-                SELECT COUNT(*) as c FROM agents
-                WHERE is_alive=true AND class IN ('poor','critical')
-            """)
-        elif party_id == "centrists":
-            cur.execute("""
-                SELECT COUNT(*) as c FROM agents
-                WHERE is_alive=true AND class IN ('working','middle')
-            """)
-        else:
-            cur.execute("""
-                SELECT COUNT(*) as c FROM agents
-                WHERE is_alive=true AND class=%s
-            """, (base_class,))
+    """Обновляем members_count по фактическому полю agents.party."""
+    for party_id in PARTIES:
+        cur.execute(
+            """
+            SELECT COUNT(*) as c FROM agents
+            WHERE is_alive=true AND party=%s
+            """,
+            (party_id,),
+        )
         count = cur.fetchone()["c"]
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE political_parties SET members_count=%s WHERE party_id=%s
-        """, (count, party_id))
+            """,
+            (count, party_id),
+        )
 
 def update_party_approval(cur):
     """Рейтинг партии зависит от благополучия её базы"""
     cur.execute("SELECT COUNT(*) as total FROM agents WHERE is_alive=true")
     total = max(cur.fetchone()["total"], 1)
 
-    # Conservatives — рейтинг от доли элиты и их среднего баланса
-    cur.execute("SELECT COUNT(*) as c, AVG(balance) as avg FROM agents WHERE is_alive=true AND class='elite'")
+    # Consensus — рейтинг от доли элиты/богатых и их среднего баланса
+    cur.execute("SELECT COUNT(*) as c, AVG(balance) as avg FROM agents WHERE is_alive=true AND class IN ('elite','rich')")
     r = cur.fetchone()
     elite_pct = (r["c"] / total) * 100
     elite_approval = min(80, int(30 + elite_pct * 5 + min(r["avg"] or 0, 1000) / 50))
-    cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='conservatives'", (elite_approval,))
+    cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='consensus'", (elite_approval,))
 
-    # Centrists — стабильный средний
-    cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true AND class='middle'")
-    mid_pct = (cur.fetchone()["c"] / total) * 100
-    mid_approval = min(70, int(25 + mid_pct * 0.8))
-    cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='centrists'", (mid_approval,))
-
-    # Populists — чем больше бедных тем выше рейтинг
+    # Reform — чем больше не-элиты, особенно бедных, тем выше рейтинг
+    cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true AND class IN ('working','middle','poor','critical')")
+    reform_count = cur.fetchone()["c"]
+    reform_pct = (reform_count / total) * 100
     cur.execute("SELECT COUNT(*) as c FROM agents WHERE is_alive=true AND class IN ('poor','critical')")
     poor_pct = (cur.fetchone()["c"] / total) * 100
-    pop_approval = min(90, int(10 + poor_pct * 0.7))
-    cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='populists'", (pop_approval,))
+    reform_approval = min(90, int(15 + reform_pct * 0.5 + poor_pct * 0.4))
+    cur.execute("UPDATE political_parties SET approval_rating=%s WHERE party_id='reform'", (reform_approval,))
 
 def compute_party_poll_shares(parties: list) -> None:
     """Normalize party support into poll_pct shares that sum to 100."""

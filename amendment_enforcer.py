@@ -147,6 +147,37 @@ def get_param(key: str, default=None):
         conn.close()
 
 
+def set_param_cur(cur, key: str, value: float) -> float:
+    """Persist a constitutional gameplay parameter within an open transaction."""
+    ensure_schema(cur)
+    clamped = _clamp(key, float(value))
+    cur.execute(
+        """
+        INSERT INTO constitutional_params (param_key, param_value)
+        VALUES (%s, %s)
+        ON CONFLICT (param_key) DO UPDATE SET
+            param_value = EXCLUDED.param_value,
+            updated_at = NOW()
+        """,
+        (key, clamped),
+    )
+    return clamped
+
+
+def adjust_param_cur(cur, key: str, delta: float) -> float:
+    ensure_schema(cur)
+    cur.execute(
+        "SELECT param_value FROM constitutional_params WHERE param_key = %s",
+        (key,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        current = float(DEFAULT_PARAMS.get(key, 0))
+    else:
+        current = float(row["param_value"] if isinstance(row, dict) else row[0])
+    return set_param_cur(cur, key, current + delta)
+
+
 def apply_enacted_amendments() -> list[int]:
     """
     Apply all enacted amendments not yet reflected in constitutional_params.

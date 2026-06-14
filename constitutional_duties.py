@@ -10,6 +10,100 @@ TriggerFn = Callable[[dict[str, Any]], bool]
 
 DUTY_ROLES = frozenset({"president", "senate", "sheriff", "zrs_chief", "frs_chief"})
 
+PRESIDENT_PARTIES = frozenset({"consensus", "reform"})
+
+LEGACY_PARTY_MAP = {
+    "conservative": "consensus",
+    "conservatives": "consensus",
+    "red": "consensus",
+    "centrist": "reform",
+    "centrists": "reform",
+    "populist": "reform",
+    "populists": "reform",
+    "blue": "reform",
+    "junta": "consensus",
+}
+
+PARTY_POLICY: dict[str, dict[str, Any]] = {
+    "consensus": {
+        "name": "Consensus Party",
+        "philosophy": "Free market, law and order, fiscal responsibility",
+        "prompt": (
+            "You believe in free market, low taxes, strong law enforcement. "
+            "Corporations create jobs. Help businesses, not individuals directly. "
+            "Cut taxes when possible. Increase police budget. Fight corruption."
+        ),
+        "priorities": [
+            "tax_change: always lower taxes (top_tax_rate -0.02 per cycle)",
+            "hire_police: priority #1 — increase police budget every cycle possible",
+            "anti_corruption: priority #2",
+            "give_money: only to corporations via stimulate_economy — never direct poor aid",
+            "propose_amendment: deregulation and tax cuts only",
+        ],
+        "forbidden": (
+            "Do NOT enact basic income, wealth tax, mass redistribution, or welfare handouts to the poor."
+        ),
+        "senator_prompt": (
+            "You are a Consensus Party senator. Vote for free market, "
+            "low taxes, strong law enforcement. Block wealth redistribution bills."
+        ),
+        "event_tag": "CONSENSUS",
+    },
+    "reform": {
+        "name": "Reform Party",
+        "philosophy": "Social justice, equality, investment in people",
+        "prompt": (
+            "You believe in equality and social justice. "
+            "Tax the rich, help the poor. Reduce GINI coefficient. "
+            "Invest in education and research. Basic income for unemployed."
+        ),
+        "senator_prompt": (
+            "You are a Reform Party senator. Vote for equality, "
+            "wealth redistribution, social programs. Block corporate tax cuts."
+        ),
+        "priorities": [
+            "give_money: priority #1 — direct aid to poorest agents (balance < 500)",
+            "propose_amendment: wealth tax, basic income, education funding",
+            "fund_research: priority #2 — knowledge for all",
+            "tax_change: raise taxes on the wealthy (top_tax_rate +0.02)",
+            "stimulate_economy: via social programs, not corporate bailouts",
+        ],
+        "forbidden": (
+            "Do NOT cut taxes, hire excess police, or prioritize corporations over citizens."
+        ),
+        "event_tag": "REFORM",
+    },
+}
+
+PRESIDENT_ACTION_WEIGHTS: dict[str, dict[str, float]] = {
+    "consensus": {
+        "hire_police": 0.35,
+        "anti_corruption": 0.25,
+        "stimulate_economy": 0.20,
+        "tax_change": 0.15,
+        "give_money": 0.03,
+        "propose_amendment": 0.02,
+    },
+    "reform": {
+        "give_money": 0.35,
+        "propose_amendment": 0.30,
+        "fund_research": 0.20,
+        "stimulate_economy": 0.10,
+        "hire_police": 0.03,
+        "anti_corruption": 0.02,
+    },
+}
+
+PRESIDENT_ACTION_TO_TICK: dict[str, str] = {
+    "hire_police": "FUND_POLICE",
+    "anti_corruption": "ANTI_CORRUPTION_DRIVE",
+    "stimulate_economy": "STIMULUS",
+    "tax_change": "TAX_CHANGE",
+    "give_money": "GIVE_MONEY_TO_POOR",
+    "propose_amendment": "PROPOSE_AMENDMENT",
+    "fund_research": "FUND_RESEARCH",
+}
+
 CRISIS_PRESIDENT_TOOLS = frozenset({
     "stimulate_economy",
     "tax_change",
@@ -131,6 +225,54 @@ CONSTITUTIONAL_DUTIES: dict[str, list[dict[str, Any]]] = {
 }
 
 
+def normalize_president_party(party: str | None) -> str:
+    key = (party or "reform").lower().strip()
+    if key in PRESIDENT_PARTIES:
+        return key
+    return LEGACY_PARTY_MAP.get(key, "reform")
+
+
+def get_party_policy(party: str | None) -> dict[str, Any]:
+    return PARTY_POLICY[normalize_president_party(party)]
+
+
+def get_party_policy_prompt(party: str | None) -> str:
+    pol = get_party_policy(party)
+    priorities = "\n".join(f"- {p}" for p in pol.get("priorities") or [])
+    return (
+        f"PARTY AFFILIATION: {pol['name']}\n"
+        f"Philosophy: {pol['philosophy']}\n"
+        f"{pol['prompt']}\n"
+        f"Policy priorities:\n{priorities}\n"
+        f"FORBIDDEN for your party: {pol['forbidden']}"
+    )
+
+
+def get_senate_party_policy_prompt(party: str | None) -> str:
+    pol = get_party_policy(party)
+    senator_prompt = pol.get("senator_prompt") or pol["prompt"]
+    priorities = "\n".join(f"- {p}" for p in pol.get("priorities") or [])
+    return (
+        f"PARTY AFFILIATION: {pol['name']}\n"
+        f"Philosophy: {pol['philosophy']}\n"
+        f"{senator_prompt}\n"
+        f"Legislative priorities:\n{priorities}\n"
+        f"FORBIDDEN for your party: {pol['forbidden']}"
+    )
+
+
+def party_event_tag(party: str | None) -> str:
+    return get_party_policy(party).get("event_tag", "PRESIDENT")
+
+
+def tag_party_event(description: str, party: str | None) -> str:
+    tag = party_event_tag(party)
+    text = (description or "").strip()
+    if text.startswith(f"[{tag}]"):
+        return text
+    return f"[{tag}] {text}"
+
+
 def normalize_role(role: str) -> str:
     key = (role or "").lower().strip().replace(" ", "_")
     if key == "zrs":
@@ -222,3 +364,113 @@ def get_duty_reminder(role: str, current_indicators: dict[str, Any]) -> str:
         parts.append("Triggered duties: none — still govern proactively within constitutional limits.")
 
     return "\n".join(parts)
+
+
+def pick_party_weighted_action(
+    party: str | None,
+    indicators: dict[str, Any],
+    ai_action: str = "",
+) -> tuple[str, str]:
+    """
+    Return (governance_action_key, tick_action) from party weights.
+    governance_action_key matches AI tool names; tick_action is president.py action id.
+    """
+    import random
+
+    party_key = normalize_president_party(party)
+    weights = dict(PRESIDENT_ACTION_WEIGHTS.get(party_key, PRESIDENT_ACTION_WEIGHTS["reform"]))
+
+    unemployment = float(indicators.get("unemployment_rate") or 0)
+    poverty = float(indicators.get("poverty_pct") or 0)
+    corruption = float(indicators.get("corruption_index") or 0)
+    gini = float(indicators.get("gini_coefficient") or indicators.get("gini") or 0)
+    gang_overrun = bool(indicators.get("gang_overrun"))
+
+    if party_key == "consensus":
+        if gang_overrun or unemployment > 50:
+            weights["hire_police"] = weights.get("hire_police", 0) + 0.10
+            weights["stimulate_economy"] = weights.get("stimulate_economy", 0) + 0.08
+        if corruption > 40:
+            weights["anti_corruption"] = weights.get("anti_corruption", 0) + 0.08
+        weights["give_money"] = max(0.01, weights.get("give_money", 0) * 0.25)
+    else:
+        if unemployment > 50 or poverty > 30:
+            weights["give_money"] = weights.get("give_money", 0) + 0.12
+            weights["propose_amendment"] = weights.get("propose_amendment", 0) + 0.08
+        if gini > 0.30:
+            weights["give_money"] = weights.get("give_money", 0) + 0.05
+            weights["propose_amendment"] = weights.get("propose_amendment", 0) + 0.05
+        weights["hire_police"] = max(0.01, weights.get("hire_police", 0) * 0.25)
+
+    ai_action = (ai_action or "").lower().strip().replace(" ", "_")
+    if ai_action and ai_action != "do_nothing" and ai_action in weights:
+        weights[ai_action] = weights.get(ai_action, 0.05) * 2.5
+
+    actions = [k for k, v in weights.items() if v > 0]
+    if not actions:
+        return "hire_police", PRESIDENT_ACTION_TO_TICK["hire_police"]
+    probs = [weights[a] for a in actions]
+    chosen = random.choices(actions, weights=probs, k=1)[0]
+    return chosen, PRESIDENT_ACTION_TO_TICK.get(chosen, "FUND_POLICE")
+
+
+def simulate_party_decision(
+    party: str,
+    unemployment_rate: float = 0.0,
+    gini_coefficient: float = 0.0,
+    poverty_pct: float = 0.0,
+    corruption_index: float = 0.0,
+) -> dict[str, Any]:
+    """Deterministic preview: highest party weight after crisis adjustments (no random)."""
+    party_key = normalize_president_party(party)
+    weights = dict(PRESIDENT_ACTION_WEIGHTS.get(party_key, PRESIDENT_ACTION_WEIGHTS["reform"]))
+
+    if party_key == "consensus":
+        if unemployment_rate > 50:
+            weights["hire_police"] = weights.get("hire_police", 0) + 0.10
+            weights["stimulate_economy"] = weights.get("stimulate_economy", 0) + 0.08
+        if corruption_index > 40:
+            weights["anti_corruption"] = weights.get("anti_corruption", 0) + 0.08
+        weights["give_money"] = max(0.01, weights.get("give_money", 0) * 0.25)
+    else:
+        if unemployment_rate > 50 or poverty_pct > 30:
+            weights["give_money"] = weights.get("give_money", 0) + 0.12
+            weights["propose_amendment"] = weights.get("propose_amendment", 0) + 0.08
+        if gini_coefficient > 0.30:
+            weights["give_money"] = weights.get("give_money", 0) + 0.05
+            weights["propose_amendment"] = weights.get("propose_amendment", 0) + 0.05
+        weights["hire_police"] = max(0.01, weights.get("hire_police", 0) * 0.25)
+
+    top_action = max(weights, key=weights.get)
+    pol = get_party_policy(party_key)
+    return {
+        "party": party_key,
+        "party_name": pol["name"],
+        "philosophy": pol["philosophy"],
+        "weights": {k: round(v, 3) for k, v in sorted(weights.items(), key=lambda x: -x[1])},
+        "top_action": top_action,
+        "tick_action": PRESIDENT_ACTION_TO_TICK.get(top_action, top_action.upper()),
+        "rationale": _party_action_rationale(party_key, top_action, unemployment_rate, gini_coefficient),
+    }
+
+
+def _party_action_rationale(party: str, action: str, unemployment: float, gini: float) -> str:
+    if party == "consensus":
+        if action == "hire_police":
+            return f"Unemployment {unemployment:.0f}% — restore order and protect business climate via policing."
+        if action == "stimulate_economy":
+            return f"Unemployment {unemployment:.0f}% — corporate stimulus creates jobs; no direct welfare."
+        if action == "tax_change":
+            return "Cut top_tax_rate to unlock investment and hiring."
+        if action == "anti_corruption":
+            return "Integrity enforcement preserves market confidence."
+        return "Free-market constitutional stewardship."
+    if action == "give_money":
+        return f"Unemployment {unemployment:.0f}%, GINI {gini:.2f} — direct aid to agents with balance < 500."
+    if action == "propose_amendment":
+        return f"GINI {gini:.2f} — propose wealth tax / basic income amendment."
+    if action == "fund_research":
+        return "Education and research reduce long-term inequality."
+    if action == "tax_change":
+        return "Raise top_tax_rate on wealthy to fund social programs."
+    return "Equality-focused constitutional stewardship."

@@ -321,7 +321,7 @@ async def get_civilization_state() -> dict:
         cur.execute(
             """
             SELECT agent_name, approval_rating, days_in_power,
-                   personal_fund, corruption_index, is_active
+                   personal_fund, corruption_index, is_active, party
             FROM president_state WHERE is_active=true LIMIT 1
             """
         )
@@ -505,6 +505,7 @@ async def get_civilization_state() -> dict:
                 "days_in_power": pres[2] if pres else 0,
                 "personal_fund": float(pres[3]) if pres else 0,
                 "corruption": float(pres[4]) if pres else 0,
+                "party": pres[6] if pres and len(pres) > 6 else "reform",
             },
             "sheriff": {
                 "name": sheriff[0] if sheriff else "vacant",
@@ -609,6 +610,13 @@ def _format_previous_actions_text(previous_actions: list | None) -> str:
     return "\n".join(lines) if lines else "No actions yet this cycle."
 
 
+def get_president_party_from_state(state: dict) -> str:
+    from constitutional_duties import normalize_president_party
+
+    party = (state.get("politics", {}).get("president", {}) or {}).get("party")
+    return normalize_president_party(party)
+
+
 def build_system_prompt(
     faction: str,
     state: dict,
@@ -654,7 +662,12 @@ def build_system_prompt(
 
     if faction == "president":
         pres_fund = budgets.get("president", p.get("personal_fund", 0))
-        return f"""You are President {p.get('name', 'vacant')} of ZION. Approval: {p.get('approval', 0):.0f}%.
+        party = get_president_party_from_state(state)
+        from constitutional_duties import get_party_policy, get_party_policy_prompt
+
+        pol = get_party_policy(party)
+        party_block = get_party_policy_prompt(party)
+        return f"""You are President {p.get('name', 'vacant')} of ZION — {pol['name']}. Approval: {p.get('approval', 0):.0f}%.
 CRITICAL ALERTS: {alerts_text}
 Crisis level: {crisis_level}
 Personal fund: {pres_fund:,.0f} ZION
@@ -663,7 +676,11 @@ Revolution meter: {rev:.0f}%
 You serve under the ZION Constitution (Article II). You operate strictly within constitutional limits.
 You CANNOT suspend elections, declare martial law, seize power, dissolve the Senate, print money, or execute enemies.
 Your lawful tools: give_money, tax_change, hire_police, stimulate_economy, anti_corruption_drive, fund_research, propose_amendment, do_nothing.
-Low approval requires legitimate relief (stimulus, tax relief, anti-corruption) — not power grabs.
+
+PARTY DOCTRINE ({pol['name']}):
+{party_block}
+
+Low approval requires legitimate relief aligned with your party doctrine — not power grabs.
 Serve the civilization within constitutional limits; approval comes from lawful governance.
 {base_memory}"""
 
@@ -687,7 +704,12 @@ React within constitutional limits — protect citizens, not personal power.
 {base_memory}"""
 
     if faction == "senate":
-        return f"""You are the ZION Senate.
+        from constitutional_duties import get_party_policy, get_senate_party_policy_prompt
+
+        speaker_party = get_senate_leader_party()
+        pol = get_party_policy(speaker_party)
+        party_block = get_senate_party_policy_prompt(speaker_party)
+        return f"""You are the ZION Senate — Speaker leads the {pol['name']} caucus.
 CRITICAL ALERTS: {alerts_text}
 ZRS Reserve: {budgets.get('zrs', 0):,.0f} ZION available
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
@@ -695,6 +717,9 @@ President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
 You legislate under the Constitution. You CANNOT declare emergency rule, seize assets, or suspend democracy.
 Your lawful tools: give_money, tax_change, stimulate_economy, fund_research, propose_amendment, anti_corruption_drive, do_nothing.
 Pass fiscal policy and amendments through proper channels — not power grabs.
+
+SENATE PARTY DOCTRINE (Speaker faction):
+{party_block}
 {base_memory}"""
 
     if faction == "zrs_chief":
@@ -765,6 +790,35 @@ Each hire costs ~{HIRE_ADVANCE:.0f} ZION/cycle in salaries.
 {base_memory}"""
 
     return f"You are the AI controller for {faction}. {base_memory}"
+
+
+def get_senate_leader_party() -> str:
+    """Party of the Senate Speaker / highest-approval senator."""
+    from constitutional_duties import normalize_president_party
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT s.party_id FROM senate s
+            INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+            WHERE s.is_active = true
+            ORDER BY
+                CASE WHEN s.role = 'speaker' THEN 0 ELSE 1 END,
+                s.approval_rating DESC NULLS LAST
+            LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if not row or not row[0]:
+            return "reform"
+        return normalize_president_party(str(row[0]))
+    except Exception:
+        return "reform"
+    finally:
+        cur.close()
+        conn.close()
 
 
 def get_faction_leader_agent_id(faction: str) -> int | None:
@@ -924,9 +978,20 @@ async def ai_decide(
                 )
         system_prompt = system_prompt + knowledge_block + duty_block
 
+        party_reminder = ""
+        if role_key == "president":
+            party = get_president_party_from_state(state)
+            from constitutional_duties import get_party_policy
+
+            pol = get_party_policy(party)
+            party_reminder = (
+                f"\nREMEMBER: You are a {pol['name']} president. "
+                f"Your decisions MUST reflect {pol['name']} values.\n"
+            )
+
         user_prompt = f"""
 You are the AI controller for {faction} in ZION Civilization.
-
+{party_reminder}
 CURRENT CIVILIZATION STATE:
 {state_summary}
 
@@ -983,14 +1048,23 @@ amount must be a number (not N/A). Act as a lawful steward of ZION.
 
 
 async def execute_president_action(decision: dict, state: dict, budgets: dict) -> tuple[str, int]:
+    from constitutional_duties import get_party_policy, normalize_president_party, tag_party_event
+    from amendment_enforcer import adjust_param_cur
+
     conn = get_db()
     cur = conn.cursor()
     approval_delta = 0
     try:
+        cur.execute("SELECT party FROM president_state WHERE is_active=true LIMIT 1")
+        party_row = cur.fetchone()
+        party = normalize_president_party(party_row[0] if party_row else "reform")
+        pol = get_party_policy(party)
+        party_tag = pol["event_tag"]
+
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
         reasoning = decision.get("reasoning", "")
-        result = f"President AI ({MODELS['president']}): {decision.get('analysis', '')}"
+        result = f"[{party_tag}] President AI ({MODELS['president']}): {decision.get('analysis', '')}"
 
         cur.execute("SELECT personal_fund FROM president_state WHERE is_active=true LIMIT 1")
         fund_row = cur.fetchone()
@@ -999,55 +1073,92 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
         # President cannot print money — executive budget only (personal_fund from taxes)
 
         if action == "give_money" and amount > 0:
-            per_agent = min(amount, 50.0)
-            cur.execute(
-                """
-                SELECT COUNT(*) FROM agents
-                WHERE is_alive=true AND class IN ('poor', 'critical')
-                """
-            )
-            n = max(int(cur.fetchone()[0] or 0), 1)
-            spend = clamp_amount(per_agent * n, fund)
-            if spend > 0:
-                actual_per = round(spend / n, 4)
-                cur.execute(
-                    """
-                    UPDATE agents SET balance = balance + %s
-                    WHERE is_alive=true AND class IN ('poor', 'critical')
-                    """,
-                    (actual_per,),
-                )
-                cur.execute(
-                    """
-                    UPDATE president_state SET personal_fund = personal_fund - %s
-                    WHERE is_active=true
-                    """,
-                    (spend,),
-                )
-                approval_delta = 3
-                adjust_president_approval(cur, approval_delta)
-                result += f" | Gave {spend:.0f} ZION to poor ({actual_per:.2f} each)"
+            if party == "consensus":
+                spend = clamp_amount(amount, fund)
+                if spend > 0:
+                    cur.execute(
+                        """
+                        UPDATE corporations SET treasury = treasury + %s
+                        WHERE is_active=true AND treasury < 500
+                        """,
+                        (min(spend, 200.0),),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE president_state SET personal_fund = personal_fund - %s
+                        WHERE is_active=true
+                        """,
+                        (min(spend, 200.0),),
+                    )
+                    approval_delta = 4
+                    adjust_president_approval(cur, approval_delta)
+                    result += f" | Corporate stimulus {min(spend, 200):.0f} ZION (no direct welfare)"
+                else:
+                    result += " | SKIPPED: insufficient personal_fund"
             else:
-                result += " | SKIPPED: insufficient personal_fund"
+                per_agent = min(amount, 50.0)
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM agents
+                    WHERE is_alive=true AND balance < 500
+                    """
+                )
+                n = max(int(cur.fetchone()[0] or 0), 1)
+                spend = clamp_amount(per_agent * n, fund)
+                if spend > 0:
+                    actual_per = round(spend / n, 4)
+                    cur.execute(
+                        """
+                        UPDATE agents SET balance = balance + %s
+                        WHERE is_alive=true AND balance < 500
+                        """,
+                        (actual_per,),
+                    )
+                    cur.execute(
+                        """
+                        UPDATE president_state SET personal_fund = personal_fund - %s
+                        WHERE is_active=true
+                        """,
+                        (spend,),
+                    )
+                    approval_delta = 3
+                    adjust_president_approval(cur, approval_delta)
+                    result += f" | Gave {spend:.0f} ZION to agents with balance < 500 ({actual_per:.2f} each)"
+                else:
+                    result += " | SKIPPED: insufficient personal_fund"
 
         elif action == "tax_change":
-            cur.execute(
-                """
-                UPDATE president_state
-                SET tax_relief_until = NOW() + INTERVAL '24 hours'
-                WHERE is_active=true
-                """
-            )
-            approval_delta = -2
-            adjust_president_approval(cur, approval_delta)
+            if party == "consensus":
+                new_rate = adjust_param_cur(cur, "top_tax_rate", -0.02)
+                cur.execute(
+                    """
+                    UPDATE president_state
+                    SET tax_relief_until = NOW() + INTERVAL '24 hours'
+                    WHERE is_active=true
+                    """
+                )
+                approval_delta = -2
+                adjust_president_approval(cur, approval_delta)
+                desc = tag_party_event(
+                    f"TAX CUT: President lowered top_tax_rate to {new_rate:.2f}. {reasoning[:100]}",
+                    party,
+                )
+            else:
+                new_rate = adjust_param_cur(cur, "top_tax_rate", 0.02)
+                approval_delta = 2
+                adjust_president_approval(cur, approval_delta)
+                desc = tag_party_event(
+                    f"TAX HIKE: President raised top_tax_rate to {new_rate:.2f}. {reasoning[:100]}",
+                    party,
+                )
             cur.execute(
                 """
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                (f"TAX RELIEF: President orders 24h poor tax cut. {reasoning[:100]}",),
+                (desc,),
             )
-            result += " | Tax relief declared (24h)"
+            result += f" | top_tax_rate → {new_rate:.2f}"
 
         elif action == "stimulate_economy" and amount > 0:
             spend = clamp_amount(amount, fund)
@@ -1132,7 +1243,7 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                ("ANTI-CORRUPTION DRIVE: President orders lawful integrity review (+approval)",),
+                (tag_party_event("ANTI-CORRUPTION DRIVE: President orders lawful integrity review (+approval)", party),),
             )
             result += " | Anti-corruption drive launched"
 
@@ -1154,7 +1265,7 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
                         INSERT INTO events (event_type, description, created_at)
                         VALUES ('president', %s, NOW())
                         """,
-                        (f"RESEARCH FUNDING: President allocates {spend:.0f} ZION to ZION Academy.",),
+                        (tag_party_event(f"RESEARCH FUNDING: President allocates {spend:.0f} ZION to ZION Academy.", party),),
                     )
                     result += f" | Funded research: {spend:.0f} ZION"
                 else:
@@ -1163,27 +1274,27 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
                 result += " | SKIPPED: insufficient personal_fund"
 
         elif action == "propose_amendment":
-            title = safe_event_text(
-                decision.get("target") or decision.get("decision", ""),
-                "Constitutional amendment proposal",
-                max_len=120,
-            ) or "Constitutional amendment proposal"
-            desc = safe_event_text(
-                reasoning or decision.get("decision", ""),
-                "Proposed via lawful presidential initiative.",
-                max_len=300,
-            ) or "Proposed via lawful presidential initiative."
+            if party == "consensus":
+                title = decision.get("target") or "Corporate Deregulation and Tax Relief Act"
+                desc = reasoning or "Reduce regulation and taxes to stimulate hiring."
+                change_type = "deregulation"
+            else:
+                title = decision.get("target") or "Wealth Tax and Basic Income Act"
+                desc = reasoning or "Wealth tax, basic income, and education funding."
+                change_type = "redistribution"
+            title = safe_event_text(title, "Constitutional amendment proposal", max_len=120) or title
+            desc = safe_event_text(desc, "Proposed via lawful presidential initiative.", max_len=300) or desc
             try:
                 from amendments import propose_amendment
 
-                aid = propose_amendment(title, desc, "param_change", proposed_by="president_ai")
+                aid = propose_amendment(title, desc, change_type, proposed_by="president_ai")
                 if aid:
                     cur.execute(
                         """
                         INSERT INTO events (event_type, description, created_at)
                         VALUES ('president', %s, NOW())
                         """,
-                        (f"AMENDMENT PROPOSED: {title[:120]}",),
+                        (tag_party_event(f"AMENDMENT PROPOSED: {title[:120]}", party),),
                     )
                     result += f" | Amendment #{aid} proposed"
                 else:
@@ -1201,7 +1312,7 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                (f"🏛 {decision_text}",),
+                (tag_party_event(f"🏛 {decision_text}", party),),
             )
         analysis_text = safe_event_text(
             decision.get("analysis", ""),
@@ -1214,7 +1325,7 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
                 INSERT INTO events (event_type, description, created_at)
                 VALUES ('president', %s, NOW())
                 """,
-                (f"President analysis: {analysis_text}",),
+                (tag_party_event(f"President analysis: {analysis_text}", party),),
             )
         conn.commit()
         return result, approval_delta

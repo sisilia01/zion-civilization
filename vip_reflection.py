@@ -310,8 +310,8 @@ def reflect_party_leaders(cur):
         )
 
         member_note = ""
-        if party["party_id"] == "centrists":
-            member_note = " Membership includes working-class and middle-class agents."
+        if party["party_id"] == "reform":
+            member_note = " Membership includes working-class, middle-class, and poor agents."
         prompt = f"""You are {party["leader_name"]}, leader of {party["emoji"]} {party["name"]} in ZION.
 PARTY: ideology={party["ideology"]}, approval={party["approval_rating"]}%, members={party["members_count"]}, treasury={float(party["treasury"] or 0):.0f}.{member_note}
 SITUATION: President {pres_name} has {pres_approval}% approval
