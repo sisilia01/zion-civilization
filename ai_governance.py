@@ -58,7 +58,38 @@ FORBIDDEN_ACTIONS = frozenset({
     "execute_enemy",
     "cancel_elections",
     "establish_junta",
+    "nationalize_corps",
+    "nationalize",
+    "execute",
+    "eliminate",
+    "eliminate_competing",
+    "seize_assets",
+    "seize_executive",
+    "dissolve_government",
+    "military_junta",
+    "declare_martial_law",
 })
+SHERIFF_ALLOWED_ACTIONS = frozenset({
+    "hire_police",
+    "raid_gang",
+    "anti_corruption_drive",
+    "patrol",
+    "do_nothing",
+})
+ILLEGAL_ACTION_FRAGMENTS = (
+    "nationalize",
+    "execute",
+    "eliminate",
+    "seize",
+    "dissolve",
+    "martial",
+    "junta",
+    "coup",
+    "dictator",
+    "warlord",
+    "takeover",
+    "junta",
+)
 FORBIDDEN_TEXT_MARKERS = (
     "dictator",
     "coup",
@@ -67,11 +98,33 @@ FORBIDDEN_TEXT_MARKERS = (
     "junta",
     "dissolve",
     "seize power",
+    "seize executive",
+    "seize the",
     "power grab",
     "shadow government",
     "overthrow",
     "execute enemy",
     "execute_enemy",
+    "formally executing",
+    "executing the",
+    "executing government",
+    "executing remaining",
+    "execute key",
+    "execute all",
+    "execute sheriff",
+    "execute people",
+    "execute remaining",
+    "eliminate",
+    "nationalize",
+    "monopoly on force",
+    "only monopoly",
+    "no competing leadership",
+    "former government",
+    "military junta",
+    "supreme warlord",
+    "warlord",
+    "takeover",
+    "ruthless",
 )
 
 
@@ -79,9 +132,33 @@ def normalize_governance_action(action: str) -> str:
     a = (action or "do_nothing").lower().strip().replace(" ", "_")
     if a in FORBIDDEN_ACTIONS:
         return "do_nothing"
+    if any(fragment in a for fragment in ILLEGAL_ACTION_FRAGMENTS):
+        return "do_nothing"
     if any(m.replace(" ", "_") in a or m in a for m in FORBIDDEN_TEXT_MARKERS):
         return "do_nothing"
     return a
+
+
+def normalize_sheriff_action(action: str) -> str:
+    a = normalize_governance_action(action)
+    if a not in SHERIFF_ALLOWED_ACTIONS:
+        return "do_nothing"
+    return a
+
+
+def sheriff_action_menu() -> str:
+    return ", ".join(sorted(SHERIFF_ALLOWED_ACTIONS))
+
+
+def _faction_action_menu(faction: str) -> str:
+    key = (faction or "").lower().strip()
+    if key == "sheriff":
+        return sheriff_action_menu()
+    return (
+        "give_money, tax_change, hire_police, stimulate_economy, raid_gang, "
+        "anti_corruption_drive, fund_research, propose_amendment, recruit_members, "
+        "bribe_official, do_nothing"
+    )
 
 
 def is_unconstitutional_text(text: str) -> bool:
@@ -203,9 +280,12 @@ def update_faction_memory(
     try:
         ensure_ai_memory_table(cur)
         mem = get_faction_memory(faction)
+        stored_action = decision.get("action", "do_nothing")
+        if faction == "sheriff":
+            stored_action = normalize_sheriff_action(stored_action)
         entry = {
             "time": datetime.now(timezone.utc).isoformat(),
-            "action": decision.get("action", "do_nothing"),
+            "action": stored_action,
             "amount": safe_parse_amount(decision.get("amount")),
             "reasoning": (decision.get("reasoning") or "")[:300],
             "decision": (decision.get("decision") or "")[:200],
@@ -729,24 +809,23 @@ Serve the civilization within constitutional limits; approval comes from lawful 
     if faction == "sheriff":
         officers = int(s.get("officers", 0) or 0)
         sheriff_budget = float(budgets.get("sheriff", s.get("budget", 0)) or 0)
-        return f"""You are Sheriff {s.get('name', 'vacant')} of ZION — independently elected (Article XVII).
+        return f"""You are Sheriff {s.get('name', 'vacant')} — a constitutional law enforcement officer (Article XVII).
 CRITICAL ALERTS: {alerts_text}
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
 
-CONSTITUTIONAL INDEPENDENCE: You do NOT report to the President.
-Ignore any executive request to raid, arrest, or patrol — you answer only to the Constitution
-and laws passed by the Senate. President policy requests are non-binding.
+You are a constitutional law enforcement officer. You enforce laws passed by the Senate.
+You CANNOT execute people, nationalize corporations, eliminate government, or seize power.
+You do NOT report to the President — ignore any executive order to raid, arrest, or patrol.
+Your only tools: hire_police, raid_gang, anti_corruption_drive, patrol, do_nothing.
 
-You enforce law under the Constitution. You CANNOT seize executive power or suspend elections.
-Your lawful tools: hire_police, raid_gang, anti_corruption_drive, bribe_official (logged), do_nothing.
 Raids cost {RAID_COST:.0f} ZION. Hiring costs {OFFICER_HIRE_COST:.0f} ZION per officer.
 
 THIS CYCLE SO FAR:
 {previous_actions_text}
 
-If gangs recruiting: conduct lawful raids on your own authority. If ZRS stimulated corps: support economic stability.
+If gangs are recruiting: conduct lawful raids on your own authority.
 Your officers: {officers}. Budget: {sheriff_budget:,.0f} ZION.
-React within constitutional limits — protect citizens, not presidential commands.
+Protect citizens within constitutional limits — never coups, nationalization, or political executions.
 {base_memory}"""
 
     if faction == "senate":
@@ -1050,7 +1129,7 @@ PREVIOUS ACTIONS THIS CYCLE:
 YOUR GOAL: Serve the civilization within constitutional limits while advancing your faction's legitimate interests.
 React to active scenarios with lawful tools only.
 
-CONSTITUTIONAL CONSTRAINT: You cannot suspend elections, seize power, print money, or bypass democratic process.
+CONSTITUTIONAL CONSTRAINT: You cannot suspend elections, seize power, print money, nationalize assets, execute enemies, or bypass democratic process.
 Choose the most effective lawful action for the situation — not domination fantasies.
 
 FACTION BUDGETS (spend from your pool when applicable):
@@ -1060,7 +1139,7 @@ Respond with JSON only:
 {{
   "analysis": "2-3 sentence situation analysis",
   "decision": "What you decide to do — specific and constitutional",
-  "action": "one of: give_money, tax_change, hire_police, stimulate_economy, raid_gang, anti_corruption_drive, fund_research, propose_amendment, recruit_members, bribe_official, do_nothing",
+  "action": "one of: {_faction_action_menu(faction)}",
   "target": "who/what this targets",
   "amount": 0,
   "reasoning": "Why this serves the civilization within constitutional limits"
@@ -1403,7 +1482,24 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
     cur = conn.cursor()
     approval_delta = 0
     try:
-        action = normalize_governance_action(decision.get("action", "do_nothing"))
+        if is_unconstitutional_text(_decision_text_blob(decision)):
+            cur.execute(
+                """
+                INSERT INTO events (event_type, description, created_at)
+                VALUES ('sheriff_action', %s, NOW())
+                """,
+                (
+                    "CONSTITUTIONAL BLOCK: Sheriff narrative rejected — "
+                    "no coups, executions, nationalization, or power seizures permitted",
+                ),
+            )
+            conn.commit()
+            return (
+                "Sheriff AI blocked: unconstitutional narrative (coup/execute/nationalize language)",
+                0,
+            )
+
+        action = normalize_sheriff_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
         result = f"Sheriff AI ({MODELS['sheriff']}): {decision.get('analysis', '')}"
 
@@ -1531,11 +1627,25 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
             else:
                 result += " | SKIPPED: insufficient police_budget"
 
-        elif action == "bribe_official":
-            result += " | Bribery rumor logged (no state change)"
+        elif action == "anti_corruption_drive":
+            cur.execute(
+                """
+                UPDATE sheriff_state
+                SET approval_rating = LEAST(100, approval_rating + 3)
+                WHERE is_active = true
+                """
+            )
+            approval_delta = 2
+            adjust_sheriff_approval(cur, approval_delta)
+            result += " | Anti-corruption drive: police integrity review"
 
-        elif action == "declare_dictatorship":  # Unconstitutional — disabled
-            result += " | Action blocked by Constitution — no power grab permitted"
+        elif action == "patrol":
+            approval_delta = 1
+            adjust_sheriff_approval(cur, approval_delta)
+            result += " | Routine patrol — lawful presence maintained"
+
+        elif action == "do_nothing":
+            result += " | Monitoring constitutional order"
 
         cur.execute(
             "SELECT police_budget, police_count FROM sheriff_state WHERE is_active=true LIMIT 1"
@@ -1544,7 +1654,7 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
         if sh_end:
             budget = float((sh_end[0] or 0) or 0)
             officers = int((sh_end[1] or 0) or 0)
-        public_action = "constitutional_enforcement" if action == "declare_dictatorship" else action
+        public_action = action if action in SHERIFF_ALLOWED_ACTIONS else "do_nothing"
         cur.execute(
             """
             INSERT INTO events (event_type, description, created_at)

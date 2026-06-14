@@ -190,7 +190,7 @@ CONSTITUTIONAL_DUTIES: dict[str, list[dict[str, Any]]] = {
         {
             "duty": "Restore order — hire police and conduct lawful raids when crime is elevated",
             "trigger": _crime_high,
-            "tools": ["hire_police", "raid_gang", "anti_corruption_drive"],
+            "tools": ["hire_police", "raid_gang", "anti_corruption_drive", "patrol"],
         },
         {
             "duty": "Fund police force — officers quitting unpaid",

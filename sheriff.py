@@ -362,7 +362,9 @@ def sheriff_actions(sheriff):
     # Read AI Sheriff decision
     print("Sheriff tick: fetching AI decision...", flush=True)
     ai_decision = get_latest_ai_decision(cur, "sheriff")
-    ai_action = ai_decision.get("action", "")
+    from ai_governance import normalize_sheriff_action
+
+    ai_action = normalize_sheriff_action(ai_decision.get("action", ""))
     force_raid = False
     extra_hire = 0
 
