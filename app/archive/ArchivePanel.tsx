@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
+import { ArchivePeriodFilter } from "./ArchivePeriodFilter";
 
 type ArchiveFile = {
   track: string;
@@ -20,8 +21,6 @@ type ArchiveReport = {
   year_number: number | null;
   walrus_blob_id: string | null;
   walrus_url?: string;
-  zip_download_url?: string;
-  zip_filename: string;
   files: ArchiveFile[];
   created_at: string;
 };
@@ -115,9 +114,6 @@ function ReportColumn({
   notYet?: boolean;
 }) {
   const files = report?.files ?? [];
-  const zipHref = report?.zip_download_url
-    ? `/api/archive/download/zip?report_id=${report.id}`
-    : undefined;
 
   return (
     <GlassCard className={glassCardStyles.glassCard} style={panelShellStyle}>
@@ -162,39 +158,20 @@ function ReportColumn({
           })
         )}
       </div>
-      {zipHref ? (
-        <a
-          href={zipHref}
-          download={report?.zip_filename ?? "zion_archive.zip"}
-          style={{
-            display: "inline-block",
-            background: "rgba(0, 180, 216, 0.15)",
-            border: "1px solid #00b4d8",
-            color: "#00b4d8",
-            padding: "8px 12px",
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: "10px",
-            letterSpacing: "0.08em",
-            textDecoration: "none",
-            marginBottom: "8px",
-          }}
-        >
-          DOWNLOAD ZIP
-        </a>
-      ) : notYet ? (
+      {notYet ? (
         <div style={{ fontSize: "11px", color: "#64748b", fontFamily: '"IBM Plex Mono", monospace' }}>
           NEXT: {formatDate(nextAt)}
         </div>
-      ) : (
+      ) : !report ? (
         <div style={{ fontSize: "11px", color: "#64748b" }}>(not yet)</div>
-      )}
+      ) : null}
       {report?.walrus_url && (
         <a
           href={report.walrus_url}
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            fontSize: "10px",
+            fontSize: "13px",
             color: "#64748b",
             marginTop: "6px",
             fontFamily: '"IBM Plex Mono", monospace',
@@ -215,6 +192,9 @@ export default function ArchivePanel() {
   const [tracks, setTracks] = useState<TrackInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [tracksOpen, setTracksOpen] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const [filteredReports, setFilteredReports] = useState<ArchiveReport[] | null>(null);
+  const [filterLoading, setFilterLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -240,7 +220,25 @@ export default function ArchivePanel() {
     load();
   }, [load]);
 
-  const latest = (type: string) => reports.find((r) => r.report_type === type);
+  useEffect(() => {
+    if (!selectedWeek) {
+      setFilteredReports(null);
+      return;
+    }
+    setFilterLoading(true);
+    fetch(`/api/archive/documents?week=${encodeURIComponent(selectedWeek)}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : { documents: [] }))
+      .then((data) => {
+        setFilteredReports(Array.isArray(data.documents) ? data.documents : []);
+      })
+      .catch(() => setFilteredReports([]))
+      .finally(() => setFilterLoading(false));
+  }, [selectedWeek]);
+
+  const displayReports = filteredReports ?? reports;
+  const latest = (type: string) => displayReports.find((r) => r.report_type === type);
   const totalTracks = tracks.length;
 
   return (
@@ -264,24 +262,36 @@ export default function ArchivePanel() {
       </p>
 
       <GlassCard className={glassCardStyles.glassCard} style={tracksPanelStyle}>
-        <button
-          type="button"
-          onClick={() => setTracksOpen((o) => !o)}
+        <div
           style={{
-            width: "100%",
-            textAlign: "left",
-            background: "transparent",
-            border: "none",
-            color: "#00b4d8",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
             padding: "12px 16px",
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: "11px",
-            letterSpacing: "0.1em",
-            cursor: "pointer",
+            flexWrap: "wrap",
           }}
         >
-          [{tracksOpen ? "▼" : "▶"}] {totalTracks} RESEARCH TRACKS DISCOVERED
-        </button>
+          <button
+            type="button"
+            onClick={() => setTracksOpen((o) => !o)}
+            style={{
+              flex: "1 1 auto",
+              textAlign: "left",
+              background: "transparent",
+              border: "none",
+              color: "#00b4d8",
+              padding: 0,
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: "11px",
+              letterSpacing: "0.1em",
+              cursor: "pointer",
+            }}
+          >
+            [{tracksOpen ? "▼" : "▶"}] {totalTracks} RESEARCH TRACKS DISCOVERED
+          </button>
+          <ArchivePeriodFilter selectedWeek={selectedWeek} onSelectWeek={setSelectedWeek} />
+        </div>
         {tracksOpen && (
           <div style={{ padding: "0 16px 16px" }}>
             <div style={{ marginBottom: "8px" }}>
@@ -298,7 +308,17 @@ export default function ArchivePanel() {
         )}
       </GlassCard>
 
-      {loading && <p style={{ color: "#64748b" }}>Loading archive…</p>}
+      {(loading || filterLoading) && (
+        <p style={{ color: "#64748b" }}>
+          {filterLoading ? "Loading period…" : "Loading archive…"}
+        </p>
+      )}
+
+      {selectedWeek && !filterLoading && filteredReports?.length === 0 && (
+        <p style={{ color: "#64748b", fontFamily: '"IBM Plex Mono", monospace', fontSize: "11px" }}>
+          No documents for selected week.
+        </p>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "16px" }}>
         <ReportColumn title="WEEKLY" report={latest("weekly")} nextAt={schedule.next_weekly_at} />

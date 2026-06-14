@@ -2887,6 +2887,8 @@ async def get_sheriff_actions():
 @app.get("/police/divisions")
 @app.get("/police-divisions")
 async def get_police_divisions():
+    from civ_common import police_role_fields
+
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -2903,12 +2905,16 @@ async def get_police_divisions():
             name = d.get("division_name") or ""
             officers = int(d.get("officers") or 0)
             budget = float(d.get("budget") or 0)
+            role = d.get("role")
+            role_label, role_description = police_role_fields(role)
             out.append({
                 "division": name,
                 "division_name": name,
                 "officers": officers,
                 "budget": budget,
-                "role": d.get("role"),
+                "role": role,
+                "role_label": role_label,
+                "role_description": role_description,
                 "effectiveness": min(100, officers * 4),
                 "depleted": uprising and name in depleted,
                 "mobilized": uprising and name == "RIOT CTRL",

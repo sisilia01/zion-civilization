@@ -5,22 +5,7 @@
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
 import { useZionTab } from "@/components/zion/ZionTabContext";
-
-const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
-  SWAT: "⚔️ COMBAT",
-  "ANTI-TAX": "💰 ENFORCEMENT",
-  "PRES.GUARD": "🛡️ SECURITY",
-  "ANTI-CORR": "⚖️ INVESTIGATION",
-  "RIOT CTRL": "🚨 CROWD CONTROL",
-};
-
-const POLICE_DIVISION_DESCRIPTIONS: Record<string, string> = {
-  SWAT: "Gang raids & tactical response",
-  "ANTI-TAX": "Tax collection & evasion enforcement",
-  "PRES.GUARD": "Presidential protection detail",
-  "ANTI-CORR": "Corruption & fraud investigation",
-  "RIOT CTRL": "Civil unrest & riot suppression",
-};
+import { policeRoleBadge, policeRoleDescription } from "@/lib/police-divisions";
 
 export function Observatory() {
   const {
@@ -157,13 +142,10 @@ export function Observatory() {
                   <div className="labDataCardGrid">
                     {policeDivisions.divisions.map((div) => {
                       const divName = div.division_name || div.division || "UNKNOWN";
-                      const roleBadge = (POLICE_DIVISION_ROLE_BADGES[divName] || "PATROL").replace(/^[^\w]+\s*/, "");
-                      const roleDesc =
-                        POLICE_DIVISION_DESCRIPTIONS[divName] || "Division operations";
+                      const roleBadge = policeRoleBadge(div.role, div.role_label);
+                      const roleDesc = policeRoleDescription(div.role, div.role_description);
                       const dimmed = Boolean(div.depleted);
-                      const mobilized =
-                        Boolean(div.mobilized) ||
-                        (policeDivisions.uprising_active && divName === "RIOT CTRL");
+                      const mobilized = Boolean(div.mobilized);
                       const statusLabel = mobilized
                         ? "MOBILIZED"
                         : dimmed

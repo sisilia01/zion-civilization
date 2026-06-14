@@ -59,6 +59,7 @@ import {
 } from "@/lib/stealth";
 import { encryptStealthMemo } from "@/lib/seal-stealth";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
+import { policeRoleBadge, policeRoleDescription } from "@/lib/police-divisions";
 import {
   Area,
   AreaChart,
@@ -9295,14 +9296,6 @@ function renderArticle(
   );
 }
 
-const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
-  SWAT: "⚔️ COMBAT",
-  "ANTI-TAX": "💰 ENFORCEMENT",
-  "PRES.GUARD": "🛡️ SECURITY",
-  "ANTI-CORR": "⚖️ INVESTIGATION",
-  "RIOT CTRL": "🚨 CROWD CONTROL",
-};
-
 type WireNewsItem = { text: string; type?: string; timestamp?: string };
 
 const WIRE_TICKER_SCROLL_SEC = 150;
@@ -9429,14 +9422,6 @@ function NewsWireTicker({
   );
 }
 
-const POLICE_DIVISION_DESCRIPTIONS: Record<string, string> = {
-  SWAT: "Gang raids & tactical response",
-  "ANTI-TAX": "Tax collection & evasion enforcement",
-  "PRES.GUARD": "Presidential protection detail",
-  "ANTI-CORR": "Corruption & fraud investigation",
-  "RIOT CTRL": "Civil unrest & riot suppression",
-};
-
 type PoliceDivisionCard = {
   division: string;
   division_name: string;
@@ -9444,6 +9429,8 @@ type PoliceDivisionCard = {
   budget: number;
   effectiveness: number;
   role?: string;
+  role_label?: string;
+  role_description?: string;
   depleted?: boolean;
   mobilized?: boolean;
 };
@@ -9460,6 +9447,8 @@ function normalizePoliceDivision(raw: Record<string, unknown>): PoliceDivisionCa
       raw.effectiveness ?? Math.min(100, Math.max(0, officers * 4))
     ),
     role: String(raw.role ?? "patrol"),
+    role_label: String(raw.role_label ?? ""),
+    role_description: String(raw.role_description ?? ""),
     depleted: Boolean(raw.depleted),
     mobilized: Boolean(raw.mobilized),
   };
@@ -15393,13 +15382,10 @@ export default function Home() {
                   <div className="labDataCardGrid">
                     {policeDivisions.divisions.map((div) => {
                       const divName = div.division_name || div.division || "UNKNOWN";
-                      const roleBadge = (POLICE_DIVISION_ROLE_BADGES[divName] || "PATROL").replace(/^[^\w]+\s*/, "");
-                      const roleDesc =
-                        POLICE_DIVISION_DESCRIPTIONS[divName] || "Division operations";
+                      const roleBadge = policeRoleBadge(div.role, div.role_label);
+                      const roleDesc = policeRoleDescription(div.role, div.role_description);
                       const dimmed = Boolean(div.depleted);
-                      const mobilized =
-                        Boolean(div.mobilized) ||
-                        (policeDivisions.uprising_active && divName === "RIOT CTRL");
+                      const mobilized = Boolean(div.mobilized);
                       const statusLabel = mobilized
                         ? "MOBILIZED"
                         : dimmed

@@ -9270,6 +9270,8 @@ type PoliceDivisionCard = {
   budget: number;
   effectiveness: number;
   role?: string;
+  role_label?: string;
+  role_description?: string;
   depleted?: boolean;
   mobilized?: boolean;
 };
@@ -9286,6 +9288,8 @@ function normalizePoliceDivision(raw: Record<string, unknown>): PoliceDivisionCa
       raw.effectiveness ?? Math.min(100, Math.max(0, officers * 4))
     ),
     role: String(raw.role ?? "patrol"),
+    role_label: String(raw.role_label ?? ""),
+    role_description: String(raw.role_description ?? ""),
     depleted: Boolean(raw.depleted),
     mobilized: Boolean(raw.mobilized),
   };
