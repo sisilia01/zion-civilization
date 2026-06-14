@@ -14,6 +14,7 @@ type GlassCardProps = {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  disableTilt?: boolean;
 };
 
 let liquidGLInit: Promise<unknown> | null = null;
@@ -40,11 +41,12 @@ function ensureLiquidGL(): Promise<unknown> {
   return liquidGLInit;
 }
 
-export function GlassCard({ children, className, style }: GlassCardProps) {
+export function GlassCard({ children, className, style, disableTilt = false }: GlassCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const tiltRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
+    if (disableTilt) return;
     const el = ref.current;
     if (!el) return;
 
@@ -61,7 +63,7 @@ export function GlassCard({ children, className, style }: GlassCardProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [disableTilt]);
 
   const applyTilt = useCallback((tiltX: number, tiltY: number, glareAngle: number) => {
     const el = ref.current;
@@ -97,15 +99,15 @@ export function GlassCard({ children, className, style }: GlassCardProps) {
     applyTilt(0, 0, 135);
   }, [applyTilt]);
 
-  const classes = [styles.glassCard, "liquidGL", className].filter(Boolean).join(" ");
+  const classes = [styles.glassCard, disableTilt ? null : "liquidGL", className].filter(Boolean).join(" ");
 
   return (
     <div
       ref={ref}
       className={classes}
       style={style}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
+      onMouseMove={disableTilt ? undefined : handleMouseMove}
+      onMouseLeave={disableTilt ? undefined : handleMouseLeave}
     >
       <div className={styles.cardContent}>{children}</div>
     </div>

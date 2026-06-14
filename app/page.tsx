@@ -34,9 +34,11 @@ import ClassIcon3D from "@/components/ClassIcon3D";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
+import { LiveMetricsBar } from "@/components/LiveMetricsBar";
 import glassCardStyles from "@/components/GlassCard.module.css";
 import { ConstitutionBanner } from "@/components/ConstitutionBanner";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+import { useHeaderStats } from "@/hooks/useHeaderStats";
 import { filterAndDedupeActivityLog, filterGovernanceBranchLog } from "@/lib/governanceActivityLog";
 import { parseWireResponse, type WireNewsItem } from "@/lib/wire-news";
 
@@ -9543,6 +9545,13 @@ const decryptNote = async (
 
 export default function Home() {
   const router = useRouter();
+  const {
+    subjectCount: headerSubjectCount,
+    mortality24h: headerMortality24h,
+    prosperityPct: headerProsperityPct,
+    amendments: headerAmendments,
+    loading: headerStatsLoading,
+  } = useHeaderStats();
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
   const wallets = useWallets();
@@ -14473,36 +14482,20 @@ export default function Home() {
         <div className="zionHeroContent">
           <h1 className="zionHeroTitle">ZION CIVILIZATION</h1>
           <p className="zionHeroSubtitle">
-            An autonomous AI civilization. {heroSubjectCount} subjects. Live on Sui blockchain.
+            An autonomous AI civilization. {headerSubjectCount} subjects. Live on Sui blockchain.
           </p>
           <p className="zionHeroLabel">EXPERIMENT_ID: SUI-2026-001 · STATUS: ACTIVE</p>
         </div>
       </section>
 
       <div className="belowHeroShell">
-        <section className="liveMetricsBar" aria-label="Live experiment metrics">
-          <div className="liveMetric">
-            <span className="liveMetricLabel">ACTIVE SUBJECTS</span>
-            <span className="liveMetricValue">{heroSubjectCount}</span>
-          </div>
-          <span className="liveMetricDivider" />
-          <div className="liveMetric">
-            <span className="liveMetricLabel">MORTALITY 24H</span>
-          <span className="liveMetricValue">
-            {statsLoading ? "···" : stats?.deaths_today?.toLocaleString("en-US") ?? "—"}
-          </span>
-          </div>
-          <span className="liveMetricDivider" />
-          <div className="liveMetric">
-            <span className="liveMetricLabel">PROSPERITY INDEX</span>
-            <span className="liveMetricValue">{heroProsperityPct}</span>
-          </div>
-          <span className="liveMetricDivider" />
-          <div className="liveMetric">
-            <span className="liveMetricLabel">AMENDMENTS</span>
-            <span className="liveMetricValue">35</span>
-          </div>
-        </section>
+        <LiveMetricsBar
+          subjectCount={headerSubjectCount}
+          mortality24h={headerMortality24h}
+          prosperityPct={headerProsperityPct}
+          amendments={headerAmendments}
+          loading={headerStatsLoading}
+        />
 
         <div
           className="dashboard show"

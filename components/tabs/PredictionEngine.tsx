@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 
+import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
 import { useZionTab } from "@/components/zion/ZionTabContext";
@@ -8,6 +9,7 @@ import { useZionTab } from "@/components/zion/ZionTabContext";
 const peGlass = glassCardStyles.glassCardLab;
 
 export function PredictionEngine() {
+  const router = useRouter();
   const {
     GOLD_THRESHOLD,
     SILVER_THRESHOLD,
@@ -36,7 +38,6 @@ export function PredictionEngine() {
     setBetSort,
     setBetTab,
     setBetTimeframe,
-    setDetailMarket,
     setShowVIP,
     setZionBetSelectedMarket,
     showVIP,
@@ -650,7 +651,7 @@ export function PredictionEngine() {
                                     volumeLabel={zionbetMarketVolumeLabel(m.volume, m.id, m.volume_sui)}
                                     endLabel={zionbetEndDateLabel(m.end_date, m.timeframe)}
                                     isZionCard={false}
-                                    onOpen={() => setDetailMarket(m)}
+                                    onOpen={() => router.push(`/prediction-engine/${encodeURIComponent(m.id.replace(/^poly-/, "market-"))}`)}
                                     onBetYes={(e) => { e.stopPropagation(); setBetModal({ market, direction: true, open: true }); }}
                                     onBetNo={(e) => { e.stopPropagation(); setBetModal({ market, direction: false, open: true }); }}
                                   />
@@ -670,7 +671,7 @@ export function PredictionEngine() {
                                       <ZionBetMarketCardItem key={m.id} marketApi={m} yes={yes} betTab="crypto"
                                         volumeLabel={zionbetMarketVolumeLabel(m.volume, m.id, m.volume_sui)}
                                         endLabel={zionbetEndDateLabel(m.end_date, m.timeframe)} isZionCard={false}
-                                        onOpen={() => setDetailMarket(m)}
+                                        onOpen={() => router.push(`/prediction-engine/${encodeURIComponent(m.id.replace(/^poly-/, "market-"))}`)}
                                         onBetYes={(e) => { e.stopPropagation(); setBetModal({ market, direction: true, open: true }); }}
                                         onBetNo={(e) => { e.stopPropagation(); setBetModal({ market, direction: false, open: true }); }}
                                       />
@@ -727,7 +728,7 @@ export function PredictionEngine() {
                                             ? zionMarketOptionButtonLabel(noOpt.label, 100 - yes)
                                             : `NO ${100 - yes}¢`
                                         }
-                                        onOpen={() => setDetailMarket(marketApi)}
+                                        onOpen={() => router.push(`/prediction-engine/${encodeURIComponent(marketApi.id.replace(/^poly-/, "market-"))}`)}
                                         onBetYes={(e) => {
                                           e.stopPropagation();
                                           setBetModal({ market: bet, direction: true, open: true });
@@ -766,7 +767,7 @@ export function PredictionEngine() {
                                   volumeLabel={volumeLabel}
                                   endLabel={endLabel}
                                   isZionCard={isZionCard}
-                                  onOpen={() => setDetailMarket(m)}
+                                        onOpen={() => router.push(`/prediction-engine/${encodeURIComponent(m.id.replace(/^poly-/, "market-"))}`)}
                                   onBetYes={(e) => {
                                     e.stopPropagation();
                                     setBetModal({ market, direction: true, open: true });

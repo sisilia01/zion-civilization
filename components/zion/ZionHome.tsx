@@ -2128,9 +2128,15 @@ function zionbetFormatMarketOpened(iso?: string | null): string | null {
 function ZionBetResolutionRulesCard({
   market,
   sectionTitleStyle,
+  panelStyle,
+  useGlassCard,
+  useDetailInnerPanel,
 }: {
   market: ZionbetApiMarket;
   sectionTitleStyle: CSSProperties;
+  panelStyle?: CSSProperties;
+  useGlassCard?: boolean;
+  useDetailInnerPanel?: boolean;
 }) {
   const [showFullDesc, setShowFullDesc] = useState(false);
 
@@ -2142,8 +2148,8 @@ function ZionBetResolutionRulesCard({
   const resolutionSource = zionbetDisplayResolutionSource(market);
   const openedLabel = zionbetFormatMarketOpened(market.created_at);
 
-  return (
-    <section style={zionbetAeroPanel()}>
+  const content = (
+    <>
       <h2 style={sectionTitleStyle}>RESOLUTION RULES</h2>
       {bodyText ? (
         <div>
@@ -2194,8 +2200,22 @@ function ZionBetResolutionRulesCard({
           {openedLabel}
         </p>
       ) : null}
-    </section>
+    </>
   );
+
+  if (useDetailInnerPanel) {
+    return <section style={zionbetDetailInnerPanel()}>{content}</section>;
+  }
+
+  if (useGlassCard) {
+    return (
+      <GlassCard style={{ padding: "20px" }}>
+        {content}
+      </GlassCard>
+    );
+  }
+
+  return <section style={panelStyle ?? zionbetAeroPanel()}>{content}</section>;
 }
 
 function zionbetEndDateLabel(endDate?: string | null, timeframe?: string): string {
@@ -2484,6 +2504,28 @@ const ZB_VISTA_GLASS: CSSProperties = {
   boxShadow:
     "0 8px 32px rgba(0,0,30,0.5), inset 0 1px 0 rgba(255,255,255,0.1)",
 };
+
+const ZB_DETAIL_BACKDROP: CSSProperties = {
+  background: "rgba(0, 0, 5, 0.7)",
+};
+
+const ZB_DETAIL_MAIN_PANEL: CSSProperties = {
+  background: "#0a0e1a",
+  backdropFilter: "none",
+  WebkitBackdropFilter: "none",
+  border: "1px solid rgba(255, 255, 255, 0.12)",
+  borderRadius: "16px",
+};
+
+function zionbetDetailInnerPanel(extra?: CSSProperties): CSSProperties {
+  return {
+    background: "rgba(255, 255, 255, 0.05)",
+    border: "1px solid rgba(255, 255, 255, 0.06)",
+    borderRadius: "12px",
+    padding: "20px",
+    ...extra,
+  };
+}
 
 function zionbetAeroPanel(extra?: CSSProperties): CSSProperties {
   return { ...ZB_VISTA_GLASS, padding: "20px", ...extra };
@@ -3015,6 +3057,8 @@ function ZionBetMarketDetailOverlay({
   onPositionClosed,
   injectedBuyConfirm,
   onInjectedBuyConfirmConsumed,
+  mode = "modal",
+  onShareLinkCopied,
 }: {
   apiMarket: ZionbetApiMarket;
   walletConnected: boolean;
@@ -3037,7 +3081,10 @@ function ZionBetMarketDetailOverlay({
   onPositionClosed?: (payload: ZionBetToastPayload) => void;
   injectedBuyConfirm?: ZionBetBuyConfirm | null;
   onInjectedBuyConfirmConsumed?: () => void;
+  mode?: "modal" | "page";
+  onShareLinkCopied?: () => void;
 }) {
+  const isPageMode = mode === "page";
   const [buyConfirm, setBuyConfirm] = useState<ZionBetBuyConfirm | null>(null);
   const [sellConfirm, setSellConfirm] = useState<ZionBetSellConfirm | null>(null);
 
@@ -3228,10 +3275,10 @@ function ZionBetMarketDetailOverlay({
       side === "buy"
         ? active
           ? `2px solid ${ZB_POLY_BUY}`
-          : "1px solid rgba(100, 180, 255, 0.15)"
+          : "1px solid rgba(255, 255, 255, 0.15)"
         : active
           ? `2px solid ${ZB_POLY_SELL}`
-          : "1px solid rgba(100, 180, 255, 0.15)",
+          : "1px solid rgba(255, 255, 255, 0.15)",
     background:
       side === "buy"
         ? active
@@ -3260,8 +3307,8 @@ function ZionBetMarketDetailOverlay({
     flex: 1,
     height: "32px",
     borderRadius: "8px",
-    border: active ? `1px solid ${ZB_POLY_BUY}` : "1px solid rgba(100, 180, 255, 0.15)",
-    background: active ? ZB_POLY_BUY_BG : "rgba(10, 30, 60, 0.4)",
+    border: active ? `1px solid ${ZB_POLY_BUY}` : "1px solid rgba(255, 255, 255, 0.15)",
+    background: active ? ZB_POLY_BUY_BG : "rgba(255, 255, 255, 0.04)",
     color: active ? "#ffffff" : ZB_VISTA_TEXT_SEC,
     fontSize: "12px",
     fontWeight: 600,
@@ -3366,10 +3413,10 @@ function ZionBetMarketDetailOverlay({
           mode === "sell"
             ? sellHeld
               ? `2px solid ${ZB_POLY_SELL}`
-              : `1px solid rgba(0,255,136,0.35)`
+              : `1px solid rgba(255, 255, 255, 0.15)`
             : selected
               ? `2px solid ${ZB_POLY_BUY}`
-              : "1px solid rgba(0,255,136,0.35)",
+              : "1px solid rgba(255, 255, 255, 0.15)",
         background:
           mode === "sell"
             ? sellHeld
@@ -3395,10 +3442,10 @@ function ZionBetMarketDetailOverlay({
         mode === "sell"
           ? sellHeld
             ? `2px solid ${ZB_POLY_SELL}`
-            : "1px solid rgba(255,68,68,0.35)"
+            : "1px solid rgba(255, 255, 255, 0.15)"
           : selected
             ? `2px solid ${ZB_POLY_SELL}`
-            : "1px solid rgba(255,68,68,0.35)",
+            : "1px solid rgba(255, 255, 255, 0.15)",
       background:
         mode === "sell"
           ? sellHeld
@@ -3439,26 +3486,39 @@ function ZionBetMarketDetailOverlay({
     transition: "background 0.15s",
   };
 
-  const panelAccentBorder =
-    panelSide === "buy" ? `1px solid rgba(0,255,136,0.25)` : `1px solid rgba(255,68,68,0.25)`;
-  const panelAccentBg =
-    panelSide === "buy" ? "rgba(0,255,136,0.04)" : "rgba(255,68,68,0.04)";
-
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role={isPageMode ? undefined : "dialog"}
+      aria-modal={isPageMode ? undefined : true}
       aria-label={cleanTitle}
       className="zbMarketDetailOverlay"
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        overflowY: "auto",
-        background: ZB_VISTA_BG,
+        ...(isPageMode
+          ? {
+              position: "relative",
+              minHeight: "calc(100vh - 48px)",
+              padding: "16px",
+            }
+          : {
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              overflowY: "auto",
+              padding: "16px",
+              ...ZB_DETAIL_BACKDROP,
+            }),
         fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}
     >
+      <div
+        style={{
+          maxWidth: "1120px",
+          margin: "0 auto",
+          padding: 0,
+          overflow: "hidden",
+          ...ZB_DETAIL_MAIN_PANEL,
+        }}
+      >
       <div
         style={{
           position: "sticky",
@@ -3466,12 +3526,10 @@ function ZionBetMarketDetailOverlay({
           zIndex: 10001,
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
           padding: "14px 20px",
-          background: "rgba(10, 30, 60, 0.45)",
-          backdropFilter: "blur(30px)",
-          WebkitBackdropFilter: "blur(30px)",
-          borderBottom: "1px solid rgba(100, 180, 255, 0.15)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
         <button
@@ -3488,8 +3546,6 @@ function ZionBetMarketDetailOverlay({
             border: "1px solid rgba(255,255,255,0.15)",
             padding: "6px 14px",
             borderRadius: "8px",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
             transition: "background 0.15s, border-color 0.15s",
           }}
           onMouseEnter={(e) => {
@@ -3501,8 +3557,41 @@ function ZionBetMarketDetailOverlay({
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
           }}
         >
-          ← Back
+          {isPageMode ? "← BACK TO MARKETS" : "← Back"}
         </button>
+        {isPageMode ? (
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(window.location.href).then(() => {
+                onShareLinkCopied?.();
+              });
+            }}
+            style={{
+              cursor: "pointer",
+              color: "#ffffff",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              padding: "6px 14px",
+              borderRadius: "8px",
+              transition: "background 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.12)";
+              e.currentTarget.style.borderColor = "rgba(100, 180, 255, 0.35)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+            }}
+          >
+            🔗 SHARE
+          </button>
+        ) : null}
       </div>
 
       <div
@@ -3526,8 +3615,6 @@ function ZionBetMarketDetailOverlay({
               background: "rgba(0, 120, 255, 0.3)",
               border: "1px solid rgba(100, 180, 255, 0.4)",
               color: "rgba(150, 210, 255, 1)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
             }}
           >
             {categoryLabel}
@@ -3565,7 +3652,7 @@ function ZionBetMarketDetailOverlay({
         <div className="zbMarketDetailGrid">
           <div className="zbMarketDetailMain">
             {/* 2. Probability bar */}
-            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+            <section style={{ ...zionbetDetailInnerPanel(), marginBottom: "16px" }}>
               <div
                 style={{
                   display: "flex",
@@ -3610,15 +3697,13 @@ function ZionBetMarketDetailOverlay({
             </section>
 
             {/* 3. Price history chart */}
-            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+            <section style={{ ...zionbetDetailInnerPanel(), marginBottom: "16px" }}>
               <h2 style={aeroSectionTitle}>PRICE HISTORY</h2>
               <div
                 style={{
+                  ...zionbetDetailInnerPanel(),
                   height: 220,
                   width: "100%",
-                  borderRadius: "12px",
-                  background: "rgba(10, 30, 60, 0.5)",
-                  border: "1px solid rgba(100, 180, 255, 0.12)",
                   padding: "8px 4px 4px",
                   boxSizing: "border-box",
                 }}
@@ -3653,8 +3738,9 @@ function ZionBetMarketDetailOverlay({
                     />
                     <Tooltip
                       contentStyle={{
-                        ...ZB_VISTA_GLASS,
+                        background: "rgba(10, 14, 26, 0.92)",
                         border: "1px solid rgba(100, 180, 255, 0.25)",
+                        borderRadius: "12px",
                         fontSize: 12,
                         color: "#fff",
                       }}
@@ -3679,7 +3765,7 @@ function ZionBetMarketDetailOverlay({
             </section>
 
             {/* 5. Market stats (main column on mobile follows chart; desktop stats also in sidebar duplicate removed - only here) */}
-            <section style={{ ...zionbetAeroPanel(), marginBottom: "16px" }}>
+            <section style={{ ...zionbetDetailInnerPanel(), marginBottom: "16px" }}>
               <h2 style={aeroSectionTitle}>MARKET STATS</h2>
               <div style={{ display: "grid", gap: 0 }}>
                 {[
@@ -3710,18 +3796,21 @@ function ZionBetMarketDetailOverlay({
               </div>
             </section>
 
-            <ZionBetResolutionRulesCard market={detailApiMarket} sectionTitleStyle={aeroSectionTitle} />
+            <ZionBetResolutionRulesCard
+              market={detailApiMarket}
+              sectionTitleStyle={aeroSectionTitle}
+              useDetailInnerPanel
+            />
           </div>
 
           {/* 4. Bet panel */}
           <aside className="zbMarketDetailSidebar">
-            <div
+            <section
               style={{
-                ...zionbetAeroPanel(),
+                ...zionbetDetailInnerPanel(),
                 position: "sticky",
                 top: "72px",
-                border: panelAccentBorder,
-                background: `linear-gradient(180deg, ${panelAccentBg} 0%, rgba(10, 30, 60, 0.5) 100%)`,
+                borderLeft: panelSide === "buy" ? "3px solid rgba(0,255,136,0.45)" : "3px solid rgba(255,68,68,0.45)",
               }}
             >
               <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -3760,6 +3849,7 @@ function ZionBetMarketDetailOverlay({
                     </button>
                   </div>
                   <div ref={currencyMenuRef} style={{ marginBottom: "12px", position: "relative" }}>
+                <div style={{ ...zionbetDetailInnerPanel(), padding: 0 }}>
                 <button
                   type="button"
                   onClick={() => setCurrencyMenuOpen((open) => !open)}
@@ -3772,8 +3862,8 @@ function ZionBetMarketDetailOverlay({
                     gap: "8px",
                     padding: "0 12px",
                     borderRadius: "10px",
-                    border: "1px solid rgba(100, 180, 255, 0.3)",
-                    background: "rgba(10, 30, 60, 0.6)",
+                    border: "none",
+                    background: "transparent",
                     color: "#ffffff",
                     fontSize: "13px",
                     fontWeight: 600,
@@ -3792,18 +3882,17 @@ function ZionBetMarketDetailOverlay({
                   </span>
                   <span style={{ color: ZB_VISTA_TEXT_SEC, fontSize: "11px" }}>▼</span>
                 </button>
+                </div>
                 {currencyMenuOpen ? (
                   <div
                     style={{
+                      ...zionbetDetailInnerPanel(),
                       position: "absolute",
                       top: "calc(100% + 6px)",
                       left: 0,
                       right: 0,
                       zIndex: 10002,
-                      borderRadius: "10px",
-                      border: "1px solid rgba(100, 180, 255, 0.35)",
-                      background: "rgba(10, 30, 60, 0.95)",
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                      padding: 0,
                       overflow: "hidden",
                     }}
                   >
@@ -3996,9 +4085,9 @@ function ZionBetMarketDetailOverlay({
                 style={{
                   width: "100%",
                   height: "48px",
-                  border: "none",
                   borderRadius: "12px",
                   background: `linear-gradient(135deg, ${ZB_POLY_BUY}, #00aa66)`,
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
                   color: "#042a1f",
                   fontSize: "1rem",
                   fontWeight: 700,
@@ -4020,20 +4109,11 @@ function ZionBetMarketDetailOverlay({
               </AnimatePresence>
                 </>
               ) : !userPosition ? (
-                <div
-                  style={{
-                    padding: "32px 16px",
-                    textAlign: "center",
-                    borderRadius: "12px",
-                    background: "rgba(0,0,0,0.25)",
-                    border: "1px solid rgba(100,180,255,0.12)",
-                    opacity: 0.55,
-                  }}
-                >
+                <section style={{ ...zionbetDetailInnerPanel(), padding: "32px 16px", textAlign: "center", opacity: 0.85 }}>
                   <p style={{ margin: 0, color: ZB_VISTA_TEXT_SEC, fontSize: "14px", lineHeight: 1.5 }}>
                     You don&apos;t have a position in this market
                   </p>
-                </div>
+                </section>
               ) : (
                 <>
                   <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
@@ -4148,9 +4228,9 @@ function ZionBetMarketDetailOverlay({
                     style={{
                       width: "100%",
                       height: "48px",
-                      border: "none",
                       borderRadius: "12px",
                       background: `linear-gradient(135deg, ${ZB_POLY_SELL}, #cc2222)`,
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
                       color: "#ffffff",
                       fontSize: "1rem",
                       fontWeight: 700,
@@ -4185,9 +4265,10 @@ function ZionBetMarketDetailOverlay({
                   ? `Wallet: ${walletBalanceSui.toFixed(2)} SUI · ${walletBalanceUsdc.toFixed(2)} USDC`
                   : "Connect wallet to trade"}
               </p>
-            </div>
+            </section>
           </aside>
         </div>
+      </div>
       </div>
 
       <style>{`
@@ -9391,7 +9472,15 @@ const decryptNote = async (
   }
 };
 
-export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; standalone?: boolean }) {
+export function ZionHome({
+  activeTab,
+  standalone = false,
+  standaloneMarketId,
+}: {
+  activeTab: TabId;
+  standalone?: boolean;
+  standaloneMarketId?: string;
+}) {
   const router = useRouter();
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
@@ -9741,6 +9830,9 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
     open: boolean;
   } | null>(null);
   const [detailMarket, setDetailMarket] = useState<ZionbetApiMarket | null>(null);
+  const [standaloneMarket, setStandaloneMarket] = useState<ZionbetApiMarket | null>(null);
+  const [standaloneMarketLoading, setStandaloneMarketLoading] = useState(Boolean(standaloneMarketId));
+  const [standaloneMarketError, setStandaloneMarketError] = useState<string | null>(null);
   const [injectedBuyConfirm, setInjectedBuyConfirm] = useState<ZionBetBuyConfirm | null>(null);
   const clearInjectedBuyConfirm = useCallback(() => setInjectedBuyConfirm(null), []);
   const [detailOverlayMounted, setDetailOverlayMounted] = useState(false);
@@ -10757,6 +10849,54 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
       }
     }
   }, [polyByTab, detailMarket?.id, detailMarket?.description, detailMarket?.resolution_criteria]);
+
+  useEffect(() => {
+    if (!standaloneMarketId) {
+      setStandaloneMarket(null);
+      setStandaloneMarketLoading(false);
+      setStandaloneMarketError(null);
+      return;
+    }
+    let cancelled = false;
+    setStandaloneMarketLoading(true);
+    setStandaloneMarketError(null);
+
+    const fromLists = [
+      ...Object.values(polyByTab).flat(),
+      ...zionbetMarkets.crypto,
+      ...zionbetMarkets.sports,
+      ...zionbetMarkets.civilization,
+    ].find((m) => m.id === standaloneMarketId);
+
+    if (fromLists && !cancelled) {
+      setStandaloneMarket(fromLists);
+    }
+
+    fetch(`/api/zionbet/market/${encodeURIComponent(standaloneMarketId)}`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("not_found");
+        return r.json() as Promise<Record<string, unknown>>;
+      })
+      .then((row) => {
+        if (cancelled) return;
+        setStandaloneMarket(zionbetPolyRowToApiMarket(row));
+        setStandaloneMarketError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (!fromLists) {
+          setStandaloneMarketError("Market not found");
+          setStandaloneMarket(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStandaloneMarketLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [standaloneMarketId, polyByTab, zionbetMarkets]);
 
   const zionbetTabCounts = useMemo(
     () => ({
@@ -14952,11 +15092,81 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
         <>
           <BackgroundGrid />
           <div className="belowHeroShell prediction-engine-shell">
-            <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
-              <div className="tabPanels">
-                <PredictionEngine />
+            {standaloneMarketId ? (
+              <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
+                {zionBetNotify ? (
+                  <GlassCard
+                    className={glassCardStyles.glassCardLab}
+                    style={{ marginBottom: 18, padding: "12px 14px" }}
+                  >
+                    <div
+                      className={`zionBetToast zionBetToast--${zionBetNotify.type}`}
+                      role="status"
+                      style={{ margin: 0, padding: 0, border: "none", background: "transparent", boxShadow: "none" }}
+                    >
+                      {zionBetNotify.message}
+                    </div>
+                  </GlassCard>
+                ) : null}
+                {standaloneMarketLoading && !standaloneMarket ? (
+                  <div style={{ color: "#94a3b8", padding: "24px", textAlign: "center" }}>Loading market…</div>
+                ) : standaloneMarketError || !standaloneMarket ? (
+                  <GlassCard className={glassCardStyles.glassCardLab} style={{ padding: "24px", textAlign: "center" }}>
+                    <p style={{ color: "#94a3b8", margin: "0 0 16px" }}>
+                      {standaloneMarketError ?? "Market not found"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/prediction-engine")}
+                      style={{
+                        cursor: "pointer",
+                        color: "#ffffff",
+                        fontSize: "14px",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        padding: "8px 16px",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      ← BACK TO MARKETS
+                    </button>
+                  </GlassCard>
+                ) : (
+                  <ZionBetMarketDetailOverlay
+                    mode="page"
+                    apiMarket={standaloneMarket}
+                    walletConnected={Boolean(walletAddress.trim())}
+                    walletAddress={walletAddress}
+                    walletBalanceSui={suiBalance}
+                    walletBalanceUsdc={usdcBalance}
+                    myBets={myBets}
+                    betAmount={betAmount}
+                    setBetAmount={setBetAmount}
+                    betCurrency={betCurrency}
+                    setBetCurrency={setBetCurrency}
+                    betLoading={betLoading}
+                    onPlaceBet={(market, direction, amount) => {
+                      setBetAmount(String(Math.round(amount * 100) / 100));
+                      return handlePlaceCardBet(market, direction, amount);
+                    }}
+                    onClose={() => router.push("/prediction-engine")}
+                    signAndExecute={signAndExecute as SignAndExecuteMutateFn}
+                    onPositionClosed={handlePositionClosed}
+                    injectedBuyConfirm={injectedBuyConfirm}
+                    onInjectedBuyConfirmConsumed={clearInjectedBuyConfirm}
+                    onShareLinkCopied={() =>
+                      setZionBetNotify({ message: "Link copied!", type: "success" })
+                    }
+                  />
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
+                <div className="tabPanels">
+                  <PredictionEngine />
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -14964,10 +15174,6 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
         isMobile={isMobile}
         experimentRunTime={experimentRunTime}
         renderAuthToolbar={renderAuthToolbar}
-        heroSubjectCount={heroSubjectCount}
-        heroProsperityPct={heroProsperityPct}
-        statsLoading={statsLoading}
-        deathsToday={stats?.deaths_today}
       >
 
           {activeTab === "civilization" && <Observatory />}
@@ -19743,22 +19949,11 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
               onClose={() => setShowMyBetsOverlay(false)}
               onOpenMarket={(m) => {
                 setShowMyBetsOverlay(false);
-                setDetailMarket(m);
+                router.push(`/prediction-engine/${encodeURIComponent(m.id.replace(/^poly-/, "market-"))}`);
               }}
               onOpenMarketId={(marketId) => {
                 setShowMyBetsOverlay(false);
-                const fromLists = [
-                  ...Object.values(polyByTab).flat(),
-                  ...zionbetMarkets.crypto,
-                  ...zionbetMarkets.sports,
-                  ...zionbetMarkets.civilization,
-                ].find((m) => m.id === marketId);
-                const fromBet = myBets.find((b) => b.market_id === marketId);
-                if (fromLists) {
-                  setDetailMarket(fromLists);
-                } else if (fromBet) {
-                  setDetailMarket(zionbetMarketFromBet(fromBet, polyByTab, zionbetMarkets));
-                }
+                router.push(`/prediction-engine/${encodeURIComponent(marketId.replace(/^poly-/, "market-"))}`);
               }}
               onPositionClosed={handlePositionClosed}
             />,
@@ -19814,29 +20009,27 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.85)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 1000,
+            ...ZB_DETAIL_BACKDROP,
           }}
           onClick={() => setBetModal(null)}
         >
-          <div
-            style={{
-              background: "#0a0a0a",
-              border: "1px solid #00ff4144",
-              borderRadius: "12px",
-              padding: "28px",
-              width: "400px",
-              maxWidth: "90vw",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{
+                padding: "28px",
+                width: "400px",
+                maxWidth: "90vw",
+                ...ZB_DETAIL_MAIN_PANEL,
+              }}
+            >
             <div style={{ marginBottom: "16px" }}>
               <div
                 style={{
-                  color: "#555",
+                  color: "#94a3b8",
                   fontFamily: "monospace",
                   fontSize: "0.7rem",
                   marginBottom: "4px",
@@ -19844,7 +20037,7 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
               >
                 {betModal.market.token} · {betModal.market.timeframe}
               </div>
-              <div style={{ color: "#fff", fontFamily: "monospace", fontSize: "0.95rem", lineHeight: "1.4" }}>
+              <div style={{ color: "#f1f5f9", fontFamily: "monospace", fontSize: "0.95rem", lineHeight: "1.4" }}>
                 {betModal.market.question}
               </div>
             </div>
@@ -19859,7 +20052,7 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
                 fontWeight: "bold",
                 background: betModal.direction ? "rgba(0,255,65,0.15)" : "rgba(255,65,65,0.15)",
                 color: betModal.direction ? "#00ff41" : "#ff4141",
-                border: `1px solid ${betModal.direction ? "#00ff4144" : "#ff414144"}`,
+                border: "1px solid rgba(255, 255, 255, 0.15)",
                 fontSize: "0.9rem",
               }}
             >
@@ -19884,9 +20077,9 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
                     fontFamily: "monospace",
                     fontSize: "0.8rem",
                     fontWeight: "bold",
-                    background: betCurrency === c ? "rgba(0,255,65,0.15)" : "transparent",
-                    border: `1px solid ${betCurrency === c ? "#00ff41" : "#333"}`,
-                    color: betCurrency === c ? "#00ff41" : "#555",
+                    background: betCurrency === c ? "rgba(0,255,65,0.15)" : "rgba(255, 255, 255, 0.04)",
+                    border: betCurrency === c ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid rgba(255, 255, 255, 0.08)",
+                    color: betCurrency === c ? "#00ff41" : "#94a3b8",
                   }}
                 >
                   {c}
@@ -19896,7 +20089,7 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
 
             <div style={{ marginBottom: "16px" }}>
               <div
-                style={{ color: "#555", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "6px" }}
+                style={{ color: "#94a3b8", fontFamily: "monospace", fontSize: "0.7rem", marginBottom: "6px" }}
               >
                 Amount ({betCurrency})
               </div>
@@ -19910,9 +20103,9 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: "6px",
-                  background: "#111",
-                  border: "1px solid #333",
-                  color: "#fff",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  color: "#f1f5f9",
                   fontFamily: "monospace",
                   fontSize: "1rem",
                   boxSizing: "border-box",
@@ -19927,34 +20120,32 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
               const amt = parseFloat(betAmount || "0");
               const payout = oddsCents > 0 ? amt * (100 / oddsCents) : 0;
               return (
-                <div
-                  style={{
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid #222",
-                    borderRadius: "6px",
-                    padding: "12px",
-                    marginBottom: "20px",
-                    fontFamily: "monospace",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <span style={{ color: "#555" }}>Odds</span>
-                    <span style={{ color: "#fff" }}>{oddsCents}¢</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <span style={{ color: "#555" }}>Potential payout</span>
-                    <span style={{ color: "#00ff41" }}>
-                      {payout.toFixed(3)} {betCurrency}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "#555" }}>Profit</span>
-                    <span style={{ color: "#00d4ff" }}>
-                      +{(payout - amt).toFixed(3)} {betCurrency}
-                    </span>
-                  </div>
-                </div>
+            <div
+              style={{
+                ...zionbetDetailInnerPanel(),
+                padding: "12px",
+                marginBottom: "20px",
+                fontFamily: "monospace",
+                fontSize: "0.8rem",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span style={{ color: "#94a3b8" }}>Odds</span>
+                <span style={{ color: "#f1f5f9" }}>{oddsCents}¢</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                <span style={{ color: "#94a3b8" }}>Potential payout</span>
+                <span style={{ color: "#00ff41" }}>
+                  {payout.toFixed(3)} {betCurrency}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94a3b8" }}>Profit</span>
+                <span style={{ color: "#00d4ff" }}>
+                  +{(payout - amt).toFixed(3)} {betCurrency}
+                </span>
+              </div>
+            </div>
               );
             })()}
 
@@ -19976,7 +20167,7 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
                 fontWeight: "bold",
                 opacity: betLoading || !account?.address ? 0.5 : 1,
                 background: betModal.direction ? "rgba(0,255,65,0.2)" : "rgba(255,65,65,0.2)",
-                border: `1px solid ${betModal.direction ? "#00ff41" : "#ff4141"}`,
+                border: "1px solid rgba(255, 255, 255, 0.15)",
                 color: betModal.direction ? "#00ff41" : "#ff4141",
               }}
             >
@@ -19998,6 +20189,7 @@ export function ZionHome({ activeTab, standalone = false }: { activeTab: TabId; 
                 Connect wallet to place bets
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
