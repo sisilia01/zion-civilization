@@ -11,7 +11,7 @@ const GLOBAL_BG_PARTICLES = {
   background: { color: "transparent" },
   fpsLimit: 60,
   particles: {
-    number: { value: 60 },
+    number: { value: 120 },
     color: {
       value: { h: 152, s: 100, l: 50 },
       animation: { h: { enable: true, speed: 8, sync: true } },
@@ -22,10 +22,20 @@ const GLOBAL_BG_PARTICLES = {
         value: { h: 152, s: 100, l: 50 },
         animation: { h: { enable: true, speed: 8, sync: true } },
       } as any,
-      distance: 150,
+      distance: 120,
       opacity: 0.15,
+      triangles: {
+        enable: true,
+        opacity: 0.05,
+      },
     },
-    move: { enable: true, speed: 0.4, random: true },
+    move: {
+      enable: true,
+      speed: 0.6,
+      random: true,
+      direction: "none",
+      outModes: { default: "bounce" },
+    },
     size: { value: 2 },
     opacity: { value: 0.4 },
   },

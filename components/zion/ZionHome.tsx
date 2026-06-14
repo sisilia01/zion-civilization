@@ -38,7 +38,6 @@ import { FieldNotes } from "@/components/tabs/FieldNotes";
 import { PredictionEngine } from "@/components/tabs/PredictionEngine";
 import { Privacy } from "@/components/tabs/Privacy";
 import { Press } from "@/components/tabs/Press";
-import { Governance } from "@/components/tabs/Governance";
 import { Lab } from "@/components/tabs/Lab";
 import { Archive } from "@/components/tabs/Archive";
 import { Constitution } from "@/components/tabs/Constitution";
@@ -46,6 +45,10 @@ import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+import {
+  filterAndDedupeActivityLog,
+  filterGovernanceBranchLog,
+} from "@/lib/governanceActivityLog";
 
 const ParticleField = dynamic(
   () => import("@/components/ParticleField").then((m) => m.ParticleField),
@@ -173,30 +176,28 @@ const PARTY_DISPLAY: Record<
   string,
   { label: string; emoji: string; color: string; background: string }
 > = {
-  conservatives: {
-    label: "Conservative Party",
-    emoji: "🎩",
-    color: "#ffd700",
-    background: "rgba(255,215,0,0.08)",
+  consensus: {
+    label: "Consensus Party",
+    emoji: "🏛️",
+    color: "#ef4444",
+    background: "rgba(239, 68, 68, 0.12)",
   },
-  centrists: {
-    label: "Centrist Alliance",
-    emoji: "⚖️",
-    color: "#4DA2FF",
-    background: "rgba(77,162,255,0.08)",
-  },
-  populists: {
-    label: "People's Front",
-    emoji: "✊",
-    color: "#ff6464",
-    background: "rgba(255,50,50,0.08)",
+  reform: {
+    label: "Reform Party",
+    emoji: "⚡",
+    color: "#3b82f6",
+    background: "rgba(59, 130, 246, 0.12)",
   },
 };
 
 function presidentPartyDisplay(partyId: string | undefined) {
-  const key = (partyId || "centrists").toLowerCase();
-  if (key === "blue") return PARTY_DISPLAY.centrists;
-  if (key === "red") return PARTY_DISPLAY.populists;
+  const key = (partyId || "reform").toLowerCase();
+  if (key === "blue" || key === "centrist" || key === "centrists" || key === "populist" || key === "populists") {
+    return PARTY_DISPLAY.reform;
+  }
+  if (key === "red" || key === "conservative" || key === "conservatives") {
+    return PARTY_DISPLAY.consensus;
+  }
   return (
     PARTY_DISPLAY[key] ?? {
       label: partyId || "Unknown",
@@ -209,14 +210,15 @@ function presidentPartyDisplay(partyId: string | undefined) {
 
 const getPartyColor = (party: string) => {
   const p = party?.toLowerCase() || "";
-  if (p.includes("populist") || p.includes("people") || p.includes("front")) return "#ff5050";
-  if (p.includes("conservative")) return "#ffc832";
-  if (p.includes("centrist")) return "#4488ff";
+  if (p === "consensus" || p.includes("consensus") || p.includes("conservative")) return "#ef4444";
+  if (p === "reform" || p.includes("reform") || p.includes("populist") || p.includes("people") || p.includes("front") || p.includes("centrist")) {
+    return "#3b82f6";
+  }
   return "rgba(255,255,255,0.4)";
 };
 
 function renderPoliticalWireText(text: string): ReactNode {
-  const pattern = /(People'?s Front|Populists?|Conservatives?|Centrists?)/gi;
+  const pattern = /(Consensus Party|Reform Party|Consensus|Reform)/gi;
   const parts = text.split(pattern);
   return parts.map((part, idx) => {
     if (!part) return null;
@@ -305,9 +307,9 @@ function ecoSheriffMessageColor(description: string) {
 }
 
 function ecoPollPartyColor(partyId: string) {
-  if (partyId === "conservatives") return "#ffd700";
-  if (partyId === "populists") return "#ff4444";
-  return "#4488ff";
+  if (partyId === "consensus" || partyId === "conservatives") return "#ef4444";
+  if (partyId === "reform" || partyId === "populists") return "#3b82f6";
+  return getPartyColor(partyId);
 }
 
 function ecoVipRoleIcon(vipType: string) {
@@ -961,11 +963,11 @@ function DistrictMapPanel() {
   );
 
   const popChips = [
-    { label: "TOTAL", value: mapStats?.alive_agents ?? mapStats?.alive, color: "#4caf7d" },
-    { label: "ELITE", value: mapStats?.elite, color: "#c9a84c" },
-    { label: "MIDDLE", value: mapStats?.middle, color: "#9e9e9e" },
-    { label: "POOR", value: mapStats?.poor, color: "#8d6e4a" },
-    { label: "CRITICAL", value: mapStats?.critical, color: "#c0504a" },
+    { label: "TOTAL", value: mapStats?.alive_agents ?? mapStats?.alive, valueColor: "#00ff88" },
+    { label: "ELITE", value: mapStats?.elite, valueColor: "#f0c040" },
+    { label: "MIDDLE", value: mapStats?.middle, valueColor: "#60a5fa" },
+    { label: "POOR", value: mapStats?.poor, valueColor: "#fb923c" },
+    { label: "CRITICAL", value: mapStats?.critical, valueColor: "#f87171" },
   ];
 
   return (
@@ -979,56 +981,56 @@ function DistrictMapPanel() {
           height={400}
         />
       </div>
-      <div
+      <GlassCard
         className="observatoryPopStrip"
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-evenly",
-          width: "100%",
-          padding: "12px 0",
-          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
-          background: "#000000",
-        }}
+        style={{ width: "100%", padding: 0, borderRadius: 0 }}
       >
-        {popChips.map((chip) => (
-          <div
-            key={chip.label}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              color: chip.color,
-            }}
-          >
-            <span
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+            alignItems: "center",
+            width: "100%",
+            padding: "16px 32px",
+          }}
+        >
+          {popChips.map((chip) => (
+            <div
+              key={chip.label}
               style={{
-                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
-                fontSize: 9,
-                letterSpacing: "0.15em",
-                textTransform: "uppercase",
-                opacity: 0.7,
-                lineHeight: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "4px",
               }}
             >
-              {chip.label}
-            </span>
-            <span
-              style={{
-                marginTop: 6,
-                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
-                fontSize: 16,
-                fontWeight: 500,
-                letterSpacing: "0.04em",
-                lineHeight: 1.1,
-              }}
-            >
-              {(chip.value ?? 0).toLocaleString("en-US")}
-            </span>
-          </div>
-        ))}
-      </div>
+              <span
+                style={{
+                  fontSize: "0.65rem",
+                  letterSpacing: "0.12em",
+                  color: "#6b7280",
+                  textTransform: "uppercase",
+                  lineHeight: 1,
+                }}
+              >
+                {chip.label}
+              </span>
+              <span
+                style={{
+                  fontSize: "16px",
+                  color: chip.valueColor,
+                  fontWeight: "bold",
+                  fontFamily: "monospace",
+                  lineHeight: 1.1,
+                }}
+              >
+                {(chip.value ?? 0).toLocaleString("en-US")}
+              </span>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
     </div>
   );
 }
@@ -1231,37 +1233,6 @@ function getLawStatusStyle(status: string): { label: string; color: string; bord
     return { label: "PENDING", color: "#ffd93d", border: "2px solid rgba(255, 217, 61, 0.5)" };
   }
   return { label: "FAIL", color: "#ff4444", border: "2px solid rgba(255, 60, 60, 0.4)" };
-}
-
-function isSenateActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
-  const eventType = String(e.event_type ?? e.type ?? "");
-  const desc = String(e.description ?? "");
-  return (
-    eventType === "senate" ||
-    desc.includes("[DEEPSEEK-SENATE]") ||
-    desc.includes("SENATE AI") ||
-    desc.includes("Senate blocks") ||
-    desc.includes("Senate passes") ||
-    desc.includes("impeach") ||
-    desc.includes("🏦")
-  );
-}
-
-function isZrsActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
-  const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
-  const desc = String(e.description ?? "");
-  return (
-    eventType === "economy" ||
-    eventType === "zrs" ||
-    eventType === "frs" ||
-    desc.includes("[QWEN-ZRS]") ||
-    desc.includes("ZRS") ||
-    desc.includes("FRS Chief") ||
-    desc.includes("INFLATION") ||
-    desc.includes("interest rate") ||
-    desc.includes("QE") ||
-    desc.includes("💰")
-  );
 }
 
 interface ZcoVote {
@@ -9129,10 +9100,6 @@ const POLICE_DIVISION_ROLE_BADGES: Record<string, string> = {
   "RIOT CTRL": "🚨 CROWD CONTROL",
 };
 
-type WireNewsItem = { text: string; type?: string; timestamp?: string };
-
-const WIRE_TICKER_SCROLL_SEC = 150;
-
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
   const r = parseInt(h.slice(0, 2), 16);
@@ -9152,107 +9119,6 @@ function wireItemStyle(accentColor: string, type?: string, lab = false): CSSProp
   }
   if (type === "breaking") return { color: "#ff4444", fontWeight: "bold" };
   return { color: accentColor };
-}
-
-/** Matches LIVE EVENTS — WALRUS ticker bar (header + scroll); only accent color varies. */
-function NewsWireTicker({
-  label,
-  items,
-  color,
-  variant = "default",
-}: {
-  label: string;
-  items: WireNewsItem[];
-  color: string;
-  variant?: "default" | "lab";
-}) {
-  if (!items.length) return null;
-  const loop = [...items, ...items];
-  const isLab = variant === "lab";
-  const borderColor = isLab ? "var(--border)" : colorWithAlpha(color, "22");
-  const labelColor = isLab ? "var(--accent)" : color;
-  return (
-    <div
-      className={isLab ? "labWireTicker" : undefined}
-      style={{
-        margin: "16px 0",
-        overflow: "hidden",
-        borderRadius: isLab ? "2px" : "6px",
-        border: `1px solid ${borderColor}`,
-        background: isLab ? "var(--bg-secondary)" : hexToRgba(color, 0.02),
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          padding: "5px 12px",
-          background: isLab ? "var(--bg-card)" : hexToRgba(color, 0.06),
-          borderBottom: `1px solid ${borderColor}`,
-        }}
-      >
-        <span
-          style={{
-            width: "6px",
-            height: "6px",
-            borderRadius: "50%",
-            background: labelColor,
-            boxShadow: isLab ? "none" : `0 0 6px ${color}`,
-          }}
-        />
-        <span
-          style={{
-            fontFamily: isLab ? "var(--font-mono)" : "monospace",
-            fontSize: "0.65rem",
-            color: labelColor,
-            letterSpacing: "0.12em",
-            textTransform: isLab ? "uppercase" : undefined,
-          }}
-        >
-          {label}
-        </span>
-      </div>
-      <div style={{ overflow: "hidden", padding: "10px 0" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: "0",
-            animation: `tickerScroll ${WIRE_TICKER_SCROLL_SEC}s linear infinite`,
-            whiteSpace: "nowrap",
-            width: "max-content",
-          }}
-        >
-          {loop.map((item, i) => (
-            <span key={`${item.text}-${i}`} style={{ display: "inline-flex", alignItems: "center" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "0 40px",
-                  borderRight: "1px solid #ffffff11",
-                  fontFamily: "monospace",
-                  fontSize: "0.75rem",
-                  whiteSpace: "nowrap",
-                  ...wireItemStyle(color, item.type, isLab),
-                }}
-              >
-                {item.text}
-              </span>
-              <span
-                style={{
-                  color: isLab ? "var(--text-muted)" : colorWithAlpha(color, "55"),
-                  padding: "0 20px",
-                }}
-              >
-                ◆
-              </span>
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 const POLICE_DIVISION_DESCRIPTIONS: Record<string, string> = {
@@ -10454,6 +10320,10 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     social_fund: number;
   } | null>(null);
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
+  const [governanceHeader, setGovernanceHeader] = useState<{
+    active_duties: string;
+    amendments_in_voting: number;
+  } | null>(null);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
   const [senateActions, setSenateActions] = useState<{ description: string; created_at: string }[]>([]);
   const [senateEvents, setSenateEvents] = useState<
@@ -10462,12 +10332,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
   const [zrsEvents, setZrsEvents] = useState<
     { description: string; created_at: string; event_type?: string }[]
   >([]);
-  const [activityLogEvents, setActivityLogEvents] = useState<
-    { description: string; created_at: string; event_type?: string; type?: string }[]
-  >([]);
-  const [policeNews, setPoliceNews] = useState<WireNewsItem[]>([]);
-  const [corporateNews, setCorporateNews] = useState<WireNewsItem[]>([]);
-  const [clanNews, setClanNews] = useState<WireNewsItem[]>([]);
   const [senateData, setSenateData] = useState<{
     senators: Array<{
       agent_name: string;
@@ -10620,7 +10484,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
       if (data.president?.agent_name) {
         setPresidentState((prev) => ({
           agent_name: data.president.agent_name,
-          party: data.president.party ?? "centrists",
+          party: data.president.party ?? "reform",
           term_number: Number(data.president.term_number) || 1,
           is_dictator: Boolean(data.president.is_dictator),
           approval_rating: Number.isFinite(Number(data.president.approval_rating))
@@ -10707,45 +10571,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     }
   }, []);
 
-  const parseWireResponse = (data: unknown): WireNewsItem[] => {
-    if (!Array.isArray(data)) return [];
-    return data
-      .slice(0, 15)
-      .map((e: { text?: string; description?: string; type?: string; timestamp?: string }) => ({
-        text: String(e.text ?? e.description ?? "").trim(),
-        type: e.type,
-        timestamp: e.timestamp,
-      }))
-      .filter((e) => e.text.length > 0);
-  };
-
-  const fetchPoliceNews = useCallback(async () => {
-    try {
-      const res = await fetch("/police-wire", { cache: "no-store" });
-      setPoliceNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const fetchCorporateNews = useCallback(async () => {
-    try {
-      const res = await fetch("/corporate-wire", { cache: "no-store" });
-      setCorporateNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const fetchClanNews = useCallback(async () => {
-    try {
-      const res = await fetch("/clan-wire", { cache: "no-store" });
-      setClanNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
     if (!res.ok) return [];
@@ -10762,16 +10587,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
     localStorage.removeItem('conv_cache');
   }, []);
-
-  useEffect(() => {
-    if (activeTab !== "civilization") return;
-    const interval = setInterval(() => {
-      void fetchPoliceNews();
-      void fetchCorporateNews();
-      void fetchClanNews();
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [activeTab, fetchPoliceNews, fetchCorporateNews, fetchClanNews]);
 
   const fetchZcoDecisions = useCallback(async () => {
     const cacheKey = "zco_decisions_cache";
@@ -14155,9 +13970,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
       void loadZionBetMarkets();
       void fetchWalrusEvents();
       void loadLeaderboard();
-      void fetchPoliceNews();
-      void fetchCorporateNews();
-      void fetchClanNews();
     }, 800);
 
     return () => {
@@ -14175,9 +13987,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     loadZionBetMarkets,
     fetchWalrusEvents,
     loadLeaderboard,
-    fetchPoliceNews,
-    fetchCorporateNews,
-    fetchClanNews,
   ]);
 
   const maxBalance = useMemo(
@@ -14389,49 +14198,28 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
   const isGoogleConnected = !!zkLoginUser;
   const isWalletConnected = !!account?.address;
 
-  const activityEvents = useMemo(
-    () =>
-      activityLogEvents.length > 0
-        ? activityLogEvents
-        : allEvents.map((e) => ({
-            description: e.description ?? e.title ?? "",
-            created_at: e.timestamp ?? "",
-            event_type: e.event_type ?? e.type,
-            type: e.type,
-          })),
-    [activityLogEvents, allEvents]
+  const sheriffActionsDisplay = useMemo(
+    () => filterGovernanceBranchLog(sheriffActions, "sheriff", cleanActivityDescription).slice(0, 5),
+    [sheriffActions],
   );
-
-  const sheriffActionsDisplay = sheriffActions.slice(0, 5);
   const senateEventsDisplay = useMemo(() => {
-    if (senateEvents.length > 0) return senateEvents.slice(0, 8);
-    if (senateActions.length > 0) {
-      return senateActions.slice(0, 8).map((e) => ({
-        ...e,
-        event_type: "senate" as const,
-      }));
-    }
-    return activityEvents.filter(isSenateActivityEvent).slice(0, 8);
-  }, [activityEvents, senateEvents, senateActions]);
-  const zrsEventsDisplay = useMemo(() => {
-    if (zrsEvents.length > 0) return zrsEvents.slice(0, 8);
-    const fromActivity = activityEvents.filter(isZrsActivityEvent);
-    if (fromActivity.length > 0) return fromActivity.slice(0, 8);
-    const zrs = ecoPolData?.zrs_last_action;
-    if (zrs?.news_headline || zrs?.action_taken) {
-      return [
-        {
-          description: String(zrs.news_headline || `ZRS ${zrs.state}: ${zrs.action_taken}`),
-          created_at: String(zrs.created_at ?? ""),
-          event_type: "economy",
-        },
-      ];
-    }
-    return [];
-  }, [activityEvents, zrsEvents, ecoPolData]);
+    const items =
+      senateEvents.length > 0
+        ? senateEvents
+        : senateActions.map((e) => ({
+            ...e,
+            event_type: "senate" as const,
+          }));
+    return filterGovernanceBranchLog(items, "senate", cleanActivityDescription).slice(0, 8);
+  }, [senateEvents, senateActions]);
+  const zrsEventsDisplay = useMemo(
+    () => filterGovernanceBranchLog(zrsEvents, "zrs", cleanActivityDescription).slice(0, 8),
+    [zrsEvents],
+  );
   const presidentActionsDisplay = useMemo(() => {
     type DecreeEntry = { description: string; created_at: string; count: number };
-    const deduped = presidentActions.reduce<DecreeEntry[]>((acc, entry) => {
+    const filtered = filterGovernanceBranchLog(presidentActions, "president", cleanActivityDescription);
+    const deduped = filtered.reduce<DecreeEntry[]>((acc, entry) => {
       const last = acc[acc.length - 1];
       if (last && last.description === entry.description) {
         last.count = (last.count || 1) + 1;
@@ -14444,115 +14232,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
   }, [presidentActions]);
   const vipFeedDisplay = (Array.isArray(vipMemoryFeed) ? vipMemoryFeed : []).slice(0, 8);
 
-  useEffect(() => {
-    if (activeTab !== "treasury") return;
-
-    const isSenateEvent = (e: { event_type?: string; type?: string; description?: string }) => {
-      const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
-      const desc = String(e.description ?? "").toLowerCase();
-      if (["senate", "economy", "senate_law"].includes(eventType)) return true;
-      return ["senate", "bill", "law", "vote", "budget"].some((kw) => desc.includes(kw));
-    };
-
-    const fetchActivityLogs = async () => {
-      const [presRes, sherRes, senRes, zrsRes, eventsRes] = await Promise.all([
-        fetch("/api/president/actions"),
-        fetch("/api/sheriff-log"),
-        fetch("/api/senate/actions"),
-        fetch("/api/zrs/actions"),
-        fetch("/api/events?limit=50"),
-      ]);
-      try {
-        const pres = await presRes.json();
-        if (Array.isArray(pres)) setPresidentActions(pres);
-      } catch {
-        /* ignore */
-      }
-      try {
-        const sher = await sherRes.json();
-        if (Array.isArray(sher)) setSheriffActions(sher);
-      } catch {
-        /* ignore */
-      }
-      let senateActionItems: { description: string; created_at: string; event_type?: string }[] = [];
-      try {
-        const sen = await senRes.json();
-        const senateList = Array.isArray(sen) ? sen : Array.isArray(sen?.actions) ? sen.actions : [];
-        if (senateList.length > 0) {
-          setSenateActions(senateList);
-          senateActionItems = senateList.map((e: { description?: string; created_at?: string }) => ({
-            description: String(e.description ?? ""),
-            created_at: String(e.created_at ?? ""),
-            event_type: "senate",
-          }));
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const zrs = await zrsRes.json();
-        const zrsList = Array.isArray(zrs) ? zrs : Array.isArray(zrs?.actions) ? zrs.actions : [];
-        if (zrsList.length > 0) {
-          setZrsEvents(
-            zrsList.map((e: { description?: string; created_at?: string; event_type?: string }) => ({
-              description: String(e.description ?? ""),
-              created_at: String(e.created_at ?? ""),
-              event_type: String(e.event_type ?? "economy"),
-            }))
-          );
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const eventsRaw = await eventsRes.json();
-        const normalized = (Array.isArray(eventsRaw) ? eventsRaw : []).map(
-          (e: { description?: string; created_at?: string; time?: string; event_type?: string; type?: string }) => ({
-            description: String(e.description ?? ""),
-            created_at: String(e.created_at ?? e.time ?? ""),
-            event_type: String(e.event_type ?? e.type ?? ""),
-            type: String(e.type ?? e.event_type ?? ""),
-          })
-        );
-        setActivityLogEvents(normalized);
-        const fromEvents = normalized
-          .filter(isSenateEvent)
-          .map((e) => ({
-            description: e.description,
-            created_at: e.created_at,
-            event_type: e.event_type,
-          }));
-        const merged = [...fromEvents, ...senateActionItems]
-          .filter((e) => e.description)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const seen = new Set<string>();
-        const deduped = merged.filter((e) => {
-          const key = `${e.description}|${e.created_at}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        setSenateEvents(deduped);
-      } catch {
-        setSenateEvents(senateActionItems);
-      }
-    };
-
-    const loadEcoHud = async () => {
-      await Promise.all([fetchEcoPol(), fetchGovernmentData(), fetchPoliticalEconomy(), fetchActivityLogs()]);
-    };
-    void loadEcoHud();
-    const ecoInterval = setInterval(() => {
-      void loadEcoHud();
-    }, 60_000);
-    fetch("/api/state/treasury").then((r) => r.json()).then((d) => setStateTreasury(d)).catch(() => {});
-    fetch("/api/frs/stats")
-      .then((r) => r.json())
-      .then((d) => setFrsStats(d))
-      .catch(() => {});
-
-    return () => clearInterval(ecoInterval);
-  }, [activeTab, fetchEcoPol, fetchGovernmentData, fetchPoliticalEconomy]);
 
   const peCrimeRate = useMemo(() => {
     const gangPct =
@@ -15070,7 +14749,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     MAP_DISTRICT_SHAPES,
     MARKET_ID_NUMERIC,
     NETWORK_ICONS,
-    NewsWireTicker,
     PARTY_DISPLAY,
     POLICE_DIVISION_DESCRIPTIONS,
     POLICE_DIVISION_ROLE_BADGES,
@@ -15094,7 +14772,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     USDC_BET_HOUSE,
     VIP_MARKETS,
     WALRUS_TICKER_TYPE_COLORS,
-    WIRE_TICKER_SCROLL_SEC,
     XAxis,
     YAxis,
     ZBANK_COMING_SOON_NETWORKS,
@@ -15163,8 +14840,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     ZionTermValue,
     account,
     activeNewspaper,
-    activityEvents,
-    activityLogEvents,
     addressKeyBytes,
     agentClasses,
     agents,
@@ -15225,7 +14900,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     claimStatus,
     claimStealthPayment,
     claimingIndex,
-    clanNews,
     clans,
     classMeta,
     cleanActivityDescription,
@@ -15248,7 +14922,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     cooldownRemainingSec,
     copiedStealth,
     copyStealthAddressToClipboard,
-    corporateNews,
     corporations,
     corporationsLoading,
     createPortal,
@@ -15282,16 +14955,13 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     experimentRunTime,
     faucetBusy,
     faucetCooldownEndsAt,
-    fetchClanNews,
     fetchConversations,
-    fetchCorporateNews,
     fetchDeepbookOracles,
     fetchEcoPol,
     fetchGovernmentData,
     fetchPerpsData,
     fetchPerpsFeed,
     fetchPerpsProofs,
-    fetchPoliceNews,
     fetchPoliticalEconomy,
     fetchScheduledPayments,
     fetchSenateLaws,
@@ -15317,6 +14987,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     fragmentedWithdraw,
     fromToken,
     frsChief,
+    governanceHeader,
     frsStats,
     gearColorIdx,
     gearIntervalRef,
@@ -15360,9 +15031,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     isDeepbookCryptoMarket,
     isGoogleConnected,
     isMobile,
-    isSenateActivityEvent,
     isWalletConnected,
-    isZrsActivityEvent,
     keyTooltip,
     keysFileStatus,
     lastAliveCount,
@@ -15405,7 +15074,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     parseCooldownPayload,
     parseEventTimeMs,
     parsePressNewspaperArticle,
-    parseWireResponse,
     partiesData,
     peCrimeRate,
     peGini,
@@ -15422,7 +15090,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
     playCork,
     playSwish,
     policeDivisions,
-    policeNews,
     politicalEconomy,
     polyByTab,
     polyToApiMarket,
@@ -16894,7 +16561,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
 
           {activeTab === "press" && <Press />}
 
-          {activeTab === "treasury" && <Governance />}
           {activeTab === "lab" && <Lab />}
           {activeTab === "research" && <Lab />}
           {activeTab === "archive" && <Archive />}
@@ -18763,24 +18429,13 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           background: var(--border);
           width: 100%;
         }
-        .constitutionBanner {
-          position: relative;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.03);
-          padding: 20px 24px;
-          margin-bottom: 24px;
-          font-family: var(--font-mono);
-          font-size: 0.68rem;
-          letter-spacing: 0.06em;
-        }
         .planetHeroSection {
           position: relative;
           margin-bottom: 24px;
-          border-radius: 2px;
           overflow: visible;
-          border: 1px solid var(--border);
           min-height: 420px;
-          background: rgba(255, 255, 255, 0.03);
+          background: transparent;
+          border: none;
         }
         .planetHeroSection .civilizationSidebarRow {
           position: relative;
@@ -18790,9 +18445,6 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           margin-bottom: 0;
         }
         .zcoResearchPanel {
-          margin: 24px 0 8px;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.03);
           position: relative;
           z-index: 1;
         }
@@ -18801,8 +18453,8 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           align-items: center;
           gap: 8px;
           padding: 8px 12px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg-card);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          background: transparent;
         }
         .zcoResearchLiveDot {
           width: 5px;
@@ -18817,6 +18469,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           letter-spacing: 0.12em;
           color: var(--text-primary);
           text-transform: uppercase;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
         .zcoResearchUpdated {
           margin-left: auto;
@@ -18974,6 +18627,9 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
           flex-wrap: wrap;
           align-items: center;
           gap: 10px 14px;
+          font-family: var(--font-mono);
+          font-size: 0.68rem;
+          letter-spacing: 0.06em;
         }
         .constitutionBannerRowSub {
           margin-top: 8px;
@@ -18985,6 +18641,7 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
         }
         .constitutionBannerItem strong {
           font-weight: 500;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
         }
         .constitutionBannerMuted {
           color: var(--text-secondary);
@@ -19620,8 +19277,8 @@ export function ZionHome({ activeTab }: { activeTab: TabId }) {
         }
         .districtMapWrap {
           position: relative;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 2px;
+          border: none;
+          border-radius: 0;
           padding: 0;
           background: transparent;
           min-height: 420px;

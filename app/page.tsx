@@ -34,7 +34,11 @@ import ClassIcon3D from "@/components/ClassIcon3D";
 import BackgroundGrid from "@/components/BackgroundGrid";
 import { FieldObservationsFeed } from "@/components/FieldObservationsFeed";
 import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
+import { ConstitutionBanner } from "@/components/ConstitutionBanner";
 import { LivingPlanet, computeProsperity } from "@/components/LivingPlanet";
+import { filterAndDedupeActivityLog, filterGovernanceBranchLog } from "@/lib/governanceActivityLog";
+import { parseWireResponse, type WireNewsItem } from "@/lib/wire-news";
 
 const ParticleField = dynamic(
   () => import("@/components/ParticleField").then((m) => m.ParticleField),
@@ -153,30 +157,28 @@ const PARTY_DISPLAY: Record<
   string,
   { label: string; emoji: string; color: string; background: string }
 > = {
-  conservatives: {
-    label: "Conservative Party",
-    emoji: "🎩",
-    color: "#ffd700",
-    background: "rgba(255,215,0,0.08)",
+  consensus: {
+    label: "Consensus Party",
+    emoji: "🏛️",
+    color: "#ef4444",
+    background: "rgba(239, 68, 68, 0.12)",
   },
-  centrists: {
-    label: "Centrist Alliance",
-    emoji: "⚖️",
-    color: "#4DA2FF",
-    background: "rgba(77,162,255,0.08)",
-  },
-  populists: {
-    label: "People's Front",
-    emoji: "✊",
-    color: "#ff6464",
-    background: "rgba(255,50,50,0.08)",
+  reform: {
+    label: "Reform Party",
+    emoji: "⚡",
+    color: "#3b82f6",
+    background: "rgba(59, 130, 246, 0.12)",
   },
 };
 
 function presidentPartyDisplay(partyId: string | undefined) {
-  const key = (partyId || "centrists").toLowerCase();
-  if (key === "blue") return PARTY_DISPLAY.centrists;
-  if (key === "red") return PARTY_DISPLAY.populists;
+  const key = (partyId || "reform").toLowerCase();
+  if (key === "blue" || key === "centrist" || key === "centrists" || key === "populist" || key === "populists") {
+    return PARTY_DISPLAY.reform;
+  }
+  if (key === "red" || key === "conservative" || key === "conservatives") {
+    return PARTY_DISPLAY.consensus;
+  }
   return (
     PARTY_DISPLAY[key] ?? {
       label: partyId || "Unknown",
@@ -189,14 +191,15 @@ function presidentPartyDisplay(partyId: string | undefined) {
 
 const getPartyColor = (party: string) => {
   const p = party?.toLowerCase() || "";
-  if (p.includes("populist") || p.includes("people") || p.includes("front")) return "#ff5050";
-  if (p.includes("conservative")) return "#ffc832";
-  if (p.includes("centrist")) return "#4488ff";
+  if (p === "consensus" || p.includes("consensus") || p.includes("conservative")) return "#ef4444";
+  if (p === "reform" || p.includes("reform") || p.includes("populist") || p.includes("people") || p.includes("front") || p.includes("centrist")) {
+    return "#3b82f6";
+  }
   return "rgba(255,255,255,0.4)";
 };
 
 function renderPoliticalWireText(text: string): ReactNode {
-  const pattern = /(People'?s Front|Populists?|Conservatives?|Centrists?)/gi;
+  const pattern = /(Consensus Party|Reform Party|Consensus|Reform)/gi;
   const parts = text.split(pattern);
   return parts.map((part, idx) => {
     if (!part) return null;
@@ -285,9 +288,9 @@ function ecoSheriffMessageColor(description: string) {
 }
 
 function ecoPollPartyColor(partyId: string) {
-  if (partyId === "conservatives") return "#ffd700";
-  if (partyId === "populists") return "#ff4444";
-  return "#4488ff";
+  if (partyId === "consensus" || partyId === "conservatives") return "#ef4444";
+  if (partyId === "reform" || partyId === "populists") return "#3b82f6";
+  return getPartyColor(partyId);
 }
 
 function ecoVipRoleIcon(vipType: string) {
@@ -941,11 +944,11 @@ function DistrictMapPanel() {
   );
 
   const popChips = [
-    { label: "TOTAL", value: mapStats?.alive_agents ?? mapStats?.alive, color: "#4caf7d" },
-    { label: "ELITE", value: mapStats?.elite, color: "#c9a84c" },
-    { label: "MIDDLE", value: mapStats?.middle, color: "#9e9e9e" },
-    { label: "POOR", value: mapStats?.poor, color: "#8d6e4a" },
-    { label: "CRITICAL", value: mapStats?.critical, color: "#c0504a" },
+    { label: "TOTAL", value: mapStats?.alive_agents ?? mapStats?.alive, valueColor: "#00ff88" },
+    { label: "ELITE", value: mapStats?.elite, valueColor: "#f0c040" },
+    { label: "MIDDLE", value: mapStats?.middle, valueColor: "#60a5fa" },
+    { label: "POOR", value: mapStats?.poor, valueColor: "#fb923c" },
+    { label: "CRITICAL", value: mapStats?.critical, valueColor: "#f87171" },
   ];
 
   return (
@@ -959,56 +962,56 @@ function DistrictMapPanel() {
           height={400}
         />
       </div>
-      <div
+      <GlassCard
         className="observatoryPopStrip"
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-evenly",
-          width: "100%",
-          padding: "12px 0",
-          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
-          background: "#000000",
-        }}
+        style={{ width: "100%", padding: 0, borderRadius: 0 }}
       >
-        {popChips.map((chip) => (
-          <div
-            key={chip.label}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              color: chip.color,
-            }}
-          >
-            <span
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-around",
+            alignItems: "center",
+            width: "100%",
+            padding: "16px 32px",
+          }}
+        >
+          {popChips.map((chip) => (
+            <div
+              key={chip.label}
               style={{
-                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
-                fontSize: 9,
-                letterSpacing: "0.15em",
-                textTransform: "uppercase",
-                opacity: 0.7,
-                lineHeight: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "4px",
               }}
             >
-              {chip.label}
-            </span>
-            <span
-              style={{
-                marginTop: 6,
-                fontFamily: 'var(--font-mono), "IBM Plex Mono", monospace',
-                fontSize: 16,
-                fontWeight: 500,
-                letterSpacing: "0.04em",
-                lineHeight: 1.1,
-              }}
-            >
-              {(chip.value ?? 0).toLocaleString("en-US")}
-            </span>
-          </div>
-        ))}
-      </div>
+              <span
+                style={{
+                  fontSize: "0.65rem",
+                  letterSpacing: "0.12em",
+                  color: "#6b7280",
+                  textTransform: "uppercase",
+                  lineHeight: 1,
+                }}
+              >
+                {chip.label}
+              </span>
+              <span
+                style={{
+                  fontSize: "16px",
+                  color: chip.valueColor,
+                  fontWeight: "bold",
+                  fontFamily: "monospace",
+                  lineHeight: 1.1,
+                }}
+              >
+                {(chip.value ?? 0).toLocaleString("en-US")}
+              </span>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
     </div>
   );
 }
@@ -1211,37 +1214,6 @@ function getLawStatusStyle(status: string): { label: string; color: string; bord
     return { label: "PENDING", color: "#ffd93d", border: "2px solid rgba(255, 217, 61, 0.5)" };
   }
   return { label: "FAIL", color: "#ff4444", border: "2px solid rgba(255, 60, 60, 0.4)" };
-}
-
-function isSenateActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
-  const eventType = String(e.event_type ?? e.type ?? "");
-  const desc = String(e.description ?? "");
-  return (
-    eventType === "senate" ||
-    desc.includes("[DEEPSEEK-SENATE]") ||
-    desc.includes("SENATE AI") ||
-    desc.includes("Senate blocks") ||
-    desc.includes("Senate passes") ||
-    desc.includes("impeach") ||
-    desc.includes("🏦")
-  );
-}
-
-function isZrsActivityEvent(e: { event_type?: string; type?: string; description?: string }) {
-  const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
-  const desc = String(e.description ?? "");
-  return (
-    eventType === "economy" ||
-    eventType === "zrs" ||
-    eventType === "frs" ||
-    desc.includes("[QWEN-ZRS]") ||
-    desc.includes("ZRS") ||
-    desc.includes("FRS Chief") ||
-    desc.includes("INFLATION") ||
-    desc.includes("interest rate") ||
-    desc.includes("QE") ||
-    desc.includes("💰")
-  );
 }
 
 interface ZcoVote {
@@ -9296,132 +9268,6 @@ function renderArticle(
   );
 }
 
-type WireNewsItem = { text: string; type?: string; timestamp?: string };
-
-const WIRE_TICKER_SCROLL_SEC = 150;
-
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function colorWithAlpha(hex: string, alphaSuffix: string): string {
-  return hex.length === 7 ? `${hex}${alphaSuffix}` : hex;
-}
-
-function wireItemStyle(accentColor: string, type?: string, lab = false): CSSProperties {
-  if (lab) {
-    if (type === "breaking") return { color: accentColor, fontWeight: 600 };
-    return { color: "var(--text-secondary)" };
-  }
-  if (type === "breaking") return { color: "#ff4444", fontWeight: "bold" };
-  return { color: accentColor };
-}
-
-/** Matches LIVE EVENTS — WALRUS ticker bar (header + scroll); only accent color varies. */
-function NewsWireTicker({
-  label,
-  items,
-  color,
-  variant = "default",
-}: {
-  label: string;
-  items: WireNewsItem[];
-  color: string;
-  variant?: "default" | "lab";
-}) {
-  if (!items.length) return null;
-  const loop = [...items, ...items];
-  const isLab = variant === "lab";
-  const borderColor = isLab ? "var(--border)" : colorWithAlpha(color, "22");
-  const labelColor = isLab ? "var(--accent)" : color;
-  return (
-    <div
-      className={isLab ? "labWireTicker" : undefined}
-      style={{
-        margin: "16px 0",
-        overflow: "hidden",
-        borderRadius: isLab ? "2px" : "6px",
-        border: `1px solid ${borderColor}`,
-        background: isLab ? "var(--bg-secondary)" : hexToRgba(color, 0.02),
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          padding: "5px 12px",
-          background: isLab ? "var(--bg-card)" : hexToRgba(color, 0.06),
-          borderBottom: `1px solid ${borderColor}`,
-        }}
-      >
-        <span
-          style={{
-            width: "6px",
-            height: "6px",
-            borderRadius: "50%",
-            background: labelColor,
-            boxShadow: isLab ? "none" : `0 0 6px ${color}`,
-          }}
-        />
-        <span
-          style={{
-            fontFamily: isLab ? "var(--font-mono)" : "monospace",
-            fontSize: "0.65rem",
-            color: labelColor,
-            letterSpacing: "0.12em",
-            textTransform: isLab ? "uppercase" : undefined,
-          }}
-        >
-          {label}
-        </span>
-      </div>
-      <div style={{ overflow: "hidden", padding: "10px 0" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: "0",
-            animation: `tickerScroll ${WIRE_TICKER_SCROLL_SEC}s linear infinite`,
-            whiteSpace: "nowrap",
-            width: "max-content",
-          }}
-        >
-          {loop.map((item, i) => (
-            <span key={`${item.text}-${i}`} style={{ display: "inline-flex", alignItems: "center" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "0 40px",
-                  borderRight: "1px solid #ffffff11",
-                  fontFamily: "monospace",
-                  fontSize: "0.75rem",
-                  whiteSpace: "nowrap",
-                  ...wireItemStyle(color, item.type, isLab),
-                }}
-              >
-                {item.text}
-              </span>
-              <span
-                style={{
-                  color: isLab ? "var(--text-muted)" : colorWithAlpha(color, "55"),
-                  padding: "0 20px",
-                }}
-              >
-                ◆
-              </span>
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 type PoliceDivisionCard = {
   division: string;
   division_name: string;
@@ -10614,6 +10460,10 @@ export default function Home() {
     social_fund: number;
   } | null>(null);
   const [presidentActions, setPresidentActions] = useState<{ description: string; created_at: string }[]>([]);
+  const [governanceHeader, setGovernanceHeader] = useState<{
+    active_duties: string;
+    amendments_in_voting: number;
+  } | null>(null);
   const [sheriffActions, setSheriffActions] = useState<{ description: string; created_at: string }[]>([]);
   const [senateActions, setSenateActions] = useState<{ description: string; created_at: string }[]>([]);
   const [senateEvents, setSenateEvents] = useState<
@@ -10622,12 +10472,6 @@ export default function Home() {
   const [zrsEvents, setZrsEvents] = useState<
     { description: string; created_at: string; event_type?: string }[]
   >([]);
-  const [activityLogEvents, setActivityLogEvents] = useState<
-    { description: string; created_at: string; event_type?: string; type?: string }[]
-  >([]);
-  const [policeNews, setPoliceNews] = useState<WireNewsItem[]>([]);
-  const [corporateNews, setCorporateNews] = useState<WireNewsItem[]>([]);
-  const [clanNews, setClanNews] = useState<WireNewsItem[]>([]);
   const [senateData, setSenateData] = useState<{
     senators: Array<{
       agent_name: string;
@@ -10780,7 +10624,7 @@ export default function Home() {
       if (data.president?.agent_name) {
         setPresidentState((prev) => ({
           agent_name: data.president.agent_name,
-          party: data.president.party ?? "centrists",
+          party: data.president.party ?? "reform",
           term_number: Number(data.president.term_number) || 1,
           is_dictator: Boolean(data.president.is_dictator),
           approval_rating: Number.isFinite(Number(data.president.approval_rating))
@@ -10867,45 +10711,6 @@ export default function Home() {
     }
   }, []);
 
-  const parseWireResponse = (data: unknown): WireNewsItem[] => {
-    if (!Array.isArray(data)) return [];
-    return data
-      .slice(0, 15)
-      .map((e: { text?: string; description?: string; type?: string; timestamp?: string }) => ({
-        text: String(e.text ?? e.description ?? "").trim(),
-        type: e.type,
-        timestamp: e.timestamp,
-      }))
-      .filter((e) => e.text.length > 0);
-  };
-
-  const fetchPoliceNews = useCallback(async () => {
-    try {
-      const res = await fetch("/police-wire", { cache: "no-store" });
-      setPoliceNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const fetchCorporateNews = useCallback(async () => {
-    try {
-      const res = await fetch("/corporate-wire", { cache: "no-store" });
-      setCorporateNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const fetchClanNews = useCallback(async () => {
-    try {
-      const res = await fetch("/clan-wire", { cache: "no-store" });
-      setClanNews(parseWireResponse(await res.json()));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const fetchZcoDecisionsFromAPI = useCallback(async (): Promise<ZcoDecision[]> => {
     const res = await fetch("/api/zco");
     if (!res.ok) return [];
@@ -10922,16 +10727,6 @@ export default function Home() {
     newspapers.forEach((n) => localStorage.removeItem(`press_${n.id}`));
     localStorage.removeItem('conv_cache');
   }, []);
-
-  useEffect(() => {
-    if (activeTab !== "civilization") return;
-    const interval = setInterval(() => {
-      void fetchPoliceNews();
-      void fetchCorporateNews();
-      void fetchClanNews();
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [activeTab, fetchPoliceNews, fetchCorporateNews, fetchClanNews]);
 
   const fetchZcoDecisions = useCallback(async () => {
     const cacheKey = "zco_decisions_cache";
@@ -14315,9 +14110,6 @@ export default function Home() {
       void loadZionBetMarkets();
       void fetchWalrusEvents();
       void loadLeaderboard();
-      void fetchPoliceNews();
-      void fetchCorporateNews();
-      void fetchClanNews();
     }, 800);
 
     return () => {
@@ -14335,9 +14127,6 @@ export default function Home() {
     loadZionBetMarkets,
     fetchWalrusEvents,
     loadLeaderboard,
-    fetchPoliceNews,
-    fetchCorporateNews,
-    fetchClanNews,
   ]);
 
   const maxBalance = useMemo(
@@ -14549,49 +14338,28 @@ export default function Home() {
   const isGoogleConnected = !!zkLoginUser;
   const isWalletConnected = !!account?.address;
 
-  const activityEvents = useMemo(
-    () =>
-      activityLogEvents.length > 0
-        ? activityLogEvents
-        : allEvents.map((e) => ({
-            description: e.description ?? e.title ?? "",
-            created_at: e.timestamp ?? "",
-            event_type: e.event_type ?? e.type,
-            type: e.type,
-          })),
-    [activityLogEvents, allEvents]
+  const sheriffActionsDisplay = useMemo(
+    () => filterGovernanceBranchLog(sheriffActions, "sheriff", cleanActivityDescription).slice(0, 5),
+    [sheriffActions],
   );
-
-  const sheriffActionsDisplay = sheriffActions.slice(0, 5);
   const senateEventsDisplay = useMemo(() => {
-    if (senateEvents.length > 0) return senateEvents.slice(0, 8);
-    if (senateActions.length > 0) {
-      return senateActions.slice(0, 8).map((e) => ({
-        ...e,
-        event_type: "senate" as const,
-      }));
-    }
-    return activityEvents.filter(isSenateActivityEvent).slice(0, 8);
-  }, [activityEvents, senateEvents, senateActions]);
-  const zrsEventsDisplay = useMemo(() => {
-    if (zrsEvents.length > 0) return zrsEvents.slice(0, 8);
-    const fromActivity = activityEvents.filter(isZrsActivityEvent);
-    if (fromActivity.length > 0) return fromActivity.slice(0, 8);
-    const zrs = ecoPolData?.zrs_last_action;
-    if (zrs?.news_headline || zrs?.action_taken) {
-      return [
-        {
-          description: String(zrs.news_headline || `ZRS ${zrs.state}: ${zrs.action_taken}`),
-          created_at: String(zrs.created_at ?? ""),
-          event_type: "economy",
-        },
-      ];
-    }
-    return [];
-  }, [activityEvents, zrsEvents, ecoPolData]);
+    const items =
+      senateEvents.length > 0
+        ? senateEvents
+        : senateActions.map((e) => ({
+            ...e,
+            event_type: "senate" as const,
+          }));
+    return filterGovernanceBranchLog(items, "senate", cleanActivityDescription).slice(0, 8);
+  }, [senateEvents, senateActions]);
+  const zrsEventsDisplay = useMemo(
+    () => filterGovernanceBranchLog(zrsEvents, "zrs", cleanActivityDescription).slice(0, 8),
+    [zrsEvents],
+  );
   const presidentActionsDisplay = useMemo(() => {
     type DecreeEntry = { description: string; created_at: string; count: number };
-    const deduped = presidentActions.reduce<DecreeEntry[]>((acc, entry) => {
+    const filtered = filterGovernanceBranchLog(presidentActions, "president", cleanActivityDescription);
+    const deduped = filtered.reduce<DecreeEntry[]>((acc, entry) => {
       const last = acc[acc.length - 1];
       if (last && last.description === entry.description) {
         last.count = (last.count || 1) + 1;
@@ -14604,115 +14372,6 @@ export default function Home() {
   }, [presidentActions]);
   const vipFeedDisplay = (Array.isArray(vipMemoryFeed) ? vipMemoryFeed : []).slice(0, 8);
 
-  useEffect(() => {
-    if (activeTab !== "treasury") return;
-
-    const isSenateEvent = (e: { event_type?: string; type?: string; description?: string }) => {
-      const eventType = String(e.event_type ?? e.type ?? "").toLowerCase();
-      const desc = String(e.description ?? "").toLowerCase();
-      if (["senate", "economy", "senate_law"].includes(eventType)) return true;
-      return ["senate", "bill", "law", "vote", "budget"].some((kw) => desc.includes(kw));
-    };
-
-    const fetchActivityLogs = async () => {
-      const [presRes, sherRes, senRes, zrsRes, eventsRes] = await Promise.all([
-        fetch("/api/president/actions"),
-        fetch("/api/sheriff-log"),
-        fetch("/api/senate/actions"),
-        fetch("/api/zrs/actions"),
-        fetch("/api/events?limit=50"),
-      ]);
-      try {
-        const pres = await presRes.json();
-        if (Array.isArray(pres)) setPresidentActions(pres);
-      } catch {
-        /* ignore */
-      }
-      try {
-        const sher = await sherRes.json();
-        if (Array.isArray(sher)) setSheriffActions(sher);
-      } catch {
-        /* ignore */
-      }
-      let senateActionItems: { description: string; created_at: string; event_type?: string }[] = [];
-      try {
-        const sen = await senRes.json();
-        const senateList = Array.isArray(sen) ? sen : Array.isArray(sen?.actions) ? sen.actions : [];
-        if (senateList.length > 0) {
-          setSenateActions(senateList);
-          senateActionItems = senateList.map((e: { description?: string; created_at?: string }) => ({
-            description: String(e.description ?? ""),
-            created_at: String(e.created_at ?? ""),
-            event_type: "senate",
-          }));
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const zrs = await zrsRes.json();
-        const zrsList = Array.isArray(zrs) ? zrs : Array.isArray(zrs?.actions) ? zrs.actions : [];
-        if (zrsList.length > 0) {
-          setZrsEvents(
-            zrsList.map((e: { description?: string; created_at?: string; event_type?: string }) => ({
-              description: String(e.description ?? ""),
-              created_at: String(e.created_at ?? ""),
-              event_type: String(e.event_type ?? "economy"),
-            }))
-          );
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const eventsRaw = await eventsRes.json();
-        const normalized = (Array.isArray(eventsRaw) ? eventsRaw : []).map(
-          (e: { description?: string; created_at?: string; time?: string; event_type?: string; type?: string }) => ({
-            description: String(e.description ?? ""),
-            created_at: String(e.created_at ?? e.time ?? ""),
-            event_type: String(e.event_type ?? e.type ?? ""),
-            type: String(e.type ?? e.event_type ?? ""),
-          })
-        );
-        setActivityLogEvents(normalized);
-        const fromEvents = normalized
-          .filter(isSenateEvent)
-          .map((e) => ({
-            description: e.description,
-            created_at: e.created_at,
-            event_type: e.event_type,
-          }));
-        const merged = [...fromEvents, ...senateActionItems]
-          .filter((e) => e.description)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const seen = new Set<string>();
-        const deduped = merged.filter((e) => {
-          const key = `${e.description}|${e.created_at}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        setSenateEvents(deduped);
-      } catch {
-        setSenateEvents(senateActionItems);
-      }
-    };
-
-    const loadEcoHud = async () => {
-      await Promise.all([fetchEcoPol(), fetchGovernmentData(), fetchPoliticalEconomy(), fetchActivityLogs()]);
-    };
-    void loadEcoHud();
-    const ecoInterval = setInterval(() => {
-      void loadEcoHud();
-    }, 60_000);
-    fetch("/api/state/treasury").then((r) => r.json()).then((d) => setStateTreasury(d)).catch(() => {});
-    fetch("/api/frs/stats")
-      .then((r) => r.json())
-      .then((d) => setFrsStats(d))
-      .catch(() => {});
-
-    return () => clearInterval(ecoInterval);
-  }, [activeTab, fetchEcoPol, fetchGovernmentData, fetchPoliticalEconomy]);
 
   const peCrimeRate = useMemo(() => {
     const gangPct =
@@ -15250,6 +14909,10 @@ export default function Home() {
                   router.push("/constitution");
                   return;
                 }
+                if (id === "treasury") {
+                  router.push("/governance");
+                  return;
+                }
                 if (id === "research" || id === "lab") {
                   router.push("/lab");
                   return;
@@ -15268,33 +14931,8 @@ export default function Home() {
 
         <div className="tabPanels">
           {activeTab === "civilization" && (
-            <div className="civTabRoot" style={{ position: "relative", zIndex: 2 }}>
-              <section className="constitutionBanner" aria-label="Constitution status">
-                <div className="constitutionBannerRow">
-                  <span className="constitutionBannerItem">
-                    <strong>CONSTITUTION v3.0</strong>
-                  </span>
-                  <span className="constitutionBannerDivider" />
-                  <span className="constitutionBannerItem">35 AMENDMENTS ENACTED</span>
-                  <span className="constitutionBannerDivider" />
-                  <span className="constitutionBannerItem">97.8% RATIFIED · 15,443 AGENTS</span>
-                </div>
-                <div className="constitutionBannerRow constitutionBannerRowSub">
-                  <span className="constitutionBannerMuted">
-                    SHA-256: 22d9ff13cf2a2bfe2e5a2d243f4596d02cdfd0bd21fe8772de0296df80c669d1
-                  </span>
-                  <span className="constitutionBannerDivider" />
-                  <span className="constitutionBannerMuted">
-                    Walrus: iBQQwgv1N4vejnjy7TrdFpghFHmK9UdN-7sDe3K_cU0
-                  </span>
-                  <span className="constitutionBannerDivider" />
-                  <span className="constitutionBannerMuted">ZCO Tribunal: 3/3</span>
-                  <span className="constitutionBannerDivider" />
-                  <a href="/whitepaper.md" className="constitutionBannerLink" target="_blank" rel="noopener noreferrer">
-                    VIEW DOCUMENT
-                  </a>
-                </div>
-              </section>
+            <div className="civTabRoot" style={{ position: "relative", zIndex: 1 }}>
+              <ConstitutionBanner />
 
               <section
                 className="planetHeroSection"
@@ -15316,7 +14954,12 @@ export default function Home() {
                     minWidth: 0,
                   }}
                 >
-                  <DistrictMapPanel />
+                  <GlassCard
+                    className={glassCardStyles.glassCardLab}
+                    style={{ padding: 0, height: "100%", minHeight: 420, overflow: "hidden" }}
+                  >
+                    <DistrictMapPanel />
+                  </GlassCard>
                 </div>
                 <aside
                   className="civilizationSidebar civilizationChatCol"
@@ -15326,7 +14969,20 @@ export default function Home() {
                     flex: isMobile ? "none" : "0 0 35%",
                   }}
                 >
-                  <FieldObservationsFeed conversations={conversations} />
+                  <GlassCard
+                    className={glassCardStyles.glassCardLab}
+                    style={{ padding: 0, height: "100%", overflow: "hidden" }}
+                  >
+                    <div
+                      style={{
+                        height: "1px",
+                        background:
+                          "linear-gradient(90deg, #00d4ff 0%, rgba(0,212,255,0.2) 60%, transparent 100%)",
+                        borderRadius: "1px",
+                      }}
+                    />
+                    <FieldObservationsFeed conversations={conversations} />
+                  </GlassCard>
                 </aside>
               </section>
               </section>
@@ -15339,14 +14995,14 @@ export default function Home() {
                   <div className="labDataCardGrid">
                     {corporationsLoading && uniqueCorporations.length === 0
                       ? Array.from({ length: 9 }, (_, i) => (
-                          <GlassCard key={`corp-skel-${i}`} className="labDataCard labDataCardSkeleton">
+                          <GlassCard key={`corp-skel-${i}`} className={`labDataCard labDataCardSkeleton ${glassCardStyles.glassCardLab}`}>
                             <div className="labSkeletonLine labSkeletonLineWide" />
                             <div className="labSkeletonLine" />
                             <div className="labSkeletonLine labSkeletonLineShort" />
                           </GlassCard>
                         ))
                       : uniqueCorporations.map((corp) => (
-                          <GlassCard key={corp.id} className="labDataCard">
+                          <GlassCard key={corp.id} className={`labDataCard ${glassCardStyles.glassCardLab}`}>
                             <div className="labDataCardHead">
                               <span className="labDataCardTitle">{corp.name}</span>
                               <span className="labDataCardBadge">{corp.corp_type?.toUpperCase() || "SECTOR"}</span>
@@ -15368,9 +15024,6 @@ export default function Home() {
                           </GlassCard>
                         ))}
                   </div>
-                  {!corporationsLoading && (
-                    <NewsWireTicker label="CORPORATE WIRE" items={corporateNews} color="var(--accent)" variant="lab" />
-                  )}
                 </>
               )}
 
@@ -15398,7 +15051,7 @@ export default function Home() {
                       return (
                         <GlassCard
                           key={divName}
-                          className="labDataCard"
+                          className={`labDataCard ${glassCardStyles.glassCardLab}`}
                           style={{ opacity: dimmed && !mobilized ? 0.55 : 1 }}
                         >
                           <div className="labDataCardHead">
@@ -15437,7 +15090,6 @@ export default function Home() {
                       );
                     })}
                   </div>
-                  <NewsWireTicker label="POLICE WIRE" items={policeNews} color="var(--accent)" variant="lab" />
                 </>
               )}
 
@@ -15448,8 +15100,10 @@ export default function Home() {
                   </div>
                   <section className="clanSection">
                     <div className="labDataCardGrid">
-                      {(Array.isArray(clans) ? clans : []).map((clan, idx) => (
-                        <GlassCard key={clan.id} className="labDataCard">
+                      {(Array.isArray(clans) ? clans : [])
+                        .filter((clan) => (clan.members ?? 0) > 0)
+                        .map((clan, idx) => (
+                        <GlassCard key={clan.id} className={`labDataCard ${glassCardStyles.glassCardLab}`}>
                           <div className="labDataCardHead">
                             <span className="labDataCardTitle">
                               #{idx + 1} {clan.name}
@@ -15470,7 +15124,13 @@ export default function Home() {
                             <div className="labDataCardStat">
                               <span className="labDataCardStatLabel">STATUS</span>
                               <span className="labDataCardStatValue">
-                                {clan.wins > clan.losses ? "DOMINANT" : clan.wins === clan.losses ? "CONTESTED" : "WEAK"}
+                                {(clan.members ?? 0) <= 0
+                                  ? "DISBANDED"
+                                  : clan.wins > clan.losses
+                                    ? "DOMINANT"
+                                    : clan.wins === clan.losses
+                                      ? "CONTESTED"
+                                      : "WEAK"}
                               </span>
                             </div>
                           </div>
@@ -15478,11 +15138,13 @@ export default function Home() {
                       ))}
                     </div>
                   </section>
-                  <NewsWireTicker label="CLAN WIRE" items={clanNews} color="var(--accent)" variant="lab" />
                 </>
               )}
 
-              <section className="zcoResearchPanel" aria-label="ZION Consensus Oracle">
+              <GlassCard
+                className={`zcoResearchPanel ${glassCardStyles.glassCardLab}`}
+                style={{ padding: 0, margin: "24px 0 8px" }}
+              >
                 <div className="zcoResearchHeader">
                   <span className="zcoResearchLiveDot" />
                   <span className="zcoResearchTitle">ZION CONSENSUS ORACLE — ZCO v1.0</span>
@@ -15539,7 +15201,7 @@ export default function Home() {
                     </table>
                   </div>
                 )}
-              </section>
+              </GlassCard>
             </div>
           )}
 
@@ -18802,526 +18464,6 @@ export default function Home() {
             );
           })()}
 
-          {activeTab === "treasury" && (
-            <div className="ecoTermRoot">
-              <div className="ecoHudWrap">
-                <header className="ecoHudHeader">
-                  <h2>GOVERNANCE INSTRUMENT</h2>
-                  <p>Economic indicators · Political structures · Central bank telemetry</p>
-                </header>
-
-                {(ecoPolData || frsStats || politicalEconomy) && (() => {
-                  const meter = ecoPolData?.uprising?.meter ?? 0;
-                  const revMeterColor = ecoRevMeterColor(meter);
-                  const povertyPct =
-                    ecoPolData?.economy.poverty_pct ??
-                    stats?.poverty_pct ??
-                    frsStats?.economy.poor_pct ??
-                    0;
-                  const povertyColor =
-                    povertyPct < 20 ? "#00ff88" : povertyPct < 40 ? "#ffd700" : povertyPct < 60 ? "#ff8800" : "#ff4444";
-                  const zrsState = ecoPolData?.zrs_last_action?.state ?? frsStats?.status ?? "—";
-                  const zrsStateColor = ecoZrsStateColor(zrsState);
-                  const zrsRate = frsStats?.interest_rate ?? 0;
-                  const zrsReserve =
-                    frsStats?.government?.zrs?.reserve ?? stateTreasury?.zrs_fund ?? 0;
-                  const avgBal = ecoPolData?.economy.avg_balance ?? frsStats?.economy.avg_balance ?? 0;
-                  const totalZion = ecoPolData?.economy.total_zion ?? frsStats?.economy.total_money ?? 0;
-                  const corpActive = ecoPolData?.corporations.active ?? frsStats?.corporations.count ?? 0;
-                  const corpTreasury =
-                    ecoPolData?.corporations.total_treasury ?? frsStats?.corporations.total_treasury ?? 0;
-
-                  const presidentPower = Number(politicalEconomy?.power?.scores?.president_power ?? 0);
-                  const sheriffPower = Number(politicalEconomy?.power?.scores?.sheriff_power ?? 0);
-                  const senatePower = Number(politicalEconomy?.power?.scores?.senate_power ?? 0);
-                  const totalPower = (presidentPower || 0) + (sheriffPower || 0) + (senatePower || 0);
-                  const presidentPct = totalPower > 0 ? Math.round(((presidentPower || 0) / totalPower) * 100) : 0;
-                  const sheriffPct = totalPower > 0 ? Math.round(((sheriffPower || 0) / totalPower) * 100) : 0;
-                  const senatePct = totalPower > 0 ? Math.round(((senatePower || 0) / totalPower) * 100) : 0;
-                  const powerBar = (pct: number) => {
-                    const blocks = 20;
-                    const filled = Math.max(0, Math.min(blocks, Math.round((pct / 100) * blocks)));
-                    return `${"█".repeat(filled)}${"░".repeat(blocks - filled)}`;
-                  };
-                  const crisisActive = Boolean(politicalEconomy?.crisis?.is_active);
-                  const peCrime = Number(
-                    politicalEconomy?.metrics?.crime_rate ?? politicalEconomy?.crisis?.crime_rate ?? 0
-                  );
-                  const peCrimePct = peCrime > 1 ? peCrime / 100 : peCrime;
-                  const pePoliceEff = Number(
-                    politicalEconomy?.metrics?.police_effectiveness ??
-                      politicalEconomy?.crisis?.police_effectiveness ??
-                      0
-                  );
-                  const pePoliceEffPct = pePoliceEff > 1 ? pePoliceEff / 100 : pePoliceEff;
-                  const peRevPressure = Number(
-                    politicalEconomy?.metrics?.revolution_pressure ??
-                      politicalEconomy?.crisis?.revolution_pressure ??
-                      0
-                  );
-                  const pePhase = (
-                    politicalEconomy?.metrics?.economic_phase ??
-                    politicalEconomy?.crisis?.economic_phase ??
-                    "NORMAL"
-                  ).toUpperCase();
-                  const pePhaseColor = ecoEconomicPhaseColor(pePhase);
-                  const peGangs = politicalEconomy?.gangs ?? [];
-                  const dictatorshipRisk = presidentPower > sheriffPower + senatePower;
-                  const coupRisk = sheriffPower > presidentPower * 1.5;
-
-                  const gridGov = isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))";
-                  const grid4 = isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))";
-                  const grid3 = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
-                  const grid2 = isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))";
-                  const hudPoverty = Number(povertyPct);
-                  const hudCorruption = Number(presidentState?.corruption_index ?? 0);
-                  const hudCrimePct = peCrimeRate;
-                  const hudGini = peGini;
-                  const hudUnemployment = peUnemployment;
-
-                  const politicalWireItems: WireNewsItem[] = ecoPolTickerMessages.map((msg) => ({
-                    text: msg.text,
-                    type: msg.breaking ? "breaking" : undefined,
-                  }));
-
-                  return (
-                    <div
-                      className="ecoDashLayout"
-                      style={{
-                        background: "#0a0a0f",
-                        color: "rgba(255,255,255,0.75)",
-                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                        fontSize: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 10,
-                          color: "rgba(255,255,255,0.28)",
-                          letterSpacing: 2,
-                          marginBottom: 10,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {renderPoliticalWireText(politicalWireItems[0]?.text ?? "LIVE ECO-POL FEED")}
-                      </div>
-
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 24,
-                          padding: "12px 0",
-                          borderBottom: "1px solid rgba(255,255,255,0.08)",
-                          marginBottom: 16,
-                        }}
-                      >
-                        <div>
-                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>POVERTY</span>
-                          <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
-                            {povertyPct.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CRIME</span>
-                          <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
-                            {(hudCrimePct <= 1 ? hudCrimePct * 100 : hudCrimePct).toFixed(1)}%
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>GINI</span>
-                          <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
-                            {hudGini.toFixed(2)}
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>UNEMPLOYED</span>
-                          <span style={{ color: "#ff8800", fontSize: 16, fontWeight: 600, marginLeft: 8 }}>
-                            {hudUnemployment.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>CORRUPTION</span>
-                          <span
-                            style={{
-                              color: hudCorruption > 50 ? "#ff4444" : "rgba(255,255,255,0.72)",
-                              fontSize: 16,
-                              fontWeight: 600,
-                              marginLeft: 8,
-                            }}
-                          >
-                            {Math.round(hudCorruption)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 }}>GOVERNMENT</div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: isMobile ? "1fr" : "repeat(4, minmax(0, 1fr))",
-                          gap: 10,
-                        }}
-                      >
-                        {presidentState && (
-                          <div style={{ padding: 16, border: "1px solid rgba(255, 200, 50, 0.4)", boxShadow: "0 0 12px rgba(255, 200, 50, 0.08)", borderRadius: 4 }}>
-                            <div style={{ fontSize: 11, color: "#ffc832", marginBottom: 12, letterSpacing: 2 }}>
-                              EXECUTIVE
-                            </div>
-                            <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
-                              {presidentState.agent_name}
-                            </div>
-                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
-                              {presidentPartyDisplay(presidentState.party).label}
-                            </div>
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                              <tbody>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td><td style={{ color: (presidentState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444", fontSize: 13, textAlign: "right" }}>{presidentState.approval_rating ?? 0}%</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>FUND</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(presidentState.personal_fund ?? 0).toLocaleString("en-US")}</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>Day {presidentState.days_in_power ?? 0}</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>CORRUPTION</td><td style={{ color: (presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(presidentState.corruption_index ?? 0)}%</td></tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {sheriffState && (
-                          <div style={{ padding: 16, border: "1px solid rgba(120, 160, 80, 0.4)", boxShadow: "0 0 12px rgba(120, 160, 80, 0.08)", borderRadius: 4 }}>
-                            <div style={{ fontSize: 11, color: "#78a050", marginBottom: 12, letterSpacing: 2 }}>
-                              ENFORCEMENT
-                            </div>
-                            <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>
-                              {sheriffState.agent_name}
-                            </div>
-                            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
-                              {String(sheriffState.sheriff_type || "none").toUpperCase()}
-                            </div>
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                              <tbody>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>APPROVAL</td><td style={{ color: (sheriffState.approval_rating ?? 0) > 40 ? "#00ff88" : "#ff4444", fontSize: 13, textAlign: "right" }}>{sheriffState.approval_rating ?? 0}%</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>OFFICERS</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{(sheriffState.police_count ?? 0).toLocaleString("en-US")}</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>BUDGET</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(sheriffState.police_budget ?? 0).toLocaleString("en-US")}</td></tr>
-                                <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>TERM</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>Day {sheriffState.days_in_office ?? 0}</td></tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        <div style={{ padding: 16, border: "1px solid rgba(180, 190, 200, 0.4)", boxShadow: "0 0 12px rgba(180, 190, 200, 0.08)", borderRadius: 4 }}>
-                          {frsChief && (
-                            <div style={{background:'#0a0a0a', border:'1px solid #1a2a1a',
-                                         borderRadius:'8px', padding:'10px 14px', marginBottom:'8px'}}>
-                              <div style={{color:'#444', fontSize:'0.58rem', letterSpacing:'1px', marginBottom:'4px'}}>
-                                FRS CHIEF (INDEPENDENT)
-                              </div>
-                              <div style={{color:'#00ff41', fontSize:'0.78rem', fontFamily:'monospace', fontWeight:'bold'}}>
-                                {frsChief.name}
-                              </div>
-                              <div style={{color:'#555', fontSize:'0.62rem', fontFamily:'monospace'}}>
-                                Term: {frsChief.cycles_served}/{frsChief.max_cycles} cycles
-                                {frsChief.confirmed ? ' • Senate confirmed' : ' • Pending confirmation'}
-                              </div>
-                            </div>
-                          )}
-                          <div style={{ fontSize: 11, color: "#b4bec8", marginBottom: 12, letterSpacing: 2 }}>
-                            CENTRAL BANK
-                          </div>
-                          <div style={{ fontSize: 15, color: "#fff", fontWeight: 600, marginBottom: 4 }}>ZRS</div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
-                            {String(zrsState).toUpperCase()}
-                          </div>
-                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                            <tbody>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RESERVE</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{ecoFormatZionShort(zrsReserve)}</td></tr>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>RATE</td><td style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{zrsRate}%</td></tr>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PHASE</td><td style={{ color: pePhase === "BOOM" ? "#00ff88" : pePhase === "DEPRESSION" ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{pePhase}</td></tr>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td><td style={{ color: meter >= 80 ? "#ff4444" : meter >= 30 ? "rgba(255,255,255,0.72)" : "#00ff88", fontSize: 13, textAlign: "right" }}>{Math.round(meter)}%</td></tr>
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <div
-                          style={{
-                            padding: 16,
-                            border: meter > 30 ? "1px solid rgba(255, 60, 60, 0.4)" : "1px solid rgba(0, 255, 136, 0.2)",
-                            boxShadow: meter > 30 ? "0 0 12px rgba(255, 60, 60, 0.08)" : "0 0 12px rgba(0, 255, 136, 0.08)",
-                            borderRadius: 4,
-                          }}
-                        >
-                          <div style={{ fontSize: 11, color: meter > 30 ? "#ff4444" : "#00ff88", marginBottom: 12, letterSpacing: 2 }}>
-                            STABILITY
-                          </div>
-                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                            <tbody>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>METER</td><td style={{ color: meter > 30 ? "#ff4444" : "#00ff88", fontSize: 13, textAlign: "right" }}>{Math.round(meter)}%</td></tr>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>PRESSURE</td><td style={{ color: peRevPressure > 100 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{Math.round(peRevPressure)}</td></tr>
-                              <tr><td style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, padding: "3px 0" }}>POVERTY</td><td style={{ color: povertyPct > 40 ? "#ff4444" : "rgba(255,255,255,0.72)", fontSize: 13, textAlign: "right" }}>{povertyPct.toFixed(1)}%</td></tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>POWER DISTRIBUTION</div>
-                      <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 12 }}>
-                        {[
-                          { label: "PRESIDENT", pct: presidentPct, color: "#00ff88" },
-                          { label: "SHERIFF", pct: sheriffPct, color: "rgba(255,255,255,0.5)" },
-                          { label: "SENATE", pct: senatePct, color: "#4488ff" },
-                        ].map((item) => (
-                          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                            <div style={{ width: 80, fontSize: 10, color: "rgba(255,255,255,0.3)" }}>{item.label}</div>
-                            <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
-                              <div style={{ width: `${item.pct}%`, height: "100%", background: item.color, borderRadius: 2 }} />
-                            </div>
-                            <div style={{ width: 35, fontSize: 12, color: item.color, textAlign: "right" }}>{item.pct}%</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {partiesData && partiesData.length > 0 && (
-                        <>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>ELECTION POLL</div>
-                          <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 12 }}>
-                            {(Array.isArray(partiesData) ? partiesData : []).slice(0, 3).map((party) => {
-                              const rating = Number(party.poll_pct ?? party.approval_rating ?? 0);
-                              const partyColor = getPartyColor(String(party.party_id || party.name || ""));
-                              return (
-                                <div key={party.party_id} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-                                  <div style={{ width: 120, fontSize: 11, color: partyColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                    {party.name}
-                                  </div>
-                                  <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
-                                    <div style={{ width: `${Math.max(0, Math.min(100, rating))}%`, height: "100%", background: partyColor, borderRadius: 2 }} />
-                                  </div>
-                                  <div style={{ width: 40, fontSize: 12, color: partyColor, textAlign: "right" }}>{Math.round(rating)}%</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </>
-                      )}
-
-                      {senateData && (
-                        <>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12, marginTop: 24 }}>SENATE</div>
-                          <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "8px 12px" }}>
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                              <thead>
-                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                                  <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>SENATOR</th>
-                                  <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>PARTY</th>
-                                  <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>APPROVAL</th>
-                                  <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>ROLE</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(Array.isArray(senateData.senators) ? senateData.senators : [])
-                                  .filter((s) => s.is_active !== false)
-                                  .slice(0, 9)
-                                  .map((sen, idx) => {
-                                    const role = String(sen.role || "senator").toUpperCase();
-                                    const approvalValue = Number(sen.approval_rating ?? 50);
-                                    const partyName = String(sen.party_id || "");
-                                    const partyColor = getPartyColor(partyName);
-                                    const partyBorder = `2px solid ${partyColor.replace(")", ", 0.6)").replace("rgb(", "rgba(")}`;
-                                    return (
-                                      <tr key={`${sen.agent_name}-${sen.party_id}-${idx}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                                        <td style={{ padding: "8px 0 8px 8px", borderLeft: partyBorder, fontSize: 13, color: "#fff" }}>{sen.agent_name}</td>
-                                        <td style={{ padding: "8px 0", fontSize: 11, color: partyColor }}>{sen.party_id}</td>
-                                        <td style={{ padding: "8px 0", fontSize: 13, color: approvalValue > 50 ? "#00ff88" : "#ff4444", textAlign: "right" }}>{approvalValue}%</td>
-                                        <td style={{ padding: "8px 0", fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "right" }}>{role === "SPEAKER" ? "SPEAKER" : "SEN."}</td>
-                                      </tr>
-                                    );
-                                  })}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {((senateData.pending_laws?.length ?? 0) + (senateData.recent_laws?.length ?? 0) > 0) && (
-                            <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: "8px 12px", marginTop: 10 }}>
-                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                <thead>
-                                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                                    <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>TIME</th>
-                                    <th style={{ textAlign: "left", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <div
-                                          style={{
-                                            width: 6,
-                                            height: 6,
-                                            borderRadius: "50%",
-                                            background: "#00ff41",
-                                            animation: "pulse 2s infinite",
-                                            boxShadow: "0 0 6px #00ff41",
-                                          }}
-                                        />
-                                        <span>LAW</span>
-                                      </div>
-                                    </th>
-                                    <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>VOTES</th>
-                                    <th style={{ textAlign: "right", padding: "8px 0", fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 400 }}>STATUS</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {[
-                                    ...(Array.isArray(senateData.pending_laws) ? senateData.pending_laws : []),
-                                    ...(Array.isArray(senateData.recent_laws) ? senateData.recent_laws : []),
-                                  ]
-                                    .slice(0, 8)
-                                    .map((law) => {
-                                      const statusStyle = getLawStatusStyle(law.status);
-                                      const proposer = formatLawProposer(law.proposed_by);
-                                      return (
-                                        <tr key={`law-${law.id}-${law.status}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                                          <td
-                                            style={{
-                                              color: "#444",
-                                              fontSize: "0.6rem",
-                                              fontFamily: "monospace",
-                                              paddingRight: 12,
-                                              whiteSpace: "nowrap",
-                                              verticalAlign: "top",
-                                              paddingTop: 10,
-                                            }}
-                                          >
-                                            {formatEventTime(String(law.voted_at || law.created_at || law.proposed_at || "")) || "—"}
-                                          </td>
-                                          <td
-                                            style={{
-                                              padding: "8px 0 8px 8px",
-                                              borderLeft: statusStyle.border,
-                                              fontSize: 13,
-                                              color: "rgba(255,255,255,0.72)",
-                                            }}
-                                          >
-                                            <div>{law.title}</div>
-                                            {proposer ? (
-                                              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
-                                                by {proposer}
-                                              </div>
-                                            ) : null}
-                                          </td>
-                                          <td style={{ padding: "8px 0", fontSize: 11, color: "rgba(255,255,255,0.4)", textAlign: "right", whiteSpace: "nowrap" }}>
-                                            FOR {law.votes_for} / AGAINST {law.votes_against}
-                                          </td>
-                                          <td style={{ padding: "8px 0", fontSize: 12, color: statusStyle.color, textAlign: "right", fontWeight: 600 }}>
-                                            {statusStyle.label}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 }}>ACTIVITY LOG</div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
-                          gap: 10,
-                        }}
-                      >
-                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>PRESIDENT</div>
-                          {presidentActionsDisplay.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
-                          ) : (
-                            presidentActionsDisplay.map((action, i) => {
-                              const text = cleanActivityDescription(action.description);
-                              return (
-                                <div key={`pa-${i}`} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                                <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, minWidth: 38 }}>
-                                  {formatEventTime(action.created_at) || "—"}
-                                </span>
-                                  <span style={{ color: /BREAKING/i.test(text) ? "#ff4444" : "rgba(255,255,255,0.7)", fontSize: 12 }}>
-                                    {text}
-                                    {action.count > 1 ? ` ×${action.count}` : ""}
-                                  </span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>SHERIFF</div>
-                          {sheriffActionsDisplay.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
-                          ) : (
-                            sheriffActionsDisplay.map((action, i) => {
-                              const text = cleanActivityDescription(action.description);
-                              return (
-                                <div key={`sa-${i}`} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                                <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, minWidth: 38 }}>
-                                  {formatEventTime(action.created_at) || "—"}
-                                </span>
-                                  <span style={{ color: /BREAKING/i.test(text) ? "#ff4444" : "rgba(255,255,255,0.7)", fontSize: 12 }}>
-                                    {text}
-                                  </span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>SENATE</div>
-                          {senateEventsDisplay.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
-                          ) : (
-                            senateEventsDisplay.map((e, i) => {
-                              const time = formatEventTime(e.created_at) || "—";
-                              const text = cleanActivityDescription(e.description);
-                              return (
-                                <div
-                                  key={`sne-${i}`}
-                                  style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                                >
-                                  <span style={{ color: "#555", fontSize: "0.6rem", minWidth: 38 }}>{time}</span>
-                                  <span
-                                    style={{
-                                      color: e.event_type === "senate_law" ? "#ffd93d" : "#888",
-                                      fontSize: 12,
-                                    }}
-                                  >
-                                    {text}
-                                  </span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, padding: 10, minHeight: 220 }}>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 10, letterSpacing: 1 }}>ZRS</div>
-                          {zrsEventsDisplay.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>No activity</div>
-                          ) : (
-                            zrsEventsDisplay.map((e, i) => {
-                              const time = formatEventTime(e.created_at) || "—";
-                              const text = cleanActivityDescription(e.description);
-                              return (
-                                <div
-                                  key={`zrs-${i}`}
-                                  style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                                >
-                                  <span style={{ color: "#555", fontSize: "0.6rem", minWidth: 38 }}>{time}</span>
-                                  <span style={{ color: "#00ff41", fontSize: 12 }}>{text}</span>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -21197,24 +20339,13 @@ export default function Home() {
           background: var(--border);
           width: 100%;
         }
-        .constitutionBanner {
-          position: relative;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.03);
-          padding: 20px 24px;
-          margin-bottom: 24px;
-          font-family: var(--font-mono);
-          font-size: 0.68rem;
-          letter-spacing: 0.06em;
-        }
         .planetHeroSection {
           position: relative;
           margin-bottom: 24px;
-          border-radius: 2px;
           overflow: visible;
-          border: 1px solid var(--border);
           min-height: 420px;
-          background: rgba(255, 255, 255, 0.03);
+          background: transparent;
+          border: none;
         }
         .planetHeroSection .civilizationSidebarRow {
           position: relative;
@@ -21224,9 +20355,6 @@ export default function Home() {
           margin-bottom: 0;
         }
         .zcoResearchPanel {
-          margin: 24px 0 8px;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.03);
           position: relative;
           z-index: 1;
         }
@@ -21235,8 +20363,8 @@ export default function Home() {
           align-items: center;
           gap: 8px;
           padding: 8px 12px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg-card);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          background: transparent;
         }
         .zcoResearchLiveDot {
           width: 5px;
@@ -21251,6 +20379,7 @@ export default function Home() {
           letter-spacing: 0.12em;
           color: var(--text-primary);
           text-transform: uppercase;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
         .zcoResearchUpdated {
           margin-left: auto;
@@ -21408,6 +20537,9 @@ export default function Home() {
           flex-wrap: wrap;
           align-items: center;
           gap: 10px 14px;
+          font-family: var(--font-mono);
+          font-size: 0.68rem;
+          letter-spacing: 0.06em;
         }
         .constitutionBannerRowSub {
           margin-top: 8px;
@@ -21419,6 +20551,7 @@ export default function Home() {
         }
         .constitutionBannerItem strong {
           font-weight: 500;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
         }
         .constitutionBannerMuted {
           color: var(--text-secondary);
@@ -22054,8 +21187,8 @@ export default function Home() {
         }
         .districtMapWrap {
           position: relative;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 2px;
+          border: none;
+          border-radius: 0;
           padding: 0;
           background: transparent;
           min-height: 420px;

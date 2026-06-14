@@ -2618,7 +2618,21 @@ def _wire_type_from_event(description: str, event_type: str, priority=None) -> s
 
 def _trim_wire(items: list, limit: int = 15) -> list:
     items.sort(key=lambda x: x.get("timestamp") or "", reverse=True)
-    return items[:limit]
+    seen: set[str] = set()
+    deduped: list = []
+    for item in items:
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        item_id = item.get("id")
+        key = f"id:{item_id}" if item_id is not None else text
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
 
 
 @app.get("/police-wire")
