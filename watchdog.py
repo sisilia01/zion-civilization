@@ -33,6 +33,7 @@ CRON_SCRIPTS = {
     "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
     "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
     "party_choice": ("party_choice.py cycle", 3600),  # 1 hour — autonomous party affiliation
+    "political_parties": ("political_parties.py", 3600),  # 1 hour — party approval + members sync
     "birth":        ("birth.py",          1800),   # 30 min
     "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
     "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)
@@ -45,7 +46,7 @@ CRON_SCRIPTS = {
     # [DISABLED for scientific clarity] "clans":        ("clans.py",          3600),   # 1 hour
     "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
     # president/senate/sheriff governance handled by governance_tick.py only
-    # [DISABLED for scientific clarity] "political_parties": ("political_parties.py", 3600),
+    # political_parties enabled — syncs members_count + approval_rating hourly
     # [DISABLED for scientific clarity] "disasters": ("disasters.py", 2700),  # 45 min average
     # [DISABLED for scientific clarity] "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day

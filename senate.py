@@ -329,6 +329,49 @@ def compute_president_popular_vote(
     return votes, meta
 
 
+def active_president_agent_ids(cur) -> set[int]:
+    cur.execute(
+        "SELECT agent_id FROM president_state WHERE is_active = true"
+    )
+    return {int(r["agent_id"]) for r in cur.fetchall() if r.get("agent_id")}
+
+
+def purge_invalid_senate_seats(cur) -> int:
+    """Remove ghost seats: dead agents and anyone currently serving as President."""
+    president_ids = active_president_agent_ids(cur)
+    cur.execute(
+        """
+        DELETE FROM senate s
+        USING agents a
+        WHERE s.agent_id = a.id
+          AND s.is_active = true
+          AND (
+            a.is_alive = false
+            OR s.agent_id = ANY(%s)
+          )
+        RETURNING s.id, s.agent_name, s.agent_id, a.is_alive AS agent_alive
+        """,
+        (list(president_ids) if president_ids else [-1],),
+    )
+    removed = cur.fetchall()
+    for row in removed:
+        if row["agent_id"] in president_ids:
+            reason = "elected President"
+            priority = "urgent"
+        else:
+            reason = "deceased"
+            priority = "normal"
+        log_event(
+            cur,
+            row["agent_id"],
+            "senate",
+            f"Senate seat cleared: {row['agent_name']} ({reason})",
+            0,
+            priority=priority,
+        )
+    return len(removed)
+
+
 def vacate_senator_for_presidency(cur, agent_id: int, agent_name: str, party_id: str) -> None:
     """Winner leaves the Senate; seat opens for supplemental election."""
     cur.execute(
@@ -338,14 +381,15 @@ def vacate_senator_for_presidency(cur, agent_id: int, agent_name: str, party_id:
         """,
         (agent_id,),
     )
-    log_event(
-        cur,
-        agent_id,
-        "senate",
-        f"Senate seat vacated: {agent_name} ({party_id}) elected President — supplemental election called",
-        0,
-        priority="urgent",
-    )
+    if cur.rowcount:
+        log_event(
+            cur,
+            agent_id,
+            "senate",
+            f"Senate seat vacated: {agent_name} ({party_id}) elected President — supplemental election called",
+            0,
+            priority="urgent",
+        )
 
 
 def simulate_presidential_election(cur) -> dict:
@@ -716,14 +760,52 @@ def compute_president_class_vote(
     return scores, meta.get("by_class", {})
 
 
+def _assign_senate_speaker(cur) -> None:
+    cur.execute(
+        """
+        UPDATE senate SET role = 'senator'
+        WHERE is_active = true AND role = 'speaker'
+        """
+    )
+    cur.execute(
+        """
+        SELECT s.id, s.agent_id, s.agent_name, s.approval_rating
+        FROM senate s
+        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
+        WHERE s.is_active = true AND COALESCE(s.role, 'senator') != 'at_large'
+        ORDER BY s.approval_rating DESC, s.votes_cast DESC
+        LIMIT 1
+        """
+    )
+    speaker = cur.fetchone()
+    if not speaker:
+        return
+    cur.execute(
+        "UPDATE senate SET role = 'speaker' WHERE id = %s",
+        (speaker["id"],),
+    )
+    log_event(
+        cur,
+        speaker["agent_id"],
+        "senate",
+        f"Speaker of the Senate: {speaker['agent_name']} (approval {speaker['approval_rating']}%)",
+        0,
+        priority="normal",
+    )
+
+
 def prune_senate_to_nine(cur) -> int:
     """Enforce max 4 party senators + 1 at-large (role=at_large); remove excess."""
+    purge_invalid_senate_seats(cur)
     cur.execute(
         """
         SELECT s.id, s.party_id, s.approval_rating, s.agent_name, s.role
         FROM senate s
         INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
         WHERE s.is_active = true
+          AND s.agent_id NOT IN (
+              SELECT agent_id FROM president_state WHERE is_active = true
+          )
         ORDER BY s.approval_rating DESC NULLS LAST, s.id
         """
     )
@@ -859,14 +941,15 @@ def check_sheriff_recall(cur) -> bool:
 
 def ensure_senate_exists(cur):
     """Elect senators if fewer than 9 living seated — popular vote (Article XVII)."""
+    purge_invalid_senate_seats(cur)
     prune_senate_to_nine(cur)
     if senate_refill_blocked(cur):
+        prune_senate_to_nine(cur)
+        _assign_senate_speaker(cur)
         return
 
     living = living_senators_count(cur)
     max_senators = TOTAL_SENATORS
-    if living >= max_senators:
-        return
 
     cur.execute(
         """
@@ -876,6 +959,7 @@ def ensure_senate_exists(cur):
         """
     )
     seated_ids = {r["agent_id"] for r in cur.fetchall()}
+    seated_ids |= active_president_agent_ids(cur)
 
     for party_id in PARTY_IDS:
         cur.execute(
@@ -969,36 +1053,8 @@ def ensure_senate_exists(cur):
             continue
         _seat_senator(cur, agent, party_id, seated_ids, reason="diversity guard elected")
 
-    cur.execute(
-        """
-        UPDATE senate SET role = 'senator'
-        WHERE is_active = true AND role = 'speaker'
-        """
-    )
-    cur.execute(
-        """
-        SELECT s.id, s.agent_id, s.agent_name, s.approval_rating
-        FROM senate s
-        INNER JOIN agents a ON a.id = s.agent_id AND a.is_alive = true
-        WHERE s.is_active = true AND COALESCE(s.role, 'senator') != 'at_large'
-        ORDER BY s.approval_rating DESC, s.votes_cast DESC
-        LIMIT 1
-        """
-    )
-    speaker = cur.fetchone()
-    if speaker:
-        cur.execute(
-            "UPDATE senate SET role = 'speaker' WHERE id = %s",
-            (speaker["id"],),
-        )
-        log_event(
-            cur,
-            speaker["agent_id"],
-            "senate",
-            f"Speaker of the Senate: {speaker['agent_name']} (approval {speaker['approval_rating']}%)",
-            0,
-            priority="normal",
-        )
+    prune_senate_to_nine(cur)
+    _assign_senate_speaker(cur)
 
 
 def senator_party_id(senator: dict) -> str:

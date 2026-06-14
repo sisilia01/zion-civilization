@@ -98,7 +98,16 @@ def ensure_parties_exist(cur):
         print(f"  Created party: {info['emoji']} {info['name']} — leader: {leader_name}")
 
 def update_party_members(cur):
-    """Обновляем members_count по фактическому полю agents.party."""
+    """Sync party_members and members_count from agents.party (source of truth)."""
+    cur.execute("DELETE FROM party_members")
+    cur.execute(
+        """
+        INSERT INTO party_members (agent_id, party_id, role)
+        SELECT id, party, 'member'
+        FROM agents
+        WHERE is_alive = true AND party IN ('consensus', 'reform')
+        """
+    )
     for party_id in PARTIES:
         cur.execute(
             """
