@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { LiveMetricsBar } from "@/components/LiveMetricsBar";
 import { useHeaderStats } from "@/hooks/useHeaderStats";
 import { LAB_NAV_ITEMS, pathForTab, tabFromPath } from "@/lib/tab-routes";
 
@@ -33,7 +32,7 @@ export function SharedLayout({
 }: SharedLayoutProps) {
   const pathname = usePathname();
   const activeTab = tabFromPath(pathname);
-  const { subjectCount, mortality24h, prosperityPct, amendments, loading } = useHeaderStats();
+  const { stats } = useHeaderStats();
 
   return (
     <>
@@ -49,20 +48,39 @@ export function SharedLayout({
         <div className="zionHeroContent">
           <h1 className="zionHeroTitle">ZION CIVILIZATION</h1>
           <p className="zionHeroSubtitle">
-            An autonomous AI civilization. {subjectCount} subjects. Live on Sui blockchain.
+            An autonomous AI civilization. {stats?.alive?.toLocaleString("en-US") ?? "..."} subjects.
+            Live on Sui blockchain.
           </p>
           <p className="zionHeroLabel">EXPERIMENT_ID: SUI-2026-001 · STATUS: ACTIVE</p>
         </div>
       </section>
 
       <div className="belowHeroShell">
-        <LiveMetricsBar
-          subjectCount={subjectCount}
-          mortality24h={mortality24h}
-          prosperityPct={prosperityPct}
-          amendments={amendments}
-          loading={loading}
-        />
+        <section className="liveMetricsBar" aria-label="Live experiment metrics">
+          <div className="liveMetric">
+            <span className="liveMetricLabel">ACTIVE SUBJECTS</span>
+            <span className="liveMetricValue">{stats?.alive?.toLocaleString("en-US") ?? "···"}</span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">MORTALITY 24H</span>
+            <span className="liveMetricValue">
+              {stats ? (stats.deaths_today ?? 0).toLocaleString("en-US") : "···"}
+            </span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">PROSPERITY INDEX</span>
+            <span className="liveMetricValue">
+              {stats ? `${stats.prosperity?.toFixed(1) ?? "0.0"}%` : "···"}
+            </span>
+          </div>
+          <span className="liveMetricDivider" />
+          <div className="liveMetric">
+            <span className="liveMetricLabel">AMENDMENTS</span>
+            <span className="liveMetricValue">{stats?.amendments_enacted ?? "···"}</span>
+          </div>
+        </section>
 
         <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
           <nav

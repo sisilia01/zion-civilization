@@ -10,6 +10,8 @@ export type CachedHeaderStats = {
   revolution_meter: number;
   poverty_pct: number;
   amendments: number;
+  prosperity: number;
+  amendments_enacted: number;
 };
 
 function parseStatsRaw(raw: unknown): CachedHeaderStats {
@@ -29,7 +31,15 @@ function parseStatsRaw(raw: unknown): CachedHeaderStats {
     unemployment_rate: Number(s.unemployment_rate ?? 0),
     revolution_meter: Number(s.revolution_meter ?? 0),
     poverty_pct: Number(s.poverty_pct ?? 0),
-    amendments: Number(s.amendments ?? 35),
+    amendments: Number(s.amendments ?? s.amendments_enacted ?? 35),
+    prosperity:
+      computeProsperity({
+        unemployment: Number(s.unemployment_rate ?? 0),
+        revolution: Number(s.revolution_meter ?? 0),
+        poverty: Number(s.poverty_pct ?? 0),
+        population: alive,
+      }) * 100,
+    amendments_enacted: Number(s.amendments_enacted ?? s.amendments ?? 35),
   };
 }
 
@@ -42,7 +52,12 @@ export function readHeaderStatsCache(): CachedHeaderStats | null {
       data: CachedHeaderStats;
       timestamp: number;
     };
-    if (Date.now() - timestamp < CACHE_TTL) return data;
+    if (Date.now() - timestamp < CACHE_TTL) {
+      const requiredFields = ["alive", "prosperity", "amendments_enacted"] as const;
+      const isValid = requiredFields.every((f) => data[f] !== undefined);
+      if (!isValid) throw new Error("stale cache");
+      return data;
+    }
   } catch {
     /* ignore corrupt cache */
   }
@@ -59,18 +74,11 @@ export function headerStatsToDisplay(stats: CachedHeaderStats | null, loading: b
     };
   }
 
-  const prosperity = computeProsperity({
-    unemployment: stats.unemployment_rate,
-    revolution: stats.revolution_meter,
-    poverty: stats.poverty_pct,
-    population: stats.alive,
-  });
-
   return {
     subjectCount: stats.alive.toLocaleString("en-US"),
     mortality24h: stats.deaths_today.toLocaleString("en-US"),
-    prosperityPct: `${(prosperity * 100).toFixed(1)}%`,
-    amendments: String(stats.amendments),
+    prosperityPct: `${(stats.prosperity ?? 0).toFixed(1)}%`,
+    amendments: String(stats.amendments_enacted ?? 0),
   };
 }
 
