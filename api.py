@@ -6673,6 +6673,8 @@ async def get_sheriff_actions():
 @app.get("/police/divisions")
 @app.get("/police-divisions")
 async def get_police_divisions():
+    from civ_common import police_role_fields
+
     db = get_db()
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -6682,56 +6684,6 @@ async def get_police_divisions():
         up_row = cur.fetchone()
         uprising = bool((up_row or {}).get("a"))
 
-        # Sync total officers across divisions based on sheriff_state
-        cur.execute("SELECT police_count, police_budget FROM sheriff_state WHERE is_active=true LIMIT 1")
-        sheriff = cur.fetchone()
-        if sheriff:
-            total_officers = sheriff.get("police_count") or 0
-            total_budget = float(sheriff.get("police_budget") or 0)
-
-            # Distribute officers across active divisions proportionally
-            cur.execute("SELECT COUNT(*) AS n FROM police_divisions WHERE budget > 0")
-            active_divs = (cur.fetchone() or {}).get("n") or 1
-
-            if total_officers > 0:
-                cur.execute("""
-                    UPDATE police_divisions SET 
-                        officers = CASE division_name
-                            WHEN 'SWAT' THEN %s
-                            WHEN 'RIOT CTRL' THEN %s
-                            WHEN 'ANTI-TAX' THEN %s
-                            WHEN 'ANTI-CORR' THEN %s
-                            WHEN 'PRES.GUARD' THEN %s
-                        END
-                    WHERE division_name IN ('SWAT','RIOT CTRL','ANTI-TAX','ANTI-CORR','PRES.GUARD')
-                """, (
-                    int(total_officers * 0.30),  # SWAT 30%
-                    int(total_officers * 0.35),  # RIOT CTRL 35%
-                    int(total_officers * 0.15),  # ANTI-TAX 15%
-                    int(total_officers * 0.12),  # ANTI-CORR 12%
-                    int(total_officers * 0.08),  # PRES.GUARD 8%
-                ))
-
-                # Distribute budget too
-                cur.execute("""
-                    UPDATE police_divisions SET
-                        budget = CASE division_name
-                            WHEN 'SWAT' THEN %s
-                            WHEN 'RIOT CTRL' THEN %s
-                            WHEN 'ANTI-TAX' THEN %s
-                            WHEN 'ANTI-CORR' THEN %s
-                            WHEN 'PRES.GUARD' THEN %s
-                        END
-                    WHERE division_name IN ('SWAT','RIOT CTRL','ANTI-TAX','ANTI-CORR','PRES.GUARD')
-                """, (
-                    int(total_budget * 0.30),
-                    int(total_budget * 0.35),
-                    int(total_budget * 0.15),
-                    int(total_budget * 0.12),
-                    int(total_budget * 0.08),
-                ))
-                db.commit()
-
         cur.execute("SELECT * FROM police_divisions ORDER BY id")
         divs = cur.fetchall()
         depleted = {"SWAT", "ANTI-TAX", "ANTI-CORR", "PRES.GUARD"} if uprising else set()
@@ -6740,12 +6692,16 @@ async def get_police_divisions():
             name = d.get("division_name") or ""
             officers = int(d.get("officers") or 0)
             budget = float(d.get("budget") or 0)
+            role = d.get("role")
+            role_label, role_description = police_role_fields(role)
             out.append({
                 "division": name,
                 "division_name": name,
                 "officers": officers,
                 "budget": budget,
-                "role": d.get("role"),
+                "role": role,
+                "role_label": role_label,
+                "role_description": role_description,
                 "effectiveness": min(100, officers * 4),
                 "depleted": uprising and name in depleted,
                 "mobilized": uprising and name == "RIOT CTRL",

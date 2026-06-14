@@ -683,6 +683,40 @@ POLICE_DIVISION_SPLITS = [
     ("RIOT CTRL", 0.30, 0.30, "riot_control"),
 ]
 
+POLICE_ROLE_DISPLAY = {
+    "gang_raids": {
+        "badge": "COMBAT",
+        "description": "Gang raids & tactical response",
+    },
+    "tax_collection": {
+        "badge": "ENFORCEMENT",
+        "description": "Tax collection & evasion enforcement",
+    },
+    "president_guard": {
+        "badge": "SECURITY",
+        "description": "Presidential protection detail",
+    },
+    "anti_corruption": {
+        "badge": "INVESTIGATION",
+        "description": "Corruption & fraud investigation",
+    },
+    "riot_control": {
+        "badge": "CROWD CONTROL",
+        "description": "Civil unrest & riot suppression",
+    },
+    "patrol": {
+        "badge": "PATROL",
+        "description": "Division operations",
+    },
+}
+
+
+def police_role_fields(role: str | None) -> tuple[str, str]:
+    """Human-readable badge + description for a police_divisions.role value."""
+    key = (role or "patrol").strip().lower()
+    meta = POLICE_ROLE_DISPLAY.get(key, POLICE_ROLE_DISPLAY["patrol"])
+    return meta["badge"], meta["description"]
+
 UPRISING_STEAL_PCT = {
     "SWAT": 0.50,
     "ANTI-TAX": 0.80,
