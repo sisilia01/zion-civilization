@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 type LiveMetricsBarProps = {
   subjectCount: string;
@@ -14,40 +14,42 @@ const containerStyle: CSSProperties = {
   display: "flex",
   flexDirection: "row",
   alignItems: "center",
-  gap: "32px",
+  justifyContent: "space-between",
+  width: "100%",
+  gap: "0px",
   background: "rgba(0, 0, 0, 0.55)",
   borderTop: "1px solid rgba(255, 255, 255, 0.08)",
   borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
   padding: "16px 24px",
   position: "relative",
   zIndex: 2,
-  flexWrap: "nowrap",
-  overflowX: "auto",
 };
 
 const metricStyle: CSSProperties = {
+  flex: 1,
   display: "flex",
-  flexDirection: "row",
+  flexDirection: "column",
   alignItems: "center",
-  gap: "8px",
+  gap: "2px",
 };
 
-const metricWithDividerStyle: CSSProperties = {
-  ...metricStyle,
-  borderLeft: "1px solid rgba(100, 116, 139, 0.3)",
-  paddingLeft: "32px",
+const dividerStyle: CSSProperties = {
+  width: "1px",
+  height: "32px",
+  background: "rgba(100, 116, 139, 0.3)",
+  flexShrink: 0,
 };
 
 const labelStyle: CSSProperties = {
-  fontSize: "11px",
+  fontSize: "9px",
   color: "#64748b",
-  letterSpacing: "0.1em",
+  letterSpacing: "0.15em",
   textTransform: "uppercase",
   whiteSpace: "nowrap",
 };
 
 const valueStyle: CSSProperties = {
-  fontSize: "11px",
+  fontSize: "15px",
   color: "#00ff88",
   fontWeight: "bold",
   fontFamily: "monospace",
@@ -68,14 +70,22 @@ export function LiveMetricsBar({
     { label: "AMENDMENTS", value: amendments },
   ];
 
+  const nodes: ReactNode[] = [];
+  metrics.forEach(({ label, value }, index) => {
+    if (index > 0) {
+      nodes.push(<span key={`divider-${label}`} style={dividerStyle} aria-hidden />);
+    }
+    nodes.push(
+      <div key={label} style={metricStyle}>
+        <span style={labelStyle}>{label}</span>
+        <span style={valueStyle}>{value}</span>
+      </div>,
+    );
+  });
+
   return (
     <section style={containerStyle} aria-label="Live experiment metrics">
-      {metrics.map(({ label, value }, index) => (
-        <div key={label} style={index === 0 ? metricStyle : metricWithDividerStyle}>
-          <span style={labelStyle}>{label}</span>
-          <span style={valueStyle}>{value}</span>
-        </div>
-      ))}
+      {nodes}
     </section>
   );
 }

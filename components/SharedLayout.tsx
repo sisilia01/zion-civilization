@@ -59,7 +59,9 @@ export function SharedLayout({
         <section className="liveMetricsBar" aria-label="Live experiment metrics">
           <div className="liveMetric">
             <span className="liveMetricLabel">ACTIVE SUBJECTS</span>
-            <span className="liveMetricValue">{stats?.alive?.toLocaleString("en-US") ?? "···"}</span>
+            <span className="liveMetricValue">
+              {stats?.alive?.toLocaleString("en-US") ?? "···"}
+            </span>
           </div>
           <span className="liveMetricDivider" />
           <div className="liveMetric">
@@ -72,13 +74,15 @@ export function SharedLayout({
           <div className="liveMetric">
             <span className="liveMetricLabel">PROSPERITY INDEX</span>
             <span className="liveMetricValue">
-              {stats ? `${stats.prosperity?.toFixed(1) ?? "0.0"}%` : "···"}
+              {stats ? `${(stats.prosperity ?? 0).toFixed(1)}%` : "···"}
             </span>
           </div>
           <span className="liveMetricDivider" />
           <div className="liveMetric">
             <span className="liveMetricLabel">AMENDMENTS</span>
-            <span className="liveMetricValue">{stats?.amendments_enacted ?? "···"}</span>
+            <span className="liveMetricValue">
+              {stats?.amendments_enacted ?? "···"}
+            </span>
           </div>
         </section>
 

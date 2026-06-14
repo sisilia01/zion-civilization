@@ -16552,10 +16552,10 @@ export function ZionHome({
         }
         .liveMetricsBar {
           display: flex;
-          align-items: stretch;
-          justify-content: center;
-          flex-wrap: wrap;
-          gap: 0;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
           background: rgba(0, 0, 0, 0.55);
           border-top: 1px solid var(--border);
           border-bottom: 1px solid var(--border);
@@ -16563,33 +16563,30 @@ export function ZionHome({
           z-index: 2;
         }
         .liveMetric {
-          flex: 1 1 160px;
+          flex: 1;
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 20px 24px;
-          min-width: 140px;
+          gap: 2px;
         }
         .liveMetricLabel {
-          font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: 9px;
+          color: #64748b;
           letter-spacing: 0.15em;
           text-transform: uppercase;
-          color: var(--text-secondary);
+          white-space: nowrap;
         }
         .liveMetricValue {
-          font-family: var(--font-mono);
-          font-size: clamp(1.1rem, 2.5vw, 1.5rem);
-          font-weight: 500;
-          color: #ffffff;
+          font-size: 15px;
+          color: #00ff88;
+          font-weight: bold;
+          font-family: monospace;
         }
         .liveMetricDivider {
           width: 1px;
-          align-self: stretch;
-          background: rgba(255, 255, 255, 0.1);
-          margin: 12px 0;
+          height: 32px;
+          background: rgba(100, 116, 139, 0.3);
+          flex-shrink: 0;
         }
         @media (prefers-reduced-motion: reduce) {
           .introFullscreen *:not(canvas) {
