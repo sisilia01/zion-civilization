@@ -17,7 +17,7 @@ from civ_common import (
 )
 
 RECRUIT_BONUS = 5.0
-SIGNING_BALANCE_MAX = 3.0
+SIGNING_BALANCE_MAX = 15.0  # было 3
 MAX_DOMINANT_GANGS = 3
 
 

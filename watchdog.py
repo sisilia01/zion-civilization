@@ -43,7 +43,7 @@ CRON_SCRIPTS = {
     "tax":          ("tax_cron.py",       3600),   # 1 hour
     # [DISABLED for scientific clarity] corporations.py ARCHIVED — corp_economy.py is the active corporate system
     # "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
-    # [DISABLED for scientific clarity] "clans":        ("clans.py",          3600),   # 1 hour
+    "clans": ("clans.py", 3600),   # 1 hour — gang recruitment, wars, territory
     "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
     # president/senate/sheriff governance handled by governance_tick.py only
     # political_parties enabled — syncs members_count + approval_rating hourly
