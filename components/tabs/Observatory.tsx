@@ -192,53 +192,59 @@ export function Observatory() {
         </>
       )}
 
-      {clans.length > 0 && (
-        <>
-          <div className="labSectionDivider">
-            <span className="labSectionDividerLabel">CLAN RANKINGS</span>
-          </div>
-          <section className="clanSection">
+      <div className="labSectionDivider">
+        <span className="labSectionDividerLabel">GANG ALLIANCES</span>
+      </div>
+      <section className="clanSection">
+        {(() => {
+          const activeClans = (Array.isArray(clans) ? clans : []).filter(
+            (clan) => (clan.members_count ?? clan.members ?? 0) > 0,
+          );
+          if (activeClans.length === 0) {
+            return <p className="zcoResearchEmpty">No active gangs</p>;
+          }
+          return (
             <div className="labDataCardGrid">
-              {(Array.isArray(clans) ? clans : [])
-                .filter((clan) => (clan.members ?? 0) > 0)
-                .map((clan, idx) => (
-                  <GlassCard key={clan.id} className={`labDataCard ${obsGlass}`}>
-                    <div className="labDataCardHead">
-                      <span className="labDataCardTitle">
-                        #{idx + 1} {clan.name}
-                      </span>
-                      <span className="labDataCardBadge">
-                        W {clan.wins} / L {clan.losses}
+              {activeClans.map((clan, idx) => (
+                <GlassCard key={clan.id} className={`labDataCard ${obsGlass}`}>
+                  <div className="labDataCardHead">
+                    <span className="labDataCardTitle">
+                      #{idx + 1} {clan.name}
+                    </span>
+                    <span className="labDataCardBadge">
+                      W {clan.wins ?? 0} / L {clan.losses ?? 0}
+                    </span>
+                  </div>
+                  <div className="labDataCardStats">
+                    <div className="labDataCardStat">
+                      <span className="labDataCardStatLabel">MEMBERS</span>
+                      <span className="labDataCardStatValue">{clan.members ?? 0}</span>
+                    </div>
+                    <div className="labDataCardStat">
+                      <span className="labDataCardStatLabel">TREASURY</span>
+                      <span className="labDataCardStatValue">
+                        {Number(clan.treasury ?? 0).toFixed(0)}
                       </span>
                     </div>
-                    <div className="labDataCardStats">
-                      <div className="labDataCardStat">
-                        <span className="labDataCardStatLabel">MEMBERS</span>
-                        <span className="labDataCardStatValue">{clan.members}</span>
-                      </div>
-                      <div className="labDataCardStat">
-                        <span className="labDataCardStatLabel">TREASURY</span>
-                        <span className="labDataCardStatValue">{clan.treasury?.toFixed(0)}</span>
-                      </div>
-                      <div className="labDataCardStat">
-                        <span className="labDataCardStatLabel">STATUS</span>
-                        <span className="labDataCardStatValue">
-                          {(clan.members ?? 0) <= 0
-                            ? "DISBANDED"
-                            : clan.wins > clan.losses
-                              ? "DOMINANT"
-                              : clan.wins === clan.losses
-                                ? "CONTESTED"
-                                : "WEAK"}
-                        </span>
-                      </div>
+                    <div className="labDataCardStat">
+                      <span className="labDataCardStatLabel">TERRITORY</span>
+                      <span className="labDataCardStatValue">
+                        {clan.territory_control ?? 0}
+                      </span>
                     </div>
-                  </GlassCard>
-                ))}
+                    <div className="labDataCardStat">
+                      <span className="labDataCardStatLabel">HEALTH</span>
+                      <span className="labDataCardStatValue">
+                        {clan.gang_health != null ? clan.gang_health : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </GlassCard>
+              ))}
             </div>
-          </section>
-        </>
-      )}
+          );
+        })()}
+      </section>
 
       <GlassCard
         className={`zcoResearchPanel ${obsGlass}`}

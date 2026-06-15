@@ -1096,6 +1096,10 @@ interface Clan {
   members: number;
   wins: number;
   losses: number;
+  territory_control?: number;
+  gang_health?: number;
+  status?: string;
+  members_count?: number;
 }
 
 interface Stats {
@@ -14778,53 +14782,59 @@ export default function Home() {
                 </>
               )}
 
-              {clans.length > 0 && (
-                <>
-                  <div className="labSectionDivider">
-                    <span className="labSectionDividerLabel">CLAN RANKINGS</span>
-                  </div>
-                  <section className="clanSection">
+              <div className="labSectionDivider">
+                <span className="labSectionDividerLabel">GANG ALLIANCES</span>
+              </div>
+              <section className="clanSection">
+                {(() => {
+                  const activeClans = (Array.isArray(clans) ? clans : []).filter(
+                    (clan) => (clan.members_count ?? clan.members ?? 0) > 0,
+                  );
+                  if (activeClans.length === 0) {
+                    return <p className="zcoResearchEmpty">No active gangs</p>;
+                  }
+                  return (
                     <div className="labDataCardGrid">
-                      {(Array.isArray(clans) ? clans : [])
-                        .filter((clan) => (clan.members ?? 0) > 0)
-                        .map((clan, idx) => (
+                      {activeClans.map((clan, idx) => (
                         <GlassCard key={clan.id} className={`labDataCard ${glassCardStyles.glassCardLab}`}>
                           <div className="labDataCardHead">
                             <span className="labDataCardTitle">
                               #{idx + 1} {clan.name}
                             </span>
                             <span className="labDataCardBadge">
-                              W {clan.wins} / L {clan.losses}
+                              W {clan.wins ?? 0} / L {clan.losses ?? 0}
                             </span>
                           </div>
                           <div className="labDataCardStats">
                             <div className="labDataCardStat">
                               <span className="labDataCardStatLabel">MEMBERS</span>
-                              <span className="labDataCardStatValue">{clan.members}</span>
+                              <span className="labDataCardStatValue">{clan.members ?? 0}</span>
                             </div>
                             <div className="labDataCardStat">
                               <span className="labDataCardStatLabel">TREASURY</span>
-                              <span className="labDataCardStatValue">{clan.treasury?.toFixed(0)}</span>
+                              <span className="labDataCardStatValue">
+                                {Number(clan.treasury ?? 0).toFixed(0)}
+                              </span>
                             </div>
                             <div className="labDataCardStat">
-                              <span className="labDataCardStatLabel">STATUS</span>
+                              <span className="labDataCardStatLabel">TERRITORY</span>
                               <span className="labDataCardStatValue">
-                                {(clan.members ?? 0) <= 0
-                                  ? "DISBANDED"
-                                  : clan.wins > clan.losses
-                                    ? "DOMINANT"
-                                    : clan.wins === clan.losses
-                                      ? "CONTESTED"
-                                      : "WEAK"}
+                                {clan.territory_control ?? 0}
+                              </span>
+                            </div>
+                            <div className="labDataCardStat">
+                              <span className="labDataCardStatLabel">HEALTH</span>
+                              <span className="labDataCardStatValue">
+                                {clan.gang_health != null ? clan.gang_health : "—"}
                               </span>
                             </div>
                           </div>
                         </GlassCard>
                       ))}
                     </div>
-                  </section>
-                </>
-              )}
+                  );
+                })()}
+              </section>
 
               <GlassCard
                 className={`zcoResearchPanel ${glassCardStyles.glassCardLab}`}
@@ -17157,7 +17167,7 @@ export default function Home() {
             ellipse 70% 60% at 50% 50%,
             transparent 0%,
             rgba(0, 0, 0, 0.45) 60%,
-            rgba(0, 0, 0, 0.82) 100%
+            rgba(0, 0, 0, 0.77) 100%
           );
         }
         .zionHeroTopBar {
@@ -17238,7 +17248,7 @@ export default function Home() {
           align-items: center;
           justify-content: space-between;
           width: 100%;
-          background: rgba(0, 0, 0, 0.55);
+          background: rgba(0, 0, 0, 0.50);
           border-top: 1px solid var(--border);
           border-bottom: 1px solid var(--border);
           position: relative;
@@ -17307,7 +17317,7 @@ export default function Home() {
           gap: 4px 8px;
           padding: 0 0 24px;
           margin: 0 0 32px;
-          background: rgba(0, 0, 0, 0.72);
+          background: rgba(0, 0, 0, 0.68);
           border-bottom: 1px solid var(--border);
         }
         .navTab {

@@ -14,7 +14,6 @@ export function useGovernancePanel() {
   const [isMobile, setIsMobile] = useState(false);
   const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [governanceHeader, setGovernanceHeader] = useState<{
-    active_duties: string;
     amendments_in_voting: number;
   } | null>(null);
   const [presidentState, setPresidentState] = useState<Record<string, unknown> | null>(null);
@@ -219,9 +218,8 @@ export function useGovernancePanel() {
     fetch("/api/governance/header")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d && typeof d.active_duties === "string") {
+        if (d && typeof d.amendments_in_voting !== "undefined") {
           setGovernanceHeader({
-            active_duties: d.active_duties,
             amendments_in_voting: Number(d.amendments_in_voting) || 0,
           });
         }

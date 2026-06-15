@@ -1106,6 +1106,10 @@ interface Clan {
   members: number;
   wins: number;
   losses: number;
+  territory_control?: number;
+  gang_health?: number;
+  status?: string;
+  members_count?: number;
 }
 
 interface Stats {

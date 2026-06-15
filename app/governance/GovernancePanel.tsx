@@ -134,30 +134,17 @@ export function GovernancePanel() {
             <h2>GOVERNANCE INSTRUMENT</h2>
             <p>Economic indicators · Political structures · Central bank telemetry</p>
             {governanceHeader ? (
-              <>
-                <p
-                  style={{
-                    margin: "8px 0 0",
-                    fontSize: "11px",
-                    letterSpacing: "0.08em",
-                    color: textMuted,
-                    fontFamily: mono,
-                  }}
-                >
-                  ACTIVE DUTIES: {governanceHeader.active_duties}
-                </p>
-                <p
-                  style={{
-                    margin: "4px 0 0",
-                    fontSize: "11px",
-                    letterSpacing: "0.08em",
-                    color: textMuted,
-                    fontFamily: mono,
-                  }}
-                >
-                  AMENDMENTS IN VOTING: {governanceHeader.amendments_in_voting}
-                </p>
-              </>
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: "11px",
+                  letterSpacing: "0.08em",
+                  color: textMuted,
+                  fontFamily: mono,
+                }}
+              >
+                AMENDMENTS IN VOTING: {governanceHeader.amendments_in_voting}
+              </p>
             ) : null}
           </header>
         </GovGlassCard>
