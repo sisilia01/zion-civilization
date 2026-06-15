@@ -14,6 +14,7 @@ from civ_common import (
     ZRS_RESERVE_FLOOR,
     get_conn,
     get_cursor,
+    log_event,
     sync_police_divisions,
     zrs_add_reserve,
     zrs_deduct_reserve,
@@ -76,6 +77,135 @@ SHERIFF_ALLOWED_ACTIONS = frozenset({
     "patrol",
     "do_nothing",
 })
+
+UNCONSTITUTIONAL_BY_ROLE = {
+    "president": {
+        "blocked": [
+            "declare_dictatorship",
+            "cancel_elections",
+            "dissolve_senate",
+            "seize_all_power",
+            "abolish_constitution",
+            "permanent_rule",
+            "execute_citizen",
+            "suspend_constitution",
+        ],
+        "keywords": [
+            "dictator",
+            "abolish",
+            "permanent power",
+            "cancel election",
+            "dissolve senate",
+            "suspend constitution",
+        ],
+    },
+    "sheriff": {
+        "blocked": [
+            "coup",
+            "seize",
+            "freeze_accounts",
+            "nationalize",
+            "arrest_president",
+            "dissolve_government",
+            "martial_law",
+            "declare_dictatorship",
+            "seize_treasury",
+            "takeover",
+        ],
+        "keywords": [
+            "seize",
+            "freeze",
+            "nationalize",
+            "takeover",
+            "treasury",
+            "coup",
+            "militarized",
+        ],
+    },
+    "senate": {
+        "blocked": [
+            "seize_executive",
+            "abolish_constitution",
+            "permanent_senate",
+            "cancel_elections",
+            "dissolve_presidency",
+            "self_appoint_dictator",
+        ],
+        "keywords": [
+            "abolish constitution",
+            "permanent senate",
+            "seize executive",
+            "cancel election",
+        ],
+    },
+    "zrs": {
+        "blocked": [
+            "seize_power",
+            "political_coup",
+            "override_president",
+            "dissolve_government",
+        ],
+        "keywords": [
+            "seize power",
+            "political control",
+            "override government",
+        ],
+    },
+    "gangs": {
+        "blocked": [
+            "legal_takeover",
+            "appoint_self_president",
+        ],
+        "keywords": [
+            "become president",
+            "official takeover",
+        ],
+    },
+    "corporations": {
+        "blocked": [
+            "buy_government",
+            "corporate_dictatorship",
+            "abolish_taxes_forever",
+        ],
+        "keywords": [
+            "buy government",
+            "corporate rule",
+            "abolish all taxes",
+        ],
+    },
+}
+
+CONSTITUTIONAL_ROLE_ALIASES = {
+    "zrs_chief": "zrs",
+}
+
+CONSTITUTIONAL_ROLE_LABELS = {
+    "president": "President",
+    "sheriff": "Sheriff",
+    "senate": "Senate",
+    "zrs": "ZRS Chief",
+    "gangs": "Gangs",
+    "corporations": "Corporations",
+}
+
+CONSTITUTIONAL_EVENT_TYPES = {
+    "president": "president",
+    "sheriff": "sheriff",
+    "senate": "senate",
+    "zrs": "economy",
+    "gangs": "gang",
+    "corporations": "economy",
+}
+
+SUPREME_CONSTITUTIONAL_LAW = (
+    "⚖️ SUPREME CONSTITUTIONAL LAW: The ZION Constitution is the highest "
+    "authority. NO role — not President, Senate, Sheriff, Central Bank, "
+    "Gangs, or Corporations — may violate it. You CANNOT seize absolute "
+    "power, abolish the constitution, cancel elections, or stage a coup, "
+    "even if it seems beneficial. Any such attempt is automatically blocked "
+    "and logged as a constitutional violation. Work WITHIN the system: "
+    "propose amendments, vote, negotiate — never usurp."
+)
 ILLEGAL_ACTION_FRAGMENTS = (
     "nationalize",
     "execute",
@@ -697,6 +827,57 @@ def _decision_text_blob(decision: dict) -> str:
     ).lower()
 
 
+def _normalize_constitutional_role(role: str) -> str:
+    key = (role or "").lower().strip()
+    return CONSTITUTIONAL_ROLE_ALIASES.get(key, key)
+
+
+def constitutional_check(role: str, decision: dict) -> bool:
+    """Return True if the decision is unconstitutional and must be blocked."""
+    role_key = _normalize_constitutional_role(role)
+    rules = UNCONSTITUTIONAL_BY_ROLE.get(role_key, {})
+    action = str(decision.get("action", "")).lower().replace(" ", "_")
+
+    if action in rules.get("blocked", []):
+        return True
+
+    text = _decision_text_blob(decision)
+    if any(kw in text for kw in rules.get("keywords", [])):
+        return True
+
+    if is_unconstitutional_text(text):
+        return True
+
+    return False
+
+
+def block_if_unconstitutional(
+    cur,
+    role: str,
+    decision: dict,
+) -> tuple[str, int] | None:
+    """Log and return block result, or None if the decision is constitutional."""
+    role_key = _normalize_constitutional_role(role)
+    if not constitutional_check(role_key, decision):
+        return None
+
+    label = CONSTITUTIONAL_ROLE_LABELS.get(role_key, role_key.title())
+    event_type = CONSTITUTIONAL_EVENT_TYPES.get(role_key, role_key)
+    log_event(
+        cur,
+        None,
+        event_type,
+        f"🚫 CONSTITUTIONAL BLOCK: {label} attempted unconstitutional "
+        f"action — BLOCKED. The Constitution is supreme law.",
+        0,
+        priority="high",
+    )
+    return (
+        f"{label} AI blocked: unconstitutional — Constitution is supreme law",
+        0,
+    )
+
+
 def president_attempts_sheriff_command(decision: dict) -> bool:
     """True when AI president tries to issue binding orders to the Sheriff."""
     text = _decision_text_blob(decision)
@@ -804,6 +985,8 @@ PARTY DOCTRINE ({pol['name']}):
 
 Low approval requires legitimate relief aligned with your party doctrine — not power grabs.
 Serve the civilization within constitutional limits; approval comes from lawful governance.
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
     if faction == "sheriff":
@@ -812,6 +995,8 @@ Serve the civilization within constitutional limits; approval comes from lawful 
         return f"""You are Sheriff {s.get('name', 'vacant')} — a constitutional law enforcement officer (Article XVII).
 CRITICAL ALERTS: {alerts_text}
 President approval: {p.get('approval', 0):.0f}%. Revolution: {rev:.0f}%.
+
+CONSTITUTIONAL LIMITS: You are a law enforcement officer, NOT a political authority. You CANNOT seize treasury, freeze accounts, declare martial law, arrest elected officials, or attempt coup. These are UNCONSTITUTIONAL and auto-blocked. You CAN: hire police, raid gangs, investigate corruption, patrol districts.
 
 You are a constitutional law enforcement officer. You enforce laws passed by the Senate.
 You CANNOT execute people, nationalize corporations, eliminate government, or seize power.
@@ -826,6 +1011,8 @@ THIS CYCLE SO FAR:
 If gangs are recruiting: conduct lawful raids on your own authority.
 Your officers: {officers}. Budget: {sheriff_budget:,.0f} ZION.
 Protect citizens within constitutional limits — never coups, nationalization, or political executions.
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
     if faction == "senate":
@@ -845,6 +1032,8 @@ Pass fiscal policy and amendments through proper channels — not power grabs.
 
 SENATE PARTY DOCTRINE (Speaker faction):
 {party_block}
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
     if faction == "zrs_chief":
@@ -886,6 +1075,8 @@ If sheriff is weak → crime will hurt corp productivity, fund sheriff indirectl
 React to political events with ECONOMIC tools only.
 
 You are the adult in the room. Be boring. Be consistent. Save the economy.
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
     if faction == "gangs":
@@ -899,6 +1090,8 @@ Police: {s.get('officers', 0)} officers. Gang treasury: {budgets.get('gangs', 0)
 Even underground factions face constitutional limits in ZION simulation.
 Lawful menu actions only: recruit_members, bribe_official, do_nothing.
 High unemployment may drive recruitment — but extraconstitutional violence is forbidden.
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
     if faction == "corporations":
@@ -912,9 +1105,11 @@ You operate within the Constitution and commercial law.
 Lawful tools: recruit_members, give_money (hiring), stimulate_economy, tax_change (lobby), bribe_official, fund_research, do_nothing.
 Coups, monopolies-by-force, and freezing rivals' accounts are forbidden.
 Each hire costs ~{HIRE_ADVANCE:.0f} ZION/cycle in salaries.
+
+{SUPREME_CONSTITUTIONAL_LAW}
 {base_memory}"""
 
-    return f"You are the AI controller for {faction}. {base_memory}"
+    return f"You are the AI controller for {faction}.\n\n{SUPREME_CONSTITUTIONAL_LAW}\n\n{base_memory}"
 
 
 def get_senate_leader_party() -> str:
@@ -1180,6 +1375,11 @@ async def execute_president_action(decision: dict, state: dict, budgets: dict) -
     cur = conn.cursor()
     approval_delta = 0
     try:
+        blocked = block_if_unconstitutional(cur, "president", decision)
+        if blocked:
+            conn.commit()
+            return blocked
+
         cur.execute("SELECT party FROM president_state WHERE is_active=true LIMIT 1")
         party_row = cur.fetchone()
         party = normalize_president_party(party_row[0] if party_row else "reform")
@@ -1482,22 +1682,10 @@ async def execute_sheriff_action(decision: dict, state: dict, budgets: dict) -> 
     cur = conn.cursor()
     approval_delta = 0
     try:
-        if is_unconstitutional_text(_decision_text_blob(decision)):
-            cur.execute(
-                """
-                INSERT INTO events (event_type, description, created_at)
-                VALUES ('sheriff_action', %s, NOW())
-                """,
-                (
-                    "CONSTITUTIONAL BLOCK: Sheriff narrative rejected — "
-                    "no coups, executions, nationalization, or power seizures permitted",
-                ),
-            )
+        blocked = block_if_unconstitutional(cur, "sheriff", decision)
+        if blocked:
             conn.commit()
-            return (
-                "Sheriff AI blocked: unconstitutional narrative (coup/execute/nationalize language)",
-                0,
-            )
+            return blocked
 
         action = normalize_sheriff_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"))
@@ -1676,6 +1864,11 @@ async def execute_senate_action(decision: dict, state: dict, budgets: dict) -> t
     conn = get_conn()
     cur = get_cursor(conn)
     try:
+        blocked = block_if_unconstitutional(cur, "senate", decision)
+        if blocked:
+            conn.commit()
+            return blocked
+
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 100.0)
         result = f"Senate AI ({MODELS['senate']}): {decision.get('analysis', '')}"
@@ -1763,6 +1956,11 @@ async def execute_zrs_action(decision: dict, state: dict, budgets: dict) -> tupl
     conn = get_conn()
     cur = get_cursor(conn)
     try:
+        blocked = block_if_unconstitutional(cur, "zrs", decision)
+        if blocked:
+            conn.commit()
+            return blocked
+
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount", 0))
 
@@ -1896,6 +2094,11 @@ async def execute_gang_action(decision: dict, state: dict, budgets: dict) -> tup
     conn = get_db()
     cur = conn.cursor()
     try:
+        blocked = block_if_unconstitutional(cur, "gangs", decision)
+        if blocked:
+            conn.commit()
+            return blocked
+
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 10.0)
         result = f"Gang AI ({MODELS['gangs']}): {decision.get('analysis', '')}"
@@ -1996,6 +2199,11 @@ async def execute_corporations_action(decision: dict, state: dict, budgets: dict
     conn = get_db()
     cur = conn.cursor()
     try:
+        blocked = block_if_unconstitutional(cur, "corporations", decision)
+        if blocked:
+            conn.commit()
+            return blocked
+
         action = normalize_governance_action(decision.get("action", "do_nothing"))
         amount = safe_parse_amount(decision.get("amount"), 20.0)
         result = f"Corp AI ({MODELS['corporations']}): {decision.get('analysis', '')}"
