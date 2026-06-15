@@ -17,7 +17,6 @@ from civ_common import (
 )
 
 RECRUIT_BONUS = 5.0
-SIGNING_BALANCE_MAX = 15.0  # было 3
 MAX_DOMINANT_GANGS = 3
 
 
@@ -176,13 +175,25 @@ def sync_member_counts(cur):
 
 
 def recruit_poor(cur):
+    """Character-based gang recruitment (aggression, faith, party, street path)."""
     cur.execute(
         """
-        SELECT id, name, balance FROM agents
-        WHERE is_alive = true AND clan_id IS NULL AND balance < %s
-        ORDER BY RANDOM() LIMIT 20
-        """,
-        (SIGNING_BALANCE_MAX,),
+        SELECT id, name, balance, aggression, faith, party, education_path
+        FROM agents
+        WHERE is_alive = TRUE
+          AND clan_id IS NULL
+          AND (
+            COALESCE(aggression, 0) > 60
+            OR COALESCE(faith, 50) < 25
+            OR party = 'gang_alliance'
+            OR (
+              education_path = 'street'
+              AND COALESCE(aggression, 0) > 40
+            )
+          )
+        ORDER BY aggression DESC, faith ASC
+        LIMIT 20
+        """
     )
     recruits = cur.fetchall()
     cur.execute(
@@ -209,6 +220,18 @@ def recruit_poor(cur):
             (clan["id"], clan["name"], RECRUIT_BONUS, ag["id"]),
         )
         joined += 1
+        log_event(
+            cur,
+            ag["id"],
+            "clan_recruited",
+            (
+                f"🔫 {clan['name']} recruited {ag['name']} "
+                f"(aggression:{ag.get('aggression')}, faith:{ag.get('faith')}, "
+                f"path:{ag.get('education_path')})"
+            ),
+            RECRUIT_BONUS,
+        )
+        clan["treasury"] = float(clan["treasury"] or 0) - RECRUIT_BONUS
     return joined
 
 
