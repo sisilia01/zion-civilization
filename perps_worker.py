@@ -1416,7 +1416,7 @@ async def update_blacklist():
 def _llm_trade_decision(agent_id: int, pair: str, direction_hint: str, analysis: dict) -> str | None:
     """LLM long/short/hold using agent book knowledge + technical context."""
     from agent_knowledge import apply_knowledge_to_decision
-    from local_llm import generate_agent_text
+    from local_llm import generate_local_only
 
     insights = apply_knowledge_to_decision(agent_id, context="trading")
     knowledge_block = ""
@@ -1435,7 +1435,7 @@ def _llm_trade_decision(agent_id: int, pair: str, direction_hint: str, analysis:
         f"Technical suggestion: {direction_hint or 'neutral'}\n\n"
         "Respond with exactly one word: LONG, SHORT, or HOLD."
     )
-    raw = (generate_agent_text(prompt, max_tokens=12) or "").strip().upper()
+    raw = (generate_local_only(prompt, max_tokens=12) or "").strip().upper()
     for word in ("LONG", "SHORT", "HOLD"):
         if word in raw:
             return word

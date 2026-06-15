@@ -74,6 +74,16 @@ def generate_openrouter(
         return None
 
 
+def generate_local_only(
+    prompt: str,
+    max_tokens: int = 200,
+    system: str = "",
+) -> str | None:
+    """Ollama only — no OpenRouter fallback (perps, predict mass calls)."""
+    full_prompt = f"{system}\n\n{prompt}" if system else prompt
+    return generate_local(full_prompt, max_tokens=max_tokens)
+
+
 def generate_agent_text(
     prompt: str,
     max_tokens: int = 200,

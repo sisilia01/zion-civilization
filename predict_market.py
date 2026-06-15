@@ -289,7 +289,7 @@ def generate_questions(cur):
 def _forecast_with_llm(agent_id: int, question: str, domain: str) -> bool | None:
     """LLM yes/no forecast with book-knowledge injection."""
     from agent_knowledge import apply_knowledge_to_decision
-    from local_llm import generate_agent_text
+    from local_llm import generate_local_only
 
     insights = apply_knowledge_to_decision(agent_id, context="forecasting")
     knowledge_block = ""
@@ -305,7 +305,7 @@ def _forecast_with_llm(agent_id: int, question: str, domain: str) -> bool | None
         f"Domain: {domain}\n\n"
         "Will this resolve YES or NO? Respond with exactly YES or NO."
     )
-    raw = (generate_agent_text(prompt, max_tokens=8) or "").strip().upper()
+    raw = (generate_local_only(prompt, max_tokens=8) or "").strip().upper()
     if "YES" in raw and "NO" not in raw:
         return True
     if "NO" in raw:
