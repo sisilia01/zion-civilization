@@ -156,6 +156,30 @@ const undecodableStyle: CSSProperties = {
   opacity: 0.85,
 };
 
+const transmissionSkeletonStyle: CSSProperties = {
+  background: "rgba(0,255,136,0.05)",
+  border: "1px solid rgba(0,255,136,0.1)",
+  borderRadius: "12px",
+  height: "233px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "rgba(0,255,136,0.3)",
+  fontSize: "11px",
+  letterSpacing: "0.2em",
+  fontFamily: mono,
+  animation: "pulse 1.5s ease-in-out infinite",
+};
+
+function TransmissionCardSkeleton({ label }: { label: string }) {
+  return (
+    <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
+      <div style={tableHeadStyle}>{label}</div>
+      <div style={transmissionSkeletonStyle}>LOADING TRANSMISSIONS...</div>
+    </GlassCard>
+  );
+}
+
 
 function TopBooksPanel() {
   const [books, setBooks] = useState<TopBook[]>([]);
@@ -1000,34 +1024,18 @@ export default function ZLabPanel() {
   const [enIndex, setEnIndex] = useState(0);
   const [zionIndex, setZionIndex] = useState(0);
   const [cycleKey, setCycleKey] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [feedsLoading, setFeedsLoading] = useState(true);
+  const [wave2Ready, setWave2Ready] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/language/glyphs", { cache: "force-cache" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.glyphs && typeof data.glyphs === "object") {
-          setGlyphs(prepareGlyphSvgs(data.glyphs as GlyphMap));
-        }
-      })
-      .catch(() => {});
-
-    buildTransliterationMaps()
-      .then(setTranslitMaps)
-      .catch(() => {});
-  }, []);
-
-  const loadFeeds = useCallback(async () => {
+  const loadTransmissionFeeds = useCallback(async () => {
     setError(null);
     try {
-      const [statsRes, englishRes, zionRes] = await Promise.all([
-        fetch("/api/zlab/stats", { cache: "no-store" }),
-        fetch(`/api/language/feed/english?limit=${FEED_LIMIT}`, { cache: "no-store" }),
-        fetch(`/api/language/feed/zion?limit=${FEED_LIMIT}`, { cache: "no-store" }),
+      const [englishRes, zionRes, glyphsRes] = await Promise.all([
+        fetch(`/api/language/feed/english?limit=${FEED_LIMIT}`),
+        fetch(`/api/language/feed/zion?limit=${FEED_LIMIT}`),
+        fetch("/api/language/glyphs", { cache: "force-cache" }),
       ]);
-
-      if (statsRes.ok) setStats(await statsRes.json());
 
       if (englishRes.ok) {
         const data = await englishRes.json();
@@ -1042,10 +1050,27 @@ export default function ZLabPanel() {
       } else {
         setError((prev) => prev ?? `ZION feed failed (${zionRes.status})`);
       }
+
+      if (glyphsRes.ok) {
+        const data = await glyphsRes.json();
+        if (data?.glyphs && typeof data.glyphs === "object") {
+          setGlyphs(prepareGlyphSvgs(data.glyphs as GlyphMap));
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load language feeds");
     } finally {
-      setLoading(false);
+      setFeedsLoading(false);
+      setWave2Ready(true);
+    }
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zlab/stats", { cache: "no-store" });
+      if (res.ok) setStats(await res.json());
+    } catch {
+      /* keep last snapshot */
     }
   }, []);
 
@@ -1059,16 +1084,28 @@ export default function ZLabPanel() {
   }, []);
 
   useEffect(() => {
-    loadFeeds();
-    const refresh = setInterval(loadFeeds, FEED_REFRESH_MS);
-    return () => clearInterval(refresh);
-  }, [loadFeeds]);
+    buildTransliterationMaps()
+      .then(setTranslitMaps)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    loadResearchStats();
-    const refresh = setInterval(loadResearchStats, RESEARCH_REFRESH_MS);
+    loadTransmissionFeeds();
+    const refresh = setInterval(loadTransmissionFeeds, FEED_REFRESH_MS);
     return () => clearInterval(refresh);
-  }, [loadResearchStats]);
+  }, [loadTransmissionFeeds]);
+
+  useEffect(() => {
+    if (!wave2Ready) return;
+    loadStats();
+    loadResearchStats();
+    const statsRefresh = setInterval(loadStats, FEED_REFRESH_MS);
+    const researchRefresh = setInterval(loadResearchStats, RESEARCH_REFRESH_MS);
+    return () => {
+      clearInterval(statsRefresh);
+      clearInterval(researchRefresh);
+    };
+  }, [wave2Ready, loadStats, loadResearchStats]);
 
   const advanceCycle = useCallback(() => {
     setEnIndex((i) => (englishQueue.length ? (i + 1) % englishQueue.length : 0));
@@ -1111,6 +1148,10 @@ export default function ZLabPanel() {
         }
         .topBookBar {
           filter: drop-shadow(0 0 3px rgba(0, 255, 136, 0.55));
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.85; }
         }
         @keyframes zlabLivePulse {
           0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.6); }
@@ -1180,6 +1221,76 @@ export default function ZLabPanel() {
       >
         Z-LAB — ZION RESEARCH INSTITUTE
       </h2>
+
+      {error && (
+        <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
+      )}
+
+      <div className="zlabDualFeed">
+        {feedsLoading && englishQueue.length === 0 ? (
+          <TransmissionCardSkeleton label="OBSERVATIONS (EN)" />
+        ) : (
+          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
+            <div style={tableHeadStyle}>OBSERVATIONS (EN)</div>
+            {currentEnglish ? (
+              <EnglishScreen
+                key={`en-${cycleKey}-${enIndex}`}
+                entry={currentEnglish}
+                cycleKey={cycleKey}
+                onCycleComplete={advanceCycle}
+              />
+            ) : (
+              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting observation…</div>
+            )}
+          </GlassCard>
+        )}
+
+        {feedsLoading && zionQueue.length === 0 ? (
+          <TransmissionCardSkeleton label="ZION TRANSMISSION (UNDECODABLE)" />
+        ) : (
+          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
+            <div
+              style={{
+                ...tableHeadStyle,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span>ZION TRANSMISSION (UNDECODABLE)</span>
+              <Link
+                href="/lab/decoder"
+                style={{
+                  fontSize: "10px",
+                  letterSpacing: "0.2em",
+                  color: "rgba(0,180,216,0.4)",
+                  textDecoration: "none",
+                  borderBottom: "1px dotted rgba(0,180,216,0.3)",
+                }}
+              >
+                DECODER
+              </Link>
+            </div>
+            {currentZion && Object.keys(glyphs).length > 0 ? (
+              <ZionScreen
+                key={`zion-${cycleKey}-${zionIndex}`}
+                entry={currentZion}
+                glyphs={glyphs}
+                translitMaps={translitMaps}
+              />
+            ) : (
+              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting transmission…</div>
+            )}
+          </GlassCard>
+        )}
+      </div>
+
+      {!feedsLoading && englishQueue.length === 0 && zionQueue.length === 0 && !error && (
+        <p style={{ color: "#64748b", fontSize: "13px", marginTop: "12px", fontFamily: mono }}>
+          No transmissions yet. Agent thoughts appear after the next watchdog cycle.
+        </p>
+      )}
+
       {research != null && (
         <p
           style={{
@@ -1227,78 +1338,9 @@ export default function ZLabPanel() {
         </div>
       )}
 
-      {error && (
-        <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
-      )}
+      {wave2Ready && research && <ResearchCharts research={research} />}
 
-      {loading && englishQueue.length === 0 && (
-        <p style={{ color: "#64748b", fontSize: "15px", padding: "24px 0" }}>
-          Loading language feeds…
-        </p>
-      )}
-
-      {!loading && englishQueue.length === 0 && zionQueue.length === 0 && !error && (
-        <p style={{ color: "#64748b", fontSize: "15px", padding: "24px 0" }}>
-          No transmissions yet. Agent thoughts appear after the next watchdog cycle.
-        </p>
-      )}
-
-      {(englishQueue.length > 0 || zionQueue.length > 0) && (
-        <div className="zlabDualFeed">
-          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
-            <div style={tableHeadStyle}>OBSERVATIONS (EN)</div>
-            {currentEnglish ? (
-              <EnglishScreen
-                key={`en-${cycleKey}-${enIndex}`}
-                entry={currentEnglish}
-                cycleKey={cycleKey}
-                onCycleComplete={advanceCycle}
-              />
-            ) : (
-              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting observation…</div>
-            )}
-          </GlassCard>
-
-          <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
-            <div
-              style={{
-                ...tableHeadStyle,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span>ZION TRANSMISSION (UNDECODABLE)</span>
-              <Link
-                href="/lab/decoder"
-                style={{
-                  fontSize: "10px",
-                  letterSpacing: "0.2em",
-                  color: "rgba(0,180,216,0.4)",
-                  textDecoration: "none",
-                  borderBottom: "1px dotted rgba(0,180,216,0.3)",
-                }}
-              >
-                DECODER
-              </Link>
-            </div>
-            {currentZion && Object.keys(glyphs).length > 0 ? (
-              <ZionScreen
-                key={`zion-${cycleKey}-${zionIndex}`}
-                entry={currentZion}
-                glyphs={glyphs}
-                translitMaps={translitMaps}
-              />
-            ) : (
-              <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting transmission…</div>
-            )}
-          </GlassCard>
-        </div>
-      )}
-
-      {research && <ResearchCharts research={research} />}
-
-      <OcularInterfacePanels />
+      {wave2Ready && <OcularInterfacePanels />}
     </section>
   );
 }
