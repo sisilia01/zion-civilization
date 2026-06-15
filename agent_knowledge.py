@@ -8,7 +8,7 @@ import sys
 import psycopg2
 import psycopg2.extras
 
-from local_llm import generate_agent_text, generate_local
+from local_llm import generate_agent_text, generate_local, generate_local_only
 
 try:
     from openrouter_key import _load_env_file
@@ -111,9 +111,7 @@ def agent_reads_book(agent_id: int, book_id: int) -> str | None:
         "Extract ONE practical insight for surviving/thriving in ZION "
         "(trading, governance, security, or philosophy). One or two sentences only."
     )
-    insight = generate_agent_text(prompt, max_tokens=150) or (
-        f"From {row['title']}: apply {row['track']} principles to daily decisions."
-    )
+    insight = generate_local_only(prompt, max_tokens=150)
 
     cur.execute(
         """
@@ -155,7 +153,7 @@ def agent_reads_chunk(agent_id: int, chunk: dict) -> str | None:
     chunk_index = chunk["chunk_index"]
     title = chunk.get("title") or "Unknown"
     track = chunk.get("track") or "SCIENCE"
-    chunk_text = chunk.get("chunk_text") or ""
+    chunk_text = (chunk.get("chunk_text") or "")[:2000]
 
     prompt = (
         f"You are {agent['name']}, a {agent['class']} class agent in ZION civilization.\n"
@@ -165,9 +163,7 @@ def agent_reads_chunk(agent_id: int, chunk: dict) -> str | None:
         "(trading, governance, security, or philosophy). One or two sentences. "
         "Do not summarize the whole book — only what is in this section."
     )
-    insight = generate_agent_text(prompt, max_tokens=150) or (
-        f"From {title} (section {chunk_index + 1}): apply {track} principles to daily decisions."
-    )
+    insight = generate_local_only(prompt, max_tokens=150)
 
     try:
         cur.execute(
