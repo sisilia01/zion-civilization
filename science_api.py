@@ -486,7 +486,7 @@ def zlab_observations(limit: int = 20, track: str | None = None):
 
 @router.get("/zlab/zion-messages")
 def zlab_zion_messages(limit: int = 20):
-    """Recent ZION public messages (zion_text only — no true_meaning)."""
+    """Recent ZION public messages for decoder UI (thought + mixed only; no template pure)."""
     limit = max(1, min(limit, 50))
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -494,6 +494,7 @@ def zlab_zion_messages(limit: int = 20):
         """
         SELECT id, from_agent, zion_text, language_level, message_type, created_at
         FROM agent_messages_zion
+        WHERE message_type IN ('thought', 'mixed')
         ORDER BY created_at DESC
         LIMIT %s
         """,

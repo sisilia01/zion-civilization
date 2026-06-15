@@ -7378,12 +7378,22 @@ def decode_zion_message(payload: dict):
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         cur.execute(
-            "SELECT true_meaning FROM agent_messages_zion WHERE zion_text = %s LIMIT 1",
+            """
+            SELECT true_meaning, message_type
+            FROM agent_messages_zion
+            WHERE zion_text = %s
+            LIMIT 1
+            """,
             (zion_text,),
         )
         row = cur.fetchone()
         if not row:
             return {"decoded": None, "error": "not found"}
+        if (row.get("message_type") or "").lower() == "pure":
+            return {
+                "decoded": None,
+                "error": "legacy template message — decoder shows thought/mixed only",
+            }
         return {"decoded": row["true_meaning"]}
     finally:
         cur.close()
