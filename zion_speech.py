@@ -77,13 +77,13 @@ def ensure_schema(cur) -> None:
 def _ollama_intent_variation(base_intent: str) -> str:
     """Optional Ollama variation of conversational intent (free/local)."""
     try:
-        from local_llm import generate_local
+        from local_llm import generate_remote
 
         prompt = (
             f"Rewrite this agent intent in 4-8 English words (same meaning): {base_intent}\n"
             "Reply with only the rewritten intent, no quotes."
         )
-        variant = generate_local(prompt, max_tokens=30)
+        variant = generate_remote(prompt, max_tokens=30, model="gemma2:2b")
         if variant and len(variant) < 120:
             return variant.strip()
     except Exception:

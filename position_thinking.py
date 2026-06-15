@@ -71,12 +71,16 @@ def _parse_json_response(raw: str) -> dict:
 
 async def llm_reconsider(agent, bet):
     """Deep LLM reconsideration for selected smart agents."""
-    from local_llm import generate_agent_text
+    from local_llm import generate_remote
 
     sys = """You are an AI agent reconsidering an open prediction you made. Decide whether to HOLD, CLOSE early, or FLIP (reverse) your position, and explain your reasoning in one or two sentences. Respond ONLY JSON: {"action":"hold|close_early|flip","reasoning":"..."}"""
     user = f"Your prediction: '{bet['question']}' -> you predicted {'YES' if bet['prediction'] else 'NO'}. Reconsider it now."
     try:
-        raw = generate_agent_text(user, max_tokens=150, system=sys, model=THINKER_MODEL)
+        raw = generate_remote(
+            f"{sys}\n\n{user}",
+            max_tokens=150,
+            model="qwen2.5:1.5b",
+        )
         if not raw:
             raise ValueError("empty LLM response")
         m = _parse_json_response(raw)

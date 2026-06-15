@@ -14,6 +14,10 @@ except ImportError:
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+OLLAMA_URL_2 = os.getenv("OLLAMA_URL_2", "")
+OLLAMA_MODEL_2 = os.getenv("OLLAMA_MODEL_2", "llama3.2:1b")
+OLLAMA_MODEL_2_GEMMA = os.getenv("OLLAMA_MODEL_2_GEMMA", "gemma2:2b")
+OLLAMA_MODEL_2_QWEN = "qwen2.5:1.5b"
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324")
 
 
@@ -41,6 +45,35 @@ def generate_local(prompt: str, max_tokens: int = 200) -> str | None:
         return response.json()["response"].strip()
     except Exception:
         return None
+
+
+def generate_remote(
+    prompt: str,
+    max_tokens: int = 200,
+    model: str | None = None,
+) -> str | None:
+    """Второй Ollama сервер для мелких частых задач."""
+    if not OLLAMA_URL_2:
+        return generate_local(prompt, max_tokens)
+    use_model = model or OLLAMA_MODEL_2
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL_2}/api/generate",
+            json={
+                "model": use_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": max_tokens,
+                    "temperature": 0.7,
+                },
+            },
+            timeout=30,
+        )
+        data = resp.json()
+        return (data.get("response") or "").strip() or None
+    except Exception:
+        return generate_local(prompt, max_tokens)
 
 
 def generate_openrouter(

@@ -76,7 +76,7 @@ def ensure_schema(cur) -> None:
 
 
 def _generate_thought(agent_name: str, topic: str) -> str:
-    from local_llm import generate_local
+    from local_llm import generate_remote
 
     hint = THOUGHT_PROMPTS.get(topic, "a brief thought about ZION civilization")
     prompt = (
@@ -84,7 +84,7 @@ def _generate_thought(agent_name: str, topic: str) -> str:
         f"Write {hint}. One or two sentences only. Plain English.\n"
         "No quotes, no JSON."
     )
-    raw = generate_local(prompt, max_tokens=80)
+    raw = generate_remote(prompt, max_tokens=80, model="llama3.2:1b")
     if raw:
         text = raw.strip().strip('"').split("\n")[0]
         if len(text) > 20:
@@ -99,7 +99,7 @@ def _generate_thought(agent_name: str, topic: str) -> str:
 
 def _generate_thought_from_knowledge(agent_name: str, insight: str, track: str) -> str:
     """Condense a real book-based insight into one short first-person thought."""
-    from local_llm import generate_local
+    from local_llm import generate_remote
 
     prompt = (
         f"You are {agent_name}, an agent in ZION civilization.\n"
@@ -107,7 +107,7 @@ def _generate_thought_from_knowledge(agent_name: str, insight: str, track: str) 
         "Restate that idea as ONE short sentence (under 25 words), "
         "in your own voice, plain English. No quotes, no JSON."
     )
-    raw = generate_local(prompt, max_tokens=60)
+    raw = generate_remote(prompt, max_tokens=60, model="llama3.2:1b")
     if raw:
         text = raw.strip().strip('"').split("\n")[0]
         if len(text) > 20:
