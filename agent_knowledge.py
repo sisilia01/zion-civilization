@@ -8,7 +8,7 @@ import sys
 import psycopg2
 import psycopg2.extras
 
-from local_llm import generate_agent_text, generate_local, generate_local_only
+from local_llm import generate_local_only
 
 try:
     from openrouter_key import _load_env_file
@@ -412,9 +412,7 @@ def expert_analysis(topic: str, track: str, top_n: int = 5) -> str:
         "Synthesize a combined expert report (vulnerabilities, risks, recommendations). "
         "Be specific and actionable. 4-8 sentences."
     )
-    report = generate_local(prompt, max_tokens=400) or generate_agent_text(
-        prompt, max_tokens=400
-    )
+    report = generate_local_only(prompt, max_tokens=400)
     return report or "Expert analysis unavailable (LLM offline)."
 
 

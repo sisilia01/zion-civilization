@@ -70,7 +70,7 @@ CRON_SCRIPTS = {
     "crisis_response": ("crisis_response.py", 3600),   # 1h — govt reacts to catastrophes
     "zionwork":     ("zionwork.py",       1800),
     # Retired - replaced by senate.py + president.py + political_parties.py
-    # "zion_speech": ("zion_speech.py cycle", 3600),  # disabled — generated template gibberish, replaced by agent_thoughts meaningful messages
+    "zion_speech": ("zion_speech.py cycle", 3600),  # hourly — ZION intent variation via remote gemma2:2b
     "zion_evolution":   ("zion_evolution.py cycle", 3600),    # hourly — mixed speech + new words
     "zion_lang_record": ("zion_lang_record.py", 86400),       # daily Walrus authorship record
     "agent_thoughts":      ("agent_thoughts.py cycle", 1800),               # 30 min — English + ZION paired thoughts

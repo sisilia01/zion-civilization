@@ -259,12 +259,12 @@ def pick_research_agents(cur, n: int = 4) -> list[dict]:
 
 
 def _llm_observation(prompt: str) -> str | None:
-    from local_llm import generate_agent_text
+    from local_llm import generate_local_only
 
-    text = generate_agent_text(prompt, max_tokens=220, model=MODEL)
+    text = generate_local_only(prompt, max_tokens=220)
     if text:
         return text
-    print("[zlab] LLM error: local and OpenRouter both failed")
+    print("[zlab] LLM error: local Ollama returned no response")
     return None
 
 
