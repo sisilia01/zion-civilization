@@ -143,7 +143,51 @@ def _add_columns(cur, table: str, columns: list[tuple[str, str]]):
         cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {typedef}")
 
 
+def _schema_is_initialized(cur) -> bool:
+    """True when runtime DDL has already run (constitutional_params flag)."""
+    try:
+        cur.execute(
+            """
+            SELECT param_value FROM constitutional_params
+            WHERE param_key = 'schema_initialized' LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        val = row["param_value"] if isinstance(row, dict) else row[0]
+        return float(val) >= 1
+    except Exception:
+        return False
+
+
+def _mark_schema_initialized(cur) -> None:
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS constitutional_params (
+                param_key VARCHAR(80) PRIMARY KEY,
+                param_value NUMERIC(20, 6) NOT NULL,
+                source_amendment_id INTEGER,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO constitutional_params (param_key, param_value)
+            VALUES ('schema_initialized', 1)
+            ON CONFLICT (param_key) DO UPDATE SET param_value = 1
+            """
+        )
+    except Exception:
+        pass
+
+
 def ensure_schema(cur):
+    if _schema_is_initialized(cur):
+        return
+
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS debt NUMERIC(20,2) DEFAULT 0")
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS home_zone INTEGER DEFAULT 1")
     cur.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS clan_name VARCHAR(100)")
@@ -710,6 +754,8 @@ def ensure_schema(cur):
         ],
     )
 
+    _mark_schema_initialized(cur)
+
 
 POLICE_DIVISION_SPLITS = [
     ("SWAT", 0.40, 0.40, "gang_raids"),
@@ -767,6 +813,8 @@ RIOT_CTRL_STRONG = 20
 
 def ensure_martial_law_columns(cur) -> None:
     """Lightweight migration — martial_law_until on president_state and civilization_state."""
+    if _schema_is_initialized(cur):
+        return
     for table in ("president_state", "civilization_state"):
         try:
             cur.execute(
