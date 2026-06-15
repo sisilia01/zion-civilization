@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ZionLoader } from "@/components/ZionLoader";
 
 export const metadata: Metadata = {
   title: "ZION Civilization",
@@ -33,20 +34,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body
-        className="min-h-full flex flex-col"
-        style={{ background: "#000000", margin: 0, visibility: "hidden" }}
-      >
+      <body className="min-h-full flex flex-col" style={{ background: "#000000", margin: 0 }}>
+        <ZionLoader />
         <Providers>{children}</Providers>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-    window.addEventListener('load', function() {
-      document.body.style.visibility = 'visible';
-    });
-  `,
-          }}
-        />
       </body>
     </html>
   );
