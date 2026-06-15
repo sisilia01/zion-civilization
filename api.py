@@ -2645,22 +2645,59 @@ def get_events_by_type(limit: int = 50):
     _events_cache_ts = _time.time()
     return result
 
+
+def _gang_health_score(members: int, territory: int, treasury: float) -> int:
+    return min(
+        100,
+        round(int(members or 0) * 8 + int(territory or 0) * 15 + min(float(treasury or 0) / 50, 40)),
+    )
+
+
+def _fetch_clan_gang_rows(cur, include_record: bool = False):
+    cur.execute(
+        """
+        SELECT c.id, c.name, c.members_count AS members, c.treasury,
+               c.wins, c.losses, c.status,
+               COALESCE((SELECT COUNT(*) FROM clan_territory ct WHERE ct.clan_id = c.id), 0) AS territory_control
+        FROM clans c
+        WHERE c.members_count > 0
+        ORDER BY c.members_count DESC, c.treasury DESC, c.id ASC
+        LIMIT 20
+        """
+    )
+    rows = []
+    for row in cur.fetchall():
+        members = int(row["members"] or 0)
+        territory = int(row["territory_control"] or 0)
+        treasury = float(row["treasury"] or 0)
+        item = {
+            "id": row["id"],
+            "name": row["name"],
+            "members": members,
+            "treasury": treasury,
+            "territory_control": territory,
+            "gang_health": _gang_health_score(members, territory, treasury),
+            "wins": int(row.get("wins") or 0),
+            "losses": int(row.get("losses") or 0),
+            "status": row.get("status") or "ACTIVE",
+        }
+        if include_record:
+            item["is_active"] = (item["status"] or "").upper() != "DISBANDED"
+            item["created_at"] = None
+        rows.append(item)
+    return rows
+
+
 @app.get("/clans")
 def get_clans():
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(
-        """
-        SELECT id, name, treasury, members_count, wins, losses FROM clans
-        WHERE members_count > 0
-        ORDER BY treasury DESC
-        """
-    )
-    clans = [{"id": r["id"], "name": r["name"], "treasury": float(r["treasury"]),
-              "members": r["members_count"], "wins": r["wins"], "losses": r["losses"]}
-             for r in cur.fetchall()]
-    cur.close(); conn.close()
-    return clans
+    try:
+        conn.rollback()
+        return _fetch_clan_gang_rows(cur)
+    finally:
+        cur.close()
+        conn.close()
 
 @app.get("/nft")
 def get_nfts(limit: int = 20):
@@ -5888,30 +5925,7 @@ def get_gangs():
     cur = db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         db.rollback()
-        cur.execute(
-            """
-            SELECT c.id, c.name, c.members_count AS members, c.treasury,
-                   COALESCE((SELECT COUNT(*) FROM clan_territory ct WHERE ct.clan_id = c.id), 0) AS territory_control
-            FROM clans c
-            WHERE c.members_count > 0
-            ORDER BY territory_control DESC, members DESC
-            LIMIT 20
-            """
-        )
-        rows = []
-        for row in cur.fetchall():
-            rows.append(
-                {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "members": int(row["members"] or 0),
-                    "treasury": float(row["treasury"] or 0),
-                    "territory_control": float(row["territory_control"] or 0),
-                    "gang_health": None,
-                    "is_active": True,
-                    "created_at": None,
-                }
-            )
+        rows = _fetch_clan_gang_rows(cur, include_record=True)
         return {"gangs": rows, "count": len(rows)}
     except Exception:
         db.rollback()
