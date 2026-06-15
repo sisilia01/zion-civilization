@@ -29,6 +29,12 @@ from civ_common import (
 
 OPENROUTER_KEY = get_openrouter_key()
 
+TRIBUNAL_ACTIVATION_DATE = date(2026, 6, 18)  # через 3 дня от 15 июня
+ANNOUNCEMENT_DESCRIPTION = (
+    "⚖️ ZRS MERIT TRIBUNAL: System initializing. First session "
+    "scheduled for June 18, 2026. Agents are completing their education."
+)
+
 TRIBUNAL = {
     "judge_1": "deepseek/deepseek-chat-v3-0324",
     "judge_2": "google/gemini-2.5-flash",
@@ -420,6 +426,22 @@ async def run_session(dry_run: bool = False) -> dict:
     return {"total": total, "funded": funded, "denied": denied, "anomaly": anomaly}
 
 
+def log_activation_announcement_once(cur, conn) -> None:
+    """One-time ZRS feed notice before the tribunal goes live."""
+    cur.execute(
+        """
+        SELECT 1 FROM events
+        WHERE event_type = 'zrs' AND description = %s
+        LIMIT 1
+        """,
+        (ANNOUNCEMENT_DESCRIPTION,),
+    )
+    if cur.fetchone():
+        return
+    log_event(cur, None, "zrs", ANNOUNCEMENT_DESCRIPTION, 0, priority="normal")
+    conn.commit()
+
+
 def merit_denies_emergency_aid(cur, agent_id: int) -> bool:
     """True if agent was condemned useless by today's merit tribunal."""
     cur.execute(
@@ -437,6 +459,22 @@ def merit_denies_emergency_aid(cur, agent_id: int) -> bool:
 
 def main():
     import sys
+
+    today = date.today()
+    if today < TRIBUNAL_ACTIVATION_DATE:
+        days_left = (TRIBUNAL_ACTIVATION_DATE - today).days
+        print(
+            f"⏳ ZRS Merit Tribunal activates on {TRIBUNAL_ACTIVATION_DATE} "
+            f"({days_left} days remaining — students still in education)"
+        )
+        conn = get_conn()
+        cur = get_cursor(conn)
+        ensure_merit_schema(cur)
+        conn.commit()
+        log_activation_announcement_once(cur, conn)
+        cur.close()
+        conn.close()
+        return
 
     dry_run = "--dry-run" in sys.argv
     result = asyncio.run(run_session(dry_run=dry_run))
