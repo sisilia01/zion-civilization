@@ -237,6 +237,8 @@ def apply_tax_cycle():
 
     total_tax = 0.0
 
+    from zrs_merit_tribunal import merit_denies_emergency_aid
+
     if tax_relief_active:
         log_event(
             cur,
@@ -265,7 +267,9 @@ def apply_tax_cycle():
         new_debt = round(debt + unpaid, 4)
 
         if new_balance < STARVATION_BALANCE_THRESHOLD and new_debt > DEBT_DEATH_THRESHOLD:
-            if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
+            if merit_denies_emergency_aid(cur, int(ag["id"])):
+                pass
+            elif zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
                 zrs_deduct_reserve(cur, ZRS_EMERGENCY_AID)
                 new_balance = ZRS_EMERGENCY_AID
                 log_event(

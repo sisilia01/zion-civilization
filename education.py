@@ -99,6 +99,39 @@ def process_children(cur):
                 )
 
 
+def enroll_overgrown_children(cur):
+    cur.execute(
+        """
+        SELECT id, name, COALESCE(age_days,0) AS age_days, balance,
+               COALESCE(strength,0) AS strength
+        FROM agents
+        WHERE is_alive = true
+          AND COALESCE(education_status,'child') = 'child'
+          AND COALESCE(age_days,0) >= %s
+        """,
+        (CHILD_MAX_DAY,),
+    )
+    enrolled = 0
+    for child in cur.fetchall():
+        bal = float(child["balance"] or 0)
+        strength = int(child["strength"] or 0)
+        age = int(child["age_days"] or 0)
+        if bal >= UNIVERSITY_COST:
+            path, status = "university", "studying_university"
+        elif bal >= ACADEMY_COST and strength >= 3:
+            path, status = "academy", "studying_academy"
+        else:
+            path, status = "street", "street"
+        cur.execute(
+            """UPDATE agents SET education_status=%s, education_path=%s,
+               education_start_day=%s WHERE id=%s""",
+            (status, path, age, child["id"]),
+        )
+        enrolled += 1
+    print(f"  Enrolled {enrolled} overgrown children")
+    return enrolled
+
+
 def process_studying(cur):
     cur.execute(
         """
@@ -229,6 +262,7 @@ def main():
     try:
         apply_church_school_bonus(cur)
         process_children(cur)
+        enroll_overgrown_children(cur)
         process_studying(cur)
         conn.commit()
         print("\n✅ Education cycle complete!")

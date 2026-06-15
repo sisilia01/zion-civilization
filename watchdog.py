@@ -50,6 +50,7 @@ CRON_SCRIPTS = {
     # [DISABLED for scientific clarity] "disasters": ("disasters.py", 2700),  # 45 min average
     # [DISABLED for scientific clarity] "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
     "vip_reflection": ("vip_reflection.py", 86400),  # once per day
+    "zrs_merit": ("zrs_merit_tribunal.py", 86400),  # daily — AI merit court for at-risk agents
     # [DISABLED for scientific clarity] "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
@@ -57,7 +58,7 @@ CRON_SCRIPTS = {
     "ingest_new_books": ("ingest_new_books.py", 3600),  # hourly — auto-detect + classify + chunk newly added books
     "knowledge_study": ("agent_knowledge.py read_chunk_cycle", 1800),  # 30 min — chunk-by-chunk cover-to-cover reading
     "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
-    # [DISABLED for scientific clarity] "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
+    "education":    ("education.py", 3600),   # 1 hour (paths are 2-3 days)
     # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
     # Other civilization modules (unchanged intervals)
     # [DISABLED for scientific clarity] "epidemics":    ("epidemics.py",      7200),
