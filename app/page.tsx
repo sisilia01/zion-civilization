@@ -14829,12 +14829,6 @@ export default function Home() {
                               </span>
                             </div>
                             <div className="labDataCardStat">
-                              <span className="labDataCardStatLabel">TERRITORY</span>
-                              <span className="labDataCardStatValue">
-                                {clan.territory_control ?? 0}
-                              </span>
-                            </div>
-                            <div className="labDataCardStat">
                               <span className="labDataCardStatLabel">HEALTH</span>
                               <span className="labDataCardStatValue">
                                 {clan.gang_health != null ? clan.gang_health : "—"}
