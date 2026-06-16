@@ -4,6 +4,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Calendar } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
+import {
+  ARCHIVE_CACHE_KEYS,
+  readArchiveCache,
+  readArchiveStaleCache,
+  writeArchiveCache,
+} from "@/lib/archiveCache";
 
 export type ArchivePeriod = {
   week_start: string;
@@ -55,14 +61,29 @@ type Props = {
 
 export function ArchivePeriodFilter({ selectedWeek, onSelectWeek }: Props) {
   const [open, setOpen] = useState(false);
-  const [periods, setPeriods] = useState<ArchivePeriod[]>([]);
+  const [periods, setPeriods] = useState<ArchivePeriod[]>(() => {
+    const cached = readArchiveStaleCache<ArchivePeriod[]>(ARCHIVE_CACHE_KEYS.periods);
+    return Array.isArray(cached) ? cached : [];
+  });
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/archive/periods", { cache: "no-store" })
+    const cached = readArchiveCache<ArchivePeriod[]>(ARCHIVE_CACHE_KEYS.periods);
+    if (cached) {
+      setPeriods(cached);
+    }
+
+    fetch("/api/archive/periods")
       .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setPeriods(Array.isArray(data) ? data : []))
-      .catch(() => setPeriods([]));
+      .then((data) => {
+        const next = Array.isArray(data) ? data : [];
+        setPeriods(next);
+        writeArchiveCache(ARCHIVE_CACHE_KEYS.periods, next);
+      })
+      .catch(() => {
+        const stale = readArchiveStaleCache<ArchivePeriod[]>(ARCHIVE_CACHE_KEYS.periods);
+        if (stale) setPeriods(stale);
+      });
   }, []);
 
   useEffect(() => {

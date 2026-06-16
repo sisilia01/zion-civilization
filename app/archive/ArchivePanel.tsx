@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
+import {
+  ARCHIVE_CACHE_KEYS,
+  readArchiveCache,
+  readArchiveStaleCache,
+  writeArchiveCache,
+} from "@/lib/archiveCache";
 import { ArchivePeriodFilter } from "./ArchivePeriodFilter";
+import { ArchiveSkeletonGrid } from "./ArchiveSkeleton";
 
 type ArchiveFile = {
   track: string;
@@ -186,60 +193,109 @@ function ReportColumn({
   );
 }
 
+type ReportsPayload = {
+  reports: ArchiveReport[];
+  schedule: Schedule;
+};
+
+type TracksPayload = {
+  tracks: TrackInfo[];
+};
+
 export default function ArchivePanel() {
-  const [reports, setReports] = useState<ArchiveReport[]>([]);
-  const [schedule, setSchedule] = useState<Schedule>({});
-  const [tracks, setTracks] = useState<TrackInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<ArchiveReport[]>(() => {
+    const cached = readArchiveStaleCache<ReportsPayload>(ARCHIVE_CACHE_KEYS.reports);
+    return cached?.reports ?? [];
+  });
+  const [schedule, setSchedule] = useState<Schedule>(() => {
+    const cached = readArchiveStaleCache<ReportsPayload>(ARCHIVE_CACHE_KEYS.reports);
+    return cached?.schedule ?? {};
+  });
+  const [tracks, setTracks] = useState<TrackInfo[]>(() => {
+    const cached = readArchiveStaleCache<TracksPayload>(ARCHIVE_CACHE_KEYS.tracks);
+    return cached?.tracks ?? [];
+  });
+  const [reportsLoading, setReportsLoading] = useState(() => !readArchiveCache(ARCHIVE_CACHE_KEYS.reports));
+  const [tracksLoading, setTracksLoading] = useState(() => !readArchiveCache(ARCHIVE_CACHE_KEYS.tracks));
   const [tracksOpen, setTracksOpen] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [filteredReports, setFilteredReports] = useState<ArchiveReport[] | null>(null);
   const [filterLoading, setFilterLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadReports = useCallback(async () => {
     try {
-      const [repRes, trkRes] = await Promise.all([
-        fetch("/api/archive/reports", { cache: "no-store" }),
-        fetch("/api/archive/tracks", { cache: "no-store" }),
-      ]);
+      const repRes = await fetch("/api/archive/reports");
       if (repRes.ok) {
-        const d = await repRes.json();
-        setReports(Array.isArray(d.reports) ? d.reports : []);
-        setSchedule(d.schedule ?? {});
-      }
-      if (trkRes.ok) {
-        const d = await trkRes.json();
-        setTracks(Array.isArray(d.tracks) ? d.tracks : []);
+        const d = (await repRes.json()) as ReportsPayload;
+        const nextReports = Array.isArray(d.reports) ? d.reports : [];
+        const nextSchedule = d.schedule ?? {};
+        setReports(nextReports);
+        setSchedule(nextSchedule);
+        writeArchiveCache(ARCHIVE_CACHE_KEYS.reports, {
+          reports: nextReports,
+          schedule: nextSchedule,
+        });
       }
     } finally {
-      setLoading(false);
+      setReportsLoading(false);
+    }
+  }, []);
+
+  const loadTracks = useCallback(async () => {
+    try {
+      const trkRes = await fetch("/api/archive/tracks");
+      if (trkRes.ok) {
+        const d = (await trkRes.json()) as TracksPayload;
+        const nextTracks = Array.isArray(d.tracks) ? d.tracks : [];
+        setTracks(nextTracks);
+        writeArchiveCache(ARCHIVE_CACHE_KEYS.tracks, { tracks: nextTracks });
+      }
+    } finally {
+      setTracksLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadReports();
+    const refresh = setInterval(loadReports, 5 * 60 * 1000);
+    return () => clearInterval(refresh);
+  }, [loadReports]);
+
+  useEffect(() => {
+    loadTracks();
+    const refresh = setInterval(loadTracks, 5 * 60 * 1000);
+    return () => clearInterval(refresh);
+  }, [loadTracks]);
 
   useEffect(() => {
     if (!selectedWeek) {
       setFilteredReports(null);
       return;
     }
-    setFilterLoading(true);
-    fetch(`/api/archive/documents?week=${encodeURIComponent(selectedWeek)}`, {
-      cache: "no-store",
-    })
+
+    const cacheKey = ARCHIVE_CACHE_KEYS.documents(selectedWeek);
+    const stale = readArchiveStaleCache<ArchiveReport[]>(cacheKey);
+    setFilteredReports(stale ?? null);
+
+    const hasFresh = Boolean(readArchiveCache(cacheKey));
+    setFilterLoading(!hasFresh);
+
+    fetch(`/api/archive/documents?week=${encodeURIComponent(selectedWeek)}`)
       .then((r) => (r.ok ? r.json() : { documents: [] }))
       .then((data) => {
-        setFilteredReports(Array.isArray(data.documents) ? data.documents : []);
+        const docs = Array.isArray(data.documents) ? data.documents : [];
+        setFilteredReports(docs);
+        writeArchiveCache(cacheKey, docs);
       })
-      .catch(() => setFilteredReports([]))
+      .catch(() => setFilteredReports(stale ?? []))
       .finally(() => setFilterLoading(false));
   }, [selectedWeek]);
 
   const displayReports = filteredReports ?? reports;
   const latest = (type: string) => displayReports.find((r) => r.report_type === type);
   const totalTracks = tracks.length;
+  const showSkeleton =
+    (reportsLoading && reports.length === 0) || (filterLoading && selectedWeek != null && !filteredReports?.length);
 
   return (
     <section
@@ -288,7 +344,7 @@ export default function ArchivePanel() {
               cursor: "pointer",
             }}
           >
-            [{tracksOpen ? "▼" : "▶"}] {totalTracks} RESEARCH TRACKS DISCOVERED
+            [{tracksOpen ? "▼" : "▶"}] {tracksLoading && totalTracks === 0 ? "…" : totalTracks} RESEARCH TRACKS DISCOVERED
           </button>
           <ArchivePeriodFilter selectedWeek={selectedWeek} onSelectWeek={setSelectedWeek} />
         </div>
@@ -308,28 +364,26 @@ export default function ArchivePanel() {
         )}
       </GlassCard>
 
-      {(loading || filterLoading) && (
-        <p style={{ color: "#64748b" }}>
-          {filterLoading ? "Loading period…" : "Loading archive…"}
-        </p>
-      )}
-
       {selectedWeek && !filterLoading && filteredReports?.length === 0 && (
         <p style={{ color: "#64748b", fontFamily: '"IBM Plex Mono", monospace', fontSize: "11px" }}>
           No documents for selected week.
         </p>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "16px" }}>
-        <ReportColumn title="WEEKLY" report={latest("weekly")} nextAt={schedule.next_weekly_at} />
-        <ReportColumn title="MONTHLY" report={latest("monthly")} nextAt={schedule.next_monthly_at} />
-        <ReportColumn
-          title="ANNUAL"
-          report={latest("annual")}
-          nextAt={schedule.next_annual_at}
-          notYet={!latest("annual")}
-        />
-      </div>
+      {showSkeleton ? (
+        <ArchiveSkeletonGrid />
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px" }}>
+          <ReportColumn title="WEEKLY" report={latest("weekly")} nextAt={schedule.next_weekly_at} />
+          <ReportColumn title="MONTHLY" report={latest("monthly")} nextAt={schedule.next_monthly_at} />
+          <ReportColumn
+            title="ANNUAL"
+            report={latest("annual")}
+            nextAt={schedule.next_annual_at}
+            notYet={!latest("annual")}
+          />
+        </div>
+      )}
     </section>
   );
 }

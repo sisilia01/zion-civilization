@@ -14642,8 +14642,11 @@ export function ZionHome({
     allEvents,
     allFeedItems,
     anonymousAmount,
+    setAnonymousAmount,
     auditTrail,
+    setAuditTrail,
     autoWithdraw,
+    setAutoWithdraw,
     backendApiUrl,
     backendBaseUrl,
     bankAmount,
@@ -14695,6 +14698,7 @@ export function ZionHome({
     claimReceiptId,
     claimResults,
     claimResultsExpanded,
+    setClaimResultsExpanded,
     claimSingleNote,
     claimStatus,
     claimStealthPayment,
@@ -14785,12 +14789,15 @@ export function ZionHome({
     formatTimeAgo,
     formatZionVolume,
     fragmentedWithdraw,
+    setFragmentedWithdraw,
     fromToken,
     frsChief,
     governanceHeader,
     frsStats,
     gearColorIdx,
+    gearColors,
     gearIntervalRef,
+    setGearColorIdx,
     generateNonce,
     generateRandomness,
     generateStealthMetaAddress,
@@ -14832,6 +14839,7 @@ export function ZionHome({
     isMobile,
     isWalletConnected,
     keyTooltip,
+    setKeyTooltip,
     keysFileStatus,
     lastAliveCount,
     leaderboard,
@@ -14853,7 +14861,9 @@ export function ZionHome({
     maxBalance,
     motion,
     multiRecipients,
+    setMultiRecipients,
     multiSend,
+    setMultiSend,
     myAgentData,
     myAgentLoading,
     myAgentSearch,
@@ -14906,8 +14916,11 @@ export function ZionHome({
     router,
     saveZionProfile,
     scheduleFrequency,
+    setScheduleFrequency,
     scheduleMaxPayments,
+    setScheduleMaxPayments,
     scheduleRecipient,
+    setScheduleRecipient,
     scheduledPayments,
     searchMyAgent,
     sectorEmoji,
@@ -14925,9 +14938,11 @@ export function ZionHome({
     sheriffState,
     shortWallet,
     showAdvanced,
+    setShowAdvanced,
     showMyBetsOverlay,
     showPortfolioOverlay,
     showSchedule,
+    setShowSchedule,
     showTokenModal,
     showUserMenu,
     showVIP,
@@ -14941,14 +14956,17 @@ export function ZionHome({
     statsLoading,
     stealthAddress,
     stealthAmount,
+    setStealthAmount,
     stealthKeys,
     stealthMemo,
+    setStealthMemo,
     stealthMetaInput,
     stealthPrivacyMax,
     stealthRegisterLoading,
     stealthScanLoading,
     stealthScanResults,
     stealthSubTab,
+    setStealthSubTab,
     suiBalance,
     suiClient,
     suiClientHook,
@@ -14967,6 +14985,7 @@ export function ZionHome({
     useConnectWallet,
     useCurrentAccount,
     useDecoys,
+    setUseDecoys,
     useDisconnectWallet,
     useEffect,
     useMemo,
@@ -14992,12 +15011,17 @@ export function ZionHome({
     xorEncryptForAddress,
     zbAmount,
     zbCoin,
+    setZbCoin,
     zbLoading,
     zbRecipient,
+    setZbRecipient,
     zbStatus,
+    setZbStatus,
     zbTab,
     zbTxDigest,
+    setZbTxDigest,
     zbankMode,
+    setZbankMode,
     zbankTab,
     zcoAgreementDisplayColor,
     zcoAgreementPercent,
@@ -15123,7 +15147,9 @@ export function ZionHome({
     zkStealthMode,
     zkStealthNotes,
     zkStealthRecipient,
+    setZkStealthRecipient,
     zkStealthStatus,
+    setZkStealthStatus,
     zrsEvents,
     zrsEventsDisplay,
   };
@@ -15144,7 +15170,7 @@ export function ZionHome({
       )}
       {standalone ? (
         <>
-          <BackgroundGrid />
+          {activeTab !== "zbank" && <BackgroundGrid />}
           <div className="belowHeroShell prediction-engine-shell">
             {standaloneMarketId ? (
               <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
@@ -15213,6 +15239,15 @@ export function ZionHome({
                     }
                   />
                 )}
+              </div>
+            ) : activeTab === "zbank" ? (
+              <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
+                <GlassCard
+                  className={glassCardStyles.glassCardLab}
+                  style={{ maxWidth: 520, margin: "0 auto", padding: "12px 8px 16px" }}
+                >
+                  <Privacy />
+                </GlassCard>
               </div>
             ) : (
               <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
@@ -15289,7 +15324,6 @@ export function ZionHome({
             </section>
           )}
 
-          {activeTab === "zbank" && <Privacy />}
 
           {activeTab === "zperps" && (
             <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>

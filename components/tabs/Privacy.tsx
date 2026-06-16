@@ -4,6 +4,8 @@
 
 import { useZionTab } from "@/components/zion/ZionTabContext";
 
+const DEFAULT_GEAR_COLORS = ["#00ff41", "#00ffff", "#ff00ff", "#ff4400", "#ffff00", "#ff0088"];
+
 export function Privacy() {
   const {
     anonymousAmount,
@@ -80,6 +82,17 @@ export function Privacy() {
     zkStealthStatus,
   } = useZionTab();
 
+  const safeGearColors =
+    Array.isArray(gearColors) && gearColors.length > 0 ? gearColors : DEFAULT_GEAR_COLORS;
+  const safeGearColorIdx =
+    typeof gearColorIdx === "number" && Number.isFinite(gearColorIdx)
+      ? ((gearColorIdx % safeGearColors.length) + safeGearColors.length) % safeGearColors.length
+      : 0;
+  const pendingNotes = Array.isArray(zkStealthNotes)
+    ? zkStealthNotes.filter((n) => n?.status === "pending")
+    : [];
+  const firstPendingNote = pendingNotes[0];
+
   return (
             <div
               style={{
@@ -134,17 +147,17 @@ export function Privacy() {
       onMouseEnter={() => {
         let idx = 0;
         gearIntervalRef.current = setInterval(() => {
-          idx = (idx + 1) % gearColors.length;
-          setGearColorIdx(idx);
+          idx = (idx + 1) % safeGearColors.length;
+          setGearColorIdx?.(idx);
         }, 150);
       }}
       onMouseLeave={() => {
         if (gearIntervalRef.current) clearInterval(gearIntervalRef.current);
-        setGearColorIdx(0);
+        setGearColorIdx?.(0);
       }}
       style={{width:'34px', height:'34px', borderRadius:'8px', border:'none',
               background:'transparent', cursor:'pointer', fontSize:'1.1rem',
-              color: gearColors[gearColorIdx],
+              color: safeGearColors[safeGearColorIdx],
               transition:'color 0.15s',
               display:'flex', alignItems:'center', justifyContent:'center'}}
     >
@@ -681,13 +694,11 @@ export function Privacy() {
                   fontFamily: 'monospace',
                   marginBottom: '12px',
                 }}>
-                {zkStealthNotes.filter((n) => n.status === 'pending')[0]?.created_at
-                  ? new Date(
-                      zkStealthNotes.filter((n) => n.status === 'pending')[0].created_at
-                    ).toLocaleTimeString()
+                {firstPendingNote?.created_at
+                  ? new Date(firstPendingNote.created_at).toLocaleTimeString()
                   : ''}
                 {' · '}
-                {zkStealthNotes.filter((n) => n.status === 'pending').length} notes
+                {pendingNotes.length} notes
               </div>
 
               <button

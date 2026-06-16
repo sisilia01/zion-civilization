@@ -1,5 +1,7 @@
 "use client";
 
+import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import { IM_Fell_English } from "next/font/google";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -43,6 +45,7 @@ type Amendment = {
   walrus_url?: string;
   created_at: string;
   closed_at?: string | null;
+  rejection_reason?: string | null;
 };
 
 const ROMAN = [
@@ -74,6 +77,31 @@ function truncateBlob(blob: string): string {
   if (blob.length <= 16) return blob;
   return `${blob.slice(0, 8)}...${blob.slice(-4)}`;
 }
+
+function getRejectionExplanation(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  const lower = reason.toLowerCase();
+  if (lower.includes("constitutional conflict")) {
+    return (
+      "This amendment was reviewed by the ZCO Tribunal (3 AI judges) " +
+      "and found to conflict with core constitutional principles. " +
+      "A revised version addressing the conflict may be submitted " +
+      "for new consideration."
+    );
+  }
+  if (lower.includes("insufficient support")) {
+    return (
+      "This amendment did not receive sufficient support from the " +
+      "population. It may be resubmitted for a new vote as public " +
+      "opinion evolves."
+    );
+  }
+  return null;
+}
+
+const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+const scrollToBottom = () =>
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
 
 /** Keep only the newest open proposal per title. */
 function dedupeProposedAmendments(items: Amendment[]): Amendment[] {
@@ -118,6 +146,7 @@ export function Constitution() {
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rejectedModal, setRejectedModal] = useState<Amendment | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -172,7 +201,9 @@ export function Constitution() {
       <style jsx global>{`
         @media print {
           .constitutionNav,
-          .constDownloadBtn {
+          .constDownloadBtn,
+          .constScrollBtns,
+          .rejectedModalBackdrop {
             display: none !important;
           }
           .constitutionRoot {
@@ -393,6 +424,114 @@ export function Constitution() {
           color: #eb5757;
           padding: 2rem;
         }
+        .amendmentCardRejected {
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .amendmentCardRejected:hover {
+          border-color: rgba(235, 87, 87, 0.45);
+          background: rgba(235, 87, 87, 0.06);
+        }
+        .rejectedModalBackdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 10000;
+          background: rgba(0, 0, 0, 0.75);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1.25rem;
+        }
+        .rejectedModalCard {
+          width: 100%;
+          max-width: 32rem;
+          border: 1px solid rgba(0, 255, 136, 0.25) !important;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+        }
+        .rejectedModalHead {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        .rejectedModalTitle {
+          font-family: "IBM Plex Mono", monospace;
+          font-size: 0.85rem;
+          letter-spacing: 0.08em;
+          color: #e2e8f0;
+          line-height: 1.5;
+          margin: 0;
+        }
+        .rejectedModalClose {
+          flex-shrink: 0;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          color: #94a3b8;
+          width: 28px;
+          height: 28px;
+          cursor: pointer;
+          font-size: 1rem;
+          line-height: 1;
+        }
+        .rejectedModalClose:hover {
+          color: #e2e8f0;
+          border-color: rgba(0, 255, 136, 0.35);
+        }
+        .rejectedModalReason {
+          font-family: "IBM Plex Mono", monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.06em;
+          color: #eb5757;
+          margin-bottom: 0.85rem;
+        }
+        .rejectedModalVotes {
+          font-family: "IBM Plex Mono", monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.06em;
+          color: rgba(226, 232, 240, 0.65);
+          margin-bottom: 1rem;
+        }
+        .rejectedModalExplanation {
+          font-family: "IBM Plex Mono", monospace;
+          font-size: 0.75rem;
+          line-height: 1.65;
+          color: rgba(226, 232, 240, 0.82);
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          padding-top: 1rem;
+          margin: 0;
+        }
+        .constScrollBtns {
+          position: fixed;
+          right: 1.25rem;
+          bottom: 1.25rem;
+          z-index: 9000;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .constScrollBtn {
+          font-family: "IBM Plex Mono", monospace;
+          font-size: 0.68rem;
+          letter-spacing: 0.12em;
+          padding: 0.55rem 0.85rem;
+          cursor: pointer;
+          color: #00ff88;
+          background: rgba(8, 16, 28, 0.72);
+          backdrop-filter: blur(12px) saturate(1.4);
+          -webkit-backdrop-filter: blur(12px) saturate(1.4);
+          border: 1px solid rgba(0, 255, 136, 0.3);
+          border-radius: 3px;
+          box-shadow:
+            0 2px 4px rgba(0, 0, 0, 0.4),
+            0 8px 24px rgba(0, 0, 0, 0.3);
+          transition: background 0.15s, border-color 0.15s;
+        }
+        .constScrollBtn:hover {
+          background: rgba(0, 255, 136, 0.08);
+          border-color: rgba(0, 255, 136, 0.5);
+        }
       `}</style>
 
       <article className="constitutionPaper" id="constitution-print-root">
@@ -487,7 +626,19 @@ export function Constitution() {
             ))}
 
             {rejectedAmendments.slice(0, 6).map((a) => (
-              <div key={a.id} className="amendmentCard">
+              <div
+                key={a.id}
+                className="amendmentCard amendmentCardRejected"
+                role="button"
+                tabIndex={0}
+                onClick={() => setRejectedModal(a)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setRejectedModal(a);
+                  }
+                }}
+              >
                 <div className="amendmentTitleRow">
                   <span className="amendmentTitle">
                     {a.proposal_number != null ? `PROPOSAL ${a.proposal_number}` : "PROPOSAL"} — {a.title}
@@ -508,6 +659,59 @@ export function Constitution() {
           </>
         )}
       </article>
+
+      {rejectedModal && (
+        <div
+          className="rejectedModalBackdrop"
+          role="presentation"
+          onClick={() => setRejectedModal(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <GlassCard
+              disableTilt
+              className={`${glassCardStyles.glassCardLab} rejectedModalCard`}
+            >
+              <div className="rejectedModalHead">
+                <h3 className="rejectedModalTitle">
+                  {rejectedModal.proposal_number != null
+                    ? `PROPOSAL ${rejectedModal.proposal_number}`
+                    : "PROPOSAL"}{" "}
+                  — {rejectedModal.title}
+                </h3>
+                <button
+                  type="button"
+                  className="rejectedModalClose"
+                  aria-label="Close"
+                  onClick={() => setRejectedModal(null)}
+                >
+                  ×
+                </button>
+              </div>
+              {rejectedModal.rejection_reason && (
+                <p className="rejectedModalReason">{rejectedModal.rejection_reason}</p>
+              )}
+              <p className="rejectedModalVotes">
+                FOR {rejectedModal.votes_for?.toLocaleString() ?? 0} · AGAINST{" "}
+                {rejectedModal.votes_against?.toLocaleString() ?? 0}
+              </p>
+              {getRejectionExplanation(rejectedModal.rejection_reason) && (
+                <p className="rejectedModalExplanation">
+                  {getRejectionExplanation(rejectedModal.rejection_reason)}
+                </p>
+              )}
+            </GlassCard>
+          </div>
+        </div>
+      )}
+
+      <div className="constScrollBtns" aria-label="Page scroll controls">
+        <button type="button" className="constScrollBtn" onClick={scrollToTop}>
+          ↑ Top
+        </button>
+        <button type="button" className="constScrollBtn" onClick={scrollToBottom}>
+          ↓ Bottom
+        </button>
+      </div>
     </div>
   );
 }
