@@ -4,7 +4,7 @@ import { useConnectWallet, useCurrentAccount, useWallets } from "@mysten/dapp-ki
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   newspapers,
-  PRESS_CACHE_TTL_MS,
+  isPressCacheValidForToday,
   type PressNewspaper,
 } from "@/lib/press/data";
 import { parsePressStats } from "@/lib/press/parseStats";
@@ -94,7 +94,7 @@ export function usePressPanel() {
       const pressCache = localStorage.getItem(`press_${newspaper.id}`);
       if (pressCache) {
         const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
-        if (Date.now() - ts < PRESS_CACHE_TTL_MS) {
+        if (isPressCacheValidForToday(ts)) {
           setPressArticles((prev) => ({ ...prev, [newspaper.id]: content }));
           return;
         }
@@ -105,31 +105,8 @@ export function usePressPanel() {
 
     setPressLoading((prev) => ({ ...prev, [newspaper.id]: true }));
     try {
-      const [eventsRes, statsRes] = await Promise.all([
-        fetch("/api/events?limit=20"),
-        fetch("/api/stats"),
-      ]);
-      const eventsRaw = await eventsRes.json();
+      const statsRes = await fetch("/api/stats");
       const stats = (await statsRes.json()) as Record<string, unknown>;
-
-      type EvRow = { type?: string; description?: string; amount?: number };
-      const events: EvRow[] = Array.isArray(eventsRaw)
-        ? (eventsRaw as EvRow[])
-        : Array.isArray((eventsRaw as { events?: EvRow[] }).events)
-          ? (eventsRaw as { events: EvRow[] }).events
-          : [];
-
-      const tLower = (s: string | undefined) => (s ?? "").toLowerCase();
-      const relevantEvents = events
-        .filter(
-          (e) =>
-            newspaper.relevantTypes.some(
-              (rt) => tLower(e.type) === rt || tLower(e.type).includes(rt),
-            ) ||
-            newspaper.keywords.some((k) => tLower(e.description).includes(k.toLowerCase())),
-        )
-        .slice(0, 8);
-
       const parsedStats = parsePressStats(stats);
 
       const aiRes = await fetch("/api/generate_press", {
@@ -138,9 +115,8 @@ export function usePressPanel() {
         body: JSON.stringify({
           newspaper_id: newspaper.id,
           persona: newspaper.persona,
-          relevant_events:
-            relevantEvents.map((e) => `[${e.type}] ${e.description}`).join("\n") ||
-            "- Civilization continues its eternal struggle",
+          relevant_types: newspaper.relevantTypes,
+          keywords: newspaper.keywords,
           alive: parsedStats.alive,
           deaths_today: parsedStats.deaths_today,
           total_zion: parsedStats.total_zion,

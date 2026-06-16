@@ -97,7 +97,6 @@ export function SharedLayout({
                 key={id}
                 href={pathForTab(id)}
                 className={`navTab ${activeTab === id ? "active" : ""}`}
-                style={{ textDecoration: "none" }}
               >
                 {label}
               </Link>

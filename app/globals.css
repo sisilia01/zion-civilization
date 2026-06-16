@@ -93,3 +93,45 @@ body {
   font-family: var(--font-mono);
   color: var(--text-primary);
 }
+
+/* Main lab navigation — shared by SharedLayout links and page buttons */
+.mainNav .navTab {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 10px 0;
+  margin: 0 16px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 300;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  text-decoration: none;
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.mainNav .navTab:hover {
+  color: #ffffff;
+}
+
+.mainNav .navTab.active {
+  color: #ffffff;
+  border-bottom-color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
+}
+
+a.navTab,
+a.navTab:visited {
+  color: var(--text-secondary);
+}
+
+a.navTab:hover,
+a.navTab.active,
+a.navTab.active:visited {
+  color: #ffffff;
+}

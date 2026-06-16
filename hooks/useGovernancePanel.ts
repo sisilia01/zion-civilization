@@ -20,9 +20,10 @@ export function useGovernancePanel() {
   const [sheriffState, setSheriffState] = useState<Record<string, unknown> | null>(null);
   const [frsChief, setFrsChief] = useState<{
     name: string;
-    cycles_served: number;
-    max_cycles: number;
     confirmed: boolean;
+    term_days: number;
+    days_remaining: number;
+    progress_pct: number;
   } | null>(null);
   const [frsStats, setFrsStats] = useState<Record<string, unknown> | null>(null);
   const [stateTreasury, setStateTreasury] = useState<Record<string, unknown> | null>(null);
@@ -57,15 +58,21 @@ export function useGovernancePanel() {
           agent_name: president.agent_name,
           party: president.party ?? "reform",
           approval_rating: Number(president.approval_rating) || 50,
-          days_in_power: Number(president.days_in_power) || 0,
-          term_day: Number(president.term_day) || 1,
-          term_limit_days: Number(president.term_limit_days) || 30,
           personal_fund: Number(president.personal_fund) || 0,
           corruption_index: Number(president.corruption_index) || 0,
+          term_days: Number(president.term_days ?? president.term_limit_days) || 3,
+          days_remaining: Number(president.days_remaining ?? president.term_days ?? 3),
+          progress_pct: Number(president.progress_pct) || 0,
         });
       }
       if (data.sheriff?.agent_name && data.sheriff.agent_name !== "No Sheriff") {
-        setSheriffState(data.sheriff);
+        const sheriff = data.sheriff;
+        setSheriffState({
+          ...sheriff,
+          term_days: Number(sheriff.term_days) || 3,
+          days_remaining: Number(sheriff.days_remaining ?? sheriff.term_days ?? 3),
+          progress_pct: Number(sheriff.progress_pct) || 0,
+        });
       } else {
         setSheriffState(null);
       }
@@ -94,9 +101,10 @@ export function useGovernancePanel() {
       if (data.frs_chief && typeof data.frs_chief === "object") {
         setFrsChief({
           name: String(data.frs_chief.name ?? "Vacant"),
-          cycles_served: Number(data.frs_chief.cycles_served) || 0,
-          max_cycles: Number(data.frs_chief.max_cycles) || 12,
           confirmed: Boolean(data.frs_chief.confirmed),
+          term_days: Number(data.frs_chief.term_days ?? data.frs_chief.max_cycles) || 6,
+          days_remaining: Number(data.frs_chief.days_remaining ?? 0),
+          progress_pct: Number(data.frs_chief.progress_pct) || 0,
         });
       }
     } catch {

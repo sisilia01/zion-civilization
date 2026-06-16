@@ -88,15 +88,12 @@ function buildMoveBlock(r: KnowledgeReflection): string[] {
 
 const mono = '"IBM Plex Mono", monospace';
 
-const statsStyle: CSSProperties = {
+const statsGridStyle: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "12px 20px",
-  fontFamily: mono,
-  fontSize: "11px",
-  letterSpacing: "0.08em",
-  color: "#00b4d8",
-  marginBottom: "24px",
+  gap: "12px",
+  marginBottom: "12px",
+  alignItems: "stretch",
 };
 
 const tableShellStyle: CSSProperties = {
@@ -105,6 +102,29 @@ const tableShellStyle: CSSProperties = {
   overflow: "hidden",
   flex: "1 1 320px",
   minWidth: 0,
+};
+
+const statCardShellStyle: CSSProperties = {
+  ...tableShellStyle,
+  padding: "12px 14px",
+  flex: "1 1 200px",
+  maxWidth: "100%",
+};
+
+const statCardTitleStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: "11px",
+  letterSpacing: "0.1em",
+  color: "#00b4d8",
+};
+
+const statCardSubtitleStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: "9px",
+  letterSpacing: "0.06em",
+  color: "#64748b",
+  lineHeight: 1.45,
+  marginTop: "6px",
 };
 
 const tableHeadStyle: CSSProperties = {
@@ -1227,6 +1247,94 @@ export default function ZLabPanel() {
         <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
       )}
 
+      {(research != null || stats) && (
+        <div style={statsGridStyle}>
+          {research != null && (
+            <>
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div
+                  title="% of all book chunks read at least once"
+                  style={{ ...statCardTitleStyle, cursor: "help" }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: "#00ff88",
+                      marginRight: "8px",
+                      animation: "zlabLivePulse 2s ease-in-out infinite",
+                    }}
+                  />
+                  CIVILIZATION KNOWLEDGE: {animatedPct.toFixed(2)}% OF LIBRARY
+                </div>
+              </GlassCard>
+
+              {research.daily && research.daily.length > 0 && (
+                <GlassCard
+                  className={glassCardStyles.glassCardLab}
+                  style={statCardShellStyle}
+                >
+                  <div style={statCardTitleStyle}>
+                    INSIGHTS (14-DAY CUMULATIVE):{" "}
+                    <span style={{ color: "#00ff88" }}>
+                      {Math.round(research.daily[research.daily.length - 1]?.cumulative_insights ?? 0)}
+                    </span>
+                  </div>
+                </GlassCard>
+              )}
+
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div style={statCardTitleStyle}>
+                  POPULATION LITERACY: {animatedLiteracy.toFixed(2)}%
+                </div>
+                <div style={statCardSubtitleStyle}>
+                  Average % of library known per citizen — 100% would mean every agent has studied every book
+                </div>
+              </GlassCard>
+            </>
+          )}
+
+          {stats && (
+            <>
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div style={statCardTitleStyle}>
+                  LAB RESEARCHERS: {stats.active_researchers}
+                </div>
+              </GlassCard>
+
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div style={statCardTitleStyle}>
+                  OBSERVATIONS THIS WEEK: {stats.observations_this_week}
+                </div>
+              </GlassCard>
+
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div style={statCardTitleStyle}>
+                  REPORTS ON WALRUS: {stats.reports_on_walrus}
+                </div>
+              </GlassCard>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="zlabDualFeed">
         {feedsLoading && englishQueue.length === 0 ? (
           <TransmissionCardSkeleton label="OBSERVATIONS (EN)" />
@@ -1290,100 +1398,6 @@ export default function ZLabPanel() {
         <p style={{ color: "#64748b", fontSize: "13px", marginTop: "12px", fontFamily: mono }}>
           No transmissions yet. Agent thoughts appear after the next watchdog cycle.
         </p>
-      )}
-
-      {research != null && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "12px",
-            marginBottom: "12px",
-            alignItems: "stretch",
-          }}
-        >
-          <p
-            style={{
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "0 16px",
-              fontFamily: mono,
-              fontSize: "11px",
-              letterSpacing: "0.1em",
-              color: "#00b4d8",
-              margin: 0,
-              flex: "1 1 320px",
-            }}
-          >
-            <span
-              title="% of all book chunks read at least once"
-              style={{ cursor: "help" }}
-            >
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "6px",
-                  height: "6px",
-                  borderRadius: "50%",
-                  background: "#00ff88",
-                  marginRight: "8px",
-                  animation: "zlabLivePulse 2s ease-in-out infinite",
-                }}
-              />
-              CIVILIZATION KNOWLEDGE: {animatedPct.toFixed(2)}% OF LIBRARY
-            </span>
-            {research.daily && research.daily.length > 0 && (
-              <span style={{ color: "#64748b", fontSize: "10px" }}>
-                INSIGHTS (14-DAY CUMULATIVE):{" "}
-                <span style={{ color: "#00ff88" }}>
-                  {Math.round(research.daily[research.daily.length - 1]?.cumulative_insights ?? 0)}
-                </span>
-              </span>
-            )}
-          </p>
-
-          <GlassCard
-            className={glassCardStyles.glassCardLab}
-            style={{
-              ...tableShellStyle,
-              padding: "12px 14px",
-              flex: "1 1 280px",
-              maxWidth: "100%",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: mono,
-                fontSize: "11px",
-                letterSpacing: "0.1em",
-                color: "#00b4d8",
-                marginBottom: "6px",
-              }}
-            >
-              POPULATION LITERACY: {animatedLiteracy.toFixed(2)}%
-            </div>
-            <div
-              style={{
-                fontFamily: mono,
-                fontSize: "9px",
-                letterSpacing: "0.06em",
-                color: "#64748b",
-                lineHeight: 1.45,
-              }}
-            >
-              Average % of library known per citizen — 100% would mean every agent has studied every book
-            </div>
-          </GlassCard>
-        </div>
-      )}
-
-      {stats && (
-        <div style={statsStyle}>
-          <span>LAB RESEARCHERS: {stats.active_researchers}</span>
-          <span>OBSERVATIONS THIS WEEK: {stats.observations_this_week}</span>
-          <span>REPORTS ON WALRUS: {stats.reports_on_walrus}</span>
-        </div>
       )}
 
       {wave2Ready && research && <ResearchCharts research={research} />}

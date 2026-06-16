@@ -15,6 +15,7 @@ import {
   renderPoliticalWireText,
 } from "@/lib/governanceFormat";
 import { useGovernancePanel } from "@/hooks/useGovernancePanel";
+import { TermProgress } from "@/components/TermProgress";
 
 const mono = '"IBM Plex Mono", monospace';
 const accent = "#00b4d8";
@@ -270,10 +271,11 @@ export function GovernancePanel() {
                         </td>
                       </tr>
                       <tr>
-                        <td style={tableLabelStyle}>TERM</td>
-                        <td style={tableValueStyle}>
-                          Day {Number(presidentState.term_day ?? presidentState.days_in_power ?? 0)} /{" "}
-                          {Number(presidentState.term_limit_days ?? 30)}
+                        <td colSpan={2} style={{ padding: "4px 0 0" }}>
+                          <TermProgress
+                            daysRemaining={Number(presidentState.days_remaining ?? 0)}
+                            termDays={Number(presidentState.term_days ?? 3)}
+                          />
                         </td>
                       </tr>
                       <tr>
@@ -328,8 +330,12 @@ export function GovernancePanel() {
                         </td>
                       </tr>
                       <tr>
-                        <td style={tableLabelStyle}>TERM</td>
-                        <td style={tableValueStyle}>Day {Number(sheriffState.days_in_office ?? 0)}</td>
+                        <td colSpan={2} style={{ padding: "4px 0 0" }}>
+                          <TermProgress
+                            daysRemaining={Number(sheriffState.days_remaining ?? 0)}
+                            termDays={Number(sheriffState.term_days ?? 3)}
+                          />
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -344,9 +350,14 @@ export function GovernancePanel() {
                       {frsChief.name}
                     </div>
                     <div style={{ color: textMuted, fontSize: "0.62rem", fontFamily: mono }}>
-                      Term: {frsChief.cycles_served}/{frsChief.max_cycles} cycles
-                      {frsChief.confirmed ? " • Senate confirmed" : " • Pending confirmation"}
+                      {frsChief.confirmed ? "Senate confirmed" : "Pending confirmation"}
                     </div>
+                    {frsChief.confirmed && frsChief.name !== "Vacant" ? (
+                      <TermProgress
+                        daysRemaining={frsChief.days_remaining}
+                        termDays={frsChief.term_days}
+                      />
+                    ) : null}
                   </GovGlassCard>
                 )}
                 <div style={cardLabelStyle}>CENTRAL BANK</div>
@@ -513,6 +524,7 @@ export function GovernancePanel() {
                         <th style={thStyle}>PARTY</th>
                         <th style={{ ...thStyle, textAlign: "right" }}>APPROVAL</th>
                         <th style={{ ...thStyle, textAlign: "right" }}>ROLE</th>
+                        <th style={{ ...thStyle, textAlign: "right", minWidth: 120 }}>TERM</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -566,6 +578,12 @@ export function GovernancePanel() {
                                 }}
                               >
                                 {role === "SPEAKER" ? "SPEAKER" : "SEN."}
+                              </td>
+                              <td style={{ padding: "8px 0 8px 8px", minWidth: 120 }}>
+                                <TermProgress
+                                  daysRemaining={Number(sen.days_remaining ?? 0)}
+                                  termDays={Number(sen.term_days ?? 6)}
+                                />
                               </td>
                             </tr>
                           );

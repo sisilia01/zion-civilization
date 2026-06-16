@@ -6652,7 +6652,6 @@ type TabId =
   | "press"
   | "treasury" // ECO-POL (display label; id kept for routing)
   | "constitution"
-  | "research"
   | "lab"
   | "archive";
 
@@ -6661,7 +6660,6 @@ const LAB_NAV_ITEMS: { id: TabId; label: string }[] = [
   { id: "chat", label: "FIELD NOTES" },
   { id: "zionbet", label: "PREDICTION ENGINE" },
   { id: "treasury", label: "GOVERNANCE" },
-  { id: "research", label: "RESEARCH" },
   { id: "constitution", label: "CONSTITUTION" },
   { id: "lab", label: "LAB" },
   { id: "archive", label: "ARCHIVE" },
@@ -14581,17 +14579,7 @@ export default function Home() {
           aria-label="Main navigation"
           style={isMobile ? { flexWrap: "wrap" } : { flexWrap: "nowrap" }}
         >
-          {LAB_NAV_ITEMS.map(({ id, label }) =>
-            id === "zbank" ? (
-              <Link
-                key={id}
-                href="/privacy"
-                className="navTab"
-                style={{ textDecoration: "none" }}
-              >
-                {label}
-              </Link>
-            ) : (
+          {LAB_NAV_ITEMS.map(({ id, label }) => (
             <button
               key={id}
               type="button"
@@ -14605,7 +14593,7 @@ export default function Home() {
                   router.push("/governance");
                   return;
                 }
-                if (id === "research" || id === "lab") {
+                if (id === "lab") {
                   router.push("/lab");
                   return;
                 }
@@ -14617,6 +14605,10 @@ export default function Home() {
                   router.push("/press");
                   return;
                 }
+                if (id === "zbank") {
+                  router.push("/privacy");
+                  return;
+                }
                 if (id === "zionbet") {
                   router.push("/prediction-engine");
                   return;
@@ -14626,8 +14618,7 @@ export default function Home() {
             >
               {label}
             </button>
-            ),
-          )}
+          ))}
         </nav>
 
         <div className="tabPanels">

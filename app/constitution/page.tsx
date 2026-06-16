@@ -443,25 +443,33 @@ export default function ConstitutionPage() {
           justify-content: center;
           padding: 1.25rem;
         }
+        .rejectedModalDialog {
+          width: min(100%, 520px);
+          max-height: min(85vh, 560px);
+          overflow: auto;
+        }
         .rejectedModalCard {
           width: 100%;
-          max-width: 32rem;
+          max-width: 520px;
+          margin: 0;
+          padding: 16px 18px !important;
+          border-radius: 12px !important;
           border: 1px solid rgba(0, 255, 136, 0.25) !important;
-          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
         }
         .rejectedModalHead {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 1rem;
-          margin-bottom: 1rem;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
         }
         .rejectedModalTitle {
           font-family: "IBM Plex Mono", monospace;
-          font-size: 0.85rem;
+          font-size: 0.78rem;
           letter-spacing: 0.08em;
           color: #e2e8f0;
-          line-height: 1.5;
+          line-height: 1.45;
           margin: 0;
         }
         .rejectedModalClose {
@@ -485,22 +493,22 @@ export default function ConstitutionPage() {
           font-size: 0.72rem;
           letter-spacing: 0.06em;
           color: #eb5757;
-          margin-bottom: 0.85rem;
+          margin: 0 0 0.65rem;
         }
         .rejectedModalVotes {
           font-family: "IBM Plex Mono", monospace;
           font-size: 0.72rem;
           letter-spacing: 0.06em;
           color: rgba(226, 232, 240, 0.65);
-          margin-bottom: 1rem;
+          margin: 0 0 0.75rem;
         }
         .rejectedModalExplanation {
           font-family: "IBM Plex Mono", monospace;
-          font-size: 0.75rem;
-          line-height: 1.65;
+          font-size: 0.72rem;
+          line-height: 1.55;
           color: rgba(226, 232, 240, 0.82);
           border-top: 1px solid rgba(255, 255, 255, 0.08);
-          padding-top: 1rem;
+          padding-top: 0.75rem;
           margin: 0;
         }
         .constScrollBtns {
@@ -518,20 +526,21 @@ export default function ConstitutionPage() {
           letter-spacing: 0.12em;
           padding: 0.55rem 0.85rem;
           cursor: pointer;
-          color: #00ff88;
-          background: rgba(8, 16, 28, 0.72);
+          color: #e8d5a3;
+          background: rgba(8, 18, 36, 0.92);
           backdrop-filter: blur(12px) saturate(1.4);
           -webkit-backdrop-filter: blur(12px) saturate(1.4);
-          border: 1px solid rgba(0, 255, 136, 0.3);
+          border: 1px solid rgba(232, 213, 163, 0.35);
           border-radius: 3px;
           box-shadow:
             0 2px 4px rgba(0, 0, 0, 0.4),
             0 8px 24px rgba(0, 0, 0, 0.3);
-          transition: background 0.15s, border-color 0.15s;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
         }
         .constScrollBtn:hover {
-          background: rgba(0, 255, 136, 0.08);
-          border-color: rgba(0, 255, 136, 0.5);
+          color: #f0ddb0;
+          background: rgba(232, 213, 163, 0.1);
+          border-color: rgba(232, 213, 163, 0.55);
         }
       `}</style>
 
@@ -551,7 +560,7 @@ export default function ConstitutionPage() {
 
             <div className="constStats">
               <span className="constStatsLine">
-                RATIFIED BY DEMOCRATIC CONSENSUS · {constitution.consensus_pct}% APPROVAL
+                RATIFIED BY POPULAR VOTE · {constitution.consensus_pct}% APPROVAL
               </span>
               <span className="constStatsLine">
                 WALRUS: {truncateBlob(constitution.walrus_blob)}{" "}
@@ -672,7 +681,12 @@ export default function ConstitutionPage() {
           role="presentation"
           onClick={() => setRejectedModal(null)}
         >
-          <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div
+            className="rejectedModalDialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
             <GlassCard
               disableTilt
               className={`${glassCardStyles.glassCardLab} rejectedModalCard`}

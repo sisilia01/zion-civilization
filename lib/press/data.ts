@@ -113,7 +113,19 @@ export const newspapers: PressNewspaper[] = [
   },
 ];
 
-export const PRESS_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+/** One article per newspaper per UTC calendar day. */
+export function isPressCacheValidForToday(ts: number): boolean {
+  const cached = new Date(ts);
+  const now = new Date();
+  return (
+    cached.getUTCFullYear() === now.getUTCFullYear() &&
+    cached.getUTCMonth() === now.getUTCMonth() &&
+    cached.getUTCDate() === now.getUTCDate()
+  );
+}
+
+/** @deprecated use isPressCacheValidForToday — kept for imports */
+export const PRESS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function readPressCache(newspaperId: string): string | null {
   if (typeof window === "undefined") return null;
@@ -121,7 +133,7 @@ export function readPressCache(newspaperId: string): string | null {
     const pressCache = localStorage.getItem(`press_${newspaperId}`);
     if (!pressCache) return null;
     const { content, ts } = JSON.parse(pressCache) as { content: string; ts: number };
-    if (Date.now() - ts < PRESS_CACHE_TTL_MS && typeof content === "string") return content;
+    if (isPressCacheValidForToday(ts) && typeof content === "string") return content;
   } catch {
     /* ignore bad cache */
   }
