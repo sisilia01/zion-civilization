@@ -52,6 +52,11 @@ export type ResearchStats = {
   library: { chunks_read: number; total_chunks: number };
   by_track: ResearchTrackStat[];
   daily: ResearchDailyCandle[];
+  population_literacy_pct?: number;
+  agents_with_any_knowledge?: number;
+  total_alive_agents?: number;
+  total_books_in_library?: number;
+  avg_books_known_per_agent?: number;
 };
 
 export type TopBook = {
