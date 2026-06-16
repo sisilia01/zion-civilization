@@ -54,6 +54,7 @@ CRON_SCRIPTS = {
     # [DISABLED for scientific clarity] "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
     "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
+    "amendment_finalizer": ("amendment_finalizer.py", 1800),  # 30 min — close voting backlog
     "knowledge_loop": ("knowledge_loop.py", 86400),  # 1x/day — feedback loop: science findings → agent memory
     "ingest_new_books": ("ingest_new_books.py", 3600),  # hourly — auto-detect + classify + chunk newly added books
     "knowledge_study": ("agent_knowledge.py read_chunk_cycle", 1800),  # 30 min — chunk-by-chunk cover-to-cover reading

@@ -43,7 +43,8 @@ def ensure_tables():
             blob_id VARCHAR(100),
             sui_tx VARCHAR(100),
             created_at TIMESTAMP DEFAULT NOW(),
-            closed_at TIMESTAMP
+            closed_at TIMESTAMP,
+            rejection_reason TEXT
         )
     """)
     cur.execute("""

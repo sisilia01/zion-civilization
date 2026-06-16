@@ -56,11 +56,12 @@ def db_conn():
     return psycopg2.connect(**DB)
 
 
-def ensure_schema(cur) -> None:
+def ensure_schema(cur, *, sync_tracks: bool = True) -> None:
     from book_classifier import ensure_book_tracks_schema, sync_book_tracks
 
     ensure_book_tracks_schema(cur)
-    sync_book_tracks(cur, verbose=False)
+    if sync_tracks:
+        sync_book_tracks(cur, verbose=False)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS zlab_observations (

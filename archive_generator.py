@@ -47,9 +47,8 @@ def is_valid_observation(text: str) -> bool:
     return not any(p in text_lower for p in REFUSAL_PATTERNS)
 
 
-def ensure_archive_schema(cur) -> None:
-    ensure_schema(cur)
-    sync_book_tracks(cur, verbose=False)
+def ensure_archive_schema(cur, *, sync_tracks: bool = True) -> None:
+    ensure_schema(cur, sync_tracks=sync_tracks)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS archive_reports (

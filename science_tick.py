@@ -39,7 +39,7 @@ def maybe_run_amendment():
         print(f"[science_tick] tribunal result: {result}")
         if result['unanimous']:
             from enact_amendment import enact
-            enact(aid)
+            enact(aid, allow_soft=True)
     print(f"[science_tick] amendment cycle ran: {title}")
 
 def run_academy():

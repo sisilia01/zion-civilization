@@ -7,6 +7,7 @@ import json
 import os
 import re
 import hashlib
+import time
 import psycopg2, psycopg2.extras
 from decimal import Decimal
 from datetime import datetime
@@ -125,14 +126,19 @@ def constitution_amendments():
     cur.execute(
         """SELECT id, proposal_number, title, description, change_type, status,
                   votes_for, votes_against, votes_abstain, merkle_root, blob_id,
-                  created_at, closed_at
+                  created_at, closed_at, rejection_reason
            FROM amendments
            ORDER BY COALESCE(proposal_number, 0) DESC, id DESC"""
     )
     rows = [dict(r) for r in cur.fetchall()]
     cur.close()
     conn.close()
-    status_map = {"enacted": "ENACTED", "voting": "PROPOSED", "rejected": "REJECTED"}
+    status_map = {
+        "enacted": "ENACTED",
+        "voting": "PROPOSED",
+        "rejected": "REJECTED",
+        "superseded": "SUPERSEDED",
+    }
     for r in rows:
         raw = (r.get("status") or "proposed").lower()
         r["status_label"] = status_map.get(raw, raw.upper())
@@ -613,13 +619,31 @@ def zlab_tracks():
     return {"tracks": js(summary), "by_track": grouped}
 
 
+ARCHIVE_CACHE_TTL = 300  # 5 minutes
+_archive_reports_cache = None
+_archive_reports_cache_ts = 0.0
+_archive_tracks_cache = None
+_archive_tracks_cache_ts = 0.0
+_archive_periods_cache = None
+_archive_periods_cache_ts = 0.0
+_archive_documents_cache: dict[str, tuple[dict, float]] = {}
+
+
+def _archive_cache_valid(cache_ts: float) -> bool:
+    return cache_ts > 0 and (time.time() - cache_ts) < ARCHIVE_CACHE_TTL
+
+
 @router.get("/archive/reports")
 def archive_reports():
+    global _archive_reports_cache, _archive_reports_cache_ts
+    if _archive_cache_valid(_archive_reports_cache_ts):
+        return _archive_reports_cache
+
     from archive_generator import ensure_archive_schema
 
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    ensure_archive_schema(cur)
+    ensure_archive_schema(cur, sync_tracks=False)
     cur.execute(
         """
         SELECT id, report_type, week_number, month_number, year_number,
@@ -635,7 +659,10 @@ def archive_reports():
     rows = _enrich_archive_report_rows(cur, rows)
     cur.close()
     conn.close()
-    return js({"reports": rows, "schedule": schedule})
+    payload = js({"reports": rows, "schedule": schedule})
+    _archive_reports_cache = payload
+    _archive_reports_cache_ts = time.time()
+    return payload
 
 
 def _enrich_archive_report_rows(cur, rows: list[dict]) -> list[dict]:
@@ -684,14 +711,17 @@ def _enrich_archive_report_rows(cur, rows: list[dict]) -> list[dict]:
 
 @router.get("/archive/periods")
 def archive_periods():
-    """Weekly periods (Mon–Sun) with document counts for archive filter."""
+    global _archive_periods_cache, _archive_periods_cache_ts
+    if _archive_cache_valid(_archive_periods_cache_ts):
+        return _archive_periods_cache
+
     from datetime import date, timedelta
 
     from archive_generator import ensure_archive_schema
 
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    ensure_archive_schema(cur)
+    ensure_archive_schema(cur, sync_tracks=False)
     rows: list[dict] = []
     try:
         cur.execute(
@@ -737,12 +767,19 @@ def archive_periods():
                 "doc_count": int(r.get("doc_count") or 0),
             }
         )
-    return js(periods)
+    payload = js(periods)
+    _archive_periods_cache = payload
+    _archive_periods_cache_ts = time.time()
+    return payload
 
 
 @router.get("/archive/documents")
 def archive_documents(week: str = Query(..., description="Week start date YYYY-MM-DD (Monday)")):
     """Archive reports/documents for a specific calendar week."""
+    cached = _archive_documents_cache.get(week.strip()[:10])
+    if cached and _archive_cache_valid(cached[1]):
+        return cached[0]
+
     from datetime import date, timedelta
 
     from archive_generator import ensure_archive_schema
@@ -755,7 +792,7 @@ def archive_documents(week: str = Query(..., description="Week start date YYYY-M
 
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    ensure_archive_schema(cur)
+    ensure_archive_schema(cur, sync_tracks=False)
     cur.execute(
         """
         SELECT id, report_type, week_number, month_number, year_number,
@@ -770,13 +807,15 @@ def archive_documents(week: str = Query(..., description="Week start date YYYY-M
     rows = _enrich_archive_report_rows(cur, rows)
     cur.close()
     conn.close()
-    return js(
+    payload = js(
         {
             "week_start": week_start.isoformat(),
             "week_end": (week_end_exclusive - timedelta(days=1)).isoformat(),
             "documents": rows,
         }
     )
+    _archive_documents_cache[week_start.isoformat()] = (payload, time.time())
+    return payload
 
 
 def _archive_track_filename(report: dict, track: str) -> str:
@@ -871,18 +910,25 @@ def archive_download_zip(report_id: int):
 
 @router.get("/archive/tracks")
 def archive_tracks():
+    global _archive_tracks_cache, _archive_tracks_cache_ts
+    if _archive_cache_valid(_archive_tracks_cache_ts):
+        return _archive_tracks_cache
+
     from book_classifier import list_discovered_tracks, sync_book_tracks
     from archive_generator import ensure_archive_schema
 
     conn = db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    ensure_archive_schema(cur)
+    ensure_archive_schema(cur, sync_tracks=False)
     sync_book_tracks(cur, verbose=False)
     conn.commit()
     tracks = list_discovered_tracks(cur)
     cur.close()
     conn.close()
-    return js({"tracks": tracks, "total_books": sum(t.get("book_count", 0) for t in tracks)})
+    payload = js({"tracks": tracks, "total_books": sum(t.get("book_count", 0) for t in tracks)})
+    _archive_tracks_cache = payload
+    _archive_tracks_cache_ts = time.time()
+    return payload
 
 
 def _timeline_day(dt) -> str:
