@@ -13,6 +13,8 @@ export function Press() {
     activeNewspaper,
     pressArticles,
     pressLoading,
+    pressNotice,
+    pressErrors,
     account,
     pressSuiChecked,
     suiBalance,
@@ -25,6 +27,8 @@ export function Press() {
   const current = newspapers.find((n) => n.id === activeNewspaper) ?? newspapers[0]!;
   const currentArticle = pressArticles[activeNewspaper];
   const loading = !!pressLoading[activeNewspaper];
+  const currentNotice = pressNotice[activeNewspaper];
+  const currentError = pressErrors[activeNewspaper];
   const ac = current.accentColor;
   const border = current.borderColor;
   const bodyFont = current.bodyFont;
@@ -395,9 +399,21 @@ export function Press() {
 
         {!isVip || (isVip && vipCanRead) ? (
           <>
+            {currentNotice ? (
+              <GlassCard className={pressGlass} style={{ padding: "10px 14px", marginBottom: "8px" }}>
+                <div style={{ color: ac, fontSize: "0.78rem", fontFamily: "ui-monospace, monospace" }}>
+                  {currentNotice}
+                </div>
+              </GlassCard>
+            ) : null}
             {showLoadingLine ? (
               <GlassCard className={pressGlass} style={{ padding: "10px 14px" }}>
                 <div style={{ color: "#666" }}>⌛ Journalist investigating...</div>
+              </GlassCard>
+            ) : null}
+            {!showLoadingLine && !currentArticle && currentError ? (
+              <GlassCard className={pressGlass} style={{ padding: "10px 14px" }}>
+                <div style={{ color: "#f87171", fontSize: "0.85rem" }}>{currentError}</div>
               </GlassCard>
             ) : null}
             {currentArticle ? renderArticle(currentArticle, ac, border, bodyFont, isVip && vipCanRead, isMobile) : null}
