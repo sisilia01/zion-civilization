@@ -200,9 +200,35 @@ function TransmissionCardSkeleton({ label }: { label: string }) {
   );
 }
 
+const STAT_CARD_LABELS = [
+  "CIVILIZATION KNOWLEDGE",
+  "INSIGHTS",
+  "POPULATION LITERACY",
+  "LAB RESEARCHERS",
+  "OBSERVATIONS THIS WEEK",
+  "REPORTS ON WALRUS",
+] as const;
+
+const statCardSkeletonBodyStyle: CSSProperties = {
+  ...transmissionSkeletonStyle,
+  height: "48px",
+  marginTop: "8px",
+  borderRadius: "4px",
+};
+
+function StatCardSkeleton({ label }: { label: string }) {
+  return (
+    <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+      <div style={statCardTitleStyle}>{label}</div>
+      <div style={statCardSkeletonBodyStyle}>LOADING...</div>
+    </GlassCard>
+  );
+}
+
 
 function TopBooksPanel() {
   const [books, setBooks] = useState<TopBook[]>([]);
+  const [loading, setLoading] = useState(true);
   const [animateBars, setAnimateBars] = useState(false);
 
   useEffect(() => {
@@ -212,7 +238,8 @@ function TopBooksPanel() {
         setBooks(Array.isArray(data) ? data : []);
         requestAnimationFrame(() => setAnimateBars(true));
       })
-      .catch(() => setBooks([]));
+      .catch(() => setBooks([]))
+      .finally(() => setLoading(false));
   }, []);
 
   const maxCount = books.length ? Math.max(...books.map((b) => b.agent_count), 1) : 1;
@@ -221,8 +248,12 @@ function TopBooksPanel() {
     <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
       <div style={tableHeadStyle}>MOST-STUDIED ARCHIVES</div>
       <div style={{ ...screenStyle, padding: "10px 12px 8px", height: "auto", minHeight: "240px" }}>
-        {books.length === 0 ? (
+        {loading ? (
           <div style={{ color: "#64748b", fontSize: "10px", fontFamily: mono }}>Loading archives…</div>
+        ) : books.length === 0 ? (
+          <div style={{ color: "#64748b", fontSize: "10px", fontFamily: mono }}>
+            No archive study activity in the last 7 days.
+          </div>
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
             {books.slice(0, 5).map((book, idx) => {
@@ -1046,7 +1077,9 @@ export default function ZLabPanel() {
   const [cycleKey, setCycleKey] = useState(0);
   const [feedsLoading, setFeedsLoading] = useState(true);
   const [wave2Ready, setWave2Ready] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const statsInitialLoad = useRef(true);
 
   const loadTransmissionFeeds = useCallback(async () => {
     setError(null);
@@ -1085,21 +1118,23 @@ export default function ZLabPanel() {
     }
   }, []);
 
-  const loadStats = useCallback(async () => {
+  const loadDashboardStats = useCallback(async (options?: { silent?: boolean }) => {
+    const isInitial = statsInitialLoad.current && !options?.silent;
+    if (isInitial) setStatsLoading(true);
     try {
-      const res = await fetch("/api/zlab/stats", { cache: "no-store" });
-      if (res.ok) setStats(await res.json());
+      const [statsRes, researchRes] = await Promise.all([
+        fetch("/api/zlab/stats", { cache: "no-store" }),
+        fetch("/api/lab/research-stats", { cache: "no-store" }),
+      ]);
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (researchRes.ok) setResearch(await researchRes.json());
     } catch {
       /* keep last snapshot */
-    }
-  }, []);
-
-  const loadResearchStats = useCallback(async () => {
-    try {
-      const res = await fetch("/api/lab/research-stats", { cache: "no-store" });
-      if (res.ok) setResearch(await res.json());
-    } catch {
-      /* keep last snapshot */
+    } finally {
+      if (isInitial) {
+        setStatsLoading(false);
+        statsInitialLoad.current = false;
+      }
     }
   }, []);
 
@@ -1117,15 +1152,10 @@ export default function ZLabPanel() {
 
   useEffect(() => {
     if (!wave2Ready) return;
-    loadStats();
-    loadResearchStats();
-    const statsRefresh = setInterval(loadStats, FEED_REFRESH_MS);
-    const researchRefresh = setInterval(loadResearchStats, RESEARCH_REFRESH_MS);
-    return () => {
-      clearInterval(statsRefresh);
-      clearInterval(researchRefresh);
-    };
-  }, [wave2Ready, loadStats, loadResearchStats]);
+    loadDashboardStats();
+    const refresh = setInterval(() => loadDashboardStats({ silent: true }), RESEARCH_REFRESH_MS);
+    return () => clearInterval(refresh);
+  }, [wave2Ready, loadDashboardStats]);
 
   const advanceCycle = useCallback(() => {
     setEnIndex((i) => (englishQueue.length ? (i + 1) % englishQueue.length : 0));
@@ -1137,6 +1167,7 @@ export default function ZLabPanel() {
   const currentZion = zionQueue.length ? zionQueue[zionIndex % zionQueue.length] : null;
   const animatedPct = useAnimatedNumber(research?.education_pct ?? 0);
   const animatedLiteracy = useAnimatedNumber(research?.population_literacy_pct ?? 0);
+  const statsReady = research != null && stats != null;
 
   return (
     <section
@@ -1247,9 +1278,13 @@ export default function ZLabPanel() {
         <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
       )}
 
-      {(research != null || stats) && (
+      {wave2Ready && (statsLoading || statsReady) && (
         <div style={statsGridStyle}>
-          {research != null && (
+          {statsLoading || !statsReady ? (
+            STAT_CARD_LABELS.map((label) => (
+              <StatCardSkeleton key={label} label={label} />
+            ))
+          ) : (
             <>
               <GlassCard
                 className={glassCardStyles.glassCardLab}
@@ -1274,19 +1309,19 @@ export default function ZLabPanel() {
                 </div>
               </GlassCard>
 
-              {research.daily && research.daily.length > 0 && (
-                <GlassCard
-                  className={glassCardStyles.glassCardLab}
-                  style={statCardShellStyle}
-                >
-                  <div style={statCardTitleStyle}>
-                    INSIGHTS (14-DAY CUMULATIVE):{" "}
-                    <span style={{ color: "#00ff88" }}>
-                      {Math.round(research.daily[research.daily.length - 1]?.cumulative_insights ?? 0)}
-                    </span>
-                  </div>
-                </GlassCard>
-              )}
+              <GlassCard
+                className={glassCardStyles.glassCardLab}
+                style={statCardShellStyle}
+              >
+                <div style={statCardTitleStyle}>
+                  INSIGHTS (14-DAY CUMULATIVE):{" "}
+                  <span style={{ color: "#00ff88" }}>
+                    {Math.round(
+                      research.daily?.[research.daily.length - 1]?.cumulative_insights ?? 0,
+                    )}
+                  </span>
+                </div>
+              </GlassCard>
 
               <GlassCard
                 className={glassCardStyles.glassCardLab}
@@ -1299,11 +1334,7 @@ export default function ZLabPanel() {
                   Average % of library known per citizen — 100% would mean every agent has studied every book
                 </div>
               </GlassCard>
-            </>
-          )}
 
-          {stats && (
-            <>
               <GlassCard
                 className={glassCardStyles.glassCardLab}
                 style={statCardShellStyle}

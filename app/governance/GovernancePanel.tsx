@@ -178,15 +178,16 @@ export function GovernancePanel() {
               </div>
             </GovGlassCard>
 
-            <GovGlassCard
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 24,
-                padding: "12px 16px",
-                marginBottom: 16,
-              }}
-            >
+            <GovGlassCard style={{ padding: "12px 16px", marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 24,
+                  alignItems: "center",
+                }}
+              >
               <div>
                 <span style={{ color: textMuted, fontSize: 11, fontFamily: mono }}>POVERTY</span>
                 <span style={{ color: "#ff4444", fontSize: 16, fontWeight: 600, marginLeft: 8, fontFamily: mono }}>
@@ -224,6 +225,7 @@ export function GovernancePanel() {
                 >
                   {Math.round(hudCorruption)}%
                 </span>
+              </div>
               </div>
             </GovGlassCard>
 
@@ -265,6 +267,17 @@ export function GovernancePanel() {
                         </td>
                       </tr>
                       <tr>
+                        <td style={tableLabelStyle}>CORRUPTION</td>
+                        <td
+                          style={{
+                            ...tableValueStyle,
+                            color: Number(presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : textPrimary,
+                          }}
+                        >
+                          {Math.round(Number(presidentState.corruption_index ?? 0))}%
+                        </td>
+                      </tr>
+                      <tr>
                         <td style={tableLabelStyle}>FUND</td>
                         <td style={tableValueStyle}>
                           {Math.round(Number(presidentState.personal_fund ?? 0)).toLocaleString("en-US")}
@@ -276,17 +289,6 @@ export function GovernancePanel() {
                             daysRemaining={Number(presidentState.days_remaining ?? 0)}
                             termDays={Number(presidentState.term_days ?? 3)}
                           />
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style={tableLabelStyle}>CORRUPTION</td>
-                        <td
-                          style={{
-                            ...tableValueStyle,
-                            color: Number(presidentState.corruption_index ?? 0) > 50 ? "#ff4444" : textPrimary,
-                          }}
-                        >
-                          {Math.round(Number(presidentState.corruption_index ?? 0))}%
                         </td>
                       </tr>
                     </tbody>
@@ -603,10 +605,10 @@ export function GovernancePanel() {
               }}
             >
               {[
-                { label: "PRESIDENT", items: presidentActionsDisplay, accent: false },
-                { label: "SHERIFF", items: sheriffActionsDisplay, accent: false },
-                { label: "SENATE", items: senateEventsDisplay, accent: "senate" as const },
-                { label: "ZRS", items: zrsEventsDisplay, accent: "zrs" as const },
+                { label: "PRESIDENT", items: presidentActionsDisplay },
+                { label: "SHERIFF", items: sheriffActionsDisplay },
+                { label: "SENATE", items: senateEventsDisplay },
+                { label: "ZRS", items: zrsEventsDisplay },
               ].map((col) => (
                 <GovGlassCard
                   key={col.label}
@@ -630,16 +632,6 @@ export function GovernancePanel() {
                     col.items.map((action, i) => {
                       const text = cleanActivityDescription(action.description);
                       const time = formatEventTime(action.created_at) || "—";
-                      const color =
-                        col.accent === "zrs"
-                          ? accent
-                          : col.accent === "senate"
-                            ? action.event_type === "senate_law"
-                              ? "#ffd93d"
-                              : textMuted
-                            : /BREAKING/i.test(text)
-                              ? "#ff4444"
-                              : textPrimary;
                       return (
                         <div
                           key={`${col.label}-${i}`}
@@ -660,7 +652,7 @@ export function GovernancePanel() {
                           >
                             {time}
                           </span>
-                          <span style={{ color, fontSize: 12, fontFamily: mono }}>
+                          <span style={{ color: "#fff", fontSize: 12, fontFamily: mono }}>
                             {text}
                             {"count" in action && Number(action.count) > 1 ? ` ×${action.count}` : ""}
                           </span>
