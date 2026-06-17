@@ -15,6 +15,9 @@ export function normalizePopulation(population = 0) {
   return Math.min(1, Math.max(0, population / 20000));
 }
 
+/** revolution_meter 0–100 from map stats; backend uprising triggers at 100. */
+const REVOLUTION_RIOT_THRESHOLD = 70;
+
 /** Polar aurora on planet surface only — off by default (atmosphere aurora reads as a solid green pole). */
 const USE_AURORA = false;
 
@@ -124,6 +127,7 @@ float ridged(vec3 p, int octaves) {
 
 const PLANET_FRAG = `
 uniform float uProsperity;
+uniform float uRiotPulse;
 uniform vec3 uLightDir;
 uniform float uTime;
 uniform vec3 uCameraPos;
@@ -273,12 +277,18 @@ void main() {
   dayCol *= 1.0 - cloudShadow * 0.32;
 
   vec3 earthshineCol = vec3(0.02, 0.025, 0.06) + surfaceColor * 0.03;
-  vec3 cityLights = cityMask * uProsperity * vec3(1.0, 0.85, 0.5) * 3.5 * nightSide;
+  vec3 cityWarm = vec3(1.0, 0.82, 0.48);
+  vec3 cityAlert = vec3(1.0, 0.125, 0.125);
+  float riotActive = step(0.01, uRiotPulse);
+  vec3 cityColor = mix(cityWarm, cityAlert, riotActive);
+  float cityBright = mix(3.5, 3.5 + uRiotPulse * 3.5, riotActive);
+  vec3 cityLights = cityMask * uProsperity * cityColor * cityBright * nightSide;
 
   vec3 nightCol = earthshineCol + cityLights;
   vec3 color = mix(nightCol, dayCol, dayAmount);
   color += vec3(1.0, 0.48, 0.14) * twilight * 0.08;
-  color += cityMask * vec3(1.0, 0.65, 0.28) * twilight * 0.03 * uProsperity;
+  vec3 twilightCity = mix(vec3(1.0, 0.65, 0.28), vec3(1.0, 0.2, 0.15), riotActive);
+  color += cityMask * twilightCity * twilight * 0.03 * uProsperity;
 ${AURORA_NOISE_GLSL}
   float limbFog = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.5);
   vec3 limbHaze = mix(vec3(0.02, 0.05, 0.1), vec3(0.04, 0.08, 0.14), uProsperity);
@@ -1358,6 +1368,7 @@ function createNoisePlanetMaterial(lightDir, prosperity) {
     fragmentShader: PLANET_FRAG,
     uniforms: {
       uProsperity: { value: prosperity },
+      uRiotPulse: { value: 0 },
       uLightDir: { value: lightDir.clone() },
       uTime: { value: 0 },
       uCameraPos: { value: new THREE.Vector3(0, 0, 4.2) },
@@ -1398,8 +1409,10 @@ const TEXTURED_PLANET_SURFACE_FRAG = `
 
   vec3 warmColor = vec3(1.0, 0.82, 0.48);
   vec3 redColor = vec3(1.0, 0.35, 0.12);
-  vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
-  float cityBright = mix(2.0, 6.0, uPopulation);
+  vec3 alertColor = vec3(1.0, 0.125, 0.125);
+  float riotActive = step(0.01, uRiotPulse);
+  vec3 cityTint = mix(mix(warmColor, redColor, uRevolution * cityMask), alertColor, riotActive);
+  float cityBright = mix(2.0, 6.0, uPopulation) * (1.0 + uRiotPulse * 1.5);
   vec3 cityGlow = nightTex * cityMask * cityTint * cityBright;
 
   float nightSide = 1.0 - dayAmount;
@@ -1415,6 +1428,7 @@ function patchTexturedPlanetShader(shader) {
   shader.uniforms.uLightDir = { value: new THREE.Vector3(5, 0.35, 1.2).normalize() };
   shader.uniforms.uProsperity = { value: 0.5 };
   shader.uniforms.uRevolution = { value: 0 };
+  shader.uniforms.uRiotPulse = { value: 0 };
   shader.uniforms.uPopulation = { value: 0.5 };
   shader.uniforms.uTime = { value: 0 };
   shader.uniforms.uNightMap = { value: null };
@@ -1426,7 +1440,7 @@ function patchTexturedPlanetShader(shader) {
   }
   if (!shader.fragmentShader.includes("uniform sampler2D uNightMap")) {
     shader.fragmentShader =
-      "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\nuniform vec3 uLightDir;\nuniform vec3 uCameraPos;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\nuniform sampler2D uSpecularMap;\n" +
+      "varying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\nuniform vec3 uLightDir;\nuniform vec3 uCameraPos;\nuniform float uProsperity;\nuniform float uRevolution;\nuniform float uRiotPulse;\nuniform float uPopulation;\nuniform float uTime;\nuniform sampler2D uNightMap;\nuniform sampler2D uSpecularMap;\n" +
       shader.fragmentShader;
   }
 
@@ -1490,6 +1504,7 @@ uniform sampler2D uCloudMap;
 uniform sampler2D uNightMap;
 uniform vec3 uLightDir;
 uniform float uProsperity;
+uniform float uRiotPulse;
 uniform float uTime;
 varying vec2 vUv;
 varying vec3 vWorldNormal;
@@ -1507,7 +1522,12 @@ void main() {
   vec3 nightTex = texture2D(uNightMap, vUv).rgb;
   float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
   float cityMask = smoothstep(0.12, 0.35, cityLum);
-  nightCloud += vec3(1.0, 0.82, 0.48) * cityMask * 0.15 * tex.a;
+  vec3 cityWarm = vec3(1.0, 0.82, 0.48);
+  vec3 cityAlert = vec3(1.0, 0.125, 0.125);
+  float riotActive = step(0.01, uRiotPulse);
+  vec3 cityColor = mix(cityWarm, cityAlert, riotActive);
+  float cityBloom = 0.15 * (1.0 + uRiotPulse * 2.0);
+  nightCloud += cityColor * cityMask * cityBloom * tex.a;
 
   vec3 col = mix(nightCloud, dayCloud, dayAmount);
 
@@ -1530,6 +1550,7 @@ function createTexturedCloudMaterial(cloudTex, nightTex, lightDir) {
       uNightMap: { value: nightTex },
       uLightDir: { value: lightDir.clone() },
       uProsperity: { value: 0.5 },
+      uRiotPulse: { value: 0 },
       uTime: { value: 0 },
     },
     vertexShader: TEXTURED_CLOUD_VERT,
@@ -2020,8 +2041,11 @@ export function LivingPlanet({
         currentRevolutionRef.current += (targetRevolutionRef.current - currentRevolutionRef.current) * 0.02;
         currentPopulationRef.current += (targetPopulationRef.current - currentPopulationRef.current) * 0.02;
         const p = currentProsperityRef.current;
-        const revNorm = currentRevolutionRef.current / 100;
+        const revMeter = currentRevolutionRef.current;
+        const revNorm = revMeter / 100;
         const pop = currentPopulationRef.current;
+        const isRiotActive = revMeter > REVOLUTION_RIOT_THRESHOLD;
+        const riotPulse = isRiotActive ? Math.sin(t * 4) * 0.5 + 0.5 : 0;
 
         updateRealtimeSunDirection(lightDir);
         dirLight.position.set(lightDir.x * 12, lightDir.y * 12, lightDir.z * 12);
@@ -2030,18 +2054,21 @@ export function LivingPlanet({
         if (useTexturedPlanet && planetMat.userData.shader) {
           planetMat.userData.shader.uniforms.uProsperity.value = p;
           planetMat.userData.shader.uniforms.uRevolution.value = revNorm;
+          planetMat.userData.shader.uniforms.uRiotPulse.value = riotPulse;
           planetMat.userData.shader.uniforms.uPopulation.value = pop;
           planetMat.userData.shader.uniforms.uTime.value = t;
           planetMat.userData.shader.uniforms.uLightDir.value.copy(lightDir);
           planetMat.userData.shader.uniforms.uCameraPos.value.copy(camera.position);
         } else if (planetMat.uniforms) {
           planetMat.uniforms.uProsperity.value = p;
+          planetMat.uniforms.uRiotPulse.value = riotPulse;
           planetMat.uniforms.uTime.value = t;
           planetMat.uniforms.uLightDir.value.copy(lightDir);
           planetMat.uniforms.uCameraPos.value.copy(camera.position);
         }
         if (cloudMat) {
           cloudMat.uniforms.uProsperity.value = p;
+          cloudMat.uniforms.uRiotPulse.value = riotPulse;
           cloudMat.uniforms.uTime.value = t;
           cloudMat.uniforms.uLightDir.value.copy(lightDir);
         }
