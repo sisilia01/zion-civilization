@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Calendar } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import glassCardStyles from "@/components/GlassCard.module.css";
@@ -36,14 +37,12 @@ const triggerStyle: CSSProperties = {
 };
 
 const dropdownShell: CSSProperties = {
-  position: "absolute",
-  top: "calc(100% + 6px)",
-  right: 0,
+  position: "fixed",
   minWidth: "280px",
   maxHeight: "280px",
   overflowY: "auto",
   padding: "8px 0",
-  zIndex: 20,
+  zIndex: 1000,
 };
 
 function formatWeekLabel(start: string, end: string, count: number): string {
@@ -59,13 +58,27 @@ type Props = {
   onSelectWeek: (weekStart: string | null) => void;
 };
 
+type DropdownCoords = { top: number; right: number };
+
 export function ArchivePeriodFilter({ selectedWeek, onSelectWeek }: Props) {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<DropdownCoords | null>(null);
   const [periods, setPeriods] = useState<ArchivePeriod[]>(() => {
     const cached = readArchiveStaleCache<ArchivePeriod[]>(ARCHIVE_CACHE_KEYS.periods);
     return Array.isArray(cached) ? cached : [];
   });
-  const rootRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const updateCoords = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setCoords({
+      top: rect.bottom + 6,
+      right: window.innerWidth - rect.right,
+    });
+  }, []);
 
   useEffect(() => {
     const cached = readArchiveCache<ArchivePeriod[]>(ARCHIVE_CACHE_KEYS.periods);
@@ -76,7 +89,9 @@ export function ArchivePeriodFilter({ selectedWeek, onSelectWeek }: Props) {
     fetch("/api/archive/periods")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
-        const next = Array.isArray(data) ? data : [];
+        const next = Array.isArray(data)
+          ? data.filter((p) => typeof p?.doc_count === "number" ? p.doc_count > 0 : true)
+          : [];
         setPeriods(next);
         writeArchiveCache(ARCHIVE_CACHE_KEYS.periods, next);
       })
@@ -88,29 +103,35 @@ export function ArchivePeriodFilter({ selectedWeek, onSelectWeek }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    updateCoords();
     const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setOpen(false);
     };
+    const onReposition = () => updateCoords();
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open, updateCoords]);
 
-  return (
-    <div ref={rootRef} style={{ position: "relative", flexShrink: 0 }}>
-      <button
-        type="button"
-        style={triggerStyle}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-      >
-        <Calendar size={14} strokeWidth={1.75} aria-hidden />
-        BY PERIOD
-      </button>
-      {open && (
-        <GlassCard className={glassCardStyles.glassCard} style={dropdownShell}>
+  const dropdown =
+    open && coords ? (
+      <div ref={dropdownRef}>
+        <GlassCard
+          className={glassCardStyles.glassCard}
+          disableTilt
+          style={{
+            ...dropdownShell,
+            top: coords.top,
+            right: coords.right,
+          }}
+        >
           <button
             type="button"
             onClick={() => {
@@ -175,7 +196,28 @@ export function ArchivePeriodFilter({ selectedWeek, onSelectWeek }: Props) {
             })
           )}
         </GlassCard>
-      )}
-    </div>
+      </div>
+    ) : null;
+
+  return (
+    <>
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          ref={triggerRef}
+          type="button"
+          style={triggerStyle}
+          onClick={() => {
+            if (!open) updateCoords();
+            setOpen((o) => !o);
+          }}
+          aria-expanded={open}
+          aria-haspopup="listbox"
+        >
+          <Calendar size={14} strokeWidth={1.75} aria-hidden />
+          BY PERIOD
+        </button>
+      </div>
+      {typeof document !== "undefined" && dropdown ? createPortal(dropdown, document.body) : null}
+    </>
   );
 }

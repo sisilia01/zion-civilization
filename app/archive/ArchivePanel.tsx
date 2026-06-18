@@ -43,9 +43,20 @@ type Schedule = {
 const panelShellStyle: CSSProperties = {
   flex: "1 1 280px",
   minWidth: "260px",
+  alignSelf: "stretch",
   border: "1px solid #1e3a5f",
   borderRadius: "6px",
   padding: "16px",
+  display: "flex",
+  flexDirection: "column",
+};
+
+const nextFooterStyle: CSSProperties = {
+  borderTop: "1px solid rgba(148, 163, 184, 0.2)",
+  paddingTop: "10px",
+  fontSize: "11px",
+  color: "#64748b",
+  fontFamily: '"IBM Plex Mono", monospace',
 };
 
 const tracksPanelStyle: CSSProperties = {
@@ -90,13 +101,28 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+function formatWeekRange(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = local.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const start = new Date(local);
+  start.setDate(local.getDate() + mondayOffset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const part = (dt: Date) =>
+    dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${part(start)} – ${part(end)}, ${end.getFullYear()}`;
+}
+
 function periodLabel(r: ArchiveReport | undefined, type: string): string {
   if (!r) {
     if (type === "weekly") return "No report yet";
     if (type === "monthly") return "No report yet";
     return "Not yet";
   }
-  if (type === "weekly") return `Week ${r.week_number}, ${r.year_number}`;
+  if (type === "weekly") return formatWeekRange(r.created_at);
   if (type === "monthly") {
     const m = r.month_number ?? 1;
     const y = r.year_number ?? new Date().getFullYear();
@@ -113,82 +139,86 @@ function ReportColumn({
   title,
   report,
   nextAt,
-  notYet,
 }: {
   title: string;
   report: ArchiveReport | undefined;
   nextAt?: string;
-  notYet?: boolean;
 }) {
   const files = report?.files ?? [];
+  const showNext = !report && Boolean(nextAt);
 
   return (
     <GlassCard className={glassCardStyles.glassCard} style={panelShellStyle}>
       <div
         style={{
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: "11px",
-          letterSpacing: "0.12em",
-          color: "#00b4d8",
-          marginBottom: "8px",
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: "100%",
+          justifyContent: showNext ? "space-between" : "flex-start",
         }}
       >
-        {title}
-      </div>
-      <div style={{ fontSize: "14px", color: "#f1f5f9", marginBottom: "12px" }}>
-        {periodLabel(report, title.toLowerCase())}
-      </div>
-      <div style={{ fontSize: "12px", marginBottom: "12px", minHeight: "120px" }}>
-        {files.length === 0 ? (
-          <span style={{ color: "#64748b" }}>—</span>
-        ) : (
-          files.map((f) => {
-            const label = trackLabel(f.track);
-            const href = f.download_url
-              ? `/api/archive/download?report_id=${report?.id}&track=${encodeURIComponent(f.track.toLowerCase())}`
-              : undefined;
-            const filename = f.download_filename ?? `${label}.txt`;
-            return href ? (
-              <a
-                key={`${f.track}-${f.filename}`}
-                href={href}
-                download={filename}
-                style={fileLinkStyle}
-              >
-                📄 {label}
-              </a>
+        <div>
+          <div
+            style={{
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: "11px",
+              letterSpacing: "0.12em",
+              color: "#00b4d8",
+              marginBottom: "8px",
+            }}
+          >
+            {title}
+          </div>
+          <div style={{ fontSize: "14px", color: "#f1f5f9", marginBottom: "12px" }}>
+            {periodLabel(report, title.toLowerCase())}
+          </div>
+          <div style={{ fontSize: "12px", marginBottom: "12px", minHeight: showNext ? undefined : "120px" }}>
+            {files.length === 0 ? (
+              <span style={{ color: "#64748b" }}>—</span>
             ) : (
-              <div key={`${f.track}-${f.filename}`} style={{ ...fileLinkStyle, cursor: "default" }}>
-                📄 {label}
-              </div>
-            );
-          })
-        )}
-      </div>
-      {notYet ? (
-        <div style={{ fontSize: "11px", color: "#64748b", fontFamily: '"IBM Plex Mono", monospace' }}>
-          NEXT: {formatDate(nextAt)}
+              files.map((f) => {
+                const label = trackLabel(f.track);
+                const href = f.download_url
+                  ? `/api/archive/download?report_id=${report?.id}&track=${encodeURIComponent(f.track.toLowerCase())}`
+                  : undefined;
+                const filename = f.download_filename ?? `${label}.txt`;
+                return href ? (
+                  <a
+                    key={`${f.track}-${f.filename}`}
+                    href={href}
+                    download={filename}
+                    style={fileLinkStyle}
+                  >
+                    📄 {label}
+                  </a>
+                ) : (
+                  <div key={`${f.track}-${f.filename}`} style={{ ...fileLinkStyle, cursor: "default" }}>
+                    📄 {label}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {report?.walrus_url && (
+            <a
+              href={report.walrus_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: "13px",
+                color: "#64748b",
+                fontFamily: '"IBM Plex Mono", monospace',
+                textDecoration: "none",
+                display: "inline-block",
+              }}
+            >
+              Walrus: {truncateBlob(report.walrus_blob_id ?? "")} ↗
+            </a>
+          )}
         </div>
-      ) : !report ? (
-        <div style={{ fontSize: "11px", color: "#64748b" }}>(not yet)</div>
-      ) : null}
-      {report?.walrus_url && (
-        <a
-          href={report.walrus_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            fontSize: "13px",
-            color: "#64748b",
-            marginTop: "6px",
-            fontFamily: '"IBM Plex Mono", monospace',
-            textDecoration: "none",
-            display: "inline-block",
-          }}
-        >
-          Walrus: {truncateBlob(report.walrus_blob_id ?? "")} ↗
-        </a>
-      )}
+        {showNext ? <div style={nextFooterStyle}>NEXT: {formatDate(nextAt)}</div> : null}
+      </div>
     </GlassCard>
   );
 }
@@ -373,14 +403,13 @@ export default function ArchivePanel() {
       {showSkeleton ? (
         <ArchiveSkeletonGrid />
       ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "stretch" }}>
           <ReportColumn title="WEEKLY" report={latest("weekly")} nextAt={schedule.next_weekly_at} />
           <ReportColumn title="MONTHLY" report={latest("monthly")} nextAt={schedule.next_monthly_at} />
           <ReportColumn
             title="ANNUAL"
             report={latest("annual")}
             nextAt={schedule.next_annual_at}
-            notYet={!latest("annual")}
           />
         </div>
       )}

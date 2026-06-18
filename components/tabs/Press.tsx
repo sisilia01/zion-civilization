@@ -203,6 +203,8 @@ export function Press() {
   );
 
   const showLoadingLine = loading && (!isVip || vipCanRead);
+  const showInvestigating =
+    (!isVip || vipCanRead) && !currentArticle && !currentError;
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", {
     weekday: "long",
@@ -406,12 +408,12 @@ export function Press() {
                 </div>
               </GlassCard>
             ) : null}
-            {showLoadingLine ? (
+            {showLoadingLine || showInvestigating ? (
               <GlassCard className={pressGlass} style={{ padding: "10px 14px" }}>
                 <div style={{ color: "#666" }}>⌛ Journalist investigating...</div>
               </GlassCard>
             ) : null}
-            {!showLoadingLine && !currentArticle && currentError ? (
+            {!showLoadingLine && !showInvestigating && !currentArticle && currentError ? (
               <GlassCard className={pressGlass} style={{ padding: "10px 14px" }}>
                 <div style={{ color: "#f87171", fontSize: "0.85rem" }}>{currentError}</div>
               </GlassCard>

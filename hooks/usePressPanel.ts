@@ -104,7 +104,6 @@ export function usePressPanel() {
 
       try {
         let hasDisplayContent = false;
-        let needsTodayEdition = true;
 
         try {
           const serverRes = await fetch(`/api/press/${newspaper.id}`);
@@ -249,16 +248,17 @@ export function usePressPanel() {
   );
 
   useEffect(() => {
-    const newspaper = newspapers.find((n) => n.id === activeNewspaper);
-    if (!newspaper) return;
-    if (newspaper.vipOnly) {
-      if (activeNewspaper === "vip" && vipCanRead) {
-        void generateArticle(newspaper);
-      }
-      return;
-    }
-    void generateArticle(newspaper);
-  }, [activeNewspaper, vipCanRead, generateArticle]);
+    newspapers.forEach((newspaper) => {
+      if (newspaper.vipOnly) return;
+      void generateArticle(newspaper);
+    });
+  }, [generateArticle]);
+
+  useEffect(() => {
+    if (!vipCanRead) return;
+    const vipPaper = newspapers.find((n) => n.id === "vip");
+    if (vipPaper) void generateArticle(vipPaper);
+  }, [vipCanRead, generateArticle]);
 
   return {
     newspapers,

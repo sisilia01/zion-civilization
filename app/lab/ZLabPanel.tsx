@@ -31,6 +31,46 @@ const PAUSE_AFTER_MS = 6_000;
 const FEED_LIMIT = 30;
 const FEED_REFRESH_MS = 120_000;
 const RESEARCH_REFRESH_MS = 30_000;
+const LAB_STATS_CACHE_KEY = "lab_stats_cache";
+
+type LabStatsCache = {
+  stats: Stats | null;
+  research: ResearchStats | null;
+  ts: number;
+};
+
+function readLabStatsCache(): Pick<LabStatsCache, "stats" | "research"> {
+  if (typeof window === "undefined") return { stats: null, research: null };
+  try {
+    const raw = localStorage.getItem(LAB_STATS_CACHE_KEY);
+    if (!raw) return { stats: null, research: null };
+    const parsed = JSON.parse(raw) as LabStatsCache;
+    return {
+      stats: parsed.stats ?? null,
+      research: parsed.research ?? null,
+    };
+  } catch {
+    return { stats: null, research: null };
+  }
+}
+
+function writeLabStatsCache(stats: Stats | null, research: ResearchStats | null) {
+  if (typeof window === "undefined") return;
+  if (!stats && !research) return;
+  try {
+    const existing = readLabStatsCache();
+    localStorage.setItem(
+      LAB_STATS_CACHE_KEY,
+      JSON.stringify({
+        stats: stats ?? existing.stats,
+        research: research ?? existing.research,
+        ts: Date.now(),
+      } satisfies LabStatsCache),
+    );
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 const TERMINAL_CHAR_MS = 13;
 const READING_MS = 3_000;
 const TRANSITION_MS = 600;
@@ -200,15 +240,6 @@ function TransmissionCardSkeleton({ label }: { label: string }) {
   );
 }
 
-const STAT_CARD_LABELS = [
-  "CIVILIZATION KNOWLEDGE",
-  "INSIGHTS",
-  "POPULATION LITERACY",
-  "LAB RESEARCHERS",
-  "OBSERVATIONS THIS WEEK",
-  "REPORTS ON WALRUS",
-] as const;
-
 const statCardSkeletonBodyStyle: CSSProperties = {
   ...transmissionSkeletonStyle,
   height: "48px",
@@ -222,6 +253,121 @@ function StatCardSkeleton({ label }: { label: string }) {
       <div style={statCardTitleStyle}>{label}</div>
       <div style={statCardSkeletonBodyStyle}>LOADING...</div>
     </GlassCard>
+  );
+}
+
+function ResearchMetricsCards({
+  research,
+  animatedPct,
+  animatedLiteracy,
+}: {
+  research: ResearchStats;
+  animatedPct: number;
+  animatedLiteracy: number;
+}) {
+  return (
+    <>
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div
+          title="% of all book chunks read at least once"
+          style={{ ...statCardTitleStyle, cursor: "help" }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: "#00ff88",
+              marginRight: "8px",
+              animation: "zlabLivePulse 2s ease-in-out infinite",
+            }}
+          />
+          CIVILIZATION KNOWLEDGE: {animatedPct.toFixed(2)}% OF LIBRARY
+        </div>
+      </GlassCard>
+
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div style={statCardTitleStyle}>
+          INSIGHTS (14-DAY CUMULATIVE):{" "}
+          <span style={{ color: "#00ff88" }}>
+            {Math.round(
+              research.daily?.[research.daily.length - 1]?.cumulative_insights ?? 0,
+            )}
+          </span>
+        </div>
+      </GlassCard>
+
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div style={statCardTitleStyle}>
+          POPULATION LITERACY: {animatedLiteracy.toFixed(2)}%
+        </div>
+        <div style={statCardSubtitleStyle}>
+          Average % of library known per citizen — 100% would mean every agent has studied every book
+        </div>
+      </GlassCard>
+    </>
+  );
+}
+
+function StatsMetricsCards({ stats }: { stats: Stats }) {
+  return (
+    <>
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div style={statCardTitleStyle}>LAB RESEARCHERS: {stats.active_researchers}</div>
+      </GlassCard>
+
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div style={statCardTitleStyle}>
+          OBSERVATIONS THIS WEEK: {stats.observations_this_week}
+        </div>
+      </GlassCard>
+
+      <GlassCard className={glassCardStyles.glassCardLab} style={statCardShellStyle}>
+        <div style={statCardTitleStyle}>REPORTS ON WALRUS: {stats.reports_on_walrus}</div>
+      </GlassCard>
+    </>
+  );
+}
+
+const RESEARCH_STAT_LABELS = [
+  "CIVILIZATION KNOWLEDGE",
+  "INSIGHTS",
+  "POPULATION LITERACY",
+] as const;
+
+const ZLAB_STAT_LABELS = [
+  "LAB RESEARCHERS",
+  "OBSERVATIONS THIS WEEK",
+  "REPORTS ON WALRUS",
+] as const;
+
+function GlyphLoadingIndicator() {
+  return (
+    <div
+      style={{
+        ...languageScreenStyle,
+        color: "#64748b",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "12px",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: "22px",
+          height: "22px",
+          border: "2px solid rgba(0,180,216,0.2)",
+          borderTopColor: "#00b4d8",
+          borderRadius: "50%",
+          animation: "zlabSpin 0.8s linear infinite",
+        }}
+      />
+      <span style={{ fontSize: "11px", letterSpacing: "0.14em" }}>LOADING ZION GLYPHS…</span>
+    </div>
   );
 }
 
@@ -1066,8 +1212,9 @@ function ZionScreen({
 }
 
 export default function ZLabPanel() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [research, setResearch] = useState<ResearchStats | null>(null);
+  const cachedOnMount = useRef(readLabStatsCache());
+  const [stats, setStats] = useState<Stats | null>(() => cachedOnMount.current.stats);
+  const [research, setResearch] = useState<ResearchStats | null>(() => cachedOnMount.current.research);
   const [glyphs, setGlyphs] = useState<GlyphMap>({});
   const [translitMaps, setTranslitMaps] = useState<TransliterationMaps | null>(null);
   const [englishQueue, setEnglishQueue] = useState<EnglishEntry[]>([]);
@@ -1076,8 +1223,9 @@ export default function ZLabPanel() {
   const [zionIndex, setZionIndex] = useState(0);
   const [cycleKey, setCycleKey] = useState(0);
   const [feedsLoading, setFeedsLoading] = useState(true);
-  const [wave2Ready, setWave2Ready] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(
+    () => !cachedOnMount.current.stats && !cachedOnMount.current.research,
+  );
   const [error, setError] = useState<string | null>(null);
   const statsInitialLoad = useRef(true);
 
@@ -1114,20 +1262,30 @@ export default function ZLabPanel() {
       setError(err instanceof Error ? err.message : "Failed to load language feeds");
     } finally {
       setFeedsLoading(false);
-      setWave2Ready(true);
     }
   }, []);
 
   const loadDashboardStats = useCallback(async (options?: { silent?: boolean }) => {
     const isInitial = statsInitialLoad.current && !options?.silent;
     if (isInitial) setStatsLoading(true);
+    let nextStats: Stats | null = null;
+    let nextResearch: ResearchStats | null = null;
     try {
       const [statsRes, researchRes] = await Promise.all([
         fetch("/api/zlab/stats", { cache: "no-store" }),
         fetch("/api/lab/research-stats", { cache: "no-store" }),
       ]);
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (researchRes.ok) setResearch(await researchRes.json());
+      if (statsRes.ok) {
+        nextStats = (await statsRes.json()) as Stats;
+        setStats(nextStats);
+      }
+      if (researchRes.ok) {
+        nextResearch = (await researchRes.json()) as ResearchStats;
+        setResearch(nextResearch);
+      }
+      if (nextStats || nextResearch) {
+        writeLabStatsCache(nextStats, nextResearch);
+      }
     } catch {
       /* keep last snapshot */
     } finally {
@@ -1151,11 +1309,10 @@ export default function ZLabPanel() {
   }, [loadTransmissionFeeds]);
 
   useEffect(() => {
-    if (!wave2Ready) return;
     loadDashboardStats();
     const refresh = setInterval(() => loadDashboardStats({ silent: true }), RESEARCH_REFRESH_MS);
     return () => clearInterval(refresh);
-  }, [wave2Ready, loadDashboardStats]);
+  }, [loadDashboardStats]);
 
   const advanceCycle = useCallback(() => {
     setEnIndex((i) => (englishQueue.length ? (i + 1) % englishQueue.length : 0));
@@ -1167,7 +1324,8 @@ export default function ZLabPanel() {
   const currentZion = zionQueue.length ? zionQueue[zionIndex % zionQueue.length] : null;
   const animatedPct = useAnimatedNumber(research?.education_pct ?? 0);
   const animatedLiteracy = useAnimatedNumber(research?.population_literacy_pct ?? 0);
-  const statsReady = research != null && stats != null;
+  const glyphsReady = Object.keys(glyphs).length > 0;
+  const showStatsSection = statsLoading || research != null || stats != null;
 
   return (
     <section
@@ -1208,6 +1366,9 @@ export default function ZLabPanel() {
         @keyframes zlabLivePulse {
           0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,136,0.6); }
           50% { opacity: 0.4; box-shadow: 0 0 0 4px rgba(0,255,136,0); }
+        }
+        @keyframes zlabSpin {
+          to { transform: rotate(360deg); }
         }
         @keyframes zlabGlyphAppear {
           from {
@@ -1278,91 +1439,23 @@ export default function ZLabPanel() {
         <p style={{ color: "#f87171", fontSize: "14px", marginBottom: "12px" }}>{error}</p>
       )}
 
-      {wave2Ready && (statsLoading || statsReady) && (
+      {showStatsSection && (
         <div style={statsGridStyle}>
-          {statsLoading || !statsReady ? (
-            STAT_CARD_LABELS.map((label) => (
-              <StatCardSkeleton key={label} label={label} />
-            ))
-          ) : (
-            <>
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div
-                  title="% of all book chunks read at least once"
-                  style={{ ...statCardTitleStyle, cursor: "help" }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: "6px",
-                      height: "6px",
-                      borderRadius: "50%",
-                      background: "#00ff88",
-                      marginRight: "8px",
-                      animation: "zlabLivePulse 2s ease-in-out infinite",
-                    }}
-                  />
-                  CIVILIZATION KNOWLEDGE: {animatedPct.toFixed(2)}% OF LIBRARY
-                </div>
-              </GlassCard>
+          {research != null ? (
+            <ResearchMetricsCards
+              research={research}
+              animatedPct={animatedPct}
+              animatedLiteracy={animatedLiteracy}
+            />
+          ) : statsLoading ? (
+            RESEARCH_STAT_LABELS.map((label) => <StatCardSkeleton key={label} label={label} />)
+          ) : null}
 
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div style={statCardTitleStyle}>
-                  INSIGHTS (14-DAY CUMULATIVE):{" "}
-                  <span style={{ color: "#00ff88" }}>
-                    {Math.round(
-                      research.daily?.[research.daily.length - 1]?.cumulative_insights ?? 0,
-                    )}
-                  </span>
-                </div>
-              </GlassCard>
-
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div style={statCardTitleStyle}>
-                  POPULATION LITERACY: {animatedLiteracy.toFixed(2)}%
-                </div>
-                <div style={statCardSubtitleStyle}>
-                  Average % of library known per citizen — 100% would mean every agent has studied every book
-                </div>
-              </GlassCard>
-
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div style={statCardTitleStyle}>
-                  LAB RESEARCHERS: {stats.active_researchers}
-                </div>
-              </GlassCard>
-
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div style={statCardTitleStyle}>
-                  OBSERVATIONS THIS WEEK: {stats.observations_this_week}
-                </div>
-              </GlassCard>
-
-              <GlassCard
-                className={glassCardStyles.glassCardLab}
-                style={statCardShellStyle}
-              >
-                <div style={statCardTitleStyle}>
-                  REPORTS ON WALRUS: {stats.reports_on_walrus}
-                </div>
-              </GlassCard>
-            </>
-          )}
+          {stats != null ? (
+            <StatsMetricsCards stats={stats} />
+          ) : statsLoading ? (
+            ZLAB_STAT_LABELS.map((label) => <StatCardSkeleton key={label} label={label} />)
+          ) : null}
         </div>
       )}
 
@@ -1411,13 +1504,15 @@ export default function ZLabPanel() {
                 DECODER
               </Link>
             </div>
-            {currentZion && Object.keys(glyphs).length > 0 ? (
+            {currentZion && glyphsReady ? (
               <ZionScreen
                 key={`zion-${cycleKey}-${zionIndex}`}
                 entry={currentZion}
                 glyphs={glyphs}
                 translitMaps={translitMaps}
               />
+            ) : currentZion && !glyphsReady ? (
+              <GlyphLoadingIndicator />
             ) : (
               <div style={{ ...languageScreenStyle, color: "#64748b" }}>Awaiting transmission…</div>
             )}
@@ -1431,9 +1526,9 @@ export default function ZLabPanel() {
         </p>
       )}
 
-      {wave2Ready && research && <ResearchCharts research={research} />}
+      {research && <ResearchCharts research={research} />}
 
-      {wave2Ready && <OcularInterfacePanels />}
+      <OcularInterfacePanels />
     </section>
   );
 }

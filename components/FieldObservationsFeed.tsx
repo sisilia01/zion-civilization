@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 export type FieldObservationAgent = {
   id: number;
@@ -16,6 +16,8 @@ export type FieldObservationConv = {
   message1?: string;
   message2?: string;
 };
+
+const DISPLAY_TICK_MS = 40_000;
 
 const cleanName = (name: string) => name.replace(/\s+\d+$/, "").trim();
 const cleanMsg = (s: string) => s.replace(/\s*\*\s*\(\d+\)\s*\*\s*$/, "").trim();
@@ -45,10 +47,9 @@ function classBadgeStyle(agentClass: string): CSSProperties {
 
 function delay(ms: number, signal: { cancelled: boolean }) {
   return new Promise<void>((resolve) => {
-    const t = window.setTimeout(() => {
+    window.setTimeout(() => {
       if (!signal.cancelled) resolve();
     }, ms);
-    return t;
   });
 }
 
@@ -82,7 +83,8 @@ type FieldObservationsFeedProps = {
 };
 
 export function FieldObservationsFeed({ conversations }: FieldObservationsFeedProps) {
-  const [convIndex, setConvIndex] = useState(0);
+  const [messageQueue, setMessageQueue] = useState<FieldObservationConv[]>([]);
+  const [currentDisplayed, setCurrentDisplayed] = useState<FieldObservationConv | null>(null);
   const [opacity, setOpacity] = useState(1);
   const [subjectLen, setSubjectLen] = useState(0);
   const [msg1Len, setMsg1Len] = useState(0);
@@ -90,26 +92,74 @@ export function FieldObservationsFeed({ conversations }: FieldObservationsFeedPr
   const [showAgent1, setShowAgent1] = useState(false);
   const [showAgent2, setShowAgent2] = useState(false);
   const runId = useRef(0);
+  const knownIdsRef = useRef<Set<number>>(new Set());
+  const currentDisplayedRef = useRef<FieldObservationConv | null>(null);
+  const messageQueueRef = useRef<FieldObservationConv[]>([]);
 
-  const convsRef = useRef(conversations);
-  convsRef.current = conversations;
-  const hasConvs = conversations.length > 0;
-  const conv = hasConvs ? conversations[convIndex % conversations.length] : undefined;
+  currentDisplayedRef.current = currentDisplayed;
+  messageQueueRef.current = messageQueue;
+
+  const promoteNext = useCallback(() => {
+    setMessageQueue((prev) => {
+      if (prev.length === 0) return prev;
+      const [next, ...rest] = prev;
+      setCurrentDisplayed(next);
+      return rest;
+    });
+  }, []);
+
+  // Incoming fetch: enqueue only new conversations by id.
+  useEffect(() => {
+    if (!Array.isArray(conversations) || conversations.length === 0) return;
+
+    const displayedId = currentDisplayedRef.current?.id;
+    const queuedIds = new Set(messageQueueRef.current.map((c) => c.id));
+
+    const toAdd = conversations.filter((c) => {
+      if (!c?.id) return false;
+      if (knownIdsRef.current.has(c.id)) return false;
+      if (c.id === displayedId) return false;
+      if (queuedIds.has(c.id)) return false;
+      return true;
+    });
+
+    if (toAdd.length === 0) return;
+
+    for (const c of toAdd) {
+      knownIdsRef.current.add(c.id);
+    }
+
+    setMessageQueue((prev) => [...prev, ...toAdd]);
+  }, [conversations]);
+
+  // First message: show immediately when queue has data but nothing on screen yet.
+  useEffect(() => {
+    if (currentDisplayed !== null) return;
+    if (messageQueue.length === 0) return;
+    promoteNext();
+  }, [currentDisplayed, messageQueue.length, promoteNext]);
+
+  // Display ticker — rotate every 40s when more messages are queued.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      promoteNext();
+    }, DISPLAY_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [promoteNext]);
+
+  const conv = currentDisplayed;
+  const showScanning = currentDisplayed === null && messageQueue.length === 0;
 
   useEffect(() => {
-    const safeConvs = convsRef.current;
-    if (safeConvs.length === 0) return;
+    if (!conv) return;
 
     const signal = { cancelled: false };
     const currentRun = ++runId.current;
 
     const run = async () => {
-      const c = safeConvs[convIndex % safeConvs.length];
-      const subjectLine = `SUBJECT ID: AGT-${String(c.agent1.id).padStart(4, "0")}`;
-      const msg1 = cleanMsg(c.message1 || c.topic || "");
-      const msg2 = cleanMsg(
-        c.message2 || "[Awaiting response transmission…]",
-      );
+      const subjectLine = `SUBJECT ID: AGT-${String(conv.agent1.id).padStart(4, "0")}`;
+      const msg1 = cleanMsg(conv.message1 || conv.topic || "");
+      const msg2 = cleanMsg(conv.message2 || "[Awaiting response transmission…]");
 
       setOpacity(0);
       await delay(350, signal);
@@ -143,12 +193,6 @@ export function FieldObservationsFeed({ conversations }: FieldObservationsFeedPr
       if (signal.cancelled || runId.current !== currentRun) return;
 
       await typeOut(msg2, 20, setMsg2Len, signal);
-      if (signal.cancelled || runId.current !== currentRun) return;
-
-      await delay(2000, signal);
-      if (signal.cancelled || runId.current !== currentRun) return;
-
-      setConvIndex((i) => (i + 1) % safeConvs.length);
     };
 
     void run();
@@ -156,7 +200,7 @@ export function FieldObservationsFeed({ conversations }: FieldObservationsFeedPr
     return () => {
       signal.cancelled = true;
     };
-  }, [convIndex, conversations.length]);
+  }, [conv?.id]);
 
   const subjectLine = conv
     ? `SUBJECT ID: AGT-${String(conv.agent1.id).padStart(4, "0")}`
@@ -185,9 +229,9 @@ export function FieldObservationsFeed({ conversations }: FieldObservationsFeedPr
       </header>
 
       <div className="fieldObsBody">
-        {!hasConvs || !conv ? (
+        {showScanning ? (
           <p className="fieldObsEmpty">Scanning agent chatter…</p>
-        ) : (
+        ) : conv ? (
           <div className="fieldObsTransmission" style={{ opacity, transition: "opacity 0.35s ease" }}>
             <p className="fieldObsSubject">
               {subjectLine.slice(0, subjectLen)}
@@ -231,7 +275,7 @@ export function FieldObservationsFeed({ conversations }: FieldObservationsFeedPr
               </p>
             )}
           </div>
-        )}
+        ) : null}
       </div>
 
       <style jsx>{`

@@ -11,7 +11,23 @@ export function renderArticle(
   const clean = text.replace(/\*\*/g, "");
 
   const headlineMatch = clean.match(/HEADLINE:\s*["«»""]?([\s\S]+?)["«»""]?(?:\r?\n|BYLINE|$)/i);
-  const headline = headlineMatch?.[1]?.replace(/["«»""]/g, "").trim() ?? "";
+  let headline = headlineMatch?.[1]?.replace(/["«»""]/g, "").trim() ?? "";
+
+  if (!headline) {
+    const firstLine = clean
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(
+        (line) =>
+          line.length > 0 &&
+          !/^BYLINE:/i.test(line) &&
+          !/^Column\s*\d/i.test(line) &&
+          !/^EDITOR['']S\s*NOTE:/i.test(line),
+      );
+    if (firstLine) {
+      headline = firstLine.replace(/^HEADLINE:\s*/i, "").trim();
+    }
+  }
 
   const bylineMatch = clean.match(/BYLINE:\s*([\s\S]+?)(?=\n|---|Column\s*2|EDITOR['']S\s*NOTE|$)/i);
   const byline = bylineMatch?.[1]?.trim() ?? "";

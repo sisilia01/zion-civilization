@@ -60,6 +60,10 @@
 .cardContent {
   position: relative;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Intaglio engraving — titles (MediCore, SWAT, Void Brotherhood) */
