@@ -15,6 +15,8 @@ type GlassCardProps = {
   className?: string;
   style?: CSSProperties;
   disableTilt?: boolean;
+  /** Multiplier for hover tilt (1 = default). Use ~0.05 for subtle tilt. */
+  tiltStrength?: number;
 };
 
 let liquidGLInit: Promise<unknown> | null = null;
@@ -41,7 +43,13 @@ function ensureLiquidGL(): Promise<unknown> {
   return liquidGLInit;
 }
 
-export function GlassCard({ children, className, style, disableTilt = false }: GlassCardProps) {
+export function GlassCard({
+  children,
+  className,
+  style,
+  disableTilt = false,
+  tiltStrength = 1,
+}: GlassCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const tiltRef = useRef({ x: 0, y: 0 });
 
@@ -80,8 +88,10 @@ export function GlassCard({ children, className, style, disableTilt = false }: G
       const rect = el.getBoundingClientRect();
       const xNorm = (e.clientX - rect.left) / rect.width - 0.5;
       const yNorm = (e.clientY - rect.top) / rect.height - 0.5;
-      const tiltX = Math.max(-3, Math.min(3, xNorm * 6));
-      const tiltY = Math.max(-3, Math.min(3, -yNorm * 6));
+      const maxDeg = 3 * tiltStrength;
+      const scale = 6 * tiltStrength;
+      const tiltX = Math.max(-maxDeg, Math.min(maxDeg, xNorm * scale));
+      const tiltY = Math.max(-maxDeg, Math.min(maxDeg, -yNorm * scale));
       tiltRef.current = { x: tiltX, y: tiltY };
 
       const cx = e.clientX - rect.left;
@@ -91,7 +101,7 @@ export function GlassCard({ children, className, style, disableTilt = false }: G
 
       applyTilt(tiltX, tiltY, glareAngle);
     },
-    [applyTilt]
+    [applyTilt, tiltStrength]
   );
 
   const handleMouseLeave = useCallback(() => {

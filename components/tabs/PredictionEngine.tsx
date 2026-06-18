@@ -8,6 +8,8 @@ import glassCardStyles from "@/components/GlassCard.module.css";
 import { useZionTab } from "@/components/zion/ZionTabContext";
 
 const peGlass = glassCardStyles.glassCardLab;
+/** ~5% of default GlassCard tilt — only for Live Oracles panel */
+const PE_LIVE_ORACLES_TILT = 0.05;
 
 export function PredictionEngine() {
   const router = useRouter();
@@ -27,9 +29,14 @@ export function PredictionEngine() {
     betTimeframeCounts,
     chronicleMeta,
     deepbookOracles,
+    deepbookPredictManagerCreating,
+    deepbookPredictManagerId,
+    deepbookPredictManagerResolving,
     deepbookVault,
+    handleCreateDeepBookPredictManager,
     effectiveZionBetCategorySlug,
     executeDeepBookMintBinary,
+    openDeepbookOracleMintModal,
     isMobile,
     loadMyBets,
     markets,
@@ -314,6 +321,7 @@ export function PredictionEngine() {
                   {betTab === "crypto" ? (
                   <GlassCard
                     className={peGlass}
+                    tiltStrength={PE_LIVE_ORACLES_TILT}
                     style={{
                       padding: "20px",
                       marginBottom: "24px",
@@ -329,11 +337,63 @@ export function PredictionEngine() {
                         padding:"2px 8px", borderRadius:"4px", fontFamily:"monospace"
                       }}>POWERED BY BLOCK SCHOLES</span>
                     </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: "10px",
+                        marginBottom: "14px",
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid #4DA2FF",
+                        background: "#0a1a30",
+                        fontFamily: "monospace",
+                        fontSize: "0.72rem",
+                      }}
+                    >
+                      <span style={{ color: "#8b9ab1" }}>PredictManager:</span>
+                      {!account?.address ? (
+                        <span style={{ color: "#8b9ab1" }}>Connect wallet</span>
+                      ) : deepbookPredictManagerResolving ? (
+                        <span style={{ color: "#8b9ab1" }}>Checking…</span>
+                      ) : deepbookPredictManagerId ? (
+                        <span style={{ color: "#00ff41" }}>
+                          {deepbookPredictManagerId.slice(0, 10)}…{deepbookPredictManagerId.slice(-6)}
+                        </span>
+                      ) : (
+                        <>
+                          <span style={{ color: "#ff9f43" }}>Not created</span>
+                          <button
+                            type="button"
+                            onClick={handleCreateDeepBookPredictManager}
+                            disabled={deepbookPredictManagerCreating}
+                            style={{
+                              padding: "6px 10px",
+                              background: deepbookPredictManagerCreating ? "#1a3050" : "#0d3a6e",
+                              border: "1px solid #4DA2FF",
+                              color: "#4DA2FF",
+                              borderRadius: "6px",
+                              cursor: deepbookPredictManagerCreating ? "wait" : "pointer",
+                              fontFamily: "monospace",
+                              fontSize: "0.7rem",
+                            }}
+                          >
+                            {deepbookPredictManagerCreating ? "Creating…" : "Create PredictManager"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                     <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:"12px"}}>
                       {deepbookOracles.length === 0 ? (
                         <p style={{ color: "#8b9ab1", fontFamily: "monospace", fontSize: "0.8rem" }}>Loading DeepBook oracles...</p>
                       ) : deepbookOracles.map((oracle) => (
-                        <GlassCard key={oracle.oracle_id} className={peGlass} style={{ padding: "14px" }}>
+                        <GlassCard
+                          key={oracle.oracle_id}
+                          className={peGlass}
+                          tiltStrength={PE_LIVE_ORACLES_TILT}
+                          style={{ padding: "14px" }}
+                        >
                           <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"}}>
                             <span style={{color:"#4DA2FF", fontFamily:"monospace", fontWeight:"bold", fontSize:"0.9rem"}}>
                               {oracle.underlying_asset}/USD
@@ -357,26 +417,7 @@ export function PredictionEngine() {
                           </div>
                           <div style={{marginTop:"10px", display:"flex", gap:"8px"}}>
                             <button
-                              onClick={() => {
-                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 0.95 * 1e9));
-                                const expiry = BigInt(oracle.expiry);
-                                if (!account?.address) { alert("Connect wallet first"); return; }
-                                executeDeepBookMintBinary(
-                                  signAndExecute as SignAndExecuteMutateFn,
-                                  {
-                                    oracleId: oracle.oracle_id,
-                                    strike,
-                                    expiry,
-                                    isCall: true,
-                                    amount: 1,
-                                    walletAddress: account.address,
-                                  },
-                                  {
-                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
-                                    onError: (err) => alert(`❌ Error: ${err}`),
-                                  }
-                                );
-                              }}
+                              onClick={() => openDeepbookOracleMintModal(oracle, true)}
                               style={{
                                 flex:1, padding:"8px", background:"#0d3a0d", border:"1px solid #00ff41",
                                 color:"#00ff41", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
@@ -386,26 +427,7 @@ export function PredictionEngine() {
                               📈 CALL +5%
                             </button>
                             <button
-                              onClick={() => {
-                                const strike = BigInt(Math.floor((oracle.spot_price ?? 0) * 1.05 * 1e9));
-                                const expiry = BigInt(oracle.expiry);
-                                if (!account?.address) { alert("Connect wallet first"); return; }
-                                executeDeepBookMintBinary(
-                                  signAndExecute as SignAndExecuteMutateFn,
-                                  {
-                                    oracleId: oracle.oracle_id,
-                                    strike,
-                                    expiry,
-                                    isCall: false,
-                                    amount: 1,
-                                    walletAddress: account.address,
-                                  },
-                                  {
-                                    onSuccess: (digest) => alert(`✅ DeepBook position minted! TX: ${digest}`),
-                                    onError: (err) => alert(`❌ Error: ${err}`),
-                                  }
-                                );
-                              }}
+                              onClick={() => openDeepbookOracleMintModal(oracle, false)}
                               style={{
                                 flex:1, padding:"8px", background:"#3a0d0d", border:"1px solid #ff4141",
                                 color:"#ff4141", borderRadius:"6px", fontFamily:"monospace", fontSize:"0.75rem",
@@ -421,6 +443,7 @@ export function PredictionEngine() {
                     {deepbookVault && (
                       <GlassCard
                         className={peGlass}
+                        tiltStrength={PE_LIVE_ORACLES_TILT}
                         style={{
                           marginTop: "16px",
                           padding: "14px",
@@ -500,7 +523,11 @@ export function PredictionEngine() {
                         </div>
                       </GlassCard>
                     )}
-                    <GlassCard className={peGlass} style={{ marginTop: "12px", padding: "8px 12px" }}>
+                    <GlassCard
+                      className={peGlass}
+                      tiltStrength={PE_LIVE_ORACLES_TILT}
+                      style={{ marginTop: "12px", padding: "8px 12px" }}
+                    >
                       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
                       <span style={{color:"#6b8fa3", fontFamily:"monospace", fontSize:"0.72rem"}}>
                         📦 Package: 0xf5ea2b37...
