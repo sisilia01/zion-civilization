@@ -1,8 +1,8 @@
-import Link from "next/link";
-import type { CSSProperties } from "react";
-import ArchivePanel from "./ArchivePanel";
+"use client";
 
-export const dynamic = "force-dynamic";
+import Link from "next/link";
+import { useEffect, useRef, type CSSProperties } from "react";
+import ArchivePanel from "./ArchivePanel";
 
 const pageStyle: CSSProperties = {
   background: "transparent",
@@ -36,6 +36,22 @@ const wrapStyle: CSSProperties = {
 };
 
 export default function ArchivePage() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+    const play = () => {
+      void video.play().catch(() => {});
+    };
+
+    play();
+    video.addEventListener("loadeddata", play);
+    return () => video.removeEventListener("loadeddata", play);
+  }, []);
+
   return (
     <div style={pageStyle}>
       <div
@@ -49,24 +65,33 @@ export default function ArchivePage() {
         aria-hidden
       >
         <video
+          ref={videoRef}
+          src="/videos/archive_bg.mp4"
           autoPlay
           loop
           muted
           playsInline
+          preload="auto"
           style={{
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
+            minWidth: "100%",
+            minHeight: "100%",
             objectFit: "cover",
+            objectPosition: "center",
+            display: "block",
             opacity: 0.75,
+            zIndex: 0,
           }}
-        >
-          <source src="/videos/archive_bg.mp4" type="video/mp4" />
-        </video>
+        />
         <div
           style={{
             position: "absolute",
             inset: 0,
             background: "rgba(0,0,10,0.45)",
+            zIndex: 1,
           }}
         />
       </div>

@@ -12,7 +12,7 @@ const OBSERVATORY_BG_PARTICLES = {
   background: { color: "transparent" },
   fpsLimit: 60,
   particles: {
-    number: { value: 390 },
+    number: { value: 449 },
     paint: {
       color: {
         value: { h: 185, s: 75, l: 55 },
@@ -24,7 +24,7 @@ const OBSERVATORY_BG_PARTICLES = {
       enable: true,
       color: { value: "hsl(185, 75%, 55%)" },
       distance: 130,
-      opacity: 0.105,
+      opacity: 0.128,
     },
     move: {
       enable: true,
@@ -34,7 +34,7 @@ const OBSERVATORY_BG_PARTICLES = {
       outModes: { default: "out" },
     },
     size: { value: 1.2 },
-    opacity: { value: 0.462 },
+    opacity: { value: 0.508 },
   },
 } as ISourceOptions;
 

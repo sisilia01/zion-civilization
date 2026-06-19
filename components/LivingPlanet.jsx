@@ -1642,8 +1642,30 @@ export function LivingPlanet({
 
   const initDoneRef = useRef(false);
   const resizeRef = useRef(/** @type {(() => void) | null} */ (null));
+  const [interactionActive, setInteractionActive] = useState(false);
+  const interactionActiveRef = useRef(false);
+  const controlsRef = useRef(/** @type {import("three/examples/jsm/controls/OrbitControls.js").OrbitControls | null} */ (null));
+  const canvasRef = useRef(/** @type {HTMLCanvasElement | null} */ (null));
+  const toggleInteractionRef = useRef(() => {});
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fsBtnHover, setFsBtnHover] = useState(false);
+
+  toggleInteractionRef.current = () => {
+    setInteractionActive((prev) => !prev);
+  };
+
+  useEffect(() => {
+    interactionActiveRef.current = interactionActive;
+    const controls = controlsRef.current;
+    const canvas = canvasRef.current;
+    if (controls) {
+      controls.enabled = interactionActive;
+      controls.autoRotate = false;
+    }
+    if (canvas) {
+      canvas.style.cursor = interactionActive ? "crosshair" : "default";
+    }
+  }, [interactionActive]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -1729,9 +1751,14 @@ export function LivingPlanet({
       controls.enableZoom = true;
       controls.minDistance = 2.5;
       controls.maxDistance = 6;
-      controls.autoRotate = true;
-      controls.autoRotateSpeed = 0.35;
+      controls.autoRotate = false;
+      controls.enabled = false;
       controls.update();
+      controlsRef.current = controls;
+      canvasRef.current = renderer.domElement;
+      renderer.domElement.style.cursor = "default";
+      const onCanvasClick = () => toggleInteractionRef.current();
+      renderer.domElement.addEventListener("click", onCanvasClick);
 
       const initPr = getPixelRatio();
       const expectedW = Math.round(w * initPr);
@@ -2017,23 +2044,27 @@ export function LivingPlanet({
         const planetSpin = 0.00025 * frameScale;
         const cloudExtraDrift = 0.000135 * frameScale;
         const cloudSpin = planetSpin + cloudExtraDrift;
-        planet.rotation.y += planetSpin;
-        if (clouds) {
-          clouds.rotation.y += cloudSpin;
-          clouds.rotation.x = 0.011;
-        } else {
-          if (cloudsLow) {
-            cloudsLow.rotation.y += cloudSpin;
-            cloudsLow.rotation.x = 0.009;
+        if (!interactionActiveRef.current) {
+          planet.rotation.y += planetSpin;
+          if (clouds) {
+            clouds.rotation.y += cloudSpin;
+            clouds.rotation.x = 0.011;
+          } else {
+            if (cloudsLow) {
+              cloudsLow.rotation.y += cloudSpin;
+              cloudsLow.rotation.x = 0.009;
+            }
+            if (cloudsHigh) {
+              cloudsHigh.rotation.y += cloudSpin + cloudExtraDrift * 0.12;
+              cloudsHigh.rotation.x = 0.013;
+            }
           }
-          if (cloudsHigh) {
-            cloudsHigh.rotation.y += cloudSpin + cloudExtraDrift * 0.12;
-            cloudsHigh.rotation.x = 0.013;
-          }
+          atmosphere.rotation.y += planetSpin;
         }
-        atmosphere.rotation.y += planetSpin;
 
-        controls.update();
+        if (interactionActiveRef.current) {
+          controls.update();
+        }
 
         const visibleSat = p > 0.2;
         satellites.forEach((sat) => {
@@ -2144,6 +2175,11 @@ export function LivingPlanet({
         spaceFx.dispose();
         cometVfx.dispose();
         controls.dispose();
+        controlsRef.current = null;
+        if (renderer?.domElement) {
+          renderer.domElement.removeEventListener("click", onCanvasClick);
+          canvasRef.current = null;
+        }
         if (loadedTextures) {
           Object.values(loadedTextures).forEach((tex) => tex.dispose());
         }
@@ -2189,6 +2225,24 @@ export function LivingPlanet({
         background: "#000",
       }}
     >
+      {interactionActive && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: showHud && civilizationData ? 52 : 10,
+            left: 12,
+            zIndex: 3,
+            fontFamily: "monospace",
+            fontSize: 9,
+            letterSpacing: 2,
+            color: "rgba(74, 158, 255, 0.65)",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          INTERACTIVE
+        </div>
+      )}
       <button
         type="button"
         aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
