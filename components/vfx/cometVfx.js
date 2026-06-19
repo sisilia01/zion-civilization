@@ -30,7 +30,7 @@ export function createCometVfx(scene, sunDir) {
 
   const tailAway = sunDir.clone().normalize().multiplyScalar(-1);
   const glowTex = new THREE.TextureLoader().load(COMET_TEXTURE_PATH);
-  glowTex.colorSpace = THREE.SRGBColorSpace;
+  glowTex.encoding = THREE.sRGBEncoding;
 
   const headMat = new THREE.SpriteMaterial({
     map: glowTex,

@@ -154,7 +154,7 @@ export async function createUnrestVfx(planet, lightDir) {
     }
 
     const glowTex = new THREE.TextureLoader().load(GLOW_TEX);
-    glowTex.colorSpace = THREE.SRGBColorSpace;
+    glowTex.encoding = THREE.sRGBEncoding;
 
     const coreEmitter = new SpriteParticleEmitter(planet, {
       texture: glowTex,

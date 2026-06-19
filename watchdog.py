@@ -7,6 +7,7 @@ import subprocess
 import time
 import os
 import logging
+import random
 
 from civ_common import get_conn
 
@@ -22,36 +23,60 @@ log = logging.getLogger(__name__)
 
 BACKEND_DIR = "/root/zion_backend"
 
-# Long-running daemons: only restart when screen session is dead (never log-age restarts)
-DAEMONS = {
-    "settlement": "settlement.py",
-    "zion-api": None,  # started via start_api(); not a python file in BACKEND_DIR
-}
+# Long-running daemons (API + settlement) are managed by systemd — not watchdog/screen
+DAEMONS: dict[str, str | None] = {}
 
 # Scripts that run once and exit: interval + log_stuck restarts
 CRON_SCRIPTS = {
-    # CIVILIZATION_LOGIC.md schedule (new architecture)
+    # USA democracy — unified governance tick (FRS → President → Senate → Sheriff)
+    "governance":        ("governance_tick.py", 1800),   # 30 min — canonical government cycle
+    "political_economy": ("political_economy.py", 1800),  # 30 min — macro feedback loops
+    "senate_budget":     ("senate_budget.py",    3600),   # 1 hour — senate spending (fiscal)
+    "party_choice": ("party_choice.py cycle", 3600),  # 1 hour — autonomous party affiliation
+    "political_parties": ("political_parties.py", 3600),  # 1 hour — party approval + members sync
     "birth":        ("birth.py",          1800),   # 30 min
+    "survival":     ("survival.py",       1800),   # 30 min — evolutionary selection (bank feeds profitable traders)
+    "predict":      ("predict_market.py",  1800),   # 30 min — agents forecast across domains (probability calibration study)
+    "corp_economy": ("corp_economy.py",    3600),   # 1 hour — corporate hiring/poaching/credit/bankruptcy
+    "corp_court":   ("corp_court.py",      7200),   # 2 hours — corporate lawsuits (AI judges)
     "news":         ("news.py",           1800),   # 30 min
     "tax":          ("tax_cron.py",       3600),   # 1 hour
-    "corporations": ("corporations.py",   3600),   # 1 hour
-    "clans":        ("clans.py",          3600),   # 1 hour
-    "police":       ("police.py",         3600),   # 1 hour
-    "sheriff":      ("sheriff.py",        3600),   # 1 hour
-    "president":    ("president.py",      3600),   # 1 hour
-    "neo":          ("neo.py",            3600),   # 1 hour
+    # [DISABLED for scientific clarity] corporations.py ARCHIVED — corp_economy.py is the active corporate system
+    # "corporations": ("corporations.py",   1800),   # 30 min — hiring every cycle
+    "clans": ("clans.py", 3600),   # 1 hour — gang recruitment, wars, territory
+    "police":       ("police.py",         1800),   # 30 min — authority dynamics (studied as collective-behavior signal)
+    # president/senate/sheriff governance handled by governance_tick.py only
+    # political_parties enabled — syncs members_count + approval_rating hourly
+    # [DISABLED for scientific clarity] "disasters": ("disasters.py", 2700),  # 45 min average
+    # [DISABLED for scientific clarity] "faction_engine": ("faction_engine.py", 1800),  # каждые 30 мин
+    "vip_reflection": ("vip_reflection.py", 86400),  # once per day
+    "zrs_merit": ("zrs_merit_tribunal.py", 86400),  # daily — AI merit court for at-risk agents
+    # [DISABLED for scientific clarity] "neo":          ("neo.py",            3600),   # 1 hour
     "zrs":          ("zrs.py",            7200),   # 2 hours — canonical central bank
-    "education":    ("education.py",      3600),   # 1 hour (paths are 2-3 days)
-    "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
+    "science":      ("science_tick.py",   1800),   # 30 min — constitutional science autonomy
+    "amendment_finalizer": ("amendment_finalizer.py", 1800),  # 30 min — close voting backlog
+    "knowledge_loop": ("knowledge_loop.py", 86400),  # 1x/day — feedback loop: science findings → agent memory
+    "ingest_new_books": ("ingest_new_books.py", 3600),  # hourly — auto-detect + classify + chunk newly added books
+    "knowledge_study": ("agent_knowledge.py read_chunk_cycle 300", 1800),  # 30 min — chunk-by-chunk cover-to-cover reading
+    "zrs_drain":    ("zrs.py drain",      3600),   # 1 hour — population wealth drain
+    "education":    ("education.py", 3600),   # 1 hour (paths are 2-3 days)
+    # [DISABLED for scientific clarity] "religion":     ("religion.py",       1800),   # 30 min — faith/prayer cycle
     # Other civilization modules (unchanged intervals)
-    "epidemics":    ("epidemics.py",      7200),
-    "marriages":    ("marriages.py",      3600),
+    # [DISABLED for scientific clarity] "epidemics":    ("epidemics.py",      7200),
+    # [DISABLED for scientific clarity] "marriages":    ("marriages.py",      3600),
     "market":       ("market.py",         1800),
-    "espionage":    ("espionage.py",      3600),
-    "casino":       ("casino.py",         1800),
-    "catastrophes": ("catastrophes.py",   7200),
+    # [DISABLED for scientific clarity] "espionage":    ("espionage.py",      3600),
+    # [DISABLED for scientific clarity] "casino":       ("casino.py",         1800),
+    "catastrophes": ("catastrophes.py",   10800),  # 3h — exogenous shocks (institutional stress test)
+    "crisis_response": ("crisis_response.py", 3600),   # 1h — govt reacts to catastrophes
     "zionwork":     ("zionwork.py",       1800),
-    "politics":     ("politics.py",       3600),
+    # Retired - replaced by senate.py + president.py + political_parties.py
+    "zion_speech": ("zion_speech.py cycle", 3600),  # hourly — ZION intent variation via remote gemma2:2b
+    "zion_evolution":   ("zion_evolution.py cycle", 3600),    # hourly — mixed speech + new words
+    "zion_lang_record": ("zion_lang_record.py", 86400),       # daily Walrus authorship record
+    "agent_thoughts":      ("agent_thoughts.py cycle", 1800),               # 30 min — English + ZION paired thoughts
+    "security_patterns":   ("vuln_patterns.py propose 3", 86400),             # daily: agents expand detection library (data only)
+    "security_self_audit": ("security_audit.py scan ~/zion_backend", 86400),  # daily self-audit, own code only
     "walrus":       ("walrus.py",         3600),
     "polymarket":   ("polymarket_sync.py",   7200),
     "settlements":  ("settlement_check.py",  3600),
@@ -63,7 +88,23 @@ ELECTION_CHECKS = {
     "president_check": ("president.py", 1800),
 }
 
+
+def get_random_interval(min_sec=900, max_sec=2700):
+    return random.randint(min_sec, max_sec)
+
+
+# Per-script random scheduling windows (seconds)
+RANDOM_INTERVAL_RANGES = {
+    # [DISABLED for scientific clarity] "political_parties": (1200, 3600), # 20-60 min
+    # [DISABLED for scientific clarity] "disasters": (2700, 5400),        # 45-90 min
+    # [DISABLED for scientific clarity] "faction_engine": (900, 1800),    # 15-30 мин
+}
+
 last_run = {name: 0 for name in CRON_SCRIPTS}
+current_intervals = {name: interval for name, (_, interval) in CRON_SCRIPTS.items()}
+for _name, (_min_s, _max_s) in RANDOM_INTERVAL_RANGES.items():
+    if _name in current_intervals:
+        current_intervals[_name] = get_random_interval(_min_s, _max_s)
 last_election_check = {name: 0 for name in ELECTION_CHECKS}
 last_coin_manager = 0
 COIN_MANAGER_INTERVAL = 14400  # каждые 4 часа
@@ -85,7 +126,7 @@ def is_screen_running(name):
 
 
 def is_api_running():
-    """HTTP health check (logging only; daemons use screen state for restarts)"""
+    """HTTP health check for heartbeat logging only (API managed by systemd)."""
     try:
         result = subprocess.run(
             ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
@@ -95,19 +136,6 @@ def is_api_running():
         return result.stdout.strip() == "200"
     except Exception:
         return False
-
-
-def start_api():
-    """Start zion-api daemon in screen (only called when screen is dead)"""
-    log.info("Starting zion-api daemon...")
-    subprocess.run(["pkill", "-f", "uvicorn"], capture_output=True)
-    time.sleep(2)
-    subprocess.run([
-        "screen", "-dmS", "zion-api",
-        "bash", "-c",
-        f"cd {BACKEND_DIR} && uvicorn api:app --host 0.0.0.0 --port 8000 2>&1 | tee api.log"
-    ])
-    log.info("zion-api daemon started")
 
 
 def run_script(name, script):
@@ -129,16 +157,13 @@ def check_log_stuck(name, max_age_seconds):
 
 
 def ensure_daemons():
-    """Restart daemons only when their screen session is dead."""
+    """Screen daemons only (API/settlement use systemd: zion-api, zion-settlement)."""
     for name, script in DAEMONS.items():
         try:
             if is_screen_running(name):
                 continue
             log.warning(f"Daemon {name} screen not running — starting")
-            if name == "zion-api":
-                start_api()
-            else:
-                run_script(name, script)
+            run_script(name, script)
         except Exception as e:
             log.exception(f"Daemon check failed for {name}: {e}")
 
@@ -185,8 +210,9 @@ def check_election_offices(now):
 
 def check_cron_scripts(now):
     """Interval + log_stuck logic for scripts that run and exit."""
-    for name, (script, interval) in CRON_SCRIPTS.items():
+    for name, (script, _) in CRON_SCRIPTS.items():
         try:
+            interval = current_intervals.get(name, CRON_SCRIPTS[name][1])
             time_since_run = now - last_run[name]
             if time_since_run < interval:
                 continue
@@ -195,10 +221,16 @@ def check_cron_scripts(now):
                 log.info(f"Running {name} (interval {interval}s)")
                 run_script(name, script)
                 last_run[name] = now
+                if name in RANDOM_INTERVAL_RANGES:
+                    min_s, max_s = RANDOM_INTERVAL_RANGES[name]
+                    current_intervals[name] = get_random_interval(min_s, max_s)
             elif check_log_stuck(name, interval):
                 log.warning(f"{name} appears stuck — restarting")
                 run_script(name, script)
                 last_run[name] = now
+                if name in RANDOM_INTERVAL_RANGES:
+                    min_s, max_s = RANDOM_INTERVAL_RANGES[name]
+                    current_intervals[name] = get_random_interval(min_s, max_s)
             else:
                 last_run[name] = now
         except Exception as e:
@@ -210,7 +242,7 @@ def main():
 
     log.info("=== ZION Watchdog started ===")
     log.info(
-        f"Monitoring {len(DAEMONS)} daemons + {len(CRON_SCRIPTS)} cron scripts + "
+        f"API/settlement: systemd | {len(CRON_SCRIPTS)} cron scripts | "
         f"{len(ELECTION_CHECKS)} election checks"
     )
 
@@ -223,11 +255,19 @@ def main():
             check_cron_scripts(now)
 
             if int(now) % 600 < 30:
-                api_status = "✅" if is_api_running() else "❌"
-                log.info(
-                    f"Heartbeat — API:{api_status} | "
-                    f"Daemons:{len(DAEMONS)} Cron:{len(CRON_SCRIPTS)}"
-                )
+                if is_api_running():
+                    log.info(f"Heartbeat — API:✅ | Cron:{len(CRON_SCRIPTS)}")
+                else:
+                    log.warning(
+                        "Heartbeat — API:❌ down — restarting via systemd (no duplicate uvicorn)"
+                    )
+                    print("[WATCHDOG] API down — systemctl restart zion-api")
+                    subprocess.run(
+                        ["systemctl", "restart", "zion-api"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
 
             if now - last_coin_manager >= COIN_MANAGER_INTERVAL:
                 subprocess.Popen(

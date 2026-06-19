@@ -44,4 +44,13 @@ __pycache__/
 *.pyc
 *.log
 .env
-.venv/
+*.log
+new_books_pdf/*.pdf
+new_books_pdf/_excluded/
+
+# Books and source materials - never commit to public repo (copyright/licensing)
+new_books_pdf/
+knowledge_base/
+owasp_temp/
+owasp_cheatsheets.zip
+*.pdf

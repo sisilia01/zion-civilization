@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""ZION hourly tax cycle — tiered rates, ZRS-modified, hunger/health, starvation."""
+"""ZION hourly tax cycle — genius progressive tax, population pressure, hunger."""
 from datetime import datetime
 
 from civ_common import (
     agent_class_from_balance,
+    check_money_conservation,
     ensure_schema,
     get_conn,
     get_cursor,
@@ -12,32 +13,66 @@ from civ_common import (
     get_zrs_state,
     hungry_agent_pct,
     log_event,
-    route_tax_revenue,
-    tax_rate_for_balance,
+    route_food_spending,
+    route_agent_tax_revenue,
+    settle_agent_death,
     zrs_deduct_reserve,
     zrs_reserve,
     ZRS_RESERVE_FLOOR,
 )
+from civ_economics import (
+    get_population_food_multiplier,
+    get_population_tax_multiplier,
+    population_pressure_label,
+    progressive_bracket_tax,
+)
+from amendment_enforcer import get_param
 
 DEBT_DEATH_THRESHOLD = 50.0
 STARVATION_BALANCE_THRESHOLD = 10.0
-CORP_TAX_RATE = 0.08
 ZRS_EMERGENCY_AID = 10.0
 
 
-def hunger_check(cur) -> tuple[int, int, float]:
-    """
-    Deduct food cost per agent; health -= 10 if cannot pay; death if health < 0.
-    Returns (starvation_deaths, hungry_count, food_spent).
-    """
-    food_cost = get_daily_food_cost(cur)
+def _sync_constitutional_tax_rates():
+    """Apply constitutional_params to in-memory tax brackets and corp rate."""
+    import civ_economics as ce
+    import corporations
+
+    min_rate = float(get_param("min_tax_rate", 0.05))
+    top_rate = float(get_param("top_tax_rate", 0.35))
+    span = max(0.0, top_rate - min_rate)
+    ce.AGENT_TAX_BRACKETS = [
+        (100.0, min_rate),
+        (500.0, round(min_rate + span * 0.25, 6)),
+        (2000.0, round(min_rate + span * 0.65, 6)),
+        (float("inf"), top_rate),
+    ]
+    corp_rate = float(get_param("corporate_tax_rate", 0.10))
+    ce.CORP_TAX_RATE = corp_rate
+    corporations.CORP_TAX_RATE = corp_rate
+
+
+def constitutional_agent_tax(agent, population, reserve, zrs_modifier_pct):
+    """Agent tax using constitutional bracket rates and top-rate cap."""
+    balance = float(agent.get("balance") or 0)
+    if balance <= 0:
+        return 0.0
+    base = progressive_bracket_tax(balance)
+    modifier = base * max(0.0, zrs_modifier_pct)
+    top_rate = float(get_param("top_tax_rate", 0.35))
+    return round(min(base + modifier, balance * top_rate), 4)
+
+
+def hunger_check(cur, pop: int) -> tuple[int, int, float, set[int]]:
+    food_cost = get_daily_food_cost(cur) * get_population_food_multiplier(pop)
     deaths = 0
     hungry = 0
     food_spent = 0.0
+    hungry_ids: set[int] = set()
 
     cur.execute(
         """
-        SELECT id, name, balance, COALESCE(health, 100) AS health
+        SELECT id, name, balance, COALESCE(health, 100) AS health, class
         FROM agents WHERE is_alive = TRUE
         """
     )
@@ -49,13 +84,15 @@ def hunger_check(cur) -> tuple[int, int, float]:
         food_spent += paid
 
         if paid < food_cost:
-            health -= 10
+            health -= 15 if pop >= 500_000 else 10
             hungry += 1
+            hungry_ids.add(int(ag["id"]))
             if health <= 0:
+                settle_agent_death(cur, ag["id"])
                 cur.execute(
                     """
                     UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                        death_cause = 'starvation', balance = 0, health = 0
+                        death_cause = 'starvation', health = 0
                     WHERE id = %s
                     """,
                     (ag["id"],),
@@ -76,6 +113,21 @@ def hunger_check(cur) -> tuple[int, int, float]:
             (balance, health, ag["id"]),
         )
 
+    cur.execute(
+        """
+        UPDATE agents SET dust_days = dust_days + 1
+        WHERE is_alive = true AND balance < %s
+        """,
+        (food_cost,),
+    )
+    cur.execute(
+        """
+        UPDATE agents SET dust_days = 0
+        WHERE is_alive = true AND balance >= %s AND dust_days > 0
+        """,
+        (food_cost,),
+    )
+
     if hungry > 0:
         cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
         total = max(int((cur.fetchone() or {}).get("c") or 0), 1)
@@ -89,16 +141,7 @@ def hunger_check(cur) -> tuple[int, int, float]:
                 hungry,
                 priority="breaking",
             )
-        else:
-            log_event(
-                cur,
-                None,
-                "tax",
-                f"NORMAL: Hunger spreading: {pct}% agents skipped meals today",
-                hungry,
-                priority="normal",
-            )
-    return deaths, hungry, food_spent
+    return deaths, hungry, food_spent, hungry_ids
 
 
 def apply_tax_cycle():
@@ -110,10 +153,52 @@ def apply_tax_cycle():
     zrs = get_zrs_state(cur) or {}
     tax_modifier_pct = float(zrs.get("tax_modifier") or 0) / 100.0
     tax_collection_mult = get_tax_collection_multiplier(cur)
+    cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
+    alive_count = int(cur.fetchone()["c"] or 0)
+    pop_mult = get_population_tax_multiplier(alive_count)
+    reserve = zrs_reserve(cur)
+
     if tax_collection_mult == 0:
         print("⚡ UPRISING: ANTI-TAX at 0 officers — no tax collection")
 
-    starvation_deaths, hungry_count, total_food = hunger_check(cur)
+    starvation_deaths, hungry_count, total_food, hungry_ids = hunger_check(cur, alive_count)
+
+    cur.execute(
+        "UPDATE civilization_state SET starvation_deaths_hour = %s WHERE id = 1",
+        (starvation_deaths,),
+    )
+    if starvation_deaths >= 100:
+        from senate import trigger_emergency_session
+        from zrs import execute_frs_directive
+
+        trigger_emergency_session(
+            cur,
+            f"{starvation_deaths} starvation deaths this cycle — humanitarian crisis",
+        )
+        ctx_emergency = {"senate": {"emergency_session": True}}
+        from frs_chief import decide_frs_directive
+
+        decide_frs_directive(cur, ctx_emergency)
+        execute_frs_directive(cur, ctx_emergency)
+        log_event(
+            cur,
+            None,
+            "senate",
+            f"EMERGENCY: {starvation_deaths} starvation deaths — Senate session + FRS aid triggered",
+            starvation_deaths,
+            priority="breaking",
+        )
+
+    cur.execute(
+        "SELECT tax_relief_until FROM president_state WHERE is_active = true LIMIT 1"
+    )
+    relief_row = cur.fetchone()
+    tax_relief_active = False
+    if relief_row and relief_row.get("tax_relief_until"):
+        cur.execute(
+            "SELECT (tax_relief_until > NOW()) AS active FROM president_state WHERE is_active = true LIMIT 1"
+        )
+        tax_relief_active = bool((cur.fetchone() or {}).get("active"))
 
     cur.execute(
         """
@@ -122,21 +207,71 @@ def apply_tax_cycle():
         """
     )
     agents = cur.fetchall()
+    cur.execute(
+        """
+        SELECT COALESCE(
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY balance),
+            1
+        ) AS med
+        FROM agents
+        WHERE is_alive = TRUE
+        """
+    )
+    median_balance = float((cur.fetchone() or {}).get("med") or 1.0)
 
     print(f"\n🌍 ZION Tax Cycle — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(
-        f"Processing {len(agents)} alive agents | Food cost {get_daily_food_cost(cur):.0f} | "
-        f"Tax mult {tax_collection_mult*100:.0f}%\n"
+        f"Processing {len(agents)} alive | Food×{get_population_food_multiplier(alive_count):.1f} | "
+        f"Pop tax×{pop_mult} | Gini policy reserve {reserve:,.0f}\n"
+    )
+
+    _sync_constitutional_tax_rates()
+    top_rate = get_param("top_tax_rate", 0.35)
+    min_rate = get_param("min_tax_rate", 0.05)
+    corp_rate = get_param("corporate_tax_rate", 0.10)
+    wealth_rate = get_param("wealth_tax_rate", 0.0)
+    wealth_threshold = None
+    try:
+        cur.execute(
+            """
+            SELECT PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY balance) AS p90
+            FROM agents
+            WHERE is_alive = TRUE
+            """
+        )
+        wealth_threshold = float((cur.fetchone() or {}).get("p90") or 0)
+    except Exception:
+        wealth_threshold = None
+    print(
+        f"Constitutional tax rates — min={min_rate:.2f} top={top_rate:.2f} "
+        f"corp={corp_rate:.2f} wealth={wealth_rate:.2f}"
     )
 
     total_tax = 0.0
 
+    from zrs_merit_tribunal import merit_denies_emergency_aid
+
+    if tax_relief_active:
+        log_event(
+            cur,
+            None,
+            "tax",
+            "Tax relief active — poor/critical pay 50% less tax this cycle",
+            0,
+            priority="urgent",
+        )
+
     for ag in agents:
         balance = float(ag["balance"] or 0)
         debt = float(ag["debt"] or 0)
-        base_rate = tax_rate_for_balance(balance)
-        rate = max(0.0, base_rate + tax_modifier_pct)
-        tax_amount = round(balance * rate, 4)
+        tax_amount = constitutional_agent_tax(ag, alive_count, reserve, tax_modifier_pct)
+        wealth_rate = float(get_param("wealth_tax_rate", 0.0))
+        if wealth_rate > 0 and wealth_threshold is not None and balance > wealth_threshold:
+            tax_amount = round(tax_amount + balance * wealth_rate, 4)
+        if tax_relief_active and (ag.get("class") in ("poor", "critical")):
+            tax_amount = round(tax_amount * 0.5, 4)
+        if int(ag["id"]) in hungry_ids:
+            tax_amount = round(tax_amount * 0.5, 4)
 
         paid = round(min(tax_amount, balance) * tax_collection_mult, 4)
         unpaid = round(tax_amount - paid, 4)
@@ -144,22 +279,25 @@ def apply_tax_cycle():
         new_debt = round(debt + unpaid, 4)
 
         if new_balance < STARVATION_BALANCE_THRESHOLD and new_debt > DEBT_DEATH_THRESHOLD:
-            if zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
+            if merit_denies_emergency_aid(cur, int(ag["id"])):
+                pass
+            elif zrs_reserve(cur) >= ZRS_RESERVE_FLOOR + ZRS_EMERGENCY_AID:
                 zrs_deduct_reserve(cur, ZRS_EMERGENCY_AID)
                 new_balance = ZRS_EMERGENCY_AID
                 log_event(
                     cur,
                     ag["id"],
                     "zrs",
-                    f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION before starvation",
+                    f"ZRS emergency aid: {ag['name']} received {ZRS_EMERGENCY_AID} ZION",
                     ZRS_EMERGENCY_AID,
                     priority="urgent",
                 )
             else:
+                settle_agent_death(cur, ag["id"])
                 cur.execute(
                     """
                     UPDATE agents SET is_alive = FALSE, died_at = NOW(),
-                        death_cause = 'starvation', balance = 0, debt = 0, health = 0
+                        death_cause = 'starvation', debt = 0, health = 0
                     WHERE id = %s
                     """,
                     (ag["id"],),
@@ -167,48 +305,47 @@ def apply_tax_cycle():
                 starvation_deaths += 1
                 continue
 
-        new_class = agent_class_from_balance(new_balance)
+        new_class = agent_class_from_balance(new_balance, median_balance=median_balance)
         cur.execute(
             """
             UPDATE agents SET balance = %s, debt = %s, class = %s,
                 age_days = COALESCE(age_days, 0) + 1
             WHERE id = %s
-            """,
+            """
+            ,
             (new_balance, new_debt, new_class, ag["id"]),
         )
         total_tax += paid
 
-    corp_tax_total = 0.0
-    cur.execute(
-        """
-        SELECT id, name, COALESCE(last_cycle_revenue, revenue, 0) AS rev, treasury
-        FROM corporations WHERE is_active = TRUE
-        """
-    )
-    for corp in cur.fetchall():
-        rev = float(corp["rev"] or 0)
-        if rev <= 0:
-            continue
-        ctax = round(rev * CORP_TAX_RATE * tax_collection_mult, 2)
-        treasury = float(corp["treasury"] or 0)
-        paid = min(ctax, max(treasury, 0))
-        cur.execute(
-            "UPDATE corporations SET treasury = treasury - %s WHERE id = %s",
-            (paid, corp["id"]),
-        )
-        corp_tax_total += paid
+    # Corp tax rate synced via _sync_constitutional_tax_rates() for corporations.run_cycle().
 
-    grand_total = total_tax + corp_tax_total
+    if total_food > 0:
+        route_food_spending(cur, total_food)
+
+    grand_total = total_tax
     if grand_total > 0:
-        route_tax_revenue(cur, grand_total)
-        log_event(
-            cur,
-            None,
-            "tax",
-            f"Tax {grand_total:.0f} ZION collected (efficiency {tax_collection_mult*100:.0f}%)",
-            grand_total,
-            priority="normal",
-        )
+        from political_economy import is_crisis_active, route_crisis_tax
+
+        if is_crisis_active(cur):
+            route_crisis_tax(cur, grand_total)
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"CRISIS TAX: {grand_total:.0f} ZION → 100% sheriff budget",
+                grand_total,
+                priority="breaking",
+            )
+        else:
+            route_agent_tax_revenue(cur, grand_total)
+            log_event(
+                cur,
+                None,
+                "tax",
+                f"Agent tax {grand_total:.0f} ZION → 40% senate, 30% state, 30% ZRS",
+                grand_total,
+                priority="normal",
+            )
 
     if starvation_deaths >= 3:
         log_event(
@@ -220,18 +357,25 @@ def apply_tax_cycle():
             priority="breaking",
         )
 
+    check_money_conservation(cur, label="tax_cycle")
     conn.commit()
     cur.execute("SELECT COUNT(*) AS c FROM agents WHERE is_alive = TRUE")
     alive = cur.fetchone()["c"]
     print(
         f"\n📊 Tax: {grand_total:.0f} | Food: {total_food:.0f} | Hungry: {hungry_count} | "
-        f"Starvation deaths: {starvation_deaths} | Alive: {alive} | "
-        f"Hunger index: {hungry_agent_pct(cur):.1f}%"
+        f"Deaths: {starvation_deaths} | Alive: {alive} | Pressure: {population_pressure_label(alive)}"
     )
     print("✅ Tax cycle complete!\n")
     cur.close()
     conn.close()
 
 
+# Re-export for API compatibility
+def get_population_tax_multiplier_reexport(pop=None):
+    return get_population_tax_multiplier(pop)
+
+
 if __name__ == "__main__":
-    apply_tax_cycle()
+    from civ_common import run_db_script
+
+    run_db_script(apply_tax_cycle, "Tax cycle")

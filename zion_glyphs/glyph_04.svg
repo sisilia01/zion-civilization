@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" data-symbol-id="4">
+  <g stroke="#1a1a2e" stroke-width="4.3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 29.17 51.24 A 12 12 0 0 1 49.40 45.24"/>
+    <path d="M 54.28 91.43 A 16 16 0 0 0 59.28 66.89"/>
+    <line x1="84.72" y1="81.74" x2="23.03" y2="57.3"/>
+    <path d="M 59.46 50.53 A 8 8 0 0 0 71.63 54.13"/>
+    <line x1="57.3" y1="28.99" x2="81.44" y2="56.41"/>
+    <line x1="38.23" y1="40.91" x2="55.81" y2="28.69"/>
+  </g>
+</svg>

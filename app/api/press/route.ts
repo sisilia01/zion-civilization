@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 
 export const revalidate = 7200;
 
+const OPENROUTER_KEY = process.env.OPENROUTER_KEY || process.env.OPENROUTER_API_KEY || "";
+
 type NewspaperIn = { id: string; name: string; theme: string };
 
 export async function POST(req: Request) {
+  if (!OPENROUTER_KEY) {
+    return NextResponse.json({ article: null, error: "OPENROUTER_KEY not configured" }, { status: 503 });
+  }
+
   let body: {
     newspaper?: NewspaperIn;
     stats?: Record<string, unknown>;
@@ -53,37 +59,37 @@ BYLINE: by [AI journalist name], ${newspaper.name}
 [article body - 3 paragraphs]`;
 
   try {
-    const response = await fetch("http://localhost:11434/api/chat", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      cache: "force-cache",
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://zionciv.com",
+        "X-Title": "ZION Civilization",
+      },
       body: JSON.stringify({
-        model: "llama3.2:3b",
+        model: "deepseek/deepseek-chat-v3-0324",
         messages: [{ role: "user", content: prompt }],
-        stream: false,
+        max_tokens: 400,
+        temperature: 0.9,
       }),
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Press Ollama error:", response.status, errText.slice(0, 200));
-      return NextResponse.json(
-        { article: null, error: "Ollama request failed" },
-        { status: 502 },
-      );
-    }
-
     const data = (await response.json()) as {
-      message?: { content?: string };
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
     };
 
-    const article = data.message?.content?.trim();
+    const article = data.choices?.[0]?.message?.content?.trim();
     if (!article) {
-      return NextResponse.json({ article: null, error: "Empty model response" }, { status: 502 });
+      const msg = data.error?.message || "Empty model response";
+      return NextResponse.json({ article: null, error: msg }, { status: response.ok ? 502 : response.status });
     }
 
     return NextResponse.json({ article });
   } catch (e) {
-    console.error("Press Ollama error:", e);
-    return NextResponse.json({ article: null, error: "ollama_failed" }, { status: 500 });
+    console.error("Press OpenRouter error:", e);
+    return NextResponse.json({ article: null, error: "openrouter_failed" }, { status: 500 });
   }
 }

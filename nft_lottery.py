@@ -1,3 +1,9 @@
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import psycopg2
 import random
 from datetime import datetime
@@ -6,7 +12,7 @@ conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
     user="zion_user",
-    password="zion2026"
+    password=os.environ.get("DB_PASSWORD", "")
 )
 
 def create_tables():

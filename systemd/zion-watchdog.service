@@ -1,15 +1,16 @@
 [Unit]
-Description=ZION Watchdog
-After=zion-api.service
+Description=ZION Watchdog (civilization cron orchestrator)
+After=network.target postgresql.service zion-api.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/root/zion_backend
-EnvironmentFile=/root/zion_backend/.env
 ExecStart=/usr/bin/python3 /root/zion_backend/watchdog.py
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

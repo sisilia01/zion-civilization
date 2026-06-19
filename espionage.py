@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """ZION Espionage — шпионаж между кланами"""
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import psycopg2
 import psycopg2.extras
 import random
 from datetime import datetime
 
-conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password="zion2026")
+conn = psycopg2.connect(host="localhost", database="zion_db", user="zion_user", password=os.environ.get("DB_PASSWORD", ""))
 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 def log_event(cur, agent_id, event_type, description, amount=0):

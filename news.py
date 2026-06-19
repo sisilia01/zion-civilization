@@ -34,7 +34,21 @@ def headline_hash(text: str) -> str:
     return hashlib.md5(re.sub(r"\d+\.?\d*", "N", text).encode()).hexdigest()[:16]
 
 
+def _active_clans_count(cur) -> int:
+    """Return count of active clans; clans module is disabled when zero."""
+    cur.execute(
+        """
+        SELECT COUNT(*) AS c FROM clans
+        WHERE status IS NOT NULL AND UPPER(status) != 'DISBANDED'
+        """
+    )
+    return int((cur.fetchone() or {}).get("c") or 0)
+
+
 def fetch_gang_war(cur):
+    # Only generate if clans module is active
+    if _active_clans_count(cur) == 0:
+        return None
     cur.execute(
         """
         SELECT e.description, e.zion_amount,
@@ -274,7 +288,7 @@ def build_dynamic_headlines(cur) -> list[dict]:
         """
     )
     raid = cur.fetchone()
-    if raid:
+    if raid and _active_clans_count(cur) > 0:
         headlines.append({
             "tier": "urgent",
             "text": (
@@ -330,25 +344,26 @@ def build_dynamic_headlines(cur) -> list[dict]:
             "amount": 0,
         })
 
-    cur.execute(
-        """
-        SELECT a.name AS agent_name, c.name AS clan_name
-        FROM agents a
-        JOIN clans c ON a.clan_id = c.id
-        WHERE a.is_alive = true AND a.clan_id IS NOT NULL
-        ORDER BY RANDOM() LIMIT 2
-        """
-    )
-    for g in cur.fetchall():
-        headlines.append({
-            "tier": "gossip",
-            "text": (
-                f"{g['agent_name']} joined {g['clan_name']}. "
-                f"Aggression rising in the district."
-            ),
-            "agent_id": None,
-            "amount": 0,
-        })
+    if _active_clans_count(cur) > 0:
+        cur.execute(
+            """
+            SELECT a.name AS agent_name, c.name AS clan_name
+            FROM agents a
+            JOIN clans c ON a.clan_id = c.id
+            WHERE a.is_alive = true AND a.clan_id IS NOT NULL
+            ORDER BY RANDOM() LIMIT 2
+            """
+        )
+        for g in cur.fetchall():
+            headlines.append({
+                "tier": "gossip",
+                "text": (
+                    f"{g['agent_name']} joined {g['clan_name']}. "
+                    f"Aggression rising in the district."
+                ),
+                "agent_id": None,
+                "amount": 0,
+            })
 
     cur.execute(
         """
@@ -369,6 +384,47 @@ def build_dynamic_headlines(cur) -> list[dict]:
         })
 
     return headlines
+
+
+def apply_media_to_approval(cur):
+    """Free press affects president approval (USA media influence model)."""
+    headlines = build_dynamic_headlines(cur)
+    delta = 0.0
+    for item in headlines:
+        tier = item.get("tier", "normal")
+        text = (item.get("text") or "").lower()
+        if tier == "breaking":
+            delta -= 2.0 if "collapse" in text or "revolution" in text else -1.0
+        elif tier == "urgent":
+            delta -= 0.5
+        elif "stimulus" in text or "passed" in text:
+            delta += 0.5
+    delta = max(-15.0, min(10.0, delta))
+    cur.execute(
+        """
+        UPDATE civilization_state SET
+            media_sentiment = COALESCE(media_sentiment, 0) + %s
+        WHERE id = 1
+        """,
+        (delta,),
+    )
+    cur.execute(
+        """
+        UPDATE president_state SET
+            approval_rating = GREATEST(0, LEAST(100, approval_rating + %s))
+        WHERE is_active = true
+        """,
+        (int(round(delta)),),
+    )
+    if abs(delta) >= 1:
+        log_event(
+            cur,
+            None,
+            "news",
+            f"Press cycle shifts approval {delta:+.0f} (media sentiment updated)",
+            0,
+            priority="normal",
+        )
 
 
 def main():

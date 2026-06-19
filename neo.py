@@ -1,3 +1,9 @@
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import psycopg2
 import random
 import hashlib
@@ -8,7 +14,7 @@ conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
     user="zion_user",
-    password="zion2026"
+    password=os.environ.get("DB_PASSWORD", "")
 )
 
 # NEO categories
@@ -133,6 +139,9 @@ def neo_random_gift(cur):
     gift = round(random.uniform(5, 50), 2)
     neo_hash = generate_neo_hash()
     
+    from civ_common import zrs_deduct_reserve
+    if not zrs_deduct_reserve(cur, gift):
+        return False
     cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
                (gift, lucky_id))
     

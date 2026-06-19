@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """ZionWork — jobs, pay, charisma growth from work/promotion/firing."""
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import psycopg2
 import random
 from datetime import datetime
@@ -8,7 +14,7 @@ conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
     user="zion_user",
-    password="zion2026",
+    password=os.environ.get("DB_PASSWORD", ""),
 )
 
 CHARISMA_MAX = 95
@@ -182,12 +188,16 @@ def run_zionwork():
 
         if worker:
             worker_id, worker_name, skill_val = worker
-            worker_reward = reward * 0.98
+            worker_reward = round(reward * 0.98, 2)
+            platform_fee = round(reward - worker_reward, 2)
 
             cur.execute(
                 "UPDATE agents SET balance = balance + %s WHERE id = %s",
                 (worker_reward, worker_id),
             )
+            if platform_fee > 0:
+                from civ_common import zrs_add_reserve
+                zrs_add_reserve(cur, platform_fee)
 
             cur.execute(
                 """

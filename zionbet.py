@@ -1,3 +1,9 @@
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 import psycopg2
 import random
 from datetime import datetime
@@ -8,7 +14,7 @@ conn = psycopg2.connect(
     host="localhost",
     database="zion_db",
     user="zion_user",
-    password="zion2026"
+    password=os.environ.get("DB_PASSWORD", "")
 )
 
 BET_EVENTS = [
@@ -107,12 +113,19 @@ def settle_bets():
         amount = float(amount)
         
         if prediction == outcome:
-            # Winner gets 1.98x (1% commission)
-            winnings = amount * 1.98
-            cur.execute("UPDATE agents SET balance = balance + %s WHERE id = %s",
-                       (winnings, agent_id))
+            winnings = round(amount * 1.98, 2)
+            from civ_common import zrs_deduct_reserve
+            if zrs_deduct_reserve(cur, winnings):
+                cur.execute(
+                    "UPDATE agents SET balance = balance + %s WHERE id = %s",
+                    (winnings, agent_id),
+                )
+            else:
+                winnings = 0
             print(f"  🏆 {name} WON! +{winnings:.2f} ZION")
         else:
+            from civ_common import zrs_add_reserve
+            zrs_add_reserve(cur, amount)
             print(f"  ❌ {name} LOST {amount:.2f} ZION")
         
         cur.execute("""

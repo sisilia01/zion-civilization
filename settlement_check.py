@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 """
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
 Settle user_bets against closed Polymarket markets (winner from polymarket_markets).
 Runs hourly via watchdog.
 """
@@ -10,7 +16,7 @@ from datetime import datetime
 
 def get_db():
     return psycopg2.connect(
-        host="localhost", database="zion_db", user="zion_user", password="zion2026"
+        host="localhost", database="zion_db", user="zion_user", password=os.environ.get("DB_PASSWORD", "")
     )
 
 

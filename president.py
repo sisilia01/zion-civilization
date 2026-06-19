@@ -10,10 +10,13 @@ from civ_common import (
     get_active_effects,
     get_conn,
     get_cursor,
+    get_latest_ai_decision,
+    get_real_days_elapsed,
     get_revolution_meter,
     insert_active_effect,
     is_uprising_active,
     log_event,
+    nationalize_corporations_from_zrs,
     process_revolution_cycle,
     apply_martial_law_divisions,
     apply_stimulus_revolution_bonus,
@@ -26,10 +29,139 @@ from civ_governance import (
     issue_president_orders,
     sheriff_compliance_actionable,
 )
+from amendment_enforcer import adjust_param_cur, get_param
+from constitutional_duties import (
+    get_party_policy,
+    normalize_president_party,
+    pick_party_weighted_action,
+    tag_party_event,
+)
 
 POPULISM_TAX_HOURS = 48
 STIMULUS_AMOUNT = 50.0
 POLICE_TRANSFER = 1000.0
+
+
+def action_give_money_to_poor(cur, president: dict):
+    fund = float(president.get("personal_fund") or 0)
+    zrs_reserve = 0.0
+    if fund < 500:
+        cur.execute(
+            """
+            SELECT COALESCE(reserve, 0) AS zr
+            FROM zrs_state
+            LIMIT 1
+            """
+        )
+        zrs_reserve = float((cur.fetchone() or {}).get("zr") or 0)
+
+    spend_pool = fund + zrs_reserve
+    if spend_pool <= 0:
+        return False
+
+    amount_per_agent = min(20, spend_pool * 0.5 / 5000)
+    # Guarantee meaningful support when treasury is sufficient.
+    if spend_pool >= 5 * 5000:
+        amount_per_agent = max(amount_per_agent, 5.0)
+    if amount_per_agent <= 0:
+        return False
+
+    cur.execute(
+        """
+        UPDATE agents SET balance = balance + %s
+        WHERE is_alive = true AND balance < 500
+        AND id IN (
+            SELECT id FROM agents WHERE is_alive=true AND balance < 500
+            ORDER BY balance ASC LIMIT 5000
+        )
+        """,
+        (amount_per_agent,),
+    )
+    affected = int(cur.rowcount or 0)
+    if affected <= 0:
+        return False
+
+    total = round(amount_per_agent * affected, 2)
+    from_fund = min(fund, total)
+    from_zrs = round(total - from_fund, 2)
+
+    cur.execute(
+        "UPDATE president_state SET personal_fund = personal_fund - %s WHERE id = %s",
+        (from_fund, president["id"]),
+    )
+    if from_zrs > 0:
+        cur.execute(
+            """
+            UPDATE zrs_state
+            SET reserve = GREATEST(0, COALESCE(reserve, 0) - %s)
+            """,
+            (from_zrs,),
+        )
+    log_event(
+        cur,
+        president["agent_id"],
+        "president_action",
+        tag_party_event(
+            f"President {president['agent_name']} gave {total:.0f} ZION to poorest {affected} agents "
+            f"({amount_per_agent:.1f} each; fund={from_fund:.0f}, zrs={from_zrs:.0f})",
+            _president_party(president),
+        ),
+        total,
+    )
+    return True
+
+
+def _president_party(president: dict | None) -> str:
+    if not president:
+        return "reform"
+    return normalize_president_party(president.get("party"))
+
+
+def _log_president_event(cur, president: dict, description: str, amount=0, priority="normal"):
+    party = _president_party(president)
+    log_event(
+        cur,
+        president["agent_id"],
+        "president",
+        tag_party_event(description, party),
+        amount,
+        priority=priority,
+    )
+
+
+def decide_action(cur, data: dict) -> str:
+    president = data.get("president") or {}
+    party = _president_party(president)
+    poverty = float(data.get("poverty_pct") or 0)
+    gang_overrun = data["gang_strength_total"] > data["police_count"] * 20
+
+    ai_decision = get_latest_ai_decision(cur, "president")
+    ai_action = ai_decision.get("action", "")
+
+    indicators = {
+        "unemployment_rate": float(data.get("unemployment_rate") or 0),
+        "poverty_pct": poverty,
+        "corruption_index": float(data.get("corruption_index") or 0),
+        "gini_coefficient": float(data.get("gini_coefficient") or 0),
+        "gang_overrun": gang_overrun,
+    }
+
+    if party == "reform" and poverty > 50:
+        return "GIVE_MONEY_TO_POOR"
+
+    _, action = pick_party_weighted_action(party, indicators, ai_action)
+
+    if ai_action and ai_action != "do_nothing":
+        print(
+            f"President [{party.upper()}] influenced by AI ({ai_action}): "
+            f"{ai_decision.get('reasoning', '')[:80]}"
+        )
+
+    if data["treasury"] <= 0 and action in ("STIMULUS", "GIVE_MONEY_TO_POOR", "FUND_RESEARCH"):
+        return "FUND_POLICE" if party == "consensus" else "PROPOSE_AMENDMENT"
+
+    print(f"President [{party.upper()}] party-weighted decision → {action}")
+    return action
 
 
 def ensure_president_schema(cur):
@@ -38,6 +170,8 @@ def ensure_president_schema(cur):
         ("corruption_index", "NUMERIC(5,2) DEFAULT 30"),
         ("tax_relief_until", "TIMESTAMP"),
         ("martial_law_until", "TIMESTAMP"),
+        ("hours_in_power", "INTEGER DEFAULT 0"),
+        ("is_dictator", "BOOLEAN DEFAULT false"),
     ]:
         try:
             cur.execute(
@@ -100,6 +234,27 @@ def gather_metrics(cur) -> dict:
     cur.execute("SELECT * FROM president_state WHERE is_active = true LIMIT 1")
     pres = cur.fetchone() or {}
 
+    unemployment_rate = 0.0
+    gini_coefficient = 0.0
+    try:
+        from civ_economics import fetch_economic_indicators
+
+        econ = fetch_economic_indicators(cur)
+        unemployment_rate = float(econ.get("unemployment_rate") or 0)
+        gini_coefficient = float(econ.get("gini_coefficient") or 0)
+    except Exception:
+        cur.execute(
+            """
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE employer_corp_id IS NULL) AS unemployed
+            FROM agents WHERE is_alive = true
+            """
+        )
+        emp = cur.fetchone() or {}
+        total_agents = max(int(emp.get("total") or total), 1)
+        unemployed = int(emp.get("unemployed") or 0)
+        unemployment_rate = unemployed / total_agents * 100
+
     compliance_metrics = get_sheriff_compliance_metrics(cur)
     compliance = (
         compliance_metrics["compliance_rate"]
@@ -128,6 +283,8 @@ def gather_metrics(cur) -> dict:
         "sheriff_type": sheriff_type,
         "president": pres,
         "sheriff": sheriff,
+        "unemployment_rate": unemployment_rate,
+        "gini_coefficient": gini_coefficient,
     }
 
 
@@ -143,7 +300,7 @@ def update_corruption(cur, data: dict, action: str) -> float:
 
     if action == "POPULISM":
         idx += 3
-    elif action != "ANTI_CORRUPTION_DRIVE" and random.random() < 0.20:
+    elif action and action != "ANTI_CORRUPTION_DRIVE" and random.random() < 0.20:
         idx += 3  # president took a bribe
 
     if action == "ANTI_CORRUPTION_DRIVE":
@@ -158,30 +315,13 @@ def update_corruption(cur, data: dict, action: str) -> float:
 
 
 def nationalize_bankrupt_corps(cur, president: dict):
-    cur.execute(
-        """
-        SELECT id, name FROM corporations
-        WHERE is_active = false
-        ORDER BY id DESC LIMIT 3
-        """
+    nationalize_corporations_from_zrs(
+        cur,
+        president["agent_id"],
+        president["agent_name"],
+        limit=3,
+        source="president",
     )
-    for corp in cur.fetchall():
-        cur.execute(
-            """
-            UPDATE corporations SET is_active = true, treasury = treasury + 1000,
-                owner = 'state', negative_cycles = 0
-            WHERE id = %s
-            """,
-            (corp["id"],),
-        )
-        log_event(
-            cur,
-            president["agent_id"],
-            "president",
-            f"President {president['agent_name']} nationalized {corp['name']}",
-            1000,
-            priority="urgent",
-        )
 
 
 def execute_decision(cur, data: dict):
@@ -192,10 +332,21 @@ def execute_decision(cur, data: dict):
     pid = pres["agent_id"]
     pname = pres["agent_name"]
     approval = data["approval"]
-    action = "FUND_POLICE"
+    action = decide_action(cur, data)
 
-    if data["corruption_index"] > 70:
-        action = "ANTI_CORRUPTION_DRIVE"
+    action_key = (action or "").upper()
+    if action_key == "MARTIAL_LAW" or (action or "").lower() == "martial_law":
+        _log_president_event(
+            cur,
+            pres,
+            f"BLOCKED: President {pname} attempted martial law — blocked by Constitution (Article II Sec.3)",
+            priority="normal",
+        )
+        return "blocked"
+
+    party = _president_party(pres)
+
+    if action == "ANTI_CORRUPTION_DRIVE":
         cur.execute(
             """
             UPDATE president_state SET approval_rating = LEAST(100, approval_rating + 15)
@@ -206,81 +357,132 @@ def execute_decision(cur, data: dict):
             cur.execute(
                 "UPDATE sheriff_state SET sheriff_type = 'honest', coup_points = GREATEST(0, coup_points - 50) WHERE is_active = true"
             )
-        log_event(
+        _log_president_event(
             cur,
-            pid,
-            "president",
+            pres,
             f"ANTI-CORRUPTION DRIVE: President {pname} purges corrupt officials! Approval +15",
-            0,
             priority="urgent",
         )
-    elif data["gang_strength_total"] > data["police_count"] * 20:
-        action = "MARTIAL_LAW"
-        cur.execute(
-            """
-            UPDATE president_state SET
-                approval_rating = GREATEST(0, approval_rating - 15),
-                martial_law_until = NOW() + INTERVAL '48 hours'
-            WHERE is_active = true
-            """
-        )
-        insert_active_effect(
-            cur, "martial_law", 48, crime_modifier=-0.40,
-            metadata={"source": "president", "action": "MARTIAL_LAW", "food_x2": True},
-        )
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_count = police_count + 10
-            WHERE is_active = true
-            """
-        )
-        apply_martial_law_divisions(cur)
-        log_event(
-            cur,
-            pid,
-            "president",
-            f"BREAKING: MARTIAL LAW DECLARED: All resources to police! Crime -40%, food ×2",
-            0,
-            priority="breaking",
-        )
-    elif data["poverty_pct"] > 60 and data["treasury"] > 10000:
-        action = "STIMULUS"
-        cur.execute(
-            """
-            UPDATE agents SET balance = balance + %s
-            WHERE is_alive = true AND balance < 10
-            """,
-            (STIMULUS_AMOUNT,),
-        )
-        cur.execute(
-            "UPDATE president_state SET personal_fund = personal_fund - %s WHERE is_active = true",
-            (STIMULUS_AMOUNT * 100,),
-        )
-        insert_active_effect(
-            cur, "stimulus", 24, poverty_modifier=-0.15,
-            metadata={"amount": STIMULUS_AMOUNT, "source": "president"},
-        )
-        apply_stimulus_revolution_bonus(cur)
-        log_event(
-            cur,
-            pid,
-            "president",
-            f"STIMULUS: President {pname} gave {STIMULUS_AMOUNT:.0f} ZION to all poor agents",
-            STIMULUS_AMOUNT,
-            priority="urgent",
-        )
-    elif data["corp_bankruptcies_week"] > 3:
-        action = "NATIONALIZE_CORPS"
+    elif action == "STIMULUS":
+        if party == "consensus" and data["treasury"] > 0:
+            spend = min(200.0, float(data["treasury"]) * 0.2)
+            cur.execute(
+                """
+                UPDATE corporations SET treasury = treasury + %s
+                WHERE is_active=true AND treasury < 500
+                """,
+                (spend,),
+            )
+            recipients_affected = cur.rowcount
+            if recipients_affected > 0:
+                cur.execute(
+                    """
+                    UPDATE president_state SET personal_fund = personal_fund - %s
+                    WHERE is_active = true AND personal_fund >= %s
+                    """,
+                    (spend, spend),
+                )
+                if cur.rowcount:
+                    _log_president_event(
+                        cur,
+                        pres,
+                        f"STIMULUS: President {pname} injected {spend:.0f} ZION into struggling corporations",
+                        spend,
+                        priority="urgent",
+                    )
+                else:
+                    action = "FUND_POLICE"
+            else:
+                log_event(
+                    cur,
+                    pid,
+                    "president",
+                    f"STIMULUS SKIPPED: no corporations eligible "
+                    f"(all treasury >= 500) — funds preserved",
+                    0,
+                    priority="normal",
+                )
+        else:
+            from civ_common import debit_personal_fund_pay_agents
+
+            if data["treasury"] <= 0:
+                if party == "reform" and action_give_money_to_poor(cur, pres):
+                    action = "GIVE_MONEY_TO_POOR"
+                else:
+                    action = "FUND_POLICE" if party == "consensus" else "PROPOSE_AMENDMENT"
+            else:
+                n_paid, total_paid = debit_personal_fund_pay_agents(
+                    cur,
+                    STIMULUS_AMOUNT,
+                    "is_alive = true AND balance < 500" if party == "reform" else "is_alive = true AND balance < 10",
+                )
+                if n_paid == 0:
+                    if party == "reform" and action_give_money_to_poor(cur, pres):
+                        action = "GIVE_MONEY_TO_POOR"
+                    else:
+                        action = "FUND_POLICE" if party == "consensus" else "PROPOSE_AMENDMENT"
+                else:
+                    insert_active_effect(
+                        cur, "stimulus", 24, poverty_modifier=-0.15,
+                        metadata={"amount": STIMULUS_AMOUNT, "source": "president"},
+                    )
+                    apply_stimulus_revolution_bonus(cur)
+                    _log_president_event(
+                        cur,
+                        pres,
+                        f"STIMULUS: President {pname} gave {STIMULUS_AMOUNT:.0f} ZION to {n_paid} agents ({total_paid:.0f} from personal fund)",
+                        total_paid,
+                        priority="urgent",
+                    )
+    elif action == "GIVE_MONEY_TO_POOR":
+        if party == "consensus":
+            action = "STIMULUS"
+            if data["treasury"] > 0:
+                spend = min(200.0, float(data["treasury"]) * 0.2)
+                cur.execute(
+                    """
+                    UPDATE corporations SET treasury = treasury + %s
+                    WHERE is_active=true AND treasury < 500
+                    """,
+                    (spend,),
+                )
+                recipients_affected = cur.rowcount
+                if recipients_affected > 0:
+                    cur.execute(
+                        """
+                        UPDATE president_state SET personal_fund = personal_fund - %s
+                        WHERE is_active = true AND personal_fund >= %s
+                        """,
+                        (spend, spend),
+                    )
+                    if cur.rowcount:
+                        _log_president_event(
+                            cur,
+                            pres,
+                            f"STIMULUS: President {pname} injected ZION into struggling corporations (no direct welfare)",
+                            spend,
+                            priority="urgent",
+                        )
+                    else:
+                        action = "FUND_POLICE"
+                else:
+                    log_event(
+                        cur,
+                        pid,
+                        "president",
+                        f"STIMULUS SKIPPED: no corporations eligible "
+                        f"(all treasury >= 500) — funds preserved",
+                        0,
+                        priority="normal",
+                    )
+            else:
+                action = "FUND_POLICE"
+        elif not action_give_money_to_poor(cur, pres):
+            action = "FUND_POLICE"
+    elif action == "NATIONALIZE_CORPS":
         nationalize_bankrupt_corps(cur, pres)
-    elif sheriff_compliance_actionable(data["sheriff_compliance_metrics"]):
-        action = "INVESTIGATE_SHERIFF"
+    elif action == "INVESTIGATE_SHERIFF":
         rate = data["sheriff_compliance_metrics"]["compliance_rate"]
-        cur.execute(
-            """
-            UPDATE sheriff_state SET coup_points = COALESCE(coup_points, 0) + 50
-            WHERE is_active = true
-            """
-        )
         log_event(
             cur,
             pid,
@@ -289,8 +491,78 @@ def execute_decision(cur, data: dict):
             0,
             priority="urgent",
         )
-    elif approval < 30:
-        action = "POPULISM"
+    elif action == "TAX_CHANGE":
+        if party == "consensus":
+            new_rate = adjust_param_cur(cur, "top_tax_rate", -0.02)
+            cur.execute(
+                """
+                UPDATE president_state
+                SET tax_relief_until = NOW() + INTERVAL '24 hours'
+                WHERE is_active = true
+                """
+            )
+            _log_president_event(
+                cur,
+                pres,
+                f"TAX CUT: President {pname} lowered top_tax_rate to {new_rate:.2f} (-0.02)",
+                priority="urgent",
+            )
+        else:
+            new_rate = adjust_param_cur(cur, "top_tax_rate", 0.02)
+            _log_president_event(
+                cur,
+                pres,
+                f"TAX HIKE: President {pname} raised top_tax_rate to {new_rate:.2f} (+0.02) to fund social programs",
+                priority="urgent",
+            )
+    elif action == "PROPOSE_AMENDMENT":
+        if party == "consensus":
+            title = "Corporate Deregulation and Tax Relief Act"
+            desc = "Reduce top tax rate and corporate regulation to stimulate hiring."
+            change_type = "deregulation"
+        else:
+            title = "Wealth Tax and Basic Income Act"
+            desc = "Introduce wealth tax, basic income for unemployed, and education funding."
+            change_type = "redistribution"
+        try:
+            from amendments import propose_amendment
+
+            proposed_by = pres.get("agent_id") if pres else None
+            aid = propose_amendment(title, desc, change_type, proposed_by=proposed_by)
+            if aid:
+                _log_president_event(
+                    cur,
+                    pres,
+                    f"AMENDMENT PROPOSED #{aid}: {title}",
+                    priority="urgent",
+                )
+            else:
+                _log_president_event(cur, pres, f"AMENDMENT pending — {title} already in queue")
+        except Exception as exc:
+            _log_president_event(cur, pres, f"Amendment proposal failed: {exc}")
+    elif action == "FUND_RESEARCH":
+        spend = min(150.0, float(data["treasury"]) * 0.15)
+        if spend > 0:
+            cur.execute(
+                """
+                UPDATE president_state SET personal_fund = personal_fund - %s
+                WHERE is_active = true AND personal_fund >= %s
+                """,
+                (spend, spend),
+            )
+            if cur.rowcount:
+                _log_president_event(
+                    cur,
+                    pres,
+                    f"RESEARCH FUNDING: President {pname} allocated {spend:.0f} ZION to ZION Academy",
+                    spend,
+                    priority="urgent",
+                )
+            else:
+                action = "PROPOSE_AMENDMENT"
+        else:
+            action = "PROPOSE_AMENDMENT"
+    elif action == "POPULISM":
         cur.execute(
             """
             UPDATE president_state SET
@@ -299,66 +571,198 @@ def execute_decision(cur, data: dict):
             WHERE is_active = true
             """
         )
-        log_event(
+        _log_president_event(
             cur,
-            pid,
-            "president",
+            pres,
             f"POPULISM: President {pname} cancels taxes 48h! Approval +25",
-            0,
             priority="urgent",
         )
-    else:
-        action = "FUND_POLICE"
+    elif action == "TAX_RELIEF":
+        cur.execute(
+            """
+            UPDATE president_state
+            SET tax_relief_until = NOW() + INTERVAL '24 hours'
+            WHERE is_active = true
+            """
+        )
+        _log_president_event(
+            cur,
+            pres,
+            f"TAX RELIEF: President {pname} cuts poor/critical tax by 50% for 24h",
+            priority="urgent",
+        )
+    elif action == "FUND_POLICE":
+        police_transfer = POLICE_TRANSFER + float(get_param("police_funding_bonus", 0.0))
         cur.execute(
             """
             UPDATE president_state SET personal_fund = personal_fund - %s
             WHERE is_active = true AND personal_fund >= %s
             """,
-            (POLICE_TRANSFER, POLICE_TRANSFER),
+            (police_transfer, police_transfer),
         )
-        cur.execute(
-            """
-            UPDATE sheriff_state SET police_budget = police_budget + %s
-            WHERE is_active = true
-            """,
-            (POLICE_TRANSFER,),
-        )
-        log_event(
-            cur,
-            pid,
-            "president",
-            f"President {pname} transferred {POLICE_TRANSFER:.0f} ZION to police budget",
-            POLICE_TRANSFER,
-            priority="normal",
-        )
+        if cur.rowcount > 0:
+            cur.execute(
+                """
+                UPDATE sheriff_state SET police_budget = police_budget + %s
+                WHERE is_active = true
+                """,
+                (police_transfer,),
+            )
+            _log_president_event(
+                cur,
+                pres,
+                f"President {pname} transferred {police_transfer:.0f} ZION to police budget",
+                police_transfer,
+                priority="normal",
+            )
+        else:
+            action = "NO_FUNDS"
 
     corruption = update_corruption(cur, data, action)
     print(f"📋 Decision: {action} | approval {approval}% | corruption {corruption:.0f}")
     return action
 
 
+def ensure_martial_law_consistency(cur):
+    cur.execute(
+        """
+        UPDATE president_state
+        SET martial_law_until = NULL
+        WHERE is_active = true
+        AND martial_law_until IS NOT NULL
+        AND martial_law_until < NOW()
+        """
+    )
+
+    # Also remove stale martial-law effects after they expire.
+    cur.execute(
+        """
+        DELETE FROM active_effects
+        WHERE effect_type ILIKE '%martial%'
+        AND expires_at IS NOT NULL
+        AND expires_at < NOW()
+        """
+    )
+
+
 def ensure_president_exists(cur):
-    if get_president(cur):
-        return
+    """Fill vacant office via presidential election (senator nominees + popular class vote)."""
+    president = get_president(cur)
+    if president:
+        cur.execute(
+            "SELECT is_alive FROM agents WHERE id = %s",
+            (president["agent_id"],),
+        )
+        agent = cur.fetchone()
+        if agent and agent.get("is_alive"):
+            return
+        cur.execute(
+            """
+            UPDATE president_state
+            SET is_active = false, phase = 'deceased'
+            WHERE is_active = true
+            """
+        )
+        log_event(
+            cur,
+            president["agent_id"],
+            "election",
+            f"President {president['agent_name']} office vacated — agent deceased",
+            0,
+            priority="breaking",
+        )
+
+    from senate import run_election
+
+    winner = run_election(cur, "president")
+    if winner:
+        log_event(
+            cur,
+            winner["agent_id"],
+            "election",
+            f"President {winner['name']} inaugurated after vacancy",
+            0,
+            priority="normal",
+        )
+
+
+def run_governance_tick(cur, ctx: dict) -> dict:
+    """Executive branch step — reads FRS/ZRS context before acting."""
+    from frs_chief import get_frs_chief, nominate_frs_chief
+
+    ensure_president_exists(cur)
+    # New presidents (first 24 real hours) have a higher approval floor.
     cur.execute(
         """
-        SELECT id, name, charisma FROM agents
-        WHERE is_alive = true ORDER BY charisma DESC, balance DESC LIMIT 1
+        UPDATE president_state SET approval_rating = GREATEST(
+            CASE WHEN started_at > NOW() - INTERVAL '24 hours' THEN 45 ELSE 10 END,
+            approval_rating
+        ) WHERE is_active = true
         """
     )
-    ag = cur.fetchone()
-    if not ag:
-        return
-    cur.execute(
-        """
-        INSERT INTO president_state (
-            agent_id, agent_name, party, approval_rating, personal_fund,
-            police_fund, is_active, phase, corruption_index
-        ) VALUES (%s, %s, 'blue', 60, 1000, 500, true, 'ruling', 30)
-        """,
-        (ag["id"], ag["name"]),
+    cleanup_expired_effects(cur)
+    restore_after_martial_law(cur)
+    ensure_martial_law_consistency(cur)
+    data = gather_metrics(cur)
+    president = data["president"]
+    if not president:
+        ctx["president"] = {"status": "vacant", "summary": "No president"}
+        return ctx
+
+    frs_dir = ctx.get("frs_chief", {}).get("directive", {})
+    if frs_dir.get("action") == "stimulate_economy":
+        log_event(
+            cur,
+            president["agent_id"],
+            "president",
+            "President notes FRS easing — fiscal restraint advised",
+            0,
+        )
+
+    chief = get_frs_chief(cur)
+    if not chief.get("is_active") and chief.get("confirmation_status") != "pending":
+        nominate_frs_chief(cur, president, ctx)
+
+    execute_decision(cur, data)
+    president = get_president(cur)
+    rev_status = process_revolution_cycle(cur, president) if president else {}
+    if president:
+        issue_president_orders(cur, president)
+        check_compliance(cur, president)
+        if not is_uprising_active(cur):
+            sync_police_divisions(cur)
+
+    try:
+        from news import apply_media_to_approval
+
+        apply_media_to_approval(cur)
+    except Exception:
+        pass
+
+    try:
+        from corporations import run_lobbying_tick
+
+        run_lobbying_tick(cur, president)
+    except Exception:
+        pass
+
+    if president:
+        president = get_president(cur)
+        current_approval = int((president or {}).get("approval_rating") or data["approval"])
+    else:
+        current_approval = data["approval"]
+
+    summary = (
+        f"President {president['agent_name'] if president else '—'} "
+        f"approval {current_approval}% | rev {rev_status.get('meter', 0)}%"
     )
-    log_event(cur, ag["id"], "election", f"President {ag['name']} inaugurated", 0, priority="normal")
+    ctx["president"] = {
+        "summary": summary,
+        "approval": current_approval,
+        "revolution": rev_status.get("meter", 0),
+        "nominate_frs": bool(ctx.get("frs_nomination")),
+    }
+    return ctx
 
 
 def main():
@@ -372,10 +776,20 @@ def main():
 
     try:
         ensure_president_exists(cur)
+        # New presidents (first 24 real hours) have a higher approval floor.
+        cur.execute(
+            """
+            UPDATE president_state SET approval_rating = GREATEST(
+                CASE WHEN started_at > NOW() - INTERVAL '24 hours' THEN 45 ELSE 10 END,
+                approval_rating
+            ) WHERE is_active = true
+            """
+        )
         cleanup_expired_effects(cur)
         restore_after_martial_law(cur)
         data = gather_metrics(cur)
         president = data["president"]
+        ensure_martial_law_consistency(cur)
 
         if not president:
             print("No president — skipping cycle")
@@ -389,12 +803,15 @@ def main():
             + (" ⚡ UPRISING" if is_uprising_active(cur) else "")
         )
 
-        cur.execute(
-            "UPDATE president_state SET days_in_power = COALESCE(days_in_power, 0) + 1 WHERE is_active = true"
-        )
-
         execute_decision(cur, data)
         president = get_president(cur)
+
+        from political_economy import manage_crisis_mode, compute_macro_metrics, update_crisis_metrics
+
+        pe_metrics = compute_macro_metrics(cur)
+        pe_metrics = update_crisis_metrics(cur, pe_metrics)
+        manage_crisis_mode(cur, pe_metrics)
+
         rev_status = {"meter": 0, "active": False}
         if president:
             rev_status = process_revolution_cycle(cur, president)
@@ -409,9 +826,13 @@ def main():
                     0,
                     priority="breaking",
                 )
+                ensure_president_exists(cur)
+                president = get_president(cur)
             check_compliance(cur, president)
             if not is_uprising_active(cur):
                 sync_police_divisions(cur)
+
+        president = get_president(cur)
 
         conn.commit()
         print("\n✅ President cycle complete!")

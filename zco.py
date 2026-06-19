@@ -2,6 +2,7 @@ import json
 import urllib.request
 import hashlib
 import subprocess
+import traceback
 import requests
 import re
 from datetime import datetime, timezone
@@ -41,7 +42,7 @@ SUI_COIN_ID = ""  # auto-detected below
 
 JUDGES = [
     {"name": "DeepSeek", "model": "deepseek/deepseek-chat-v3-0324"},
-    {"name": "Gemini", "model": "google/gemini-2.0-flash-lite-001"},
+    {"name": "Gemini", "model": "google/gemini-3.1-flash-lite"},
     {"name": "GPT", "model": "openai/gpt-4o-mini"},
 ]
 
@@ -141,7 +142,7 @@ def store_decision_walrus(decision_data: dict) -> tuple[str, str] | tuple[None, 
         print(f"Walrus store error: {e}")
     return None, None
 
-def record_sui_proof(blob_id: str, consensus_hash: str) -> str | None:
+def record_sui_proof(blob_id: str) -> dict:
     """Record ZCO consensus proof on Sui blockchain"""
     try:
         result = subprocess.run([
@@ -152,14 +153,20 @@ def record_sui_proof(blob_id: str, consensus_hash: str) -> str | None:
             "--json"
         ], capture_output=True, text=True, timeout=30)
 
+        print(f"[ZCO TX] returncode={result.returncode}")
+        print(f"[ZCO TX] stdout={result.stdout[:500]}")
+        print(f"[ZCO TX] stderr={result.stderr[:300]}")
+
         if result.returncode == 0:
             data = json.loads(result.stdout)
             digest = data.get("digest") or data.get("effects", {}).get("transactionDigest")
-            if digest:
-                return f"https://suiscan.xyz/testnet/tx/{digest}"
-    except Exception as e:
-        print(f"Sui proof error: {e}")
-    return None
+            return {
+                "tx_hash": digest or "",
+                "explorer_url": f"https://suiscan.xyz/testnet/tx/{digest}" if digest else ""
+            }
+    except Exception:
+        print(f"[ZCO TX] ERROR: {traceback.format_exc()}")
+    return {"tx_hash": "", "explorer_url": ""}
 
 def zco_decide(agent_name: str, agent_class: str, balance: float, context: str) -> dict:
     """ZION Consensus Oracle — полный цикл с записью в Sui"""
@@ -192,7 +199,9 @@ Respond ONLY as JSON:
     }, sort_keys=True)
     consensus_hash = "ZCO-" + hashlib.sha256(hash_data.encode()).hexdigest()[:16]
 
-    sui_url = record_sui_proof("", consensus_hash)
+    sui_proof = record_sui_proof("")
+    sui_url = sui_proof.get("explorer_url") or ""
+    sui_tx_hash = sui_proof.get("tx_hash") or ""
 
     proof_payload = {
         "type": "zco_decision",
@@ -220,7 +229,7 @@ Respond ONLY as JSON:
         "votes": votes,
         "consensus_hash": consensus_hash,
         "blob_id": blob_id,
-        "tx_hash": blob_id or "",
+        "tx_hash": sui_tx_hash or blob_id or "",
         "explorer_url": explorer_url or "",
         "sui_url": sui_url or "",
         "timestamp": timestamp,

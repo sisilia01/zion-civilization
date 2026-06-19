@@ -1,0 +1,16 @@
+[Unit]
+Description=ZION Z-PERPS Trading Worker
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/zion_backend
+ExecStart=/usr/bin/python3 /root/zion_backend/perps_worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/zion_perps.log
+StandardError=append:/var/log/zion_perps.log
+
+[Install]
+WantedBy=multi-user.target

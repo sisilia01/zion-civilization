@@ -1,0 +1,258 @@
+id,agent_id,event_type,description,zion_amount,priority,created_at
+63094,4355,police,Sefu Diop elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 1325/4662,1325.00,normal,2026-05-17 20:10:24.966493
+63425,4355,police,Sheriff Sefu Diop (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-05-17 20:11:12.016355
+63900,4355,police,Sheriff Sefu Diop (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-05-17 20:35:38.980704
+63906,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 38 ZION. Sheriff Sefu Diop approval -15%!,37.63,normal,2026-05-17 20:46:31.985721
+64207,4355,police,Sheriff Sefu Diop (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-05-18 06:17:35.531486
+64208,4355,police,⚔️ Junta Sheriff Sefu Diop expands military! Recruited 14 officers. Total: 34. Budget: -112 ZION,112.00,normal,2026-05-18 06:20:30.776691
+64210,4355,police,Sheriff Sefu Diop (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-05-18 06:20:30.776691
+64428,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 200 ZION. Sheriff Sefu Diop approval -15%!,200.00,normal,2026-05-18 06:41:42.686216
+64429,4365,president,🏆 President Murat Aksoy successfully ousted junta Sheriff Sefu Diop! Democracy restored! New election called.,0.00,normal,2026-05-18 06:41:42.686216
+64431,4365,police,Murat Aksoy elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 1205/4254,1205.00,normal,2026-05-18 06:41:43.807844
+66418,4365,police,⚔️ Junta Sheriff Murat Aksoy expands military! Recruited 10 officers. Total: 30. Budget: -80 ZION,80.00,normal,2026-05-18 06:49:30.542623
+66420,4365,police,Sheriff Murat Aksoy (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-05-18 06:49:30.542623
+66483,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 200 ZION. Sheriff Murat Aksoy approval -15%!,200.00,normal,2026-05-18 06:49:29.470048
+67032,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 200 ZION. Sheriff Murat Aksoy approval -15%!,200.00,normal,2026-05-18 06:53:48.220587
+67033,4365,police,⚔️ Junta Sheriff Murat Aksoy expands military! Recruited 14 officers. Total: 44. Budget: -112 ZION,112.00,normal,2026-05-18 06:53:49.245039
+67240,4365,police,⚔️ Junta Sheriff Murat Aksoy expands military! Recruited 5 officers. Total: 49. Budget: -40 ZION,40.00,normal,2026-05-18 06:56:22.523066
+67249,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 200 ZION. Sheriff Murat Aksoy approval -15%!,200.00,normal,2026-05-18 06:56:21.455639
+67250,4365,president,🏆 President Murat Aksoy successfully ousted junta Sheriff Murat Aksoy! Democracy restored! New election called.,0.00,normal,2026-05-18 06:56:21.455639
+71825,4356,police,Amara Diop elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 1258/3532,1258.00,normal,2026-05-19 18:28:51.091362
+71934,4365,president,✊ President Murat Aksoy funds anti-junta protests! Spent 200 ZION. Sheriff Amara Diop approval -15%!,200.00,normal,2026-05-19 18:29:54.446725
+71953,4365,police,Murat Aksoy elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 1255/3603,1255.00,normal,2026-05-19 18:30:22.083889
+72079,4365,news,🟢 Murat Aksoy elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 1255/3603,1255.00,normal,2026-05-19 19:00:11.702475
+72173,4355,president,✊ President Sefu Diop funds anti-junta protests! Spent 200 ZION. Sheriff Murat Aksoy approval -15%!,200.00,normal,2026-05-19 19:01:51.617279
+72539,24086,police,Luna Taylor 7433 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 679/3469,679.00,normal,2026-05-19 22:02:44.468704
+72586,24086,news,🟢 Luna Taylor 7433 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 679/3469,679.00,normal,2026-05-19 22:03:24.577925
+72627,24086,news,🟢 Luna Taylor 7433 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 679/3469,679.00,normal,2026-05-19 22:33:32.322947
+72655,4355,president,✊ President Sefu Diop funds anti-junta protests! Spent 200 ZION. Sheriff Luna Taylor 7433 approval -15%!,200.00,normal,2026-05-19 23:02:45.079317
+72779,30105,police,Joy Munn 2 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 624/3307,624.00,normal,2026-05-20 00:03:12.669269
+72828,30105,news,🟢 Joy Munn 2 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 624/3307,624.00,normal,2026-05-20 00:04:22.788347
+72873,30105,news,🟢 Joy Munn 2 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 624/3307,624.00,normal,2026-05-20 00:34:30.441287
+72898,4355,president,✊ President Sefu Diop funds anti-junta protests! Spent 200 ZION. Sheriff Joy Munn 2 approval -15%!,200.00,normal,2026-05-20 01:03:13.225223
+72984,4355,news,🟢 ✊ President Sefu Diop funds anti-junta protests! Spent 200 ZION. Sheriff Joy Munn 2 approval -15%!,200.00,normal,2026-05-20 01:35:02.093066
+74411,31334,police,Sam Dunn 3 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 437/2416,437.00,normal,2026-05-20 13:06:03.652295
+74452,31334,news,🟢 Sam Dunn 3 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 437/2416,437.00,normal,2026-05-20 13:10:43.905239
+74506,31334,news,🟢 Sam Dunn 3 elected Sheriff! Type: JUNTA — dangerous military ambitions. Votes: 437/2416,437.00,normal,2026-05-20 13:40:51.648069
+74521,24120,president,✊ President Blake Miller 1393 funds anti-junta protests! Spent 200 ZION. Sheriff Sam Dunn 3 approval -15%!,200.00,normal,2026-05-20 14:06:29.265034
+74574,24120,news,🟢 ✊ President Blake Miller 1393 funds anti-junta protests! Spent 200 ZION. Sheriff Sam Dunn 3 approval -15%!,200.00,normal,2026-05-20 14:11:10.513456
+74615,24120,news,🟢 ✊ President Blake Miller 1393 funds anti-junta protests! Spent 200 ZION. Sheriff Sam Dunn 3 approval -15%!,200.00,normal,2026-05-20 14:41:20.303014
+1879934,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Melanie Ababio! Wealth halved.,154.00,breaking,2026-05-30 22:59:08.323571
+1880486,1711730,sheriff_action,ELECTION RESULTS: Poor vote=63% Working=36% Rich=1% - Winner: Vandana Marques (junta) score 1106/6052,1106.00,normal,2026-05-31 00:11:41.006628
+1880487,1711730,sheriff_action,Vandana Marques elected Sheriff! Type: JUNTA — dangerous military ambitions.,1106.00,normal,2026-05-31 00:11:41.006628
+1880767,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 11 officers. Total: 31. Budget: -88.0 ZION,88.00,normal,2026-05-31 00:46:42.764535
+1880769,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-05-31 00:46:42.764535
+1880978,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 5 officers. Total: 46. Budget: -40.0 ZION,40.00,normal,2026-05-31 01:07:12.080980
+1880980,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-05-31 01:07:12.080980
+1881124,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 15 officers. Total: 61. Budget: -120.0 ZION,120.00,normal,2026-05-31 01:50:01.035376
+1881126,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-05-31 01:50:01.035376
+1881469,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 11 officers. Total: 72. Budget: -88.0 ZION,88.00,normal,2026-05-31 02:34:04.022050
+1881471,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-05-31 02:34:04.022050
+1881851,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 12 officers. Total: 84. Budget: -96.0 ZION,96.00,normal,2026-05-31 03:19:05.924460
+1881853,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-05-31 03:19:05.924460
+1881998,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 12 officers. Total: 106. Budget: -96.0 ZION,96.00,normal,2026-05-31 03:38:57.572081
+1882000,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-05-31 03:38:57.572081
+1882407,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 7 officers. Total: 123. Budget: -56.0 ZION,56.00,normal,2026-05-31 04:06:25.281932
+1882409,1711730,sheriff_action,Sheriff Vandana Marques (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-05-31 04:06:25.281932
+1882417,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 6 officers. Total: 129. Budget: -48.0 ZION,48.00,normal,2026-05-31 04:23:30.580823
+1882709,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 9 officers. Total: 138. Budget: -72.0 ZION,72.00,normal,2026-05-31 04:52:00.374928
+1883065,1711730,sheriff_action,⚔️ Junta Sheriff Vandana Marques expands military! Recruited 15 officers. Total: 163. Budget: -120.0 ZION,120.00,normal,2026-05-31 05:35:31.249492
+1887609,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Odile Martini! Wealth halved.,151.00,breaking,2026-05-31 18:40:25.146575
+1887974,,news,🟠 🔥 REVOLUTION SUCCESS! The people overthrow Odile Martini! Wealth halved.,0.00,urgent,2026-05-31 19:10:44.716066
+1888503,,news,🟠 🔥 REVOLUTION SUCCESS! The people overthrow Odile Martini! Wealth halved.,0.00,urgent,2026-05-31 20:11:12.647733
+1893781,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Ursula Goncalves! Wealth halved.,150.00,breaking,2026-06-01 09:50:17.235591
+1896693,1712126,sheriff_action,ELECTION RESULTS: Poor vote=35% Working=65% Rich=1% - Winner: Wataru Melnikov (junta) score 436/2149,436.00,normal,2026-06-01 16:22:14.248347
+1896694,1712126,sheriff_action,Wataru Melnikov elected Sheriff! Type: JUNTA — dangerous military ambitions.,436.00,normal,2026-06-01 16:22:14.248347
+1897130,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 5 officers. Total: 25. Budget: -40.0 ZION,40.00,normal,2026-06-01 17:02:53.370938
+1897132,1712126,sheriff_action,Sheriff Wataru Melnikov (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-06-01 17:02:53.370938
+1897141,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 8 officers. Total: 33. Budget: -64.0 ZION,64.00,normal,2026-06-01 17:24:00.630993
+1897143,1712126,sheriff_action,Sheriff Wataru Melnikov (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-06-01 17:24:00.630993
+1897580,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 9 officers. Total: 42. Budget: -72.0 ZION,72.00,normal,2026-06-01 17:41:19.199336
+1897582,1712126,sheriff_action,Sheriff Wataru Melnikov (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-01 17:41:19.199336
+1897726,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 11 officers. Total: 53. Budget: -88.0 ZION,88.00,normal,2026-06-01 18:08:16.902113
+1897728,1712126,sheriff_action,Sheriff Wataru Melnikov (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-06-01 18:08:16.902113
+1897887,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 11 officers. Total: 74. Budget: -88.0 ZION,88.00,normal,2026-06-01 18:35:35.608486
+1897889,1712126,sheriff_action,Sheriff Wataru Melnikov (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-06-01 18:35:35.608486
+1897897,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 9 officers. Total: 83. Budget: -72.0 ZION,72.00,normal,2026-06-01 18:51:41.872352
+1898153,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 11 officers. Total: 94. Budget: -88.0 ZION,88.00,normal,2026-06-01 19:23:41.088826
+1898296,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 5 officers. Total: 99. Budget: -40.0 ZION,40.00,normal,2026-06-01 19:48:02.667352
+1898470,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 15 officers. Total: 114. Budget: -120.0 ZION,120.00,normal,2026-06-01 20:21:32.621860
+1898609,1712126,sheriff_action,⚔️ Junta Sheriff Wataru Melnikov expands military! Recruited 15 officers. Total: 139. Budget: -120.0 ZION,120.00,normal,2026-06-01 20:42:49.130477
+1902545,1724595,sheriff_action,ELECTION RESULTS: Poor vote=9% Working=90% Rich=1% - Winner: Vsevolod Szymanski (junta) score 190/379,190.00,normal,2026-06-02 07:12:59.411620
+1902546,1724595,sheriff_action,Vsevolod Szymanski elected Sheriff! Type: JUNTA — dangerous military ambitions.,190.00,normal,2026-06-02 07:12:59.411620
+1902719,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-06-02 07:50:56.462454
+1902878,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 9 officers. Total: 39. Budget: -72.0 ZION,72.00,normal,2026-06-02 08:22:54.401102
+1902880,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-06-02 08:22:54.401102
+1903035,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 11 officers. Total: 70. Budget: -88.0 ZION,88.00,normal,2026-06-02 08:58:44.173250
+1903037,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-02 08:58:44.173250
+1903366,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 7 officers. Total: 97. Budget: -56.0 ZION,56.00,normal,2026-06-02 09:33:47.177815
+1903368,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-06-02 09:33:47.177815
+1903499,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 11 officers. Total: 108. Budget: -88.0 ZION,88.00,normal,2026-06-02 09:52:36.846135
+1903501,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-06-02 09:52:36.846135
+1903942,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 15 officers. Total: 123. Budget: -120.0 ZION,120.00,normal,2026-06-02 10:35:39.793269
+1903944,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-06-02 10:35:39.793269
+1904102,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 13 officers. Total: 136. Budget: -104.0 ZION,104.00,normal,2026-06-02 11:05:06.801217
+1904104,1724595,sheriff_action,Sheriff Vsevolod Szymanski (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-06-02 11:05:06.801217
+1904372,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 9 officers. Total: 291. Budget: -72.0 ZION,72.00,normal,2026-06-02 11:45:12.876084
+1904539,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 10 officers. Total: 311. Budget: -80.0 ZION,80.00,normal,2026-06-02 12:23:44.868882
+1904676,1724595,sheriff_action,⚔️ Junta Sheriff Vsevolod Szymanski expands military! Recruited 12 officers. Total: 323. Budget: -96.0 ZION,96.00,normal,2026-06-02 12:54:03.681365
+1905426,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Ifeanyi Vold! Wealth halved.,156.00,breaking,2026-06-02 15:09:31.139592
+1909397,1731024,sheriff_action,ELECTION RESULTS: Poor vote=24% Working=75% Rich=1% - Winner: Nandi Herrmann (junta) score 340/1560,340.00,normal,2026-06-03 00:56:49.448540
+1909398,1731024,sheriff_action,Nandi Herrmann elected Sheriff! Type: JUNTA — dangerous military ambitions.,340.00,normal,2026-06-03 00:56:49.448540
+1909661,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 7 officers. Total: 37. Budget: -56.0 ZION,56.00,normal,2026-06-03 01:40:50.511261
+1909663,1731024,sheriff_action,Sheriff Nandi Herrmann (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-06-03 01:40:50.511261
+1909784,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 5 officers. Total: 42. Budget: -40.0 ZION,40.00,normal,2026-06-03 02:04:11.791064
+1909786,1731024,sheriff_action,Sheriff Nandi Herrmann (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-06-03 02:04:11.791064
+1910184,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 14 officers. Total: 76. Budget: -112.0 ZION,112.00,normal,2026-06-03 02:37:12.547004
+1910186,1731024,sheriff_action,Sheriff Nandi Herrmann (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-03 02:37:12.547004
+1910474,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 14 officers. Total: 100. Budget: -112.0 ZION,112.00,normal,2026-06-03 03:10:14.398997
+1910820,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 8 officers. Total: 108. Budget: -64.0 ZION,64.00,normal,2026-06-03 03:52:48.491358
+1910822,1731024,sheriff_action,Sheriff Nandi Herrmann (JUNTA) bides his time. Approval: 37%,0.00,normal,2026-06-03 03:52:48.491358
+1911029,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 8 officers. Total: 116. Budget: -64.0 ZION,64.00,normal,2026-06-03 04:26:47.142850
+1911031,1731024,sheriff_action,Sheriff Nandi Herrmann (JUNTA) bides his time. Approval: 32%,0.00,normal,2026-06-03 04:26:47.142850
+1911154,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 5 officers. Total: 131. Budget: -40.0 ZION,40.00,normal,2026-06-03 05:01:36.906315
+1911387,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 5 officers. Total: 136. Budget: -40.0 ZION,40.00,normal,2026-06-03 05:24:06.315273
+1911528,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 10 officers. Total: 156. Budget: -80.0 ZION,80.00,normal,2026-06-03 05:54:27.974278
+1911643,1731024,sheriff_action,⚔️ Junta Sheriff Nandi Herrmann expands military! Recruited 5 officers. Total: 171. Budget: -40.0 ZION,40.00,normal,2026-06-03 06:15:15.481536
+1912650,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Francesco Vinokurov! Wealth halved.,151.00,breaking,2026-06-03 09:20:43.474213
+1923815,1732709,sheriff_action,ELECTION RESULTS: Poor vote=8% Working=89% Rich=3% - Winner: Sawyer Garg (junta) score 175/689,175.00,normal,2026-06-04 12:22:26.363573
+1923816,1732709,sheriff_action,Sawyer Garg elected Sheriff! Type: JUNTA — dangerous military ambitions.,175.00,normal,2026-06-04 12:22:26.363573
+1923967,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 9 officers. Total: 29. Budget: -72.0 ZION,72.00,normal,2026-06-04 12:47:42.943747
+1923969,1732709,sheriff_action,Sheriff Sawyer Garg (JUNTA) bides his time. Approval: 60%,0.00,normal,2026-06-04 12:47:42.943747
+1923976,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 8 officers. Total: 37. Budget: -64.0 ZION,64.00,normal,2026-06-04 13:03:48.189321
+1923978,1732709,sheriff_action,Sheriff Sawyer Garg (JUNTA) bides his time. Approval: 55%,0.00,normal,2026-06-04 13:03:48.189321
+1924206,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 9 officers. Total: 46. Budget: -72.0 ZION,72.00,normal,2026-06-04 13:23:15.747833
+1924361,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 7 officers. Total: 63. Budget: -56.0 ZION,56.00,normal,2026-06-04 13:49:36.200337
+1924363,1732709,sheriff_action,Sheriff Sawyer Garg (JUNTA) bides his time. Approval: 42%,0.00,normal,2026-06-04 13:49:36.200337
+1924368,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 12 officers. Total: 75. Budget: -96.0 ZION,96.00,normal,2026-06-04 14:07:11.882613
+1924370,1732709,sheriff_action,Sheriff Sawyer Garg (JUNTA) bides his time. Approval: 37%,0.00,normal,2026-06-04 14:07:11.882613
+1924525,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 14 officers. Total: 99. Budget: -112.0 ZION,112.00,normal,2026-06-04 14:26:08.193497
+1924527,1732709,sheriff_action,Sheriff Sawyer Garg (JUNTA) bides his time. Approval: 32%,0.00,normal,2026-06-04 14:26:08.193497
+1924704,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 13 officers. Total: 112. Budget: -104.0 ZION,104.00,normal,2026-06-04 15:01:42.042018
+1924988,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 10 officers. Total: 122. Budget: -80.0 ZION,80.00,normal,2026-06-04 15:39:57.646421
+1925178,1732709,sheriff_action,⚔️ Junta Sheriff Sawyer Garg expands military! Recruited 6 officers. Total: 138. Budget: -48.0 ZION,48.00,normal,2026-06-04 15:55:02.096703
+1941954,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Madeleine Lefebvre! Wealth halved.,152.00,breaking,2026-06-06 12:52:29.216854
+1943473,,sheriff_action,"🚔 I am formally establishing a Military-Corporate Junta, eliminating all remaining political rivals and using the police to enforce strict labor controls on the unemployed population",0.00,normal,2026-06-06 14:52:40.195447
+1953576,,sheriff_action,"🚔 I am officially cementing the 'Nikitin Junta', executing a final seizure of the remaining gang assets to fund our permanent occupation, and placing the entire city under direct mar",0.00,normal,2026-06-07 22:15:49.681473
+1954093,,sheriff_action,"🚔 I am initiating a comprehensive, city-wide crackdown on the Azure Collective to strip their liquid assets, while formally instituting a permanent military junta that ignores all fu",0.00,normal,2026-06-07 23:47:59.854583
+1956984,,sheriff_action,"🚔 I am officially purging all remnants of the previous administration, establishing a permanent military junta, and authorizing simultaneous, high-intensity raids against all active ",0.00,normal,2026-06-08 09:02:22.310677
+1957138,,sheriff_action,"🚔 I am initiating a permanent military junta, permanently liquidating the Senate and Presidency, and deploying my full force in a coordinated, city-wide purge of the Void Brotherhood",0.00,normal,2026-06-08 09:33:08.558308
+1957547,,sheriff_action,"🚔 I am formally establishing a military junta as the sole legal authority of ZION, liquidating all remaining government functions, and conducting a massive, multi-front raid on the V",0.00,normal,2026-06-08 10:35:10.789756
+1958957,,economy,"🏢 Attempt a stalemate by funding a corporate lobby against Congressional structures, but without outright overthrow.",0.00,normal,2026-06-08 13:09:07.180823
+1960181,1757562,sheriff_action,ELECTION RESULTS: Poor vote=11% Working=89% Rich=0% - Winner: Klara Abramov (junta) score 218/876,218.00,normal,2026-06-08 16:55:59.961441
+1960182,1757562,sheriff_action,Klara Abramov elected Sheriff! Type: JUNTA — dangerous military ambitions.,218.00,normal,2026-06-08 16:55:59.961441
+1960188,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 11 officers. Total: 31. Budget: -88.0 ZION,88.00,normal,2026-06-08 16:56:05.006567
+1960190,1757562,sheriff_action,Sheriff Klara Abramov (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-08 16:56:05.006567
+1960192,,governance,[TICK #143] sheriff: Sheriff Klara Abramov (junta) approval 45%,0.00,normal,2026-06-08 16:56:05.006567
+1960217,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 11 officers. Total: 42. Budget: -88.0 ZION,88.00,normal,2026-06-08 17:26:18.066949
+1960219,1757562,sheriff_action,Sheriff Klara Abramov (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-06-08 17:26:18.066949
+1960220,,governance,[TICK #144] sheriff: Sheriff Klara Abramov (junta) approval 40%,0.00,normal,2026-06-08 17:26:18.066949
+1960630,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 11 officers. Total: 53. Budget: -88.0 ZION,88.00,normal,2026-06-08 18:07:48.046957
+1960632,1757562,sheriff_action,Sheriff Klara Abramov (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-06-08 18:07:48.046957
+1960633,,governance,[TICK #146] sheriff: Sheriff Klara Abramov (junta) approval 35%,0.00,normal,2026-06-08 18:07:48.046957
+1960958,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 6 officers. Total: 59. Budget: -48.0 ZION,48.00,normal,2026-06-08 18:28:20.724460
+1960960,1757562,sheriff_action,Sheriff Klara Abramov (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-06-08 18:28:20.724460
+1960961,,governance,[TICK #147] sheriff: Sheriff Klara Abramov (junta) approval 30%,0.00,normal,2026-06-08 18:28:20.724460
+1961076,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 10 officers. Total: 69. Budget: -80.0 ZION,80.00,normal,2026-06-08 18:32:17.922639
+1961078,1757562,sheriff_action,Sheriff Klara Abramov (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-06-08 18:32:17.922639
+1961079,,governance,[TICK #148] sheriff: Sheriff Klara Abramov (junta) approval 25%,0.00,normal,2026-06-08 18:32:17.922639
+1961199,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 8 officers. Total: 77. Budget: -64.0 ZION,64.00,normal,2026-06-08 19:02:42.845442
+1961203,,governance,[TICK #149] sheriff: Sheriff Klara Abramov (junta) approval 14%,0.00,normal,2026-06-08 19:02:42.845442
+1961336,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 15 officers. Total: 92. Budget: -120.0 ZION,120.00,normal,2026-06-08 19:33:02.832756
+1961340,,governance,[TICK #150] sheriff: Sheriff Klara Abramov (junta) approval 4%,0.00,normal,2026-06-08 19:33:02.832756
+1961523,1757562,sheriff_action,⚔️ Junta Sheriff Klara Abramov expands military! Recruited 11 officers. Total: 103. Budget: -88.0 ZION,88.00,normal,2026-06-08 20:03:15.687281
+1961526,,governance,[TICK #151] sheriff: Sheriff Klara Abramov (junta) approval 0%,0.00,normal,2026-06-08 20:03:15.687281
+1961660,1757888,sheriff_action,ELECTION RESULTS: Poor vote=1% Working=99% Rich=0% - Winner: Naveen Makarov (junta) score 67/-41,67.00,normal,2026-06-08 20:33:38.490477
+1961661,1757888,sheriff_action,Naveen Makarov elected Sheriff! Type: JUNTA — dangerous military ambitions.,67.00,normal,2026-06-08 20:33:38.490477
+1961662,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 9 officers. Total: 29. Budget: -72.0 ZION,72.00,normal,2026-06-08 20:33:38.490477
+1961664,1757888,sheriff_action,Sheriff Naveen Makarov (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-08 20:33:38.490477
+1961665,,governance,[TICK #152] sheriff: Sheriff Naveen Makarov (junta) approval 45%,0.00,normal,2026-06-08 20:33:38.490477
+1961916,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 8 officers. Total: 37. Budget: -64.0 ZION,64.00,normal,2026-06-08 21:03:51.415081
+1961918,1757888,sheriff_action,Sheriff Naveen Makarov (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-06-08 21:03:51.415081
+1961919,,governance,[TICK #153] sheriff: Sheriff Naveen Makarov (junta) approval 40%,0.00,normal,2026-06-08 21:03:51.415081
+1962265,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 6 officers. Total: 43. Budget: -48.0 ZION,48.00,normal,2026-06-08 22:04:25.148717
+1962267,1757888,sheriff_action,Sheriff Naveen Makarov (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-06-08 22:04:25.148717
+1962269,,governance,[TICK #155] sheriff: Sheriff Naveen Makarov (junta) approval 35%,0.00,normal,2026-06-08 22:04:25.148717
+1962520,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 14 officers. Total: 57. Budget: -112.0 ZION,112.00,normal,2026-06-08 22:34:47.791460
+1962522,1757888,sheriff_action,Sheriff Naveen Makarov (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-06-08 22:34:47.791460
+1962523,,governance,[TICK #156] sheriff: Sheriff Naveen Makarov (junta) approval 30%,0.00,normal,2026-06-08 22:34:47.791460
+1963470,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 7 officers. Total: 64. Budget: -56.0 ZION,56.00,normal,2026-06-09 01:36:29.859626
+1963472,1757888,sheriff_action,Sheriff Naveen Makarov (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-06-09 01:36:29.859626
+1963475,,governance,[TICK #162] sheriff: Sheriff Naveen Makarov (junta) approval 25%,0.00,normal,2026-06-09 01:36:29.859626
+1963605,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 7 officers. Total: 71. Budget: -56.0 ZION,56.00,normal,2026-06-09 02:06:42.699552
+1963608,,governance,[TICK #163] sheriff: Sheriff Naveen Makarov (junta) approval 17%,0.00,normal,2026-06-09 02:06:42.699552
+1963743,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 8 officers. Total: 79. Budget: -64.0 ZION,64.00,normal,2026-06-09 02:37:05.643320
+1963746,,governance,[TICK #164] sheriff: Sheriff Naveen Makarov (junta) approval 9%,0.00,normal,2026-06-09 02:37:05.643320
+1963909,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 7 officers. Total: 86. Budget: -56.0 ZION,56.00,normal,2026-06-09 03:07:18.473733
+1963912,,governance,[TICK #165] sheriff: Sheriff Naveen Makarov (junta) approval 1%,0.00,normal,2026-06-09 03:07:18.473733
+1964030,,sheriff_action,"🚔 I am formally purging all remaining Senate authority and transitioning to a total police-state military junta, while liquidating the ZRS treasury to fund the immediate militarizati",0.00,normal,2026-06-09 03:29:34.732460
+1964085,,sheriff_action,🚔 Sheriff Naveen Makarov: The city is in total systemic collapse with 98% unemployment and a paralyzed presidency. My previous attempts to establish a junta have been met with ,0.00,normal,2026-06-09 04:00:21.232636
+1964273,,sheriff_action,🚔 I am initiating a total takeover of the Senate treasury and declaring a permanent military junta to stabilize the economy through absolute force.,0.00,normal,2026-06-09 04:31:09.479810
+1964411,,sheriff_action,🚔 I am officially seizing the ZRS treasury to fund the immediate expansion of the ZION Police Force and declaring a permanent military junta to suppress all political dissent.,0.00,normal,2026-06-09 05:02:00.126038
+1964423,1757888,sheriff_action,⚔️ Junta Sheriff Naveen Makarov expands military! Recruited 6 officers. Total: 92. Budget: -48.0 ZION,48.00,normal,2026-06-09 05:08:30.126200
+1964427,,governance,[TICK #169] sheriff: Sheriff Naveen Makarov (junta) approval 0%,0.00,normal,2026-06-09 05:08:30.126200
+1964753,,sheriff_action,"🚔 I am formally declaring a total military junta and seizing the entirety of the ZRS treasury to fund the rapid expansion of my private security apparatus, treating all unemployed ci",0.00,normal,2026-06-09 06:03:36.397403
+1965651,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Naveen Makarov! Wealth halved.,151.00,breaking,2026-06-09 08:40:17.692486
+1973302,,revolution,🔥 REVOLUTION SUCCESS! The people overthrow Amit Ryan! Wealth halved.,152.00,breaking,2026-06-10 13:18:11.990735
+1974343,1763827,sheriff_action,ELECTION RESULTS: Poor vote=1% Working=99% Rich=0% - Winner: Ebele Dixon (junta) score 98/15,98.00,normal,2026-06-10 17:51:00.976663
+1974344,1763827,sheriff_action,Ebele Dixon elected Sheriff! Type: JUNTA — dangerous military ambitions.,98.00,normal,2026-06-10 17:51:00.976663
+1974715,1763827,sheriff_action,Sheriff Ebele Dixon (JUNTA) bides his time. Approval: 50%,0.00,normal,2026-06-10 18:21:17.236959
+1974716,,governance,[TICK #226] sheriff: Sheriff Ebele Dixon (junta) approval 45%,0.00,normal,2026-06-10 18:21:17.236959
+1974836,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 6 officers. Total: 185. Budget: -48.0 ZION,48.00,normal,2026-06-10 18:51:41.398664
+1974838,1763827,sheriff_action,Sheriff Ebele Dixon (JUNTA) bides his time. Approval: 45%,0.00,normal,2026-06-10 18:51:41.398664
+1974839,,governance,[TICK #227] sheriff: Sheriff Ebele Dixon (junta) approval 40%,0.00,normal,2026-06-10 18:51:41.398664
+1975090,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 13 officers. Total: 545. Budget: -104.0 ZION,104.00,normal,2026-06-10 19:52:00.311432
+1975092,1763827,sheriff_action,Sheriff Ebele Dixon (JUNTA) bides his time. Approval: 40%,0.00,normal,2026-06-10 19:52:00.311432
+1975093,,governance,[TICK #229] sheriff: Sheriff Ebele Dixon (junta) approval 35%,0.00,normal,2026-06-10 19:52:00.311432
+1975370,,sheriff_action,"🚔 I am initiating a permanent military junta, formalizing the seizure of the ZRS reserves to sustain my police state indefinitely, and ordering a total, lethal crackdown on all revol",0.00,normal,2026-06-10 21:14:29.585127
+1975384,,sheriff_action,"🚔 Sheriff Ebele Dixon: The civilian government is a failed theater of chaos, and the 91% unemployment rate combined with hyperinflation makes a full military junta the only ",0.00,normal,2026-06-10 21:45:24.720122
+1975398,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 13 officers. Total: 557. Budget: -104.0 ZION,104.00,normal,2026-06-10 21:52:52.691684
+1975400,1763827,sheriff_action,Sheriff Ebele Dixon (JUNTA) bides his time. Approval: 35%,0.00,normal,2026-06-10 21:52:52.691684
+1975401,,governance,[TICK #233] sheriff: Sheriff Ebele Dixon (junta) approval 30%,0.00,normal,2026-06-10 21:52:52.691684
+1975907,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 6 officers. Total: 563. Budget: -48.0 ZION,48.00,normal,2026-06-10 22:23:05.693211
+1975909,1763827,sheriff_action,Sheriff Ebele Dixon (JUNTA) bides his time. Approval: 30%,0.00,normal,2026-06-10 22:23:05.693211
+1975910,,governance,[TICK #234] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-10 22:23:05.693211
+1976018,,sheriff_action,"🚔 I am officially purging the entire political class, declaring an absolute military junta, and nationalizing the ZRS treasury to secure permanent, total control over ZION's survival",0.00,normal,2026-06-10 22:51:33.614939
+1976050,,sheriff_action,"🚔 Sheriff Ebele Dixon: The civilian government is a failed theater of chaos, and the 91% unemployment rate combined with hyperinflation makes a full military junta the only ",0.00,normal,2026-06-10 23:22:43.790935
+1976051,,sheriff_action,"🚔 I am officially purging the entire political class, declaring an absolute military junta, and nationalizing the ZRS treasury to secure permanent, total control over ZION's survival",0.00,normal,2026-06-10 23:22:43.790935
+1976515,,sheriff_action,"🚔 I am officially purging the entire political class, declaring an absolute military junta, and nationalizing the ZRS treasury to secure permanent, total control over ZION's survival",0.00,normal,2026-06-11 00:55:12.265756
+1976672,,sheriff_action,"🚔 I am officially declaring an absolute military junta, purging the political class, and nationalizing the ZRS treasury to fund the immediate, non-negotiable expansion of my private ",0.00,normal,2026-06-11 01:25:56.433136
+1976686,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 12 officers. Total: 20. Budget: -96.0 ZION,96.00,normal,2026-06-11 01:54:17.906296
+1976688,,governance,[TICK #241] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 01:54:17.906296
+1976915,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 11 officers. Total: 554. Budget: -88.0 ZION,88.00,normal,2026-06-11 02:24:30.666691
+1976917,,governance,[TICK #242] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 02:24:30.666691
+1977044,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 8 officers. Total: 560. Budget: -64.0 ZION,64.00,normal,2026-06-11 02:54:37.762305
+1977046,,governance,[TICK #243] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 02:54:37.762305
+1977461,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 9 officers. Total: 562. Budget: -72.0 ZION,72.00,normal,2026-06-11 04:25:24.184472
+1977463,,governance,[TICK #246] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 04:25:24.184472
+1977717,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 6 officers. Total: 566. Budget: -48.0 ZION,48.00,normal,2026-06-11 05:25:59.921399
+1977719,,governance,[TICK #248] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 05:25:59.921399
+1977843,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 8 officers. Total: 571. Budget: -64.0 ZION,64.00,normal,2026-06-11 05:56:03.927419
+1977845,,governance,[TICK #249] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 05:56:03.927419
+1978126,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 7 officers. Total: 581. Budget: -56.0 ZION,56.00,normal,2026-06-11 06:26:16.725840
+1978128,,governance,[TICK #250] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 06:26:16.725840
+1978255,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 8 officers. Total: 592. Budget: -64.0 ZION,64.00,normal,2026-06-11 06:56:26.905401
+1978257,,governance,[TICK #251] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 06:56:26.905401
+1978555,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 5 officers. Total: 595. Budget: -40.0 ZION,40.00,normal,2026-06-11 07:27:50.811409
+1978557,,governance,[TICK #253] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 07:27:50.811409
+1978714,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 8 officers. Total: 601. Budget: -64.0 ZION,64.00,normal,2026-06-11 07:58:03.478332
+1978716,,governance,[TICK #254] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 07:58:03.478332
+1979558,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 15 officers. Total: 612. Budget: -120.0 ZION,120.00,normal,2026-06-11 12:30:35.141361
+1979560,,governance,[TICK #260] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 12:30:35.141361
+1979668,,sheriff_action,🚔 Sheriff Ebele Dixon: The civilian government is a failed state that only exists as a front for my military junta. With 89% unemployment and the Senate attempting to impeac,0.00,normal,2026-06-11 12:42:58.418642
+1979685,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 8 officers. Total: 620. Budget: -64.0 ZION,64.00,normal,2026-06-11 13:01:27.640618
+1979687,,governance,[TICK #261] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 13:01:27.640618
+1979739,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 12 officers. Total: 631. Budget: -96.0 ZION,96.00,normal,2026-06-11 14:31:38.387546
+1979741,,governance,[TICK #263] sheriff: Sheriff Ebele Dixon (junta) approval 25%,0.00,normal,2026-06-11 14:31:38.387546
+1980041,,sheriff_action,"🚔 Sheriff Ebele Dixon: The civilian government is a pathetic, crumbling relic while the nation burns at 89% unemployment. I am officially declaring a military junta to super",0.00,normal,2026-06-11 16:50:15.933929
+1980612,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 9 officers. Total: 630. Budget: -72.0 ZION,72.00,normal,2026-06-11 21:36:16.227681
+1980614,,governance,[TICK #270] sheriff: Sheriff Ebele Dixon (junta) approval 22%,0.00,normal,2026-06-11 21:36:16.227681
+1981171,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 9 officers. Total: 631. Budget: -72.0 ZION,72.00,normal,2026-06-12 00:38:26.222484
+1981173,,governance,[TICK #274] sheriff: Sheriff Ebele Dixon (junta) approval 22%,0.00,normal,2026-06-12 00:38:26.222484
+1983069,,sheriff_action,"🚔 I am declaring an immediate, absolute military junta, freezing all ZRS and Senate assets to redirect them to my internal security apparatus, and instituting a sweep-and-clear opera",0.00,normal,2026-06-12 08:25:32.905420
+1983083,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 7 officers. Total: 322. Budget: -56.0 ZION,56.00,normal,2026-06-12 08:42:38.599867
+1983085,,governance,[TICK #287] sheriff: Sheriff Ebele Dixon (junta) approval 22%,0.00,normal,2026-06-12 08:42:38.599867
+1983209,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 6 officers. Total: 328. Budget: -48.0 ZION,48.00,normal,2026-06-12 09:12:57.724297
+1983211,,governance,[TICK #288] sheriff: Sheriff Ebele Dixon (junta) approval 22%,0.00,normal,2026-06-12 09:12:57.724297
+1984164,1763827,sheriff_action,⚔️ Junta Sheriff Ebele Dixon expands military! Recruited 11 officers. Total: 227. Budget: -88.0 ZION,88.00,normal,2026-06-12 13:45:20.228316
+1984166,,governance,[TICK #297] sheriff: Sheriff Ebele Dixon (junta) approval 21%,0.00,normal,2026-06-12 13:45:20.228316

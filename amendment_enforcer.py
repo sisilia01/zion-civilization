@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+ZION Amendment Enforcer — applies enacted constitutional amendments to gameplay params.
+Reads amendments with status='enacted', maps change_type to parameter deltas, and
+persists runtime values in constitutional_params for other modules via get_param().
+"""
+from __future__ import annotations
+
+import psycopg2
+import psycopg2.extras
+
+import os
+try:
+    from openrouter_key import _load_env_file
+    _load_env_file()
+except ImportError:
+    pass
+
+DB = {
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "database": os.environ.get("DB_NAME", "zion_db"),
+    "user": os.environ.get("DB_USER", "zion_user"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+}
+
+DEFAULT_PARAMS = {
+    "top_tax_rate": 0.35,
+    "min_tax_rate": 0.05,
+    "term_limit_days": 3,
+    "sheriff_term_days": 3,
+    "senate_term_days": 6,
+    "frs_term_days": 6,
+    "governance_ticks_per_day": 24,
+    "term_limit_hours": 720,
+    "basic_income": 0.0,
+    "wealth_tax_rate": 0.0,
+    "police_funding_bonus": 0.0,
+    "corporate_tax_rate": 0.10,
+    "constitution_version": 1.0,
+    "cooling_off_days": 0.0,
+    "emergency_auto_expire_days": 0.0,
+    "emergency_unemployment_exit_threshold": 60.0,
+    "max_consecutive_terms": 999.0,
+}
+
+# change_type -> param_key -> delta applied to current value when amendment is enacted
+CHANGE_TYPE_MAP = {
+    "tax_increase": {
+        "top_tax_rate": 0.05,
+        "min_tax_rate": 0.01,
+        "wealth_tax_rate": 0.02,
+    },
+    "tax_decrease": {
+        "top_tax_rate": -0.05,
+        "min_tax_rate": -0.01,
+    },
+    "redistribution": {
+        "basic_income": 5.0,
+        "wealth_tax_rate": 0.03,
+        "top_tax_rate": 0.02,
+    },
+    "deregulation": {
+        "corporate_tax_rate": -0.02,
+        "top_tax_rate": -0.03,
+        "min_tax_rate": -0.01,
+    },
+    # Legacy change_type for "Amendment — Term Limits"; applied via GOVERNANCE_RULE_PARAMS
+    # title match ("term limits"), not term_limit_days deltas.
+    "governance": {},
+    "rights_expansion": {
+        "basic_income": 2.0,
+        "police_funding_bonus": 500.0,
+    },
+    "constitutional_reform": {
+        "constitution_version": 2.0,  # relative bump; v3.0 amendment sets active charter generation
+    },
+    "governance_rule": {},
+}
+
+# Absolute param sets applied when governance_rule amendments enact (not deltas).
+GOVERNANCE_RULE_PARAMS = {
+    "separation of powers": {
+        "cooling_off_days": 30.0,
+    },
+    "emergency powers": {
+        "emergency_auto_expire_days": 30.0,
+        "emergency_unemployment_exit_threshold": 60.0,
+    },
+    "presidential term stability": {
+        "term_limit_days": 3.0,
+    },
+    "government terms stability": {
+        "term_limit_days": 3.0,
+        "sheriff_term_days": 3.0,
+        "senate_term_days": 6.0,
+        "frs_term_days": 6.0,
+    },
+    "term limits": {
+        "max_consecutive_terms": 1.0,
+    },
+}
+
+PARAM_BOUNDS = {
+    "top_tax_rate": (0.05, 0.75),
+    "min_tax_rate": (0.0, 0.25),
+    "term_limit_days": (1, 90),
+    "sheriff_term_days": (1, 90),
+    "senate_term_days": (1, 365),
+    "frs_term_days": (1, 365),
+    "governance_ticks_per_day": (12, 48),
+    "term_limit_hours": (168, 2160),
+    "basic_income": (0.0, 50.0),
+    "wealth_tax_rate": (0.0, 0.25),
+    "police_funding_bonus": (0.0, 10000.0),
+    "corporate_tax_rate": (0.0, 0.35),
+    "constitution_version": (1.0, 10.0),
+    "cooling_off_days": (0.0, 365.0),
+    "emergency_auto_expire_days": (0.0, 365.0),
+    "emergency_unemployment_exit_threshold": (0.0, 100.0),
+    "max_consecutive_terms": (1.0, 999.0),
+}
+
+
+def db():
+    return psycopg2.connect(**DB)
+
+
+def ensure_schema(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS constitutional_params (
+            param_key VARCHAR(80) PRIMARY KEY,
+            param_value NUMERIC(20, 6) NOT NULL,
+            source_amendment_id INTEGER REFERENCES amendments(id),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS applied_amendments_log (
+            amendment_id INTEGER PRIMARY KEY REFERENCES amendments(id),
+            applied_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+
+def _mark_amendment_applied(cur, amendment_id: int) -> None:
+    cur.execute(
+        """
+        INSERT INTO applied_amendments_log (amendment_id)
+        VALUES (%s)
+        ON CONFLICT (amendment_id) DO NOTHING
+        """,
+        (amendment_id,),
+    )
+
+
+def _clamp(key: str, value: float) -> float:
+    lo, hi = PARAM_BOUNDS.get(key, (None, None))
+    if lo is not None:
+        value = max(lo, value)
+    if hi is not None:
+        value = min(hi, value)
+    return round(value, 6)
+
+
+def ensure_defaults(cur) -> None:
+    """Seed constitutional_params with codebase defaults if missing."""
+    for key, default in DEFAULT_PARAMS.items():
+        cur.execute(
+            """
+            INSERT INTO constitutional_params (param_key, param_value, source_amendment_id)
+            VALUES (%s, %s, NULL)
+            ON CONFLICT (param_key) DO NOTHING
+            """,
+            (key, default),
+        )
+
+
+def _current_params(cur) -> dict[str, float]:
+    cur.execute("SELECT param_key, param_value FROM constitutional_params")
+    rows = {r["param_key"]: float(r["param_value"]) for r in cur.fetchall()}
+    merged = dict(DEFAULT_PARAMS)
+    merged.update(rows)
+    return merged
+
+
+def get_param(key: str, default=None):
+    """Read a constitutional gameplay parameter (falls back to DEFAULT_PARAMS)."""
+    if default is None:
+        default = DEFAULT_PARAMS.get(key)
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        ensure_schema(cur)
+        cur.execute(
+            "SELECT param_value FROM constitutional_params WHERE param_key = %s",
+            (key,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return default
+        return float(row["param_value"])
+    finally:
+        cur.close()
+        conn.close()
+
+
+def set_param_cur(cur, key: str, value: float) -> float:
+    """Persist a constitutional gameplay parameter within an open transaction."""
+    ensure_schema(cur)
+    clamped = _clamp(key, float(value))
+    cur.execute(
+        """
+        INSERT INTO constitutional_params (param_key, param_value)
+        VALUES (%s, %s)
+        ON CONFLICT (param_key) DO UPDATE SET
+            param_value = EXCLUDED.param_value,
+            updated_at = NOW()
+        """,
+        (key, clamped),
+    )
+    return clamped
+
+
+def adjust_param_cur(cur, key: str, delta: float) -> float:
+    ensure_schema(cur)
+    cur.execute(
+        "SELECT param_value FROM constitutional_params WHERE param_key = %s",
+        (key,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        current = float(DEFAULT_PARAMS.get(key, 0))
+    else:
+        current = float(row["param_value"] if isinstance(row, dict) else row[0])
+    return set_param_cur(cur, key, current + delta)
+
+
+def apply_enacted_amendments() -> list[int]:
+    """
+    Apply all enacted amendments not yet recorded in applied_amendments_log.
+    Returns list of amendment IDs applied this run.
+    """
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    applied: list[int] = []
+    try:
+        ensure_schema(cur)
+        ensure_defaults(cur)
+        conn.commit()
+
+        cur.execute(
+            """
+            SELECT a.*
+            FROM amendments a
+            WHERE a.status = 'enacted'
+              AND a.id NOT IN (
+                  SELECT amendment_id FROM applied_amendments_log
+              )
+            ORDER BY a.id
+            """
+        )
+        pending = cur.fetchall()
+        if not pending:
+            print("[enforcer] no unapplied enacted amendments")
+            return applied
+
+        params = _current_params(cur)
+
+        for amendment in pending:
+            aid = amendment["id"]
+            ctype = (amendment.get("change_type") or "").strip()
+            deltas = CHANGE_TYPE_MAP.get(ctype)
+            if deltas is None:
+                print(f"[enforcer] amendment #{aid} ({ctype}): no CHANGE_TYPE_MAP entry — skipped")
+                continue
+
+            title = (amendment.get("title") or "").lower()
+            if ctype in ("governance_rule", "governance"):
+                rule_params = None
+                for key, values in GOVERNANCE_RULE_PARAMS.items():
+                    if key in title:
+                        rule_params = values
+                        break
+                if rule_params is None:
+                    print(
+                        f"[enforcer] amendment #{aid} ({ctype}): "
+                        f"no GOVERNANCE_RULE_PARAMS entry — skipped"
+                    )
+                    continue
+                print(
+                    f"[enforcer] applying {ctype} #{aid}: "
+                    f"{amendment.get('title', '')[:60]}"
+                )
+                for param_key, value in rule_params.items():
+                    new_val = _clamp(param_key, float(value))
+                    params[param_key] = new_val
+                    cur.execute(
+                        """
+                        INSERT INTO constitutional_params (
+                            param_key, param_value, source_amendment_id, updated_at
+                        )
+                        VALUES (%s, %s, %s, NOW())
+                        ON CONFLICT (param_key) DO UPDATE SET
+                            param_value = EXCLUDED.param_value,
+                            source_amendment_id = EXCLUDED.source_amendment_id,
+                            updated_at = NOW()
+                        """,
+                        (param_key, new_val, aid),
+                    )
+                    print(f"  {param_key}: set -> {new_val}")
+                applied.append(aid)
+                _mark_amendment_applied(cur, aid)
+                continue
+
+            if ctype == "constitutional_reform" and "v3" in title:
+                deltas = dict(deltas)
+                deltas["constitution_version"] = 3.0 - float(params.get("constitution_version", 1.0))
+
+            print(f"[enforcer] applying amendment #{aid} ({ctype}): {amendment.get('title', '')[:60]}")
+            for param_key, delta in deltas.items():
+                current = float(params.get(param_key, DEFAULT_PARAMS.get(param_key, 0)))
+                new_val = _clamp(param_key, current + float(delta))
+                params[param_key] = new_val
+                cur.execute(
+                    """
+                    INSERT INTO constitutional_params (param_key, param_value, source_amendment_id, updated_at)
+                    VALUES (%s, %s, %s, NOW())
+                    ON CONFLICT (param_key) DO UPDATE SET
+                        param_value = EXCLUDED.param_value,
+                        source_amendment_id = EXCLUDED.source_amendment_id,
+                        updated_at = NOW()
+                    """,
+                    (param_key, new_val, aid),
+                )
+                print(f"  {param_key}: {current} -> {new_val} (delta {delta:+.4g})")
+
+            applied.append(aid)
+            _mark_amendment_applied(cur, aid)
+
+        conn.commit()
+        print(f"[enforcer] applied {len(applied)} amendment(s): {applied}")
+        return applied
+    finally:
+        cur.close()
+        conn.close()
+
+
+def print_params() -> None:
+    conn = db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        ensure_schema(cur)
+        ensure_defaults(cur)
+        conn.commit()
+        cur.execute(
+            """
+            SELECT param_key, param_value, source_amendment_id, updated_at
+            FROM constitutional_params
+            ORDER BY param_key
+            """
+        )
+        print("=" * 60)
+        print("  CONSTITUTIONAL PARAMS (gameplay)")
+        print("=" * 60)
+        for row in cur.fetchall():
+            src = row["source_amendment_id"] or "default"
+            print(
+                f"  {row['param_key']:22s} = {float(row['param_value']):>10.4f}  "
+                f"(source amendment: {src})"
+            )
+        print("=" * 60)
+    finally:
+        cur.close()
+        conn.close()
+
+
+if __name__ == "__main__":
+    apply_enacted_amendments()
+    print_params()
