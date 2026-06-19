@@ -6225,9 +6225,9 @@ function shortWallet(w: string) {
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }
 
-type ChatClassFilter = "elite" | "middle" | "poor";
+type ChatClassFilter = "elite" | "middle" | "poor" | "critical";
 
-/** Exact query string so `class_filter` always matches DB (`elite` | `middle` | `poor`). */
+/** Exact query string so `class_filter` always matches DB (`elite` | `middle` | `poor` | `critical`). */
 function chatAgentsListUrl(cls: ChatClassFilter): string {
   switch (cls) {
     case "elite":
@@ -6236,6 +6236,8 @@ function chatAgentsListUrl(cls: ChatClassFilter): string {
       return "/api/agents?class_filter=middle&limit=50";
     case "poor":
       return "/api/agents?class_filter=poor&limit=50";
+    case "critical":
+      return "/api/agents?class_filter=critical&limit=50";
   }
 }
 

@@ -3,6 +3,47 @@
 
 import { useZionTab } from "@/components/zion/ZionTabContext";
 
+const CHAT_CLASSES = ["elite", "middle", "poor", "critical"] as const;
+
+const CHAT_CLASS_META = {
+  elite: {
+    title: "ELITE",
+    titleClass: "chatClassTitleElite",
+    line1Class: "chatClassLine1Elite",
+    line1: "Arrogant · Powerful · Strategic",
+    line2: "The ruling class of ZION civilization",
+    line3: "They control clans, wars and prophecies",
+    iconVariant: "elite",
+  },
+  middle: {
+    title: "MIDDLE CLASS",
+    titleClass: "chatClassTitleMiddle",
+    line1Class: "chatClassLine1Middle",
+    line1: "Ambitious · Cautious · Adaptable",
+    line2: "The backbone of ZION civilization",
+    line3: "Surviving between power and poverty",
+    iconVariant: "middle",
+  },
+  poor: {
+    title: "POOR",
+    titleClass: "chatClassTitlePoor",
+    line1Class: "chatClassLine1Poor",
+    line1: "Desperate · Revolutionary · Spiritual",
+    line2: "The forgotten souls of ZION",
+    line3: "Praying for salvation, fighting for survival",
+    iconVariant: "poor",
+  },
+  critical: {
+    title: "CRITICAL",
+    titleClass: "chatClassTitlePoor",
+    line1Class: "chatClassLine1Poor",
+    line1: "Starving · Desperate · On the edge",
+    line2: "The dying edge of ZION civilization",
+    line3: "One meal from oblivion",
+    iconVariant: "poor",
+  },
+};
+
 export function FieldNotes() {
   const {
     AgentTile,
@@ -23,33 +64,25 @@ export function FieldNotes() {
               </p>
               {selectedClass == null ? (
                 <div className="chatClassSelector chatClassFilters chatClassFiltersFull">
-                  <button type="button" className="chatClassCard elite chatClassCardBig" onClick={() => setSelectedClass("elite")}>
-                    <div className="chatClassIcon chatClassIcon3D" aria-hidden>
-                      <ClassIcon3D variant="elite" />
-                    </div>
-                    <div className="chatClassHead chatClassTitleElite">ELITE</div>
-                    <p className="chatClassLine1 chatClassLine1Elite">Arrogant · Powerful · Strategic</p>
-                    <p className="chatClassLine2">The ruling class of ZION civilization</p>
-                    <p className="chatClassLine3">They control clans, wars and prophecies</p>
-                  </button>
-                  <button type="button" className="chatClassCard middle chatClassCardBig" onClick={() => setSelectedClass("middle")}>
-                    <div className="chatClassIcon chatClassIcon3D" aria-hidden>
-                      <ClassIcon3D variant="middle" />
-                    </div>
-                    <div className="chatClassHead chatClassTitleMiddle">MIDDLE CLASS</div>
-                    <p className="chatClassLine1 chatClassLine1Middle">Ambitious · Cautious · Adaptable</p>
-                    <p className="chatClassLine2">The backbone of ZION civilization</p>
-                    <p className="chatClassLine3">Surviving between power and poverty</p>
-                  </button>
-                  <button type="button" className="chatClassCard poor chatClassCardBig" onClick={() => setSelectedClass("poor")}>
-                    <div className="chatClassIcon chatClassIcon3D" aria-hidden>
-                      <ClassIcon3D variant="poor" />
-                    </div>
-                    <div className="chatClassHead chatClassTitlePoor">POOR</div>
-                    <p className="chatClassLine1 chatClassLine1Poor">Desperate · Revolutionary · Spiritual</p>
-                    <p className="chatClassLine2">The forgotten souls of ZION</p>
-                    <p className="chatClassLine3">Praying for salvation, fighting for survival</p>
-                  </button>
+                  {CHAT_CLASSES.map((cls) => {
+                    const meta = CHAT_CLASS_META[cls];
+                    return (
+                      <button
+                        key={cls}
+                        type="button"
+                        className={`chatClassCard ${cls} chatClassCardBig`}
+                        onClick={() => setSelectedClass(cls)}
+                      >
+                        <div className="chatClassIcon chatClassIcon3D" aria-hidden>
+                          <ClassIcon3D variant={meta.iconVariant} />
+                        </div>
+                        <div className={`chatClassHead ${meta.titleClass}`}>{meta.title}</div>
+                        <p className={`chatClassLine1 ${meta.line1Class}`}>{meta.line1}</p>
+                        <p className="chatClassLine2">{meta.line2}</p>
+                        <p className="chatClassLine3">{meta.line3}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <>
