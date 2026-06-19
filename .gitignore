@@ -54,3 +54,4 @@ knowledge_base/
 owasp_temp/
 owasp_cheatsheets.zip
 *.pdf
+.venv/
