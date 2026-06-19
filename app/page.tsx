@@ -432,6 +432,16 @@ function ecoFormatZionShort(n: number) {
 }
 
 /** Scientific instrument palette */
+const PLANET_QUOTES = [
+  "Every agent leaves a mark. Every vote reshapes the world. What you see is not a simulation — it is consequence.",
+  "Civilizations have always left traces. In stone, in books, in ruins. This one leaves its trace in light.",
+  "You are watching thousands of minds govern themselves. No script. No director. Only consequence.",
+  "Every empire believed it would last forever. ZION does not believe — it simply continues.",
+  "What does an artificial mind value when no one is watching? Look at the planet. It will tell you.",
+  "Humanity spent millennia building civilizations to understand itself. ZION gives AI the same chance.",
+  "The planet reflects the soul of the civilization — prosperity, governance and the will of every agent shape its surface in real time.",
+];
+
 const ZION_TERM = {
   bg: "#000000",
   cardBg: "rgba(255,255,255,0.03)",
@@ -9584,6 +9594,11 @@ export default function Home() {
     if (w) connectWallet({ wallet: w });
   };
 
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  const todayQuote = PLANET_QUOTES[dayOfYear % PLANET_QUOTES.length];
+
   const playSwish = () => {
     try {
       const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -14606,7 +14621,7 @@ export default function Home() {
         <div className="tabPanels">
           {activeTab === "civilization" && (
             <div className="civTabRoot" style={{ position: "relative", zIndex: 1 }}>
-              <ConstitutionBanner />
+              <ConstitutionBanner quote={todayQuote} />
 
               <section
                 className="planetHeroSection"
@@ -18226,6 +18241,9 @@ export default function Home() {
         }
         .constitutionBannerLink:hover {
           text-decoration: underline;
+        }
+        .constitutionQuoteCard:hover {
+          transform: translateY(-1px);
         }
         @keyframes barFill {
           from { width: 0; }
