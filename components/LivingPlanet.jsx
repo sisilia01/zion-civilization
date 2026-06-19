@@ -1396,6 +1396,7 @@ function loadEarthTextures(renderer) {
     results.forEach(({ key, tex }) => {
       textures[key] = tex;
     });
+    console.log("Night texture loaded:", textures.night ? "YES" : "NO", textures.night);
     return textures;
   });
 }
@@ -1433,6 +1434,7 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     shader.uniforms.uPopulation = { value: 0.5 };
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uNightMap = { value: textures.night };
+    console.log("uNightMap uniform set:", shader.uniforms.uNightMap);
     shader.uniforms.uSpecularMap = { value: textures.specular };
     shader.uniforms.uCameraPos = { value: new THREE.Vector3(0, 0, 4.2) };
 
@@ -1449,50 +1451,33 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
-      "gl_FragColor = vec4( outgoingLight, diffuseColor.a );",
-      `{
-        vec3 N = normalize(vWorldNormal);
-        vec3 L = normalize(uLightDir);
-        vec3 V = normalize(uCameraPos - vWorldPos);
-        vec3 H = normalize(L + V);
-        float sunDot = dot(N, L);
-        float dayAmount = smoothstep(-0.15, 0.15, sunDot);
+      "#include <opaque_fragment>",
+      `
+  #ifdef OPAQUE
+  diffuseColor.a = 1.0;
+  #endif
+  #ifdef USE_TRANSMISSION
+  diffuseColor.a *= material.transmissionAlpha;
+  #endif
+  gl_FragColor = vec4( outgoingLight, diffuseColor.a );
 
-        vec3 dayColor = texture2D(map, vUv).rgb;
-        float sunFacing = max(sunDot, 0.0);
-        vec3 dayLit = dayColor * (0.90 + sunFacing * 0.12);
-
-        float specMask = texture2D(uSpecularMap, vUv).r;
-        float oceanSheen = pow(max(dot(N, H), 0.0), 20.0) * specMask * sunFacing;
-        dayLit += vec3(0.85, 0.90, 0.95) * oceanSheen * 0.26;
-
-        float daySideMask = smoothstep(0.05, 0.55, sunDot);
-        float viewRim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.2);
-        float sunLimb = daySideMask * viewRim * smoothstep(0.12, 0.7, sunDot);
-        dayLit += vec3(1.0, 0.93, 0.72) * sunLimb * 0.2;
-
-        float poleLat = abs(N.y);
-        float poleMask = smoothstep(0.58, 0.9, poleLat);
-        dayLit += vec3(0.16, 0.18, 0.2) * poleMask * sunFacing * 0.32;
-
-        vec3 nightTex = texture2D(uNightMap, vUv).rgb;
-        float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
-        float thr = mix(0.30, 0.10, uPopulation);
-        float cityMask = smoothstep(thr, thr + 0.18, cityLum);
-
-        vec3 warmColor = vec3(1.0, 0.82, 0.48);
-        vec3 redColor = vec3(1.0, 0.35, 0.12);
-        vec3 cityTint = mix(warmColor, redColor, uRevolution * cityMask);
-        float cityBright = mix(1.8, 5.5, uPopulation);
-        vec3 cityGlow = nightTex * cityMask * cityTint * cityBright;
-
-        vec3 nightBase = dayColor * 0.04;
-        vec3 nightColor = nightBase + cityGlow;
-
-        vec3 surface = mix(nightColor, dayLit, dayAmount);
-
-        gl_FragColor = vec4(surface, 1.0);
-      }`
+  {
+    vec2 nightUv = vMapUv;
+    vec3 nightTex = texture2D(uNightMap, nightUv).rgb;
+    float cityLum = dot(nightTex, vec3(0.299, 0.587, 0.114));
+    float thr = mix(0.15, 0.08, uPopulation);
+    float cityMask = smoothstep(thr, thr + 0.18, cityLum);
+    vec3 cityTint = mix(vec3(1.0, 0.85, 0.5), vec3(1.0, 0.3, 0.1), uRevolution);
+    float cityBright = mix(2.5, 5.0, uPopulation);
+    vec3 boosted = pow(nightTex, vec3(0.7));
+    vec3 cityGlow = boosted * cityMask * cityTint * cityBright;
+    vec3 N2 = normalize(vWorldNormal);
+    vec3 L2 = normalize(uLightDir);
+    float sunDot2 = dot(N2, L2);
+    float nightBlend = 1.0 - smoothstep(-0.15, 0.15, sunDot2);
+    gl_FragColor.rgb += cityGlow * nightBlend;
+  }
+  `
     );
 
     mat.userData.shader = shader;
