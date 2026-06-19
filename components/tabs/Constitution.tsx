@@ -152,7 +152,7 @@ export function Constitution() {
     try {
       const [cRes, aRes] = await Promise.all([
         fetch("/api/constitution"),
-        fetch("/api/constitution/amendments"),
+        fetch("/api/constitution/amendments?show_all=true"),
       ]);
       if (!cRes.ok) throw new Error("Constitution fetch failed");
       const cData = (await cRes.json()) as ConstitutionData;
