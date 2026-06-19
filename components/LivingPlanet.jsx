@@ -1341,6 +1341,7 @@ const EARTH_TEXTURE_CANDIDATES = {
   day: ["/textures/earth_day_nasa.jpg", "/textures/earth_day.jpg"],
   night: ["/textures/earth_night_8k.png", "/textures/earth_night.jpg"],
   normal: ["/textures/earth_normal_8k.jpg", "/textures/earth_normal.jpg"],
+  bump: ["/textures/earth_normal_8k.jpg", "/textures/earth_normal.jpg"],
   specular: ["/textures/earth_specular_8k.jpg", "/textures/earth_specular.jpg"],
   clouds: ["/textures/earth_clouds_8k.png", "/textures/earth_clouds.png"],
 };
@@ -1417,6 +1418,7 @@ function loadEarthTextures(renderer) {
     loadOne("day", EARTH_TEXTURE_CANDIDATES.day, true),
     loadOne("night", EARTH_TEXTURE_CANDIDATES.night, true),
     loadOne("normal", EARTH_TEXTURE_CANDIDATES.normal, false),
+    loadOne("bump", EARTH_TEXTURE_CANDIDATES.bump, false),
     loadOne("specular", EARTH_TEXTURE_CANDIDATES.specular, false),
     loadCloudTexture(),
   ]).then((results) => {
@@ -1862,6 +1864,32 @@ export function LivingPlanet({
         cloudsHigh = noiseClouds.cloudsHigh;
         cloudLowMat = noiseClouds.cloudLowMat;
         cloudHighMat = noiseClouds.cloudHighMat;
+      }
+
+      {
+        const atmosGeo = new THREE.SphereGeometry(1.025, 64, 64);
+        const atmosMat = new THREE.ShaderMaterial({
+          vertexShader: `
+    varying vec3 vNormal;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+          fragmentShader: `
+    varying vec3 vNormal;
+    void main() {
+      float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+      gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity;
+    }
+  `,
+          side: THREE.BackSide,
+          blending: THREE.AdditiveBlending,
+          transparent: true,
+          depthWrite: false,
+        });
+        const atmosMesh = new THREE.Mesh(atmosGeo, atmosMat);
+        scene.add(atmosMesh);
       }
 
       console.log("[init] planet added, textured:", useTexturedPlanet, "children:", scene.children.length);
