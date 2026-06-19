@@ -1357,7 +1357,7 @@ function configureGlobeTexture(tex, renderer, opts = {}) {
   tex.needsUpdate = true;
 }
 
-/** @param {THREE.WebGLRenderer} renderer */
+  /** @param {THREE.WebGLRenderer} renderer */
 function loadEarthTextures(renderer) {
   const loader = new THREE.TextureLoader();
 
@@ -1384,12 +1384,41 @@ function loadEarthTextures(renderer) {
       tryUrl(0);
     });
 
+  const loadCloudTexture = () =>
+    new Promise((resolve, reject) => {
+      const cloudUrl = "https://matteason.github.io/live-cloud-maps/4096x2048/clouds.png";
+      const fallbackUrl = "/textures/earth_clouds_8k.png";
+      loader.setCrossOrigin("anonymous");
+      loader.load(
+        cloudUrl,
+        (tex) => {
+          configureGlobeTexture(tex, renderer, { srgb: true });
+          console.log(`[textures] clouds: ${cloudUrl} (${tex.image?.width || "?"}x${tex.image?.height || "?"})`);
+          resolve({ key: "clouds", tex });
+        },
+        undefined,
+        () => {
+          console.log("Live clouds unavailable, using fallback");
+          loader.load(
+            fallbackUrl,
+            (tex) => {
+              configureGlobeTexture(tex, renderer, { srgb: true });
+              console.log(`[textures] clouds: ${fallbackUrl} (${tex.image?.width || "?"}x${tex.image?.height || "?"})`);
+              resolve({ key: "clouds", tex });
+            },
+            undefined,
+            () => reject(new Error(`Failed to load clouds from ${cloudUrl} and ${fallbackUrl}`))
+          );
+        }
+      );
+    });
+
   return Promise.all([
     loadOne("day", EARTH_TEXTURE_CANDIDATES.day, true),
     loadOne("night", EARTH_TEXTURE_CANDIDATES.night, true),
     loadOne("normal", EARTH_TEXTURE_CANDIDATES.normal, false),
     loadOne("specular", EARTH_TEXTURE_CANDIDATES.specular, false),
-    loadOne("clouds", EARTH_TEXTURE_CANDIDATES.clouds, true),
+    loadCloudTexture(),
   ]).then((results) => {
     /** @type {Record<string, THREE.Texture>} */
     const textures = {};
@@ -1476,6 +1505,12 @@ function createTexturedPlanetMaterial(textures, lightDir) {
     float sunDot2 = dot(N2, L2);
     float nightBlend = 1.0 - smoothstep(-0.15, 0.15, sunDot2);
     gl_FragColor.rgb += cityGlow * nightBlend;
+
+    if (uRevolution > 0.5) {
+      float riotGlow = (uRevolution - 0.5) * 2.0;
+      vec3 redTint = vec3(0.8, 0.0, 0.0) * riotGlow * nightBlend * 0.3;
+      gl_FragColor.rgb += redTint;
+    }
   }
   `
     );
