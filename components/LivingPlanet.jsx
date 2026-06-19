@@ -973,7 +973,7 @@ function getSoftStarTexture() {
     ctx.fillRect(0, 0, size, size);
   }
   softStarTextureCache = new THREE.CanvasTexture(canvas);
-  softStarTextureCache.encoding = THREE.sRGBEncoding;
+  softStarTextureCache.encoding = THREE.SRGBColorSpace;
   return softStarTextureCache;
 }
 
@@ -1185,7 +1185,7 @@ function loadMilkyWaySky(scene, renderer) {
           resolve(null);
           return;
         }
-        texture.encoding = THREE.sRGBEncoding;
+        texture.encoding = THREE.SRGBColorSpace;
         texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
         texture.generateMipmaps = true;
         texture.minFilter = THREE.LinearMipmapLinearFilter;
@@ -1347,7 +1347,7 @@ const EARTH_TEXTURE_CANDIDATES = {
 
 /** @param {THREE.Texture} tex @param {THREE.WebGLRenderer} renderer @param {{ srgb?: boolean }} [opts] */
 function configureGlobeTexture(tex, renderer, opts = {}) {
-  if (opts.srgb) tex.encoding = THREE.sRGBEncoding;
+  if (opts.srgb) tex.encoding = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -1715,7 +1715,7 @@ export function LivingPlanet({
       renderer.setSize(w, h, false);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.15;
-      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
       renderer.domElement.style.display = "block";
