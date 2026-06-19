@@ -460,10 +460,10 @@ export function GovernancePanel() {
 
             {partiesData.length > 0 && (
               <>
-                <div style={sectionTitleStyle}>ELECTION POLL</div>
+                <div style={sectionTitleStyle}>PARTY APPROVAL</div>
                 <GovGlassCard style={{ padding: 12 }}>
                   {filterGovernanceParties(partiesData).map((party) => {
-                    const rating = Number(party.poll_pct ?? party.approval_rating ?? 0);
+                    const rating = Number(party.approval_rating ?? party.poll_pct ?? 0);
                     const partyColor = getPartyColor(String(party.party_id || party.name || ""));
                     return (
                       <div key={String(party.party_id)} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
