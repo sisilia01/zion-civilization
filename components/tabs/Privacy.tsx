@@ -23,6 +23,151 @@ const PRESIGNED_MAX_ROWS = 10;
 const PRESIGNED_HISTORY_POLL_MS = 60_000;
 const PRESIGNED_TERMINAL_VISIBLE_MS = 60_000;
 
+const PRIVACY_PANEL_STYLE = {
+  borderRadius: "20px",
+  background: "rgba(8, 16, 40, 0.7)",
+  border: "1px solid rgba(50, 100, 200, 0.4)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+};
+
+const PRIVACY_FIELD_STYLE = {
+  background: "rgba(255, 255, 255, 0.04)",
+  border: "1px solid rgba(100, 150, 255, 0.2)",
+  borderRadius: "12px",
+};
+
+const PICKER_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const PICKER_YEARS = [2026, 2027, 2028, 2029, 2030];
+
+const PRIVACY_SCROLL_BLOCK_STYLE = {
+  background: "rgba(8, 16, 28, 0.34)",
+  backdropFilter: "blur(12px) saturate(1.4)",
+  WebkitBackdropFilter: "blur(12px) saturate(1.4)",
+  border: "1px solid #1e3a5f",
+  borderRadius: "10px",
+  padding: "4px 8px",
+  boxShadow: "0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+  cursor: "ns-resize",
+  fontFamily: "monospace",
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  userSelect: "none",
+  minWidth: 0,
+};
+
+function parseScheduledAtLocalParts(value) {
+  const fallback = new Date(Date.now() + 5 * 60 * 1000);
+  fallback.setSeconds(0, 0);
+  const d = value ? new Date(value) : fallback;
+  if (Number.isNaN(d.getTime())) {
+    return {
+      day: fallback.getDate(),
+      month: fallback.getMonth(),
+      year: fallback.getFullYear(),
+      hour: fallback.getHours(),
+      minute: Math.round(fallback.getMinutes() / 5) * 5,
+    };
+  }
+  const rawMinute = Math.round(d.getMinutes() / 5) * 5;
+  return {
+    day: d.getDate(),
+    month: d.getMonth(),
+    year: d.getFullYear(),
+    hour: d.getHours(),
+    minute: rawMinute >= 60 ? 55 : rawMinute,
+  };
+}
+
+function scheduledAtLocalFromParts({ day, month, year, hour, minute }) {
+  const maxDay = new Date(year, month + 1, 0).getDate();
+  const clampedDay = Math.min(Math.max(1, day), maxDay);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${year}-${pad(month + 1)}-${pad(clampedDay)}T${pad(hour)}:${pad(Math.round(minute / 5) * 5)}`;
+}
+
+function PrivacyScrollBlock({ label, display, onDelta }) {
+  const handleWheel = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.deltaY === 0) return;
+    onDelta(e.deltaY > 0 ? -1 : 1);
+  };
+
+  return (
+    <div onWheel={handleWheel} style={PRIVACY_SCROLL_BLOCK_STYLE}>
+      <div style={{ fontSize: "14px", color: "#fff", fontWeight: 700, lineHeight: 1.1 }}>{display}</div>
+      <div style={{ fontSize: "9px", color: "#4a9eff", letterSpacing: "1px", marginTop: "4px" }}>{label}</div>
+    </div>
+  );
+}
+
+function PrivacyIOsDateTimePicker({ value, onChange }) {
+  const parts = parseScheduledAtLocalParts(value);
+
+  const updateParts = (patch) => {
+    onChange(scheduledAtLocalFromParts({ ...parts, ...patch }));
+  };
+
+  const maxDayFor = (month, year) => new Date(year, month + 1, 0).getDate();
+
+  const changeDay = (delta) => {
+    const maxDay = maxDayFor(parts.month, parts.year);
+    let day = parts.day + delta;
+    if (day < 1) day = maxDay;
+    if (day > maxDay) day = 1;
+    updateParts({ day });
+  };
+
+  const changeMonth = (delta) => {
+    const month = (parts.month + delta + 12) % 12;
+    const maxDay = maxDayFor(month, parts.year);
+    updateParts({ month, day: Math.min(parts.day, maxDay) });
+  };
+
+  const changeYear = (delta) => {
+    const idx = PICKER_YEARS.indexOf(parts.year);
+    const nextIdx = Math.max(0, Math.min(PICKER_YEARS.length - 1, idx + delta));
+    const year = PICKER_YEARS[nextIdx];
+    const maxDay = maxDayFor(parts.month, year);
+    updateParts({ year, day: Math.min(parts.day, maxDay) });
+  };
+
+  const changeHour = (delta) => {
+    updateParts({ hour: (parts.hour + delta + 24) % 24 });
+  };
+
+  const changeMinute = (delta) => {
+    const step = Math.round(parts.minute / 5);
+    const next = (step + delta + 12) % 12;
+    updateParts({ minute: next * 5 });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", gap: "8px", alignItems: "stretch" }}>
+        <PrivacyScrollBlock label="DAY" display={String(parts.day).padStart(2, "0")} onDelta={changeDay} />
+        <PrivacyScrollBlock label="MONTH" display={PICKER_MONTHS[parts.month]} onDelta={changeMonth} />
+        <PrivacyScrollBlock label="YEAR" display={String(parts.year)} onDelta={changeYear} />
+      </div>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <PrivacyScrollBlock label="HH" display={String(parts.hour).padStart(2, "0")} onDelta={changeHour} />
+        <span style={{ color: "#4a9eff", fontSize: "22px", fontWeight: 700, fontFamily: "monospace", flexShrink: 0 }}>
+          :
+        </span>
+        <PrivacyScrollBlock
+          label="MM"
+          display={String(Math.round(parts.minute / 5) * 5).padStart(2, "0")}
+          onDelta={changeMinute}
+        />
+      </div>
+    </div>
+  );
+}
+
 function StealthIncomingFileAttachment({
   attachment,
   autoDownloadOk = false,
@@ -193,7 +338,7 @@ function formatPresignedDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -550,7 +695,7 @@ function PresignedScheduleSection({
 
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "10px" }}>
             {presignedScheduleRows.map((row, index) => (
-              <div key={row.id} className={glassCardStyles.glassCardNestedSection} style={{ marginBottom: 0 }}>
+              <div key={row.id} className={glassCardStyles.glassCardNestedSection} style={{ marginBottom: 0, ...PRIVACY_PANEL_STYLE }}>
                 <div
                   style={{
                     display: "flex",
@@ -587,13 +732,12 @@ function PresignedScheduleSection({
                     <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
                       DATE & TIME
                     </div>
-                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
-                      <input
-                        type="datetime-local"
-                        className="zbank-input"
+                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px", ...PRIVACY_FIELD_STYLE }}>
+                      <PrivacyIOsDateTimePicker
                         value={row.scheduledAtLocal}
-                        onChange={(e) => updatePresignedScheduleRow(row.id, { scheduledAtLocal: e.target.value })}
-                        style={inputStyle}
+                        onChange={(scheduledAtLocal) =>
+                          updatePresignedScheduleRow(row.id, { scheduledAtLocal })
+                        }
                       />
                     </div>
                   </div>
@@ -603,7 +747,7 @@ function PresignedScheduleSection({
                       <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
                         AMOUNT
                       </div>
-                      <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
+                      <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px", ...PRIVACY_FIELD_STYLE }}>
                         <input
                           type="number"
                           className="zbank-input"
@@ -647,7 +791,7 @@ function PresignedScheduleSection({
                     <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
                       RECIPIENT (0x...)
                     </div>
-                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
+                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px", ...PRIVACY_FIELD_STYLE }}>
                       <input
                         className="zbank-input"
                         value={row.recipient}
@@ -862,6 +1006,8 @@ export function Privacy() {
                 position: "relative",
                 zIndex: 10,
                 boxSizing: "border-box",
+                borderRadius: "20px",
+                overflow: "hidden",
               }}
             >
 <div style={{ fontFamily:'monospace', maxWidth:'480px', margin:'0 auto', padding:'8px', width:'100%', boxSizing:'border-box' }}>
@@ -923,12 +1069,12 @@ export function Privacy() {
   </div>
 
   {zbankMode === 'anonymous' && (
-  <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'4px' }}>
+  <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'4px', ...PRIVACY_PANEL_STYLE }}>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
       <span style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>From:</span>
       <span style={{color:'#555', fontSize:'0.68rem', fontFamily:'monospace'}}>{walletAddress ? walletAddress.slice(0,6)+'...'+walletAddress.slice(-4) : 'Connect wallet'}</span>
     </div>
-    <div className={glassCardStyles.glassCardNested}>
+    <div className={glassCardStyles.glassCardNested} style={PRIVACY_FIELD_STYLE}>
       <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
         <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
           <img
@@ -1005,7 +1151,7 @@ export function Privacy() {
 
   {zbankMode === 'stealth' && (
     <>
-      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
+      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px', ...PRIVACY_PANEL_STYLE }}>
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px'}}>
           <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
             <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png"
@@ -1048,10 +1194,10 @@ export function Privacy() {
         </div>
       </div>
 
-      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
+      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px', ...PRIVACY_PANEL_STYLE }}>
         <div style={{fontSize:'0.6rem', color:'#00ff41', letterSpacing:'1px', marginBottom:'5px'}}>→ RECIPIENT</div>
         <div className={glassCardStyles.glassCardNested}
-             style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', border:'1px solid #1a3a1a'}}>
+             style={{display:'flex', alignItems:'center', gap:'6px', padding:'8px 10px', ...PRIVACY_FIELD_STYLE}}>
           <div style={{width:'18px', height:'18px', borderRadius:'50%', background:'#0d2a0d',
                        display:'flex', alignItems:'center', justifyContent:'center',
                        fontSize:'0.7rem', flexShrink:0,
@@ -1072,7 +1218,7 @@ export function Privacy() {
         </div>
       </div>
 
-      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
+      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px', ...PRIVACY_PANEL_STYLE }}>
         {(() => {
           const hasAttachments = stealthAttachedFiles.length > 0;
           const totalAttachmentBytes = stealthAttachedFiles.reduce(
@@ -1321,7 +1467,7 @@ export function Privacy() {
         })()}
       </div>
 
-      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
+      <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px', ...PRIVACY_PANEL_STYLE }}>
         <div style={{display:'flex', gap:'4px', alignItems:'center'}}>
         <button type="button" onClick={handleGenerateStealthAddress}
           style={{padding:'6px 10px', borderRadius:'7px', border:'1px solid #1a3a1a', background:'#0a1a0a', color:'#00ff41', fontFamily:'monospace', fontSize:'0.65rem', cursor:'pointer', whiteSpace:'nowrap'}}>
@@ -1622,19 +1768,6 @@ export function Privacy() {
             </div>
           )}
 
-          <PresignedScheduleSection
-            showSchedule={showSchedule}
-            setShowSchedule={setShowSchedule}
-            presignedScheduleRows={presignedScheduleRows}
-            presignedScheduleLoading={presignedScheduleLoading}
-            presignedScheduleStatus={presignedScheduleStatus}
-            addPresignedScheduleRow={addPresignedScheduleRow}
-            removePresignedScheduleRow={removePresignedScheduleRow}
-            updatePresignedScheduleRow={updatePresignedScheduleRow}
-            handleReserveAndSignAllPayments={handleReserveAndSignAllPayments}
-            walletAddress={walletAddress}
-            backendApiUrl={backendApiUrl}
-          />
         </>
       )}
 
@@ -1847,11 +1980,11 @@ export function Privacy() {
   )}
 
   {zbankMode === 'anonymous' && (
-  <div className={glassCardStyles.glassCardNestedSection} style={{ marginTop:'4px', marginBottom:'12px' }}>
+  <div className={glassCardStyles.glassCardNestedSection} style={{ marginTop:'4px', marginBottom:'12px', ...PRIVACY_PANEL_STYLE }}>
     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
       <span style={{color:'#777', fontSize:'0.68rem', fontFamily:'monospace'}}>To:</span>
     </div>
-    <div className={glassCardStyles.glassCardNested}>
+    <div className={glassCardStyles.glassCardNested} style={PRIVACY_FIELD_STYLE}>
       <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px'}}>
         <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png" style={{width:'28px', height:'28px', borderRadius:'50%', border:'1px solid #2a2a2a'}} alt="SUI" />
         <div>
@@ -1896,7 +2029,7 @@ export function Privacy() {
     </button>
   )}
 
-  {zbankMode === 'anonymous' && (
+  {zbankMode !== 'stealth' && (
   <PresignedScheduleSection
     showSchedule={showSchedule}
     setShowSchedule={setShowSchedule}

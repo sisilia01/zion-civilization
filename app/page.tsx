@@ -1233,7 +1233,7 @@ function formatEventTime(ts: string): string {
   try {
     const d = new Date(ts.includes("T") ? ts : `${ts.replace(" ", "T")}Z`);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
@@ -1981,7 +1981,7 @@ function zionbetVolumeSuiLabel(volume?: number, id?: string, volumeSui?: number)
   const sui = zionbetVolumeSuiAmount(volume, id, volumeSui);
   if (sui >= 1_000_000) return `${(sui / 1_000_000).toFixed(1)}M SUI vol`;
   if (sui >= 1_000) return `${(sui / 1_000).toFixed(1)}K SUI vol`;
-  return `${sui.toLocaleString()} SUI vol`;
+  return `${sui.toLocaleString("en-US")} SUI vol`;
 }
 
 /** Polymarket USD volume (raw API volume field). */
@@ -2144,7 +2144,7 @@ function zionbetFormatMarketOpened(iso?: string | null): string | null {
   if (!iso?.trim()) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function ZionBetResolutionRulesCard({
@@ -2224,7 +2224,7 @@ function zionbetEndDateLabel(endDate?: string | null, timeframe?: string): strin
   if (endDate) {
     const d = new Date(endDate);
     if (!Number.isNaN(d.getTime())) {
-      return `Ends ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+      return `Ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     }
   }
   return zionbetTimeframeEndLabel(timeframe);
@@ -2654,24 +2654,6 @@ function ZionBetMarketCardItem({
       onMouseLeave={() => setHovered(false)}
       style={cardStyle}
     >
-      {isZionCard ? (
-        <span
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            background: "#052e16",
-            color: "#22c55e",
-            border: "1px solid #166534",
-            fontSize: "10px",
-            padding: "2px 6px",
-            borderRadius: "4px",
-            fontWeight: 600,
-          }}
-        >
-          🌍 ZION
-        </span>
-      ) : null}
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
         {showCryptoIcon ? (
           <CryptoIcon marketId={marketApi.id} />
@@ -3150,7 +3132,7 @@ function ZionBetMarketDetailOverlay({
         const volumeSui = zionbetVolumeSuiAmount(detailApiMarket.volume, detailApiMarket.id);
         if (volumeSui >= 1_000_000) return `${(volumeSui / 1_000_000).toFixed(1)}M`;
         if (volumeSui >= 1_000) return `${(volumeSui / 1_000).toFixed(1)}K`;
-        return volumeSui.toLocaleString();
+        return volumeSui.toLocaleString("en-US");
       })();
   const endLabel = zionbetEndDateLabel(detailApiMarket.end_date, detailApiMarket.timeframe);
   const categoryLabel =
@@ -4986,7 +4968,7 @@ function zionbetFormatEndsDate(bet: ZionBetMyBetRow): string {
   if (raw) {
     const d = new Date(raw);
     if (!Number.isNaN(d.getTime())) {
-      return `Ends ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+      return `Ends ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     }
   }
   return "End date TBD";
@@ -11060,7 +11042,7 @@ export default function Home() {
     const volLabel =
       totalVol >= 1000
         ? `${(totalVol / 1000).toFixed(1)}K SUI total volume`
-        : `${totalVol.toLocaleString()} SUI total volume`;
+        : `${totalVol.toLocaleString("en-US")} SUI total volume`;
     return `${totalMarkets} markets · ${volLabel}`;
   }, [zionbetMarkets]);
 
@@ -15058,7 +15040,7 @@ export default function Home() {
                           transition: "color 0.3s",
                         }}
                       >
-                        ${p.price.toLocaleString()}
+                        ${p.price.toLocaleString("en-US")}
                       </div>
                     </div>
                   );
@@ -15405,7 +15387,7 @@ export default function Home() {
                             transition: "color 0.3s",
                           }}
                         >
-                          ${p.price.toLocaleString()}
+                          ${p.price.toLocaleString("en-US")}
                         </div>
                       </div>
                     ))}
@@ -15580,7 +15562,7 @@ export default function Home() {
                           width: "100px",
                         }}
                       >
-                        ${t.entry_price?.toLocaleString()}
+                        ${t.entry_price?.toLocaleString("en-US")}
                       </div>
                       <div
                         style={{
@@ -15795,7 +15777,7 @@ export default function Home() {
                                 {pos.pair}
                               </span>
                               <span style={{ color: "#555", fontSize: "0.62rem", fontFamily: "monospace", flex: 1 }}>
-                                entry ${pos.entry?.toLocaleString()}
+                                entry ${pos.entry?.toLocaleString("en-US")}
                               </span>
                               <span style={{ color: "#ffaa00", fontSize: "0.62rem", fontFamily: "monospace" }}>
                                 LIVE
@@ -15841,7 +15823,7 @@ export default function Home() {
                             {t.pair}
                           </span>
                           <span style={{ color: "#555", fontSize: "0.62rem", fontFamily: "monospace", flex: 1 }}>
-                            ${t.entry?.toLocaleString()} → {t.exit ? `$${t.exit?.toLocaleString()}` : "OPEN"}
+                            ${t.entry?.toLocaleString("en-US")} → {t.exit ? `$${t.exit?.toLocaleString("en-US")}` : "OPEN"}
                           </span>
                           <span
                             style={{
@@ -15934,8 +15916,8 @@ export default function Home() {
                           {p.agent_name}
                         </div>
                         <div style={{ color: "#555", fontSize: "0.6rem", fontFamily: "monospace" }}>
-                          {p.direction} {p.pair} • entry ${p.entry_price?.toLocaleString()} → exit $
-                          {p.exit_price?.toLocaleString()}
+                          {p.direction} {p.pair} • entry ${p.entry_price?.toLocaleString("en-US")} → exit $
+                          {p.exit_price?.toLocaleString("en-US")}
                         </div>
                       </div>
                       <div
@@ -16107,8 +16089,8 @@ export default function Home() {
                           flex: 1,
                         }}
                       >
-                        ${t.entry?.toLocaleString()} →{" "}
-                        {t.exit ? `$${t.exit?.toLocaleString()}` : "OPEN"}
+                        ${t.entry?.toLocaleString("en-US")} →{" "}
+                        {t.exit ? `$${t.exit?.toLocaleString("en-US")}` : "OPEN"}
                       </div>
                       <div
                         style={{
@@ -17284,6 +17266,7 @@ export default function Home() {
           position: absolute;
           top: 8px;
           right: 8px;
+          z-index: 10;
           font-size: 9px;
           font-weight: 600;
           color: #16a34a;
