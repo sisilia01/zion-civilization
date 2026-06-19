@@ -1,6 +1,8 @@
 // @ts-nocheck
 "use client";
 
+import { GlassCard } from "@/components/GlassCard";
+import glassCardStyles from "@/components/GlassCard.module.css";
 import { useZionTab } from "@/components/zion/ZionTabContext";
 
 const CHAT_CLASSES = ["elite", "middle", "poor", "critical"] as const;
@@ -91,7 +93,13 @@ export function FieldNotes() {
                   </button>
                   <div className="agentGrid">
                     {chatAgents.slice(0, 12).map((agent) => (
-                      <AgentTile key={`chat-${agent.id}`} agent={agent} maxBalance={chatMaxBalance} onClick={() => openChat(agent)} />
+                      <GlassCard
+                        key={`chat-${agent.id}`}
+                        className={glassCardStyles.glassCard}
+                        style={{ border: "1px solid #1e3a5f", borderRadius: "6px", padding: "16px" }}
+                      >
+                        <AgentTile agent={agent} maxBalance={chatMaxBalance} onClick={() => openChat(agent)} />
+                      </GlassCard>
                     ))}
                   </div>
                 </>

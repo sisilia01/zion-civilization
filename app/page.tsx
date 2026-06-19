@@ -6556,7 +6556,10 @@ function AgentTile({
   const classLabel =
     tier === "elite" ? "ELITE" : tier === "middle" ? "MIDDLE" : tier === "critical" ? "CRITICAL" : "POOR";
   const tooltip = `Subject ${classLabel} — ${Math.round(agent.balance)} ZION balance`;
-  const statVal = (n?: number) => `${Math.min(5, Math.max(0, Math.round(n ?? 0)))}/5`;
+  const statVal = (n?: number) => {
+    const normalized = Math.round((n ?? 0) / 20);
+    return `${Math.min(5, Math.max(0, normalized))}/5`;
+  };
   const cardStyle = {
     position: "relative" as const,
     border: "1px solid rgba(255,255,255,0.08)",

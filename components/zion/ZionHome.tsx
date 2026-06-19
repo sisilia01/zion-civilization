@@ -6262,7 +6262,10 @@ function AgentTile({
   const classLabel =
     tier === "elite" ? "ELITE" : tier === "middle" ? "MIDDLE" : tier === "critical" ? "CRITICAL" : "POOR";
   const tooltip = `Subject ${classLabel} — ${Math.round(agent.balance)} ZION balance`;
-  const statVal = (n?: number) => `${Math.min(5, Math.max(0, Math.round(n ?? 0)))}/5`;
+  const statVal = (n?: number) => {
+    const normalized = Math.round((n ?? 0) / 20);
+    return `${Math.min(5, Math.max(0, normalized))}/5`;
+  };
   const cardStyle = {
     position: "relative" as const,
     border: "1px solid rgba(255,255,255,0.08)",
@@ -9253,10 +9256,12 @@ export function ZionHome({
   activeTab,
   standalone = false,
   standaloneMarketId,
+  embedContent,
 }: {
   activeTab: TabId;
   standalone?: boolean;
   standaloneMarketId?: string;
+  embedContent?: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -15617,7 +15622,18 @@ export function ZionHome({
 
   return (
     <ZionTabProvider value={tabCtx}>
-    <main className="page" style={standalone ? { background: "transparent", position: "relative", zIndex: 1 } : undefined}>
+    <main
+      className="page"
+      style={
+        embedContent != null || standalone
+          ? { background: "transparent", position: "relative", zIndex: 1, minHeight: embedContent != null ? "auto" : undefined }
+          : undefined
+      }
+    >
+      {embedContent != null ? (
+        embedContent
+      ) : (
+      <>
       {!standalone && <BackgroundGrid />}
       {(showWalletMenu || showUserMenu) && (
         <div
@@ -15631,7 +15647,7 @@ export function ZionHome({
       )}
       {standalone ? (
         <>
-          {activeTab !== "zbank" && <BackgroundGrid />}
+          {activeTab !== "zbank" && activeTab !== "chat" && <BackgroundGrid />}
           <div className="belowHeroShell prediction-engine-shell">
             {standaloneMarketId ? (
               <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
@@ -15710,6 +15726,19 @@ export function ZionHome({
                 >
                   <Privacy />
                 </GlassCard>
+              </div>
+            ) : activeTab === "chat" ? (
+              <div
+                className="dashboard show"
+                style={{
+                  maxWidth: "56rem",
+                  margin: "0 auto",
+                  padding: isMobile ? "8px 16px" : "24px",
+                }}
+              >
+                <div className="tabPanels">
+                  <FieldNotes />
+                </div>
               </div>
             ) : (
               <div className="dashboard show" style={isMobile ? { padding: "8px 16px" } : undefined}>
@@ -16929,8 +16958,10 @@ export function ZionHome({
           {activeTab === "archive" && <Archive />}
       </SharedLayout>
       )}
+      </>
+      )}
 
-        {!standalone && chatAgent ? (
+        {(embedContent != null || !standalone || activeTab === "chat") && chatAgent ? (
           <div
             className="chatModalBackdrop"
             role="presentation"
