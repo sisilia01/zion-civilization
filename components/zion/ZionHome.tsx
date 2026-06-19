@@ -5,6 +5,7 @@ import {
   useCurrentAccount,
   useDisconnectWallet,
   useSignAndExecuteTransaction,
+  useSignTransaction,
   useSignPersonalMessage,
   useSuiClient,
   useWallets,
@@ -29,6 +30,18 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
 import {
+  PRESIGNED_MAX_ROWS,
+  buildPresignedTransferTransaction,
+  buildReserveCoinsTransaction,
+  createEmptyPresignedRow,
+  extractCreatedCoinRefs,
+  localDateTimeToIso,
+  mapReservedCoins,
+  validatePresignedRows,
+  type PresignedPaymentPayload,
+  type PresignedScheduleRow,
+} from "@/lib/presigned-schedule";
+import {
   buildCreatePredictManagerTx,
   buildDeepBookPredictMintTx,
   deepBookStrikeFromSpot,
@@ -42,7 +55,20 @@ import {
   waitForPredictManagerTx,
 } from "@/lib/deepbook-predict";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { ZionBetProfileDropdown } from "@/components/zion/ZionBetProfileDropdown";
+import { ZionUserAvatarBadge } from "@/components/zion/ZionUserAvatarBadge";
+import {
+  ZION_WALLET_OVERLAY_BACKDROP,
+  ZION_WALLET_OVERLAY_NESTED_CARD,
+  ZION_WALLET_OVERLAY_PANEL,
+} from "@/lib/zionbet-wallet-overlay-glass";
+import {
+  consumeLeaderboardScrollPending,
+  LEADERBOARD_SECTION_ID,
+  openLeaderboardFromWalletMenu,
+  scrollToLeaderboardSection,
+} from "@/lib/zion-leaderboard-nav";
 import {
   parseZionbetPeTabParam,
   zionbetPeListHref,
@@ -142,6 +168,45 @@ import {
   generateStealthMetaAddress,
   getUsdcCoins,
 } from "@/lib/stealth";
+import { encryptStealthFile } from "@/lib/stealth-file-crypto";
+import { buildMultiFileMemo, isStealthFileMemo, parseFileMemo } from "@/lib/stealth-file-memo";
+import type { StealthFileAttachment } from "@/lib/stealth-file-attachment";
+import {
+  downloadStealthFileAttachment,
+  flattenNoteFileAttachments,
+  stealthAttachmentsFromMemo,
+} from "@/lib/stealth-file-attachment";
+import { uploadWalrusBytes } from "@/lib/walrus-blob";
+import {
+  formatStealthFileSize,
+  validateStealthAttachmentFileForBatch,
+} from "@/lib/stealth-file-policy";
+import Link from "next/link";
+import { ZionRoleBadge } from "@/components/achievements/ZionRoleBadge";
+import { ZionRoleIcon as ZionRoleSvg } from "@/components/achievements/ZionRoleIcon";
+import {
+  ZION_ACHIEVEMENT_DEFS,
+  loadZionProfile,
+  mergeAchievementTimestamps,
+  saveZionProfile,
+  zionProfileStorageKey,
+  zionbetComputeAchievements,
+  type ZionProfile,
+} from "@/lib/zion-achievements";
+
+const ZION_ROLE_DEFS = ZION_ACHIEVEMENT_DEFS;
+
+export type StealthAttachedFileEntry = { id: string; file: File };
+
+export {
+  ZION_ACHIEVEMENT_DEFS as ZION_ROLE_DEFS,
+  loadZionProfile,
+  saveZionProfile,
+  zionProfileStorageKey,
+  zionbetComputeAchievements,
+} from "@/lib/zion-achievements";
+export { ZionRoleBadge } from "@/components/achievements/ZionRoleBadge";
+export { ZionRoleIcon as ZionRoleSvg } from "@/components/achievements/ZionRoleIcon";
 import { encryptStealthMemo } from "@/lib/seal-stealth";
 import { checkVIPAccess, VIP_MARKETS, SILVER_THRESHOLD, GOLD_THRESHOLD } from "@/lib/seal";
 import {
@@ -5028,9 +5093,16 @@ type LeaderboardEntry = {
   points?: number;
   messages?: number;
   messages_sent?: number;
-  zion_spent?: number;
+  total_staked?: number;
   zionbet_pnl?: number;
 };
+
+function formatLeaderboardTotalStaked(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(1)} SUI`;
+}
 
 const ZION_AVATARS = [
   { id: "warrior", color: "#ff6b35", icon: "⚔️" },
@@ -5053,12 +5125,6 @@ const ZION_AVATAR_LEGACY_EMOJI: Record<string, string> = {
   "💎": "diamond",
   "🔥": "phoenix",
   fire: "phoenix",
-};
-
-type ZionProfile = {
-  nickname?: string;
-  avatar?: string;
-  achievements?: string[];
 };
 
 type ZionBetWalletStats = {
@@ -5087,69 +5153,6 @@ function zionbetFormatStakedLabel(stats: ZionBetWalletStats | null): string {
     return legacy > 0 ? `${legacy.toFixed(2)} SUI` : "0.00 SUI";
   }
   return parts.join(" + ");
-}
-
-const ZION_ROLE_DEFS: { id: string; label: string }[] = [
-  { id: "night_wolf", label: "NIGHT WOLF" },
-  { id: "fire_fox", label: "FIRE FOX" },
-  { id: "void_dragon", label: "VOID DRAGON" },
-  { id: "storm_hawk", label: "STORM HAWK" },
-  { id: "crystal_mind", label: "CRYSTAL MIND" },
-  { id: "shadow_ninja", label: "SHADOW NINJA" },
-];
-
-function zionProfileStorageKey(wallet: string): string {
-  return `zion_profile_${wallet.trim().toLowerCase()}`;
-}
-
-function loadZionProfile(wallet: string): ZionProfile {
-  if (typeof window === "undefined" || !wallet.trim()) return {};
-  try {
-    return JSON.parse(localStorage.getItem(zionProfileStorageKey(wallet)) || "{}") as ZionProfile;
-  } catch {
-    return {};
-  }
-}
-
-function saveZionProfile(wallet: string, profile: ZionProfile): void {
-  if (typeof window === "undefined" || !wallet.trim()) return;
-  localStorage.setItem(zionProfileStorageKey(wallet), JSON.stringify(profile));
-}
-
-function zionbetComputeAchievements(bets: ZionBetMyBetRow[], stats: ZionBetWalletStats | null): string[] {
-  const earned: string[] = [];
-  const totalBets = stats?.total_bets ?? bets.length;
-  const winRate = stats?.win_rate ?? 0;
-  const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
-
-  if (totalBets >= 50) earned.push("night_wolf");
-  if (winRate > 60) earned.push("fire_fox");
-  if (profit > 100) earned.push("void_dragon");
-
-  const dayMs = 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  const bets24h = bets.filter((b) => {
-    const t = b.created_at ? Date.parse(b.created_at) : NaN;
-    return Number.isFinite(t) && now - t < dayMs;
-  }).length;
-  if (bets24h >= 5) earned.push("storm_hawk");
-
-  const settled = [...bets]
-    .filter((b) => {
-      const s = (b.status || "").toLowerCase();
-      return s === "won" || s === "lost";
-    })
-    .sort((a, b) => b.id - a.id);
-  let winStreak = 0;
-  for (const b of settled) {
-    if ((b.status || "").toLowerCase() === "won") winStreak += 1;
-    else break;
-  }
-  if (winStreak >= 10) earned.push("crystal_mind");
-
-  if (bets.some((b) => b.amount_sui > 10)) earned.push("shadow_ninja");
-
-  return earned;
 }
 
 function zionbetWalletTruncated(wallet: string): string {
@@ -5297,37 +5300,15 @@ function ZionBetPremiumStatCard({
   variant: "staked" | "won" | "winrate" | "pnl";
   valueColor?: string;
 }) {
-  const styles: Record<string, { bg: string; valueColor: string }> = {
-    staked: {
-      bg: "linear-gradient(145deg, rgba(30, 80, 160, 0.45) 0%, rgba(15, 50, 90, 0.35) 100%)",
-      valueColor: "#7eb8ff",
-    },
-    won: {
-      bg: "linear-gradient(145deg, rgba(0, 90, 70, 0.4) 0%, rgba(15, 50, 90, 0.35) 100%)",
-      valueColor: ZB_VISTA_YES,
-    },
-    winrate: {
-      bg: "linear-gradient(145deg, rgba(90, 70, 20, 0.4) 0%, rgba(15, 50, 90, 0.35) 100%)",
-      valueColor: "#fcd34d",
-    },
-    pnl: {
-      bg: "linear-gradient(145deg, rgba(15, 50, 90, 0.5) 0%, rgba(10, 30, 60, 0.4) 100%)",
-      valueColor: "#ffffff",
-    },
+  const styles: Record<string, { valueColor: string }> = {
+    staked: { valueColor: "#7eb8ff" },
+    won: { valueColor: ZB_VISTA_YES },
+    winrate: { valueColor: "#fcd34d" },
+    pnl: { valueColor: "#ffffff" },
   };
   const s = styles[variant];
   return (
-    <div
-      style={{
-        padding: "16px 14px",
-        borderRadius: 12,
-        background: s.bg,
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(100, 180, 255, 0.18)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-      }}
-    >
+    <div className={glassCardStyles.glassCardNested} style={{ padding: "16px 14px" }}>
       <div
         style={{
           fontSize: "0.65rem",
@@ -5348,11 +5329,7 @@ function ZionBetPremiumStatCard({
 }
 
 const ZB_BET_CARD_GLASS: CSSProperties = {
-  background: "rgba(15, 50, 90, 0.4)",
-  backdropFilter: "blur(20px)",
-  WebkitBackdropFilter: "blur(20px)",
-  border: "1px solid rgba(100, 180, 255, 0.15)",
-  borderRadius: 12,
+  ...ZION_WALLET_OVERLAY_NESTED_CARD,
   padding: 16,
 };
 
@@ -5847,346 +5824,6 @@ function zionbetMarketFromBet(
   };
 }
 
-function ZionRoleSvg({ roleId }: { roleId: string }) {
-  const cyan = "#00b4d8";
-  const purple = "#7b2fff";
-  const bg = "#0a0a1a";
-  const common = { width: 40, height: 40, viewBox: "0 0 40 40", fill: "none" as const };
-
-  switch (roleId) {
-    case "night_wolf":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 28 L14 14 L20 22 L26 14 L32 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
-          <path d="M12 18 L10 10 M28 18 L30 10" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
-          <circle cx="16" cy="22" r="2" fill={cyan} />
-          <circle cx="24" cy="22" r="2" fill={cyan} />
-          <path d="M18 26 Q20 28 22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "fire_fox":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M10 26 Q14 18 20 16 Q26 14 28 20 Q30 26 24 28 Q20 30 14 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
-          <path d="M28 20 Q34 14 32 26 Q30 32 24 28" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
-          <circle cx="22" cy="22" r="1.5" fill={cyan} />
-          <path d="M24 24 L26 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "void_dragon":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 30 Q12 10 20 14 Q28 10 32 30" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
-          <path d="M14 20 L20 16 L26 20 L22 24 Z" stroke={cyan} strokeWidth="1" fill="rgba(0,180,216,0.12)" />
-          <path d="M10 26 L6 22 M30 26 L34 22" stroke={purple} strokeWidth="1" strokeLinecap="round" />
-          <circle cx="20" cy="19" r="1.5" fill={cyan} />
-        </svg>
-      );
-    case "storm_hawk":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 22 L20 12 L32 22 L26 22 L30 30 L20 24 L10 30 L14 22 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
-          <path d="M18 8 L20 14 M24 6 L22 12" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
-          <path d="M6 16 L10 18 L8 20" stroke={purple} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "crystal_mind":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M20 8 L28 16 L24 32 L16 32 L12 16 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.08)" />
-          <path d="M20 8 L20 32 M12 16 L28 16 M16 32 L24 16 M24 32 L16 16" stroke={cyan} strokeWidth="0.6" opacity="0.5" />
-          <circle cx="17" cy="20" r="1.2" fill={cyan} />
-          <circle cx="23" cy="20" r="1.2" fill={cyan} />
-          <path d="M18 26 L22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "shadow_ninja":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <ellipse cx="20" cy="30" rx="10" ry="3" fill="rgba(123,47,255,0.2)" />
-          <path d="M20 10 Q26 14 24 22 Q22 28 20 28 Q18 28 16 22 Q14 14 20 10" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
-          <path d="M12 18 Q8 20 10 24 M28 18 Q32 20 30 24" stroke={purple} strokeWidth="1" strokeLinecap="round" opacity="0.7" />
-          <path d="M16 20 L24 20" stroke={cyan} strokeWidth="0.8" opacity="0.4" />
-        </svg>
-      );
-    default:
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-        </svg>
-      );
-  }
-}
-
-function ZionRoleBadge({ roleId, earned, label }: { roleId: string; earned: boolean; label: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 4,
-          overflow: "hidden",
-          opacity: earned ? 1 : 0.2,
-          filter: earned ? "none" : "grayscale(1)",
-          boxShadow: earned ? "0 0 10px rgba(0, 180, 216, 0.45)" : "none",
-          border: earned ? "1px solid rgba(0, 180, 216, 0.35)" : "1px solid rgba(255,255,255,0.06)",
-          transition: "opacity 0.2s, box-shadow 0.2s",
-        }}
-      >
-        <ZionRoleSvg roleId={roleId} />
-      </div>
-      {!earned ? (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 2,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 10,
-            height: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <rect x="2" y="4.5" width="6" height="4.5" rx="0.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
-            <path d="M3.5 4.5 V3.5 C3.5 2.5 4.5 2 5 2 C5.5 2 6.5 2.5 6.5 3.5 V4.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
-          </svg>
-        </div>
-      ) : null}
-      {hovered ? (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 6px)",
-            left: "50%",
-            transform: "translateX(-50%)",
-            whiteSpace: "nowrap",
-            background: "rgba(0, 8, 20, 0.95)",
-            border: "1px solid rgba(0, 180, 216, 0.25)",
-            borderRadius: 2,
-            padding: "3px 8px",
-            fontSize: "0.62rem",
-            fontFamily: "'IBM Plex Mono', monospace",
-            color: earned ? "#00b4d8" : "rgba(255,255,255,0.45)",
-            letterSpacing: "0.06em",
-            pointerEvents: "none",
-            zIndex: 5,
-          }}
-        >
-          {label}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ZionBetProfileDropdown({
-  walletAddress,
-  profile,
-  stats,
-  onRefreshAchievements,
-  onOpenPortfolio,
-  onOpenMyBets,
-  onLeaderboard,
-  onDisconnect,
-  onClose,
-}: {
-  walletAddress: string;
-  profile: ZionProfile;
-  stats: ZionBetWalletStats | null;
-  onRefreshAchievements: () => void;
-  onOpenPortfolio: () => void;
-  onOpenMyBets: () => void;
-  onLeaderboard: () => void;
-  onDisconnect: () => void;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    onRefreshAchievements();
-  }, [onRefreshAchievements]);
-
-  const totalBets = stats?.total_bets ?? 0;
-  const winRate = stats?.win_rate ?? 0;
-  const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
-  const earnedRoles = new Set(profile.achievements ?? []);
-
-  const mono: CSSProperties = {
-    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-    letterSpacing: "0.02em",
-  };
-
-  const menuBtn: CSSProperties = {
-    width: "100%",
-    background: "transparent",
-    border: "none",
-    color: "rgba(255,255,255,0.85)",
-    padding: "10px 16px",
-    cursor: "pointer",
-    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-    fontSize: "0.72rem",
-    letterSpacing: "0.08em",
-    textAlign: "left",
-    textTransform: "uppercase",
-    transition: "background 0.15s, color 0.15s",
-  };
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        right: 0,
-        top: "40px",
-        width: "min(300px, 92vw)",
-        background: "rgba(0, 8, 20, 0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(0, 180, 216, 0.2)",
-        borderRadius: "4px",
-        zIndex: 210,
-        boxShadow: "0 12px 40px rgba(0, 0, 0, 0.5)",
-        overflow: "visible",
-        color: "#fff",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0, 180, 216, 0.12)" }}>
-        <div
-          style={{
-            ...mono,
-            fontSize: "0.78rem",
-            color: "rgba(255,255,255,0.9)",
-            wordBreak: "break-all",
-          }}
-        >
-          {zionbetWalletTruncated(walletAddress)}
-        </div>
-        <div
-          style={{
-            ...mono,
-            marginTop: 10,
-            fontSize: "0.68rem",
-            color: "rgba(255,255,255,0.55)",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: "4px 0",
-          }}
-        >
-          <span>
-            BETS <span style={{ color: "#fff" }}>{totalBets}</span>
-          </span>
-          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
-          <span>
-            WIN <span style={{ color: "#fff" }}>{Number(winRate).toFixed(1)}%</span>
-          </span>
-          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
-          <span>
-            P&amp;L{" "}
-            <span style={{ color: profit >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
-              {profit >= 0 ? "+" : ""}
-              {profit.toFixed(2)} SUI
-            </span>
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "space-between" }}>
-          {ZION_ROLE_DEFS.map((role) => (
-            <ZionRoleBadge
-              key={role.id}
-              roleId={role.id}
-              label={role.label}
-              earned={earnedRoles.has(role.id)}
-            />
-          ))}
-        </div>
-      </div>
-      <div style={{ padding: "4px 0" }}>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onOpenPortfolio();
-            onClose();
-          }}
-        >
-          My Portfolio
-        </button>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onOpenMyBets();
-            onClose();
-          }}
-        >
-          My Bets
-        </button>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onLeaderboard();
-            onClose();
-          }}
-        >
-          Leaderboard
-        </button>
-        <button
-          type="button"
-          style={{
-            ...menuBtn,
-            color: "rgba(255, 120, 120, 0.9)",
-            borderTop: "1px solid rgba(0, 180, 216, 0.1)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(255, 80, 80, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onDisconnect();
-            onClose();
-          }}
-        >
-          Disconnect
-        </button>
-      </div>
-    </div>
-  );
-}
-
 type ZionBetMyBetsTab = "positions" | "history";
 
 function ZionBetMyBetsOverlay({
@@ -6219,7 +5856,6 @@ function ZionBetMyBetsOverlay({
   const [histMonth, setHistMonth] = useState(now.getMonth());
   const [histYear, setHistYear] = useState(now.getFullYear());
   const displayName = profile.nickname?.trim() || "ZION Trader";
-  const avatarId = zionNormalizeAvatarId(profile.avatar);
   const netPnl = stats?.net_pnl ?? 0;
 
   const activeBets = useMemo(
@@ -6285,9 +5921,9 @@ function ZionBetMyBetsOverlay({
     flex: 1,
     padding: "10px 8px",
     borderRadius: 8,
-    border: tab === id ? "1px solid rgba(0, 212, 170, 0.5)" : "1px solid rgba(100, 180, 255, 0.15)",
-    background: tab === id ? "rgba(0, 100, 80, 0.35)" : "rgba(10, 30, 60, 0.5)",
-    color: tab === id ? "#fff" : "rgba(180, 220, 255, 0.7)",
+    border: tab === id ? "1px solid var(--accent)" : "1px solid var(--border)",
+    background: tab === id ? "rgba(0, 180, 216, 0.12)" : "var(--bg-card)",
+    color: tab === id ? "#fff" : ZB_VISTA_TEXT_SEC,
     fontSize: "0.8rem",
     fontWeight: 600,
     cursor: "pointer",
@@ -6296,33 +5932,15 @@ function ZionBetMyBetsOverlay({
   const listBets = tab === "positions" ? validActiveBets : historyBets;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 12000,
-        background: "rgba(0, 8, 20, 0.88)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "24px 12px",
-        overflowY: "auto",
-      }}
-      onClick={onClose}
-    >
+    <div style={ZION_WALLET_OVERLAY_BACKDROP} onClick={onClose}>
       <div
-        style={{
-          width: "min(720px, 100%)",
-          ...zionbetAeroPanel(),
-          padding: "20px",
-          marginTop: 48,
-        }}
+        className={`${glassCardStyles.glassCard} ${glassCardStyles.glassCardLab}`}
+        style={{ width: "min(720px, 100%)", ...ZION_WALLET_OVERLAY_PANEL }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <ZionBetAvatarImg avatarId={avatarId} size={52} selected />
+            <ZionUserAvatarBadge size={52} />
             <div>
               <h2 style={{ margin: 0, color: "#fff", fontSize: "1.25rem" }}>{displayName}</h2>
               <p style={{ margin: "4px 0 0", fontSize: "0.75rem", color: ZB_VISTA_TEXT_SEC, fontFamily: "monospace" }}>
@@ -6378,8 +5996,8 @@ function ZionBetMyBetsOverlay({
                     marginTop: 4,
                     padding: "8px 10px",
                     borderRadius: 8,
-                    border: "1px solid rgba(100,180,255,0.25)",
-                    background: "rgba(10,30,60,0.7)",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-card)",
                     color: "#fff",
                     fontSize: "0.85rem",
                   }}
@@ -6402,8 +6020,8 @@ function ZionBetMyBetsOverlay({
                     marginTop: 4,
                     padding: "8px 10px",
                     borderRadius: 8,
-                    border: "1px solid rgba(100,180,255,0.25)",
-                    background: "rgba(10,30,60,0.7)",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-card)",
                     color: "#fff",
                     fontSize: "0.85rem",
                   }}
@@ -6502,12 +6120,11 @@ function ZionBetPortfolioPositionRow({
   const rowCurrency = zionbetBetCurrency(bet) ?? "SUI";
   return (
     <div
+      className={glassCardStyles.glassCardNested}
       style={{
         padding: 12,
         marginBottom: 8,
-        borderRadius: 10,
-        border: `1px solid ${pnl >= 0 ? "rgba(0,212,170,0.35)" : "rgba(255,107,107,0.35)"}`,
-        background: "rgba(0,0,0,0.2)",
+        borderColor: pnl >= 0 ? "rgba(0, 180, 216, 0.25)" : "rgba(255, 107, 107, 0.25)",
       }}
     >
       <div
@@ -6549,7 +6166,6 @@ function ZionBetPortfolioOverlay({
   onClose: () => void;
 }) {
   const displayName = profile.nickname?.trim() || "ZION Trader";
-  const avatarId = zionNormalizeAvatarId(profile.avatar);
   const active = myBets.filter((b) => {
     const s = (b.status || "active").toLowerCase();
     return s === "active" || s === "pending";
@@ -6557,28 +6173,15 @@ function ZionBetPortfolioOverlay({
   const netPnl = stats?.net_pnl ?? 0;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 12000,
-        background: "rgba(0, 8, 20, 0.88)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "24px 12px",
-        overflowY: "auto",
-      }}
-      onClick={onClose}
-    >
+    <div style={ZION_WALLET_OVERLAY_BACKDROP} onClick={onClose}>
       <div
-        style={{ width: "min(560px, 100%)", ...zionbetAeroPanel(), padding: "20px", marginTop: 48 }}
+        className={`${glassCardStyles.glassCard} ${glassCardStyles.glassCardLab}`}
+        style={{ width: "min(560px, 100%)", ...ZION_WALLET_OVERLAY_PANEL }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <ZionBetAvatarImg avatarId={avatarId} size={52} selected />
+            <ZionUserAvatarBadge size={52} />
             <div>
               <h2 style={{ margin: 0, color: "#fff" }}>My Portfolio</h2>
               <p style={{ margin: 4, fontSize: "0.75rem", color: ZB_VISTA_TEXT_SEC }}>{displayName} · {zionbetWalletTruncated(walletAddress)}</p>
@@ -6589,7 +6192,7 @@ function ZionBetPortfolioOverlay({
           </button>
         </div>
         <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
-          <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(100,180,255,0.15)" }}>
+          <div className={glassCardStyles.glassCardNested} style={{ padding: 14 }}>
             <div style={{ fontSize: "0.72rem", color: ZB_VISTA_LABEL }}>Net P&L</div>
             <div style={{ fontSize: "1.5rem", fontWeight: 700, color: netPnl >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
               {netPnl >= 0 ? "+" : ""}
@@ -6597,17 +6200,17 @@ function ZionBetPortfolioOverlay({
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: "0.8rem" }}>
-            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div className={glassCardStyles.glassCardNested} style={{ textAlign: "center", padding: 10 }}>
               <div style={{ color: ZB_VISTA_LABEL }}>Staked</div>
               <div style={{ color: "#fff", fontWeight: 700, fontSize: "0.75rem", lineHeight: 1.35 }}>
                 {zionbetFormatStakedLabel(stats)}
               </div>
             </div>
-            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div className={glassCardStyles.glassCardNested} style={{ textAlign: "center", padding: 10 }}>
               <div style={{ color: ZB_VISTA_LABEL }}>Won</div>
               <div style={{ color: ZB_VISTA_YES, fontWeight: 700 }}>{(stats?.total_won ?? 0).toFixed(2)}</div>
             </div>
-            <div style={{ textAlign: "center", padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+            <div className={glassCardStyles.glassCardNested} style={{ textAlign: "center", padding: 10 }}>
               <div style={{ color: ZB_VISTA_LABEL }}>Win %</div>
               <div style={{ color: "#fff", fontWeight: 700 }}>{stats?.win_rate ?? 0}%</div>
             </div>
@@ -9672,12 +9275,15 @@ export function ZionHome({
   standaloneMarketId?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const walletMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
   const wallets = useWallets();
   const { mutate: connectWallet } = useConnectWallet();
   const { mutate: disconnect } = useDisconnectWallet();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { mutateAsync: signTransaction } = useSignTransaction();
   const { mutateAsync: signMessage } = useSignPersonalMessage();
   const suiClientHook = useSuiClient();
   const connect = () => {
@@ -9756,6 +9362,13 @@ export function ZionHome({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "leaderboard") return;
+    if (consumeLeaderboardScrollPending()) {
+      scrollToLeaderboardSection();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -10182,6 +9795,14 @@ export function ZionHome({
     Array<{ digest: string; amount: number; from?: string; relayer?: string; success?: boolean }>
   >([]);
   const [claimResultsExpanded, setClaimResultsExpanded] = useState(false);
+  const [claimedFileAttachments, setClaimedFileAttachments] = useState<
+    Array<{
+      attachment: StealthFileAttachment;
+      autoDownloadOk: boolean;
+      autoDownloadError?: string;
+      downloadedSize?: number;
+    }>
+  >([]);
   const [zkStealthLoading, setZkStealthLoading] = useState(false);
   const [zkClaimLoading, setZkClaimLoading] = useState(false);
   const [zkClaimStatus, setZkClaimStatus] = useState("");
@@ -10197,7 +9818,15 @@ export function ZionHome({
   const [outputAddresses, setOutputAddresses] = useState("");
   const [multiSend, setMultiSend] = useState(false);
   const [stealthMemo, setStealthMemo] = useState("");
+  const [stealthAttachedFiles, setStealthAttachedFiles] = useState<StealthAttachedFileEntry[]>([]);
+  const [stealthFileAttachError, setStealthFileAttachError] = useState("");
+  const [stealthFileProcessing, setStealthFileProcessing] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [presignedScheduleRows, setPresignedScheduleRows] = useState<PresignedScheduleRow[]>([
+    createEmptyPresignedRow(),
+  ]);
+  const [presignedScheduleLoading, setPresignedScheduleLoading] = useState(false);
+  const [presignedScheduleStatus, setPresignedScheduleStatus] = useState("");
   const [scheduleFrequency, setScheduleFrequency] = useState("weekly");
   const [scheduleMaxPayments, setScheduleMaxPayments] = useState("4");
   const [scheduleRecipient, setScheduleRecipient] = useState("");
@@ -10228,6 +9857,8 @@ export function ZionHome({
       decrypted_memo?: string;
       amount_sui?: string;
       memo?: string;
+      memo_file?: StealthFileAttachment;
+      memo_files?: StealthFileAttachment[];
     }>
   >([]);
   const [confTab, setConfTab] = useState<'deposit'|'withdraw'>('deposit');
@@ -11706,7 +11337,7 @@ export function ZionHome({
     if (!w) return;
     const earned = zionbetComputeAchievements(myBetsRef.current, zionBetStats);
     setZionProfile((prev) => {
-      const merged = { ...prev, achievements: earned };
+      const merged = mergeAchievementTimestamps(prev, earned);
       saveZionProfile(w, merged);
       return merged;
     });
@@ -11729,7 +11360,7 @@ export function ZionHome({
       setMyBets(fetched);
       const earned = zionbetComputeAchievements(fetched, zionBetStats);
       setZionProfile((p) => {
-        const merged = { ...p, achievements: earned };
+        const merged = mergeAchievementTimestamps(p, earned);
         saveZionProfile(w, merged);
         return merged;
       });
@@ -12684,6 +12315,31 @@ export function ZionHome({
               }
             }
 
+            let memo_file: StealthFileAttachment | undefined;
+            let memo_files: StealthFileAttachment[] | undefined;
+            let memo: string | undefined;
+            if (decrypted_memo && isStealthFileMemo(decrypted_memo)) {
+              const parsed = parseFileMemo(decrypted_memo);
+              if (parsed) {
+                memo_files = stealthAttachmentsFromMemo(parsed);
+                memo_file = memo_files[0];
+                memo = parsed.caption || undefined;
+              } else {
+                memo_file = {
+                  blobId: "",
+                  keyBytes: [],
+                  fileName: "attachment",
+                  caption: "",
+                  unavailable: true,
+                };
+                memo_files = [memo_file];
+              }
+            } else {
+              memo =
+                decrypted_memo?.trim() ||
+                (encrypted_memo ? "encrypted memo" : undefined);
+            }
+
             let noteData = await decryptNote(walletAddress, encrypted_note);
             if (!noteData) {
               noteData = await decryptNote(stealthAddress || "", encrypted_note);
@@ -12698,9 +12354,6 @@ export function ZionHome({
             }
             const amount_sui =
               amountMist > 0 ? (amountMist / 1_000_000_000).toFixed(4) : undefined;
-            const memo =
-              decrypted_memo?.trim() ||
-              (encrypted_memo ? "encrypted memo" : undefined);
 
             return {
               id: Number(n.id),
@@ -12713,6 +12366,8 @@ export function ZionHome({
               decrypted_memo,
               amount_sui,
               memo,
+              memo_file,
+              memo_files,
             };
           }
         )
@@ -12757,6 +12412,50 @@ export function ZionHome({
     }
   };
 
+  const clearStealthAttachment = () => {
+    setStealthAttachedFiles([]);
+    setStealthFileAttachError("");
+    setStealthFileProcessing(false);
+  };
+
+  const removeStealthAttachedFile = (entryId: string) => {
+    setStealthAttachedFiles((prev) => prev.filter((entry) => entry.id !== entryId));
+    setStealthFileAttachError("");
+  };
+
+  const handleStealthFilePick = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    setStealthFileAttachError("");
+
+    const incoming = Array.from(files);
+    let runningTotal = stealthAttachedFiles.reduce((sum, entry) => sum + entry.file.size, 0);
+    const accepted: StealthAttachedFileEntry[] = [];
+    const errors: string[] = [];
+
+    for (const file of incoming) {
+      const validation = validateStealthAttachmentFileForBatch(file, runningTotal);
+      if (!validation.ok) {
+        errors.push(validation.error);
+        continue;
+      }
+      accepted.push({
+        id:
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+      });
+      runningTotal += file.size;
+    }
+
+    if (accepted.length) {
+      setStealthAttachedFiles((prev) => [...prev, ...accepted]);
+    }
+    if (errors.length) {
+      setStealthFileAttachError(errors[errors.length - 1]);
+    }
+  };
+
   const handleCreateScheduledPayment = async () => {
     try {
       if (!walletAddress) {
@@ -12796,6 +12495,177 @@ export function ZionHome({
   const cancelScheduledPayment = async (id: number) => {
     await fetch(backendApiUrl(`/zk-schedule-payment/${id}`), { method: "DELETE" });
     await fetchScheduledPayments();
+  };
+
+  const addPresignedScheduleRow = () => {
+    setPresignedScheduleRows((rows) => {
+      if (rows.length >= PRESIGNED_MAX_ROWS) return rows;
+      return [...rows, createEmptyPresignedRow()];
+    });
+  };
+
+  const removePresignedScheduleRow = (id: string) => {
+    setPresignedScheduleRows((rows) => (rows.length <= 1 ? rows : rows.filter((r) => r.id !== id)));
+  };
+
+  const updatePresignedScheduleRow = (id: string, patch: Partial<PresignedScheduleRow>) => {
+    setPresignedScheduleRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  const getUsdcCoinIdsForReserve = async (): Promise<{ primaryId: string; mergeIds: string[] } | null> => {
+    if (!walletAddress) return null;
+    const rpcRes = await fetch("https://fullnode.testnet.sui.io:443", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "suix_getCoins",
+        params: [walletAddress, USDC_TYPE_TESTNET, null, 50],
+      }),
+    });
+    const rpcData = await rpcRes.json();
+    const usdcCoins: { coinObjectId: string }[] = rpcData.result?.data || [];
+    if (!usdcCoins.length) return null;
+    return {
+      primaryId: usdcCoins[0].coinObjectId,
+      mergeIds: usdcCoins.slice(1).map((c) => c.coinObjectId),
+    };
+  };
+
+  const handleReserveAndSignAllPayments = async () => {
+    if (presignedScheduleLoading) return;
+    const validationError = validatePresignedRows(presignedScheduleRows);
+    if (validationError) {
+      setPresignedScheduleStatus(`❌ ${validationError}`);
+      return;
+    }
+    if (!account?.address) {
+      setPresignedScheduleStatus("❌ Connect wallet first");
+      return;
+    }
+
+    setPresignedScheduleLoading(true);
+    setPresignedScheduleStatus("Preparing coin reservation...");
+
+    try {
+      const rows = presignedScheduleRows;
+      const needsUsdc = rows.some((r) => r.coin === "USDC");
+      let usdcPrimaryId: string | null = null;
+      let usdcMergeIds: string[] = [];
+
+      if (needsUsdc) {
+        const usdcCoins = await getUsdcCoinIdsForReserve();
+        if (!usdcCoins) {
+          throw new Error("No USDC in wallet for scheduled USDC payments");
+        }
+        usdcPrimaryId = usdcCoins.primaryId;
+        usdcMergeIds = usdcCoins.mergeIds;
+      }
+
+      const { tx: reserveTx, plans, suiSplitCount, usdcSplitCount } = buildReserveCoinsTransaction(
+        rows,
+        account.address,
+        usdcPrimaryId,
+        usdcMergeIds
+      );
+
+      setPresignedScheduleStatus("Reserving coins — sign split transaction in wallet...");
+
+      const reserveDigest = await new Promise<string>((resolve, reject) => {
+        signAndExecute(
+          { transaction: reserveTx, chain: "sui:testnet" },
+          {
+            onSuccess: (result) => resolve(suiTxDigest(result)),
+            onError: (error) => reject(error),
+          }
+        );
+      });
+
+      setPresignedScheduleStatus("Waiting for reservation confirmation...");
+
+      const waitResult = await suiClientHook.waitForTransaction({
+        digest: reserveDigest,
+        options: { showObjectChanges: true, showEffects: true },
+      });
+
+      if (waitResult.effects?.status?.status !== "success") {
+        throw new Error(
+          `Reserve transaction failed on-chain: ${waitResult.effects?.status?.error || "unknown error"}`
+        );
+      }
+
+      const createdCoins = extractCreatedCoinRefs(waitResult.objectChanges);
+      if (createdCoins.length < suiSplitCount + usdcSplitCount) {
+        throw new Error(
+          `Expected ${suiSplitCount + usdcSplitCount} reserved coins, got ${createdCoins.length}`
+        );
+      }
+
+      const suiCoins = createdCoins.slice(0, suiSplitCount);
+      const usdcCoins = createdCoins.slice(suiSplitCount, suiSplitCount + usdcSplitCount);
+      const reserved = mapReservedCoins(plans, suiCoins, usdcCoins);
+
+      const payloads: PresignedPaymentPayload[] = [];
+
+      for (let i = 0; i < rows.length; i += 1) {
+        setPresignedScheduleStatus(`Signing payment ${i + 1}/${rows.length}...`);
+        const row = rows[i];
+        const transferTx = buildPresignedTransferTransaction(row, reserved[i]);
+        const { bytes, signature } = await signTransaction({
+          transaction: transferTx,
+          chain: "sui:testnet",
+        });
+
+        const scheduledIso = localDateTimeToIso(row.scheduledAtLocal)!;
+        const paymentRef = reserved[i].payment;
+        const gasRef = reserved[i].gas;
+
+        payloads.push({
+          recipient: row.recipient.trim().startsWith("0x")
+            ? row.recipient.trim()
+            : `0x${row.recipient.trim()}`,
+          amount: String(row.amount).replace(",", "."),
+          coin_type: row.coin,
+          scheduled_at: scheduledIso,
+          transaction_bytes: typeof bytes === "string" ? bytes : btoa(String.fromCharCode(...new Uint8Array(bytes as ArrayBuffer))),
+          signature,
+          reserved_coin_object_id: paymentRef.objectId,
+          reserved_coin_version: Number(paymentRef.version),
+          reserved_coin_digest: paymentRef.digest,
+          reserved_gas_coin_object_id:
+            gasRef && gasRef.objectId !== paymentRef.objectId ? gasRef.objectId : null,
+          reserved_gas_coin_version:
+            gasRef && gasRef.objectId !== paymentRef.objectId ? Number(gasRef.version) : null,
+          reserved_gas_coin_digest:
+            gasRef && gasRef.objectId !== paymentRef.objectId ? gasRef.digest : null,
+        });
+      }
+
+      setPresignedScheduleStatus("Saving presigned payments to server...");
+
+      const saveRes = await fetch(backendApiUrl("/presigned-payments"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender_address: walletAddress,
+          payments: payloads,
+        }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        throw new Error(saveData.error || "Failed to save presigned payments");
+      }
+
+      setPresignedScheduleStatus(
+        `✅ ${rows.length} payment${rows.length === 1 ? "" : "s"} reserved and signed. Do NOT spend these reserved coins manually before their scheduled date, or the payment will fail.`
+      );
+      setPresignedScheduleRows([createEmptyPresignedRow()]);
+    } catch (e) {
+      setPresignedScheduleStatus(`❌ ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPresignedScheduleLoading(false);
+    }
   };
 
   const handleZkStealthSend = async () => {
@@ -12857,8 +12727,60 @@ export function ZionHome({
       })();
 
       let encryptedMemoHex = "";
-      if (stealthMemo.trim()) {
-        encryptedMemoHex = await encryptNote(recipient, stealthMemo.trim());
+      let memoPlaintext = "";
+
+      if (stealthAttachedFiles.length > 0) {
+        const memoUploads: Array<{ blobId: string; keyBytes: Uint8Array; fileName: string }> = [];
+        const totalFiles = stealthAttachedFiles.length;
+
+        for (let i = 0; i < stealthAttachedFiles.length; i += 1) {
+          const entry = stealthAttachedFiles[i]!;
+          const fileNum = i + 1;
+          setZkStealthStatus(`Encrypting & uploading file ${fileNum} of ${totalFiles}...`);
+
+          let encrypted;
+          try {
+            encrypted = await encryptStealthFile(entry.file, entry.file.name);
+          } catch (encryptErr) {
+            throw new Error(
+              `Failed to encrypt ${entry.file.name}: ${encryptErr instanceof Error ? encryptErr.message : String(encryptErr)}`
+            );
+          }
+
+          const uploadSizeLabel = formatStealthFileSize(encrypted.packedCiphertext.byteLength);
+          setZkStealthStatus(
+            `Encrypting & uploading file ${fileNum} of ${totalFiles} (${uploadSizeLabel})...`
+          );
+
+          let blobId: string;
+          try {
+            blobId = await uploadWalrusBytes(encrypted.packedCiphertext);
+          } catch (uploadErr) {
+            throw new Error(
+              `Walrus upload failed for ${entry.file.name}: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`
+            );
+          }
+
+          memoUploads.push({
+            blobId,
+            keyBytes: encrypted.keyBytes,
+            fileName: encrypted.originalName,
+          });
+        }
+
+        setZkStealthStatus(
+          `Walrus upload complete (${memoUploads.length} file${memoUploads.length === 1 ? "" : "s"}) — preparing stealth deposit...`
+        );
+        memoPlaintext = buildMultiFileMemo({
+          files: memoUploads,
+          caption: stealthMemo.trim(),
+        });
+      } else if (stealthMemo.trim()) {
+        memoPlaintext = stealthMemo.trim();
+      }
+
+      if (memoPlaintext) {
+        encryptedMemoHex = await encryptNote(recipient, memoPlaintext);
       }
 
       type DepositFragment = {
@@ -12978,6 +12900,7 @@ export function ZionHome({
               playSwish();
               setZkStealthRecipient("");
               setStealthMemo("");
+              clearStealthAttachment();
 
               try {
                 const auditRes = await fetch("/api/audit/create-trail", {
@@ -13371,6 +13294,9 @@ export function ZionHome({
     setZkClaimLoading(true);
     setZkClaimStatus("Preparing batch claim...");
     setClaimResults([]);
+    setClaimedFileAttachments([]);
+
+    const pendingFileAttachments = pendingNotes.flatMap((note) => flattenNoteFileAttachments(note));
 
     try {
       const recipientAddress = (walletAddress || "").trim();
@@ -13430,9 +13356,52 @@ export function ZionHome({
           );
           setZkStealthClaimDigest(mapped[0]?.digest || "");
           playCork();
+
+          if (pendingFileAttachments.length > 0) {
+            const attachmentResults: Array<{
+              attachment: StealthFileAttachment;
+              autoDownloadOk: boolean;
+              autoDownloadError?: string;
+              downloadedSize?: number;
+            }> = [];
+
+            for (let i = 0; i < pendingFileAttachments.length; i += 1) {
+              const attachment = pendingFileAttachments[i]!;
+              const fileNum = i + 1;
+              const totalFiles = pendingFileAttachments.length;
+              setZkClaimStatus(`Downloading file ${fileNum} of ${totalFiles}...`);
+              setZkStealthStatus(`Downloading file ${fileNum} of ${totalFiles}...`);
+
+              const downloadResult = await downloadStealthFileAttachment(attachment);
+              attachmentResults.push({
+                attachment,
+                autoDownloadOk: downloadResult.ok,
+                autoDownloadError: downloadResult.ok ? undefined : downloadResult.error,
+                downloadedSize: downloadResult.ok ? downloadResult.size : undefined,
+              });
+
+              if (i < pendingFileAttachments.length - 1) {
+                await new Promise((resolve) => window.setTimeout(resolve, 400));
+              }
+            }
+
+            setClaimedFileAttachments(attachmentResults);
+            setClaimResultsExpanded(true);
+
+            const failedCount = attachmentResults.filter((item) => !item.autoDownloadOk).length;
+            if (failedCount > 0) {
+              setZkClaimStatus(
+                `Claim successful — ${attachmentResults.length - failedCount}/${attachmentResults.length} files downloaded`
+              );
+            } else {
+              setZkClaimStatus(`Claim successful — ${attachmentResults.length} file(s) downloaded`);
+            }
+          }
+
           setTimeout(() => {
             setClaimResults([]);
             setClaimResultsExpanded(false);
+            setClaimedFileAttachments([]);
           }, 15000);
         }
 
@@ -14111,7 +14080,7 @@ export function ZionHome({
           setMyBets(bets);
           const earned = zionbetComputeAchievements(bets, zionBetStats);
           setZionProfile((p) => {
-            const merged = { ...p, achievements: earned };
+            const merged = mergeAchievementTimestamps(p, earned);
             saveZionProfile(account.address!, merged);
             return merged;
           });
@@ -14675,6 +14644,7 @@ export function ZionHome({
     return (
       <div style={{ position: "relative" }}>
         <button
+          ref={walletMenuAnchorRef}
           type="button"
           onClick={(e) => {
             e.stopPropagation();
@@ -14700,13 +14670,16 @@ export function ZionHome({
         </button>
         {showWalletMenu ? (
           <ZionBetProfileDropdown
+            anchorRef={walletMenuAnchorRef}
             walletAddress={w}
             profile={zionProfile}
             stats={zionBetStats}
             onRefreshAchievements={refreshZionAchievements}
             onOpenPortfolio={() => setShowPortfolioOverlay(true)}
             onOpenMyBets={() => setShowMyBetsOverlay(true)}
-            onLeaderboard={() => router.push("/leaderboard")}
+            onLeaderboard={() =>
+              openLeaderboardFromWalletMenu({ pathname, router })
+            }
             onDisconnect={() => disconnect()}
             onClose={() => setShowWalletMenu(false)}
           />
@@ -15174,6 +15147,7 @@ export function ZionHome({
     claimReceiptId,
     claimResults,
     claimResultsExpanded,
+    claimedFileAttachments,
     setClaimResultsExpanded,
     claimSingleNote,
     claimStatus,
@@ -15298,6 +15272,7 @@ export function ZionHome({
     handleClaimAll,
     handleConfidential,
     handleCreateScheduledPayment,
+    handleReserveAndSignAllPayments,
     handleCrossDenomMix,
     handleExportKeys,
     handleGenerateStealthAddress,
@@ -15404,7 +15379,12 @@ export function ZionHome({
     renderZionWalletProfileMenu,
     router,
     saveZionProfile,
-    scheduleFrequency,
+    presignedScheduleLoading,
+    presignedScheduleRows,
+    presignedScheduleStatus,
+    addPresignedScheduleRow,
+    removePresignedScheduleRow,
+    updatePresignedScheduleRow,
     setScheduleFrequency,
     scheduleMaxPayments,
     setScheduleMaxPayments,
@@ -15449,6 +15429,12 @@ export function ZionHome({
     stealthKeys,
     stealthMemo,
     setStealthMemo,
+    stealthAttachedFiles,
+    stealthFileAttachError,
+    stealthFileProcessing,
+    clearStealthAttachment,
+    removeStealthAttachedFile,
+    handleStealthFilePick,
     stealthMetaInput,
     stealthPrivacyMax,
     stealthRegisterLoading,
@@ -15481,6 +15467,7 @@ export function ZionHome({
     useRef,
     useRouter,
     useSignAndExecuteTransaction,
+    useSignTransaction,
     useSignPersonalMessage,
     useState,
     useSuiClient,
@@ -15763,7 +15750,7 @@ export function ZionHome({
           {activeTab === "chat" && <FieldNotes />}
 
           {activeTab === "leaderboard" && (
-            <section className="leaderboardSection">
+            <section id={LEADERBOARD_SECTION_ID} className="leaderboardSection">
               <div className="leaderboardWrap">
                 <table className="leaderboardTable">
                   <thead>
@@ -15772,7 +15759,7 @@ export function ZionHome({
                       <th>Wallet</th>
                       <th>Points</th>
                       <th>Messages</th>
-                      <th>ZION Spent</th>
+                      <th>Total Staked</th>
                       <th>Prediction P&L</th>
                     </tr>
                   </thead>
@@ -15795,7 +15782,7 @@ export function ZionHome({
                               (row as { msg_count?: number }).msg_count ??
                               "—"}
                           </td>
-                          <td>{row.zion_spent ?? (row as { zionSpent?: number }).zionSpent ?? "—"}</td>
+                          <td>{formatLeaderboardTotalStaked(row.total_staked)}</td>
                           <td
                             style={{
                               color: "var(--text-primary)",
@@ -20278,13 +20265,21 @@ export function ZionHome({
         }
         .leaderboardWrap {
           overflow-x: auto;
-          border-radius: 2px;
+          border-radius: 3px;
           border: 1px solid var(--border);
-          background: var(--bg-secondary);
+          background: rgba(5, 15, 30, 0.85);
+          backdrop-filter: blur(12px) saturate(1.4);
+          -webkit-backdrop-filter: blur(12px) saturate(1.4);
+          box-shadow:
+            0 2px 4px rgba(0, 0, 0, 0.4),
+            0 8px 24px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          padding: 12px 14px 14px;
         }
         .leaderboardTable {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0 4px;
           font-family: var(--font-mono);
           font-size: 0.72rem;
         }
@@ -20292,17 +20287,47 @@ export function ZionHome({
         .leaderboardTable td {
           padding: 10px 12px;
           text-align: left;
-          border-bottom: 1px solid var(--border);
+        }
+        .leaderboardTable thead tr {
+          background: rgba(255, 255, 255, 0.06);
         }
         .leaderboardTable th {
           color: var(--text-secondary);
           font-size: 0.6rem;
           letter-spacing: 0.12em;
           text-transform: uppercase;
+          border-bottom: 1px solid var(--border);
+        }
+        .leaderboardTable th:first-child {
+          border-radius: 2px 0 0 2px;
+        }
+        .leaderboardTable th:last-child {
+          border-radius: 0 2px 2px 0;
+        }
+        .leaderboardTable tbody tr {
           background: var(--bg-card);
+          transition: background 0.15s ease;
+        }
+        .leaderboardTable tbody tr:hover {
+          background: rgba(255, 255, 255, 0.06);
+        }
+        .leaderboardTable tbody td {
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+        }
+        .leaderboardTable tbody tr:hover td {
+          border-color: var(--border-hover);
         }
         .leaderboardTable td {
           color: var(--text-primary);
+        }
+        .leaderboardTable tbody tr td:first-child {
+          border-left: 1px solid var(--border);
+          border-radius: 2px 0 0 2px;
+        }
+        .leaderboardTable tbody tr td:last-child {
+          border-right: 1px solid var(--border);
+          border-radius: 0 2px 2px 0;
         }
         .leaderboardEmpty {
           text-align: center;

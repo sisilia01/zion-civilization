@@ -1,19 +1,763 @@
 // @ts-nocheck
 "use client";
 
-
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Paperclip } from "lucide-react";
 import { useZionTab } from "@/components/zion/ZionTabContext";
 import glassCardStyles from "@/components/GlassCard.module.css";
+import {
+  downloadStealthFileAttachment,
+  formatStealthAttachmentSize,
+  type StealthFileAttachment,
+} from "@/lib/stealth-file-attachment";
+import {
+  formatStealthFileSize,
+  stealthFileTypeIcon,
+  STEALTH_FILE_LARGE_WARN_BYTES,
+  STEALTH_FILE_MAX_BYTES,
+} from "@/lib/stealth-file-policy";
 
 const DEFAULT_GEAR_COLORS = ["#00ff41", "#00ffff", "#ff00ff", "#ff4400", "#ffff00", "#ff0088"];
 
+const PRESIGNED_MAX_ROWS = 10;
+const PRESIGNED_HISTORY_POLL_MS = 60_000;
+const PRESIGNED_TERMINAL_VISIBLE_MS = 60_000;
+
+function StealthIncomingFileAttachment({
+  attachment,
+  autoDownloadOk = false,
+  autoDownloadError = "",
+  initialDownloadedSize = null,
+  showCaption = true,
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(autoDownloadError || "");
+  const [downloadedSize, setDownloadedSize] = useState(initialDownloadedSize);
+
+  if (attachment?.unavailable) {
+    return (
+      <div
+        style={{
+          marginBottom: "8px",
+          padding: "8px 10px",
+          borderRadius: "8px",
+          border: "1px solid rgba(255,170,0,0.25)",
+          background: "rgba(255,170,0,0.06)",
+          color: "#ffaa66",
+          fontSize: "0.62rem",
+          fontFamily: "monospace",
+        }}
+      >
+        ⚠️ {attachment.fileName || "File"} unavailable
+      </div>
+    );
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setDownloadError("");
+    const result = await downloadStealthFileAttachment(attachment);
+    setDownloading(false);
+    if (result.ok) {
+      setDownloadedSize(result.size);
+    } else {
+      setDownloadError(result.error);
+    }
+  };
+
+  return (
+    <div
+      className={glassCardStyles.glassCardNested}
+      style={{
+        marginBottom: "8px",
+        padding: "8px 10px",
+        border: "1px solid rgba(0,170,255,0.25)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <span style={{ fontSize: "1rem" }}>{stealthFileTypeIcon(attachment.fileName)}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              color: "#00ccff",
+              fontSize: "0.68rem",
+              fontFamily: "monospace",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            📎 {attachment.fileName}
+            {downloadedSize ? ` (${formatStealthAttachmentSize(downloadedSize)})` : ""}
+          </div>
+          {autoDownloadOk ? (
+            <div style={{ color: "#00ff41", fontSize: "0.55rem", fontFamily: "monospace", marginTop: "2px" }}>
+              Saved to downloads
+            </div>
+          ) : null}
+          {showCaption && attachment.caption ? (
+            <div
+              style={{
+                color: "#666",
+                fontSize: "0.6rem",
+                fontFamily: "monospace",
+                marginTop: "3px",
+                fontStyle: "italic",
+              }}
+            >
+              {attachment.caption}
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleDownload()}
+          disabled={downloading}
+          style={{
+            padding: "4px 8px",
+            borderRadius: "6px",
+            border: "1px solid #1a3a3a",
+            background: "#0a1a1a",
+            color: "#00ff41",
+            fontFamily: "monospace",
+            fontSize: "0.58rem",
+            cursor: downloading ? "wait" : "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {downloading ? "..." : "Download"}
+        </button>
+      </div>
+      {downloadError ? (
+        <div style={{ color: "#ff6688", fontSize: "0.58rem", fontFamily: "monospace", marginTop: "6px" }}>
+          {autoDownloadOk
+            ? null
+            : autoDownloadError
+              ? `⚠️ Auto-download failed — use Download: ${downloadError}`
+              : `⚠️ ${attachment.fileName} unavailable: ${downloadError}`}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StealthIncomingFileList({ attachments, ...itemProps }) {
+  if (!attachments?.length) return null;
+  return (
+    <div style={{ marginBottom: "8px" }}>
+      {attachments.length > 1 ? (
+        <div
+          style={{
+            color: "#666",
+            fontSize: "0.58rem",
+            fontFamily: "monospace",
+            marginBottom: "6px",
+            letterSpacing: "0.3px",
+          }}
+        >
+          {attachments.length} attached files
+        </div>
+      ) : null}
+      {attachments.map((attachment, index) => (
+        <StealthIncomingFileAttachment
+          key={`${attachment.blobId || attachment.fileName}-${index}`}
+          attachment={attachment}
+          showCaption={index === 0}
+          {...itemProps}
+        />
+      ))}
+    </div>
+  );
+}
+const SUI_TESTNET_TX_EXPLORER = "https://suiscan.xyz/testnet/tx";
+
+const inputStyle = {
+  width: "100%",
+  background: "transparent",
+  border: "none",
+  color: "#ffffff",
+  fontFamily: "monospace",
+  fontSize: "0.72rem",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+function shortenSuiAddress(address) {
+  if (!address) return "—";
+  const a = String(address).trim();
+  if (a.length <= 14) return a;
+  return `${a.slice(0, 6)}...${a.slice(-4)}`;
+}
+
+function formatPresignedDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function PresignedPaymentsHistory({ walletAddress, backendApiUrl, refreshToken }) {
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [expandedFailureId, setExpandedFailureId] = useState(null);
+  const [sentDetectedAt, setSentDetectedAt] = useState({});
+  const [failedDetectedAt, setFailedDetectedAt] = useState({});
+  const [autoHideTick, setAutoHideTick] = useState(0);
+  const prevStatusRef = useRef({});
+  const isInitialLoadRef = useRef(true);
+
+  const applyPayments = useCallback((nextPayments) => {
+    const now = Date.now();
+    const isInitialLoad = isInitialLoadRef.current;
+    const newSentTimestamps = {};
+    const newFailedTimestamps = {};
+
+    for (const payment of nextPayments) {
+      const id = payment.id;
+      const status = String(payment.status || "pending").toLowerCase();
+      const prevStatus = prevStatusRef.current[id];
+
+      if (status === "sent" && !isInitialLoad && prevStatus && prevStatus !== "sent") {
+        newSentTimestamps[id] = now;
+      }
+      if (status === "failed" && !isInitialLoad && prevStatus && prevStatus !== "failed") {
+        newFailedTimestamps[id] = now;
+      }
+
+      prevStatusRef.current[id] = status;
+    }
+
+    if (Object.keys(newSentTimestamps).length) {
+      setSentDetectedAt((prev) => ({ ...prev, ...newSentTimestamps }));
+    }
+    if (Object.keys(newFailedTimestamps).length) {
+      setFailedDetectedAt((prev) => ({ ...prev, ...newFailedTimestamps }));
+    }
+
+    isInitialLoadRef.current = false;
+    setPayments(nextPayments);
+  }, []);
+
+  const loadPayments = useCallback(async () => {
+    if (!walletAddress?.trim() || !backendApiUrl) {
+      prevStatusRef.current = {};
+      isInitialLoadRef.current = true;
+      setSentDetectedAt({});
+      setFailedDetectedAt({});
+      setPayments([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(
+        backendApiUrl("/presigned-payments/" + encodeURIComponent(walletAddress.trim()))
+      );
+      const data = await res.json();
+      if (data.success && Array.isArray(data.payments)) {
+        applyPayments(data.payments);
+      }
+    } catch (e) {
+      console.error("Failed to fetch presigned payments:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [walletAddress, backendApiUrl, applyPayments]);
+
+  useEffect(() => {
+    isInitialLoadRef.current = true;
+    prevStatusRef.current = {};
+    setSentDetectedAt({});
+    setFailedDetectedAt({});
+  }, [walletAddress]);
+
+  useEffect(() => {
+    void loadPayments();
+  }, [loadPayments, refreshToken]);
+
+  useEffect(() => {
+    if (!walletAddress?.trim()) return undefined;
+    const id = window.setInterval(() => {
+      void loadPayments();
+    }, PRESIGNED_HISTORY_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [walletAddress, loadPayments]);
+
+  useEffect(() => {
+    const hasActiveTerminal = payments.some((payment) => {
+      const status = String(payment.status || "pending").toLowerCase();
+      if (status === "sent") {
+        const detectedAt = sentDetectedAt[payment.id];
+        return detectedAt && Date.now() - detectedAt < PRESIGNED_TERMINAL_VISIBLE_MS;
+      }
+      if (status === "failed") {
+        const detectedAt = failedDetectedAt[payment.id];
+        return detectedAt && Date.now() - detectedAt < PRESIGNED_TERMINAL_VISIBLE_MS;
+      }
+      return false;
+    });
+    if (!hasActiveTerminal) return undefined;
+    const id = window.setInterval(() => {
+      setAutoHideTick((tick) => tick + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [payments, sentDetectedAt, failedDetectedAt]);
+
+  if (!walletAddress?.trim()) return null;
+
+  const visiblePayments = payments.filter((payment) => {
+    const status = String(payment.status || "pending").toLowerCase();
+    if (status === "sent") {
+      const detectedAt = sentDetectedAt[payment.id];
+      if (!detectedAt) return false;
+      return Date.now() - detectedAt < PRESIGNED_TERMINAL_VISIBLE_MS;
+    }
+    if (status === "failed") {
+      const detectedAt = failedDetectedAt[payment.id];
+      if (!detectedAt) return false;
+      return Date.now() - detectedAt < PRESIGNED_TERMINAL_VISIBLE_MS;
+    }
+    return true;
+  });
+
+  return (
+    <div style={{ marginTop: "16px" }}>
+      <div
+        style={{
+          fontSize: "0.62rem",
+          color: "#777",
+          fontFamily: "monospace",
+          letterSpacing: "1px",
+          marginBottom: "10px",
+        }}
+      >
+        MY SCHEDULED PAYMENTS
+        {loading && visiblePayments.length > 0 ? (
+          <span style={{ color: "#444", marginLeft: "8px" }}>↻</span>
+        ) : null}
+      </div>
+
+      {!loading && visiblePayments.length === 0 ? (
+        <div
+          className={glassCardStyles.glassCardNestedSection}
+          style={{ padding: "12px 14px", marginBottom: 0 }}
+        >
+          <div style={{ color: "#555", fontSize: "0.65rem", fontFamily: "monospace" }}>
+            No scheduled payments yet.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {visiblePayments.map((payment) => {
+            const status = String(payment.status || "pending").toLowerCase();
+            const isSent = status === "sent";
+            const isFailed = status === "failed";
+            const digest = payment.executed_tx_digest;
+            const failureReason = payment.failure_reason;
+
+            let badgeLabel = "⏳ PENDING";
+            let badgeColor = "#888";
+            let badgeBg = "rgba(255,255,255,0.04)";
+            let badgeBorder = "#2a2a2a";
+
+            if (isSent) {
+              badgeLabel = "✅ SENT";
+              badgeColor = "#00ff41";
+              badgeBg = "rgba(0,255,65,0.08)";
+              badgeBorder = "#2a3a2a";
+            } else if (isFailed) {
+              badgeLabel = "❌ FAILED";
+              badgeColor = "#ff4466";
+              badgeBg = "rgba(255,34,68,0.08)";
+              badgeBorder = "rgba(255,34,68,0.3)";
+            }
+
+            const badge = (
+              <span
+                title={isFailed && failureReason ? failureReason : undefined}
+                onClick={() => {
+                  if (isFailed && failureReason) {
+                    setExpandedFailureId((prev) => (prev === payment.id ? null : payment.id));
+                  }
+                }}
+                style={{
+                  fontSize: "0.58rem",
+                  fontFamily: "monospace",
+                  fontWeight: "bold",
+                  letterSpacing: "0.5px",
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  color: badgeColor,
+                  background: badgeBg,
+                  border: `1px solid ${badgeBorder}`,
+                  cursor: isFailed && failureReason ? "pointer" : "default",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {badgeLabel}
+              </span>
+            );
+
+            return (
+              <div
+                key={payment.id}
+                className={glassCardStyles.glassCardNestedSection}
+                style={{ marginBottom: 0, padding: "10px 12px" }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        color: "#ccc",
+                        fontSize: "0.68rem",
+                        fontFamily: "monospace",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {formatPresignedDate(payment.scheduled_at)}
+                    </div>
+                    <div
+                      style={{
+                        color: "#00ff41",
+                        fontSize: "0.72rem",
+                        fontFamily: "monospace",
+                        fontWeight: "bold",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {payment.amount} {payment.currency || "SUI"}
+                    </div>
+                    <div style={{ color: "#666", fontSize: "0.62rem", fontFamily: "monospace" }}>
+                      → {shortenSuiAddress(payment.recipient_address)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                    {isSent && digest ? (
+                      <a
+                        href={`${SUI_TESTNET_TX_EXPLORER}/${digest}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: "none" }}
+                      >
+                        {badge}
+                      </a>
+                    ) : (
+                      badge
+                    )}
+                    {isSent && digest ? (
+                      <a
+                        href={`${SUI_TESTNET_TX_EXPLORER}/${digest}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "#00ff41",
+                          fontSize: "0.55rem",
+                          fontFamily: "monospace",
+                          textDecoration: "none",
+                          opacity: 0.85,
+                        }}
+                      >
+                        SUISCAN ↗
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+                {isFailed && expandedFailureId === payment.id && failureReason ? (
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      padding: "8px",
+                      borderRadius: "8px",
+                      background: "rgba(255,34,68,0.06)",
+                      border: "1px solid rgba(255,34,68,0.2)",
+                      color: "#ff8899",
+                      fontSize: "0.62rem",
+                      fontFamily: "monospace",
+                      lineHeight: 1.4,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {failureReason}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PresignedScheduleSection({
+  showSchedule,
+  setShowSchedule,
+  presignedScheduleRows,
+  presignedScheduleLoading,
+  presignedScheduleStatus,
+  addPresignedScheduleRow,
+  removePresignedScheduleRow,
+  updatePresignedScheduleRow,
+  handleReserveAndSignAllPayments,
+  walletAddress,
+  backendApiUrl,
+}) {
+  return (
+    <div style={{ marginTop: "16px", borderTop: "1px solid #2a3a2a", paddingTop: "16px" }}>
+      <button
+        type="button"
+        onClick={() => setShowSchedule(!showSchedule)}
+        style={{
+          width: "100%",
+          padding: "8px",
+          fontSize: "0.72rem",
+          background: showSchedule ? "#0d1a0d" : "transparent",
+          border: "1px solid #2a3a2a",
+          color: showSchedule ? "#00ff41" : "#777",
+          cursor: "pointer",
+          fontFamily: "monospace",
+          borderRadius: "10px",
+        }}
+      >
+        {showSchedule ? "📅 SCHEDULE PAYMENT ▲" : "📅 SCHEDULE PAYMENT ▼"}
+      </button>
+
+      {showSchedule && (
+        <div style={{ marginTop: "12px" }}>
+          <div
+            style={{
+              fontSize: "0.68rem",
+              color: "#777",
+              marginBottom: "10px",
+              fontFamily: "monospace",
+              lineHeight: 1.5,
+            }}
+          >
+            Add payments with date/time, amount, and recipient. Coins are reserved on-chain when you sign.
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "10px" }}>
+            {presignedScheduleRows.map((row, index) => (
+              <div key={row.id} className={glassCardStyles.glassCardNestedSection} style={{ marginBottom: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span style={{ color: "#00ff41", fontSize: "0.62rem", fontFamily: "monospace" }}>
+                    PAYMENT {index + 1}
+                  </span>
+                  {presignedScheduleRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removePresignedScheduleRow(row.id)}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid #3a2a2a",
+                        color: "#ff6666",
+                        fontSize: "0.6rem",
+                        fontFamily: "monospace",
+                        borderRadius: "6px",
+                        padding: "2px 8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div>
+                    <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
+                      DATE & TIME
+                    </div>
+                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
+                      <input
+                        type="datetime-local"
+                        className="zbank-input"
+                        value={row.scheduledAtLocal}
+                        onChange={(e) => updatePresignedScheduleRow(row.id, { scheduledAtLocal: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
+                        AMOUNT
+                      </div>
+                      <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
+                        <input
+                          type="number"
+                          className="zbank-input"
+                          value={row.amount}
+                          onChange={(e) => updatePresignedScheduleRow(row.id, { amount: e.target.value })}
+                          placeholder="0.1"
+                          style={inputStyle}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ width: "96px" }}>
+                      <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
+                        COIN
+                      </div>
+                      <div style={{ display: "flex", gap: "4px" }}>
+                        {(["SUI", "USDC"] as const).map((coin) => (
+                          <button
+                            key={coin}
+                            type="button"
+                            onClick={() => updatePresignedScheduleRow(row.id, { coin })}
+                            style={{
+                              flex: 1,
+                              padding: "8px 4px",
+                              fontSize: "0.62rem",
+                              background: row.coin === coin ? "#00ff41" : "transparent",
+                              color: row.coin === coin ? "#000" : "#777",
+                              border: row.coin === coin ? "1px solid #00ff41" : "1px solid #2a2a2a",
+                              cursor: "pointer",
+                              fontFamily: "monospace",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            {coin}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: "#555", fontSize: "0.58rem", letterSpacing: "1px", marginBottom: "4px" }}>
+                      RECIPIENT (0x...)
+                    </div>
+                    <div className={glassCardStyles.glassCardNested} style={{ padding: "8px 10px" }}>
+                      <input
+                        className="zbank-input"
+                        value={row.recipient}
+                        onChange={(e) => updatePresignedScheduleRow(row.id, { recipient: e.target.value })}
+                        placeholder="0x..."
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {presignedScheduleRows.length < PRESIGNED_MAX_ROWS && (
+            <button
+              type="button"
+              onClick={addPresignedScheduleRow}
+              disabled={presignedScheduleLoading}
+              style={{
+                width: "100%",
+                padding: "8px",
+                marginBottom: "10px",
+                fontSize: "0.72rem",
+                background: "transparent",
+                border: "1px dashed #2a3a2a",
+                color: "#00ff41",
+                cursor: "pointer",
+                fontFamily: "monospace",
+                borderRadius: "10px",
+              }}
+            >
+              + Add Payment
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleReserveAndSignAllPayments()}
+            disabled={presignedScheduleLoading}
+            style={{
+              width: "100%",
+              padding: "10px",
+              fontSize: "0.75rem",
+              background: presignedScheduleLoading ? "#111" : "#0d2a0d",
+              border: "1px solid #2a3a2a",
+              color: "#00ff41",
+              cursor: presignedScheduleLoading ? "wait" : "pointer",
+              fontFamily: "monospace",
+              fontWeight: "bold",
+              borderRadius: "10px",
+              opacity: presignedScheduleLoading ? 0.7 : 1,
+            }}
+          >
+            {presignedScheduleLoading ? "PROCESSING..." : "🔐 Reserve & Sign All Payments"}
+          </button>
+
+          {presignedScheduleStatus && (
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "10px",
+                borderRadius: "10px",
+                fontSize: "0.68rem",
+                fontFamily: "monospace",
+                whiteSpace: "pre-line",
+                background: presignedScheduleStatus.startsWith("✅")
+                  ? "rgba(0,255,65,0.08)"
+                  : presignedScheduleStatus.startsWith("❌")
+                    ? "rgba(255,34,68,0.08)"
+                    : "rgba(255,255,255,0.04)",
+                border: `1px solid ${
+                  presignedScheduleStatus.startsWith("✅")
+                    ? "#2a3a2a"
+                    : presignedScheduleStatus.startsWith("❌")
+                      ? "rgba(255,34,68,0.3)"
+                      : "#2a2a2a"
+                }`,
+                color: presignedScheduleStatus.startsWith("✅")
+                  ? "#00ff41"
+                  : presignedScheduleStatus.startsWith("❌")
+                    ? "#ff4466"
+                    : "#888",
+              }}
+            >
+              {presignedScheduleStatus}
+            </div>
+          )}
+        </div>
+      )}
+
+      <PresignedPaymentsHistory
+        walletAddress={walletAddress}
+        backendApiUrl={backendApiUrl}
+        refreshToken={presignedScheduleStatus?.startsWith("✅") ? presignedScheduleStatus : ""}
+      />
+    </div>
+  );
+}
+
 export function Privacy() {
   const {
+    addPresignedScheduleRow,
     anonymousAmount,
     auditTrail,
     autoWithdraw,
+    backendApiUrl,
     claimResults,
     claimResultsExpanded,
+    claimedFileAttachments,
     copiedStealth,
     copyStealthAddressToClipboard,
     fragmentedWithdraw,
@@ -21,10 +765,10 @@ export function Privacy() {
     gearColors,
     gearIntervalRef,
     handleClaimAll,
-    handleCreateScheduledPayment,
     handleExportKeys,
     handleGenerateStealthAddress,
     handleImportKeys,
+    handleReserveAndSignAllPayments,
     handleScanStealth,
     handleZbTransfer,
     handleZkStealthMultiSend,
@@ -32,9 +776,10 @@ export function Privacy() {
     keyTooltip,
     multiRecipients,
     multiSend,
-    scheduleFrequency,
-    scheduleMaxPayments,
-    scheduleRecipient,
+    presignedScheduleLoading,
+    presignedScheduleRows,
+    presignedScheduleStatus,
+    removePresignedScheduleRow,
     setAnonymousAmount,
     setAuditTrail,
     setAutoWithdraw,
@@ -44,9 +789,6 @@ export function Privacy() {
     setKeyTooltip,
     setMultiRecipients,
     setMultiSend,
-    setScheduleFrequency,
-    setScheduleMaxPayments,
-    setScheduleRecipient,
     setShowAdvanced,
     setShowSchedule,
     setStealthAmount,
@@ -64,9 +806,16 @@ export function Privacy() {
     showSchedule,
     stealthAddress,
     stealthAmount,
+    stealthAttachedFiles,
+    stealthFileAttachError,
+    stealthFileProcessing,
+    clearStealthAttachment,
+    removeStealthAttachedFile,
+    handleStealthFilePick,
     stealthMemo,
     stealthSubTab,
     suiPrice,
+    updatePresignedScheduleRow,
     useDecoys,
     walletAddress,
     zbCoin,
@@ -93,6 +842,13 @@ export function Privacy() {
     ? zkStealthNotes.filter((n) => n?.status === "pending")
     : [];
   const firstPendingNote = pendingNotes[0];
+  const firstPendingFiles =
+    firstPendingNote?.memo_files?.length
+      ? firstPendingNote.memo_files
+      : firstPendingNote?.memo_file
+        ? [firstPendingNote.memo_file]
+        : [];
+  const stealthFileInputRef = useRef(null);
 
   return (
             <div
@@ -317,16 +1073,252 @@ export function Privacy() {
       </div>
 
       <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
-        <div style={{fontSize:'0.6rem', color:'#555', letterSpacing:'1px', marginBottom:'4px'}}>MEMO</div>
-        <div className={glassCardStyles.glassCardNested} style={{padding:0, border:'1px solid #1a3a1a'}}>
-          <textarea value={stealthMemo} onChange={(e) => setStealthMemo(e.target.value.slice(0, 280))}
-            rows={2} className="zbank-input"
-            placeholder="Private message (optional)"
-            style={{width:'100%', background:'transparent', border:'none',
-                    borderRadius:'8px', padding:'8px 10px', color:'#fff',
-                    fontFamily:'monospace', fontSize:'0.72rem', outline:'none',
-                    resize:'none', boxSizing:'border-box', caretColor:'#00ff41'}}/>
+        {(() => {
+          const hasAttachments = stealthAttachedFiles.length > 0;
+          const totalAttachmentBytes = stealthAttachedFiles.reduce(
+            (sum, entry) => sum + entry.file.size,
+            0
+          );
+          const showLargeWarning =
+            totalAttachmentBytes > STEALTH_FILE_LARGE_WARN_BYTES ||
+            stealthAttachedFiles.some((entry) => entry.file.size > STEALTH_FILE_LARGE_WARN_BYTES);
+
+          return (
+            <>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+          <div style={{fontSize:'0.6rem', color:'#555', letterSpacing:'1px'}}>MEMO</div>
+          {hasAttachments ? (
+            <div style={{ fontSize:'0.55rem', color:'#00aaff', fontFamily:'monospace', letterSpacing:'0.5px' }}>
+              + {stealthAttachedFiles.length} FILE{stealthAttachedFiles.length === 1 ? "" : "S"} ATTACHED
+            </div>
+          ) : null}
         </div>
+        <div
+          className={glassCardStyles.glassCardNested}
+          style={{
+            padding: 0,
+            border: hasAttachments ? '1px solid rgba(0,170,255,0.35)' : '1px solid #1a3a1a',
+            position: 'relative',
+          }}
+        >
+          <textarea
+            value={stealthMemo}
+            onChange={(e) => setStealthMemo(e.target.value.slice(0, 280))}
+            rows={2}
+            className="zbank-input"
+            placeholder={
+              hasAttachments
+                ? "Optional caption for attached files..."
+                : "Private message (optional)"
+            }
+            style={{
+              width:'100%',
+              background:'transparent',
+              border:'none',
+              borderRadius:'8px',
+              padding:'8px 36px 8px 10px',
+              color:'#fff',
+              fontFamily:'monospace',
+              fontSize:'0.72rem',
+              outline:'none',
+              resize:'none',
+              boxSizing:'border-box',
+              caretColor:'#00ff41',
+            }}
+          />
+          <input
+            ref={stealthFileInputRef}
+            type="file"
+            multiple
+            onChange={(event) => {
+              const picked = event.target.files;
+              if (picked?.length) {
+                handleStealthFilePick(picked);
+              }
+              event.target.value = "";
+            }}
+            style={{ display:'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => stealthFileInputRef.current?.click()}
+            title="Attach files (max 50 MB total; executables blocked)"
+            style={{
+              position:'absolute',
+              right:'8px',
+              bottom:'8px',
+              width:'26px',
+              height:'26px',
+              display:'flex',
+              alignItems:'center',
+              justifyContent:'center',
+              borderRadius:'6px',
+              border: hasAttachments ? '1px solid rgba(0,170,255,0.45)' : '1px solid #2a3a2a',
+              background: hasAttachments ? 'rgba(0,170,255,0.12)' : 'rgba(255,255,255,0.03)',
+              color: hasAttachments ? '#00aaff' : '#777',
+              cursor:'pointer',
+              padding: 0,
+            }}
+          >
+            <Paperclip size={14} strokeWidth={2.2} />
+          </button>
+        </div>
+
+        {stealthFileProcessing ? (
+          <div
+            style={{
+              marginTop:'6px',
+              fontSize:'0.62rem',
+              fontFamily:'monospace',
+              color:'#00aaff',
+            }}
+          >
+            ⏳ Encrypting file in browser...
+          </div>
+        ) : null}
+
+        {stealthFileAttachError ? (
+          <div
+            style={{
+              marginTop:'6px',
+              fontSize:'0.62rem',
+              fontFamily:'monospace',
+              color:'#ff6688',
+            }}
+          >
+            {stealthFileAttachError}
+          </div>
+        ) : null}
+
+        {hasAttachments ? (
+          <>
+            <div
+              style={{
+                marginTop:'8px',
+                fontSize:'0.58rem',
+                fontFamily:'monospace',
+                color:'#888',
+                letterSpacing:'0.3px',
+              }}
+            >
+              {stealthAttachedFiles.length} file{stealthAttachedFiles.length === 1 ? "" : "s"} ·{" "}
+              {formatStealthFileSize(totalAttachmentBytes)} / {formatStealthFileSize(STEALTH_FILE_MAX_BYTES)}
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'6px' }}>
+              {stealthAttachedFiles.map((entry) => (
+                <div
+                  key={entry.id}
+                  className={glassCardStyles.glassCardNested}
+                  style={{
+                    padding:'8px 10px',
+                    border:'1px solid rgba(0,170,255,0.25)',
+                    display:'flex',
+                    alignItems:'center',
+                    gap:'10px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width:'32px',
+                      height:'32px',
+                      borderRadius:'8px',
+                      background:'rgba(0,170,255,0.1)',
+                      border:'1px solid rgba(0,170,255,0.2)',
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'center',
+                      fontSize:'1rem',
+                      flexShrink:0,
+                    }}
+                  >
+                    {stealthFileTypeIcon(entry.file.name)}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div
+                      style={{
+                        color:'#ddd',
+                        fontSize:'0.68rem',
+                        fontFamily:'monospace',
+                        overflow:'hidden',
+                        textOverflow:'ellipsis',
+                        whiteSpace:'nowrap',
+                      }}
+                    >
+                      {entry.file.name}
+                    </div>
+                    <div style={{ color:'#666', fontSize:'0.58rem', fontFamily:'monospace', marginTop:'2px' }}>
+                      {formatStealthFileSize(entry.file.size)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeStealthAttachedFile(entry.id)}
+                    title="Remove this file"
+                    style={{
+                      width:'24px',
+                      height:'24px',
+                      borderRadius:'6px',
+                      border:'1px solid #3a2a2a',
+                      background:'transparent',
+                      color:'#ff6666',
+                      fontFamily:'monospace',
+                      fontSize:'0.75rem',
+                      cursor:'pointer',
+                      flexShrink:0,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            {stealthAttachedFiles.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearStealthAttachment();
+                  if (stealthFileInputRef.current) {
+                    stealthFileInputRef.current.value = "";
+                  }
+                }}
+                style={{
+                  marginTop:'6px',
+                  padding:'4px 8px',
+                  borderRadius:'6px',
+                  border:'1px solid #3a2a2a',
+                  background:'transparent',
+                  color:'#888',
+                  fontFamily:'monospace',
+                  fontSize:'0.58rem',
+                  cursor:'pointer',
+                }}
+              >
+                Remove all files
+              </button>
+            ) : null}
+          </>
+        ) : null}
+
+        {showLargeWarning ? (
+          <div
+            style={{
+              marginTop:'6px',
+              padding:'8px 10px',
+              borderRadius:'8px',
+              border:'1px solid rgba(255,170,0,0.35)',
+              background:'rgba(255,170,0,0.08)',
+              color:'#ffcc66',
+              fontSize:'0.62rem',
+              fontFamily:'monospace',
+              lineHeight: 1.4,
+            }}
+          >
+            ⚠️ Large file — upload may take a while depending on your connection.
+          </div>
+        ) : null}
+            </>
+          );
+        })()}
       </div>
 
       <div className={glassCardStyles.glassCardNestedSection} style={{ marginBottom:'8px' }}>
@@ -484,13 +1476,33 @@ export function Privacy() {
             const statusMsg = zkStealthStatus;
             const hideStatusForTxCard = zbTxDigest && statusMsg.startsWith('✅');
             if (!statusMsg || hideStatusForTxCard) return null;
+            const isWalrusUpload =
+              statusMsg.includes('Walrus') ||
+              statusMsg.includes('uploading to Walrus') ||
+              /uploading file \d+ of \d+/i.test(statusMsg);
+            const isError = statusMsg.startsWith('❌');
+            const isSuccess = statusMsg.startsWith('✅');
             return (
               <div style={{ marginBottom:'12px', padding:'10px', borderRadius:'12px', fontSize:'0.72rem',
-                background: statusMsg.startsWith('✅') ? 'rgba(0,255,65,0.08)' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.08)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${statusMsg.startsWith('✅') ? '#2a3a2a' : statusMsg.startsWith('❌') ? 'rgba(255,34,68,0.3)' : '#2a2a2a'}`,
-                color: statusMsg.startsWith('✅') ? '#00ff41' : statusMsg.startsWith('❌') ? '#ff4466' : '#666',
+                background: isSuccess
+                  ? 'rgba(0,255,65,0.08)'
+                  : isError
+                    ? 'rgba(255,34,68,0.08)'
+                    : isWalrusUpload
+                      ? 'rgba(0,170,255,0.08)'
+                      : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${
+                  isSuccess
+                    ? '#2a3a2a'
+                    : isError
+                      ? 'rgba(255,34,68,0.3)'
+                      : isWalrusUpload
+                        ? 'rgba(0,170,255,0.35)'
+                        : '#2a2a2a'
+                }`,
+                color: isSuccess ? '#00ff41' : isError ? '#ff4466' : isWalrusUpload ? '#88ccff' : '#666',
                 whiteSpace: 'pre-line' }}>
-                {zkStealthLoading && !statusMsg.startsWith('✅') && !statusMsg.startsWith('❌') && '⏳ '}
+                {(zkStealthLoading || isWalrusUpload) && !isSuccess && !isError ? '⏳ ' : ''}
                 {statusMsg}
               </div>
             );
@@ -507,7 +1519,17 @@ export function Privacy() {
               style={{width:'100%', padding:'16px', borderRadius:'16px', border:'none', background:'#00ff41', color:'#000', fontFamily:'monospace', fontSize:'0.9rem', fontWeight:'bold', letterSpacing:'2px', boxShadow:'0 4px 24px rgba(0,255,65,0.2)', transition:'all 0.2s',
                       cursor: zkStealthLoading ? 'wait' : (!zkStealthRecipient || !zkStealthRecipient.startsWith('st:sui:')) ? 'not-allowed' : 'pointer',
                       opacity: (!zkStealthRecipient || !zkStealthRecipient.startsWith('st:sui:')) ? 0.4 : zkStealthLoading ? 0.7 : 1}}>
-              {zkStealthLoading ? 'PROCESSING...' : '⚡ SEND STEALTH'}
+              {zkStealthLoading
+                ? (zkStealthStatus.includes('Walrus') ||
+                    zkStealthStatus.includes('uploading to Walrus') ||
+                    /uploading file \d+ of \d+/i.test(zkStealthStatus)
+                    ? 'UPLOADING TO WALRUS...'
+                    : 'PROCESSING...')
+                : stealthAttachedFiles.length > 0
+                  ? stealthAttachedFiles.length === 1
+                    ? '🔒 SEND STEALTH + FILE'
+                    : `🔒 SEND STEALTH + ${stealthAttachedFiles.length} FILES`
+                  : '⚡ SEND STEALTH'}
             </button>
           )}
 
@@ -600,44 +1622,19 @@ export function Privacy() {
             </div>
           )}
 
-          <div style={{marginTop:'16px', borderTop:'1px solid #2a3a2a', paddingTop:'16px'}}>
-            <button type="button" onClick={() => setShowSchedule(!showSchedule)}
-              style={{width:'100%', padding:'8px', fontSize:'0.72rem', background: showSchedule ? '#0d1a0d' : 'transparent',
-                      border:'1px solid #2a3a2a', color: showSchedule ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'10px'}}>
-              {showSchedule ? '📅 SCHEDULE PAYMENT ▲' : '📅 SCHEDULE RECURRING PAYMENT ▼'}
-            </button>
-            {showSchedule && (
-              <div style={{marginTop:'12px'}}>
-                <div style={{fontSize:'0.68rem', color:'#777', marginBottom:'8px', fontFamily:'monospace'}}>
-                  AUTO-SEND {stealthAmount} SUI TO THIS ADDRESS
-                </div>
-                <div style={{marginBottom:'10px'}}>
-                  <div style={{color:'#555', fontSize:'0.62rem', letterSpacing:'1px', marginBottom:'4px', fontFamily:'monospace'}}>RECIPIENT STEALTH ADDRESS</div>
-                  <input value={scheduleRecipient || zkStealthRecipient} onChange={(e) => setScheduleRecipient(e.target.value)}
-                    placeholder="st:sui:... recipient address" className="zbank-input"
-                    style={{width:'100%', background:'#111', border:'1px solid #2a2a2a', borderRadius:'8px', padding:'8px 12px', fontSize:'0.72rem', fontFamily:'monospace', outline:'none', boxSizing:'border-box', color:'#ffffff'}} />
-                </div>
-                <div style={{display:'flex', gap:'8px', marginBottom:'8px'}}>
-                  {(['daily','weekly','monthly'] as const).map(f => (
-                    <button key={f} type="button" onClick={() => setScheduleFrequency(f)}
-                      style={{flex:1, padding:'6px', fontSize:'0.68rem', background: scheduleFrequency===f ? '#00ff41' : 'transparent',
-                              color: scheduleFrequency===f ? '#000' : '#777', border: scheduleFrequency===f ? '1px solid #00ff41' : '1px solid #2a3a2a',
-                              cursor:'pointer', fontFamily:'monospace', textTransform:'uppercase', borderRadius:'8px'}}>{f}</button>
-                  ))}
-                </div>
-                <div style={{display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px'}}>
-                  <span style={{fontSize:'0.68rem', color:'#777', fontFamily:'monospace'}}>PAYMENTS:</span>
-                  <input className="zbank-input" value={scheduleMaxPayments} onChange={e => setScheduleMaxPayments(e.target.value)}
-                    placeholder="0=unlimited" style={{flex:1, padding:'6px', background:'#111', border:'1px solid #2a3a2a', color:'#ffffff', fontFamily:'monospace', fontSize:'0.68rem', borderRadius:'8px', outline:'none'}} />
-                  <span style={{fontSize:'0.62rem', color:'#555', fontFamily:'monospace'}}>0=∞</span>
-                </div>
-                <button type="button" onClick={handleCreateScheduledPayment}
-                  style={{width:'100%', padding:'10px', fontSize:'0.75rem', background:'#0d2a0d', border:'1px solid #2a3a2a', color:'#00ff41', cursor:'pointer', fontFamily:'monospace', fontWeight:'bold', borderRadius:'10px'}}>
-                  📅 CREATE SCHEDULE
-                </button>
-              </div>
-            )}
-          </div>
+          <PresignedScheduleSection
+            showSchedule={showSchedule}
+            setShowSchedule={setShowSchedule}
+            presignedScheduleRows={presignedScheduleRows}
+            presignedScheduleLoading={presignedScheduleLoading}
+            presignedScheduleStatus={presignedScheduleStatus}
+            addPresignedScheduleRow={addPresignedScheduleRow}
+            removePresignedScheduleRow={removePresignedScheduleRow}
+            updatePresignedScheduleRow={updatePresignedScheduleRow}
+            handleReserveAndSignAllPayments={handleReserveAndSignAllPayments}
+            walletAddress={walletAddress}
+            backendApiUrl={backendApiUrl}
+          />
         </>
       )}
 
@@ -684,7 +1681,9 @@ export function Privacy() {
                 SUI
               </div>
 
-              {zkStealthNotes.find((n) => n.status === 'pending' && n.memo) && (
+              {firstPendingFiles.length > 0 ? (
+                <StealthIncomingFileList attachments={firstPendingFiles} />
+              ) : firstPendingNote?.memo ? (
                 <div
                   style={{
                     color: '#00ccff',
@@ -693,9 +1692,9 @@ export function Privacy() {
                     marginBottom: '4px',
                     fontStyle: 'italic',
                   }}>
-                  &quot;{zkStealthNotes.find((n) => n.status === 'pending' && n.memo)?.memo}&quot;
+                  &quot;{firstPendingNote.memo}&quot;
                 </div>
-              )}
+              ) : null}
 
               <div
                 style={{
@@ -774,6 +1773,17 @@ export function Privacy() {
                   {claimResultsExpanded ? '▲' : '▼'}
                 </div>
               </div>
+
+              {claimedFileAttachments.map((item, index) => (
+                <StealthIncomingFileAttachment
+                  key={`${item.attachment.blobId}-${index}`}
+                  attachment={item.attachment}
+                  autoDownloadOk={item.autoDownloadOk}
+                  autoDownloadError={item.autoDownloadError || ""}
+                  initialDownloadedSize={item.downloadedSize ?? null}
+                  showCaption={index === 0}
+                />
+              ))}
 
               {claimResultsExpanded && (
                 <div
@@ -887,38 +1897,19 @@ export function Privacy() {
   )}
 
   {zbankMode === 'anonymous' && (
-  <div style={{marginTop:'16px', borderTop:'1px solid #2a2a2a', paddingTop:'16px'}}>
-    <button type="button" onClick={() => setShowSchedule(!showSchedule)}
-      style={{width:'100%', padding:'8px', fontSize:'0.72rem', background: showSchedule ? '#0d1a0d' : 'transparent',
-              border:'1px solid #2a2a2a', color: showSchedule ? '#00ff41' : '#777', cursor:'pointer', fontFamily:'monospace', borderRadius:'10px'}}>
-      {showSchedule ? '📅 SCHEDULE PAYMENT ▲' : '📅 SCHEDULE RECURRING PAYMENT ▼'}
-    </button>
-    {showSchedule && (
-      <div style={{marginTop:'12px'}}>
-        <div style={{fontSize:'0.68rem', color:'#777', marginBottom:'8px', fontFamily:'monospace'}}>
-          AUTO-SEND {anonymousAmount} {zbCoin} TO THIS ADDRESS
-        </div>
-        <div style={{display:'flex', gap:'8px', marginBottom:'8px'}}>
-          {(['daily','weekly','monthly'] as const).map(f => (
-            <button key={f} type="button" onClick={() => setScheduleFrequency(f)}
-              style={{flex:1, padding:'6px', fontSize:'0.68rem', background: scheduleFrequency===f ? '#00ff41' : 'transparent',
-                      color: scheduleFrequency===f ? '#000' : '#777', border: scheduleFrequency===f ? '1px solid #00ff41' : '1px solid #2a2a2a',
-                      cursor:'pointer', fontFamily:'monospace', textTransform:'uppercase', borderRadius:'8px'}}>{f}</button>
-          ))}
-        </div>
-        <div style={{display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px'}}>
-          <span style={{fontSize:'0.68rem', color:'#777', fontFamily:'monospace'}}>PAYMENTS:</span>
-          <input className="zbank-input" value={scheduleMaxPayments} onChange={e => setScheduleMaxPayments(e.target.value)}
-            placeholder="0=unlimited" style={{flex:1, padding:'6px', background:'#111', border:'1px solid #2a2a2a', color:'#ffffff', fontFamily:'monospace', fontSize:'0.68rem', borderRadius:'8px', outline:'none'}} />
-          <span style={{fontSize:'0.62rem', color:'#555', fontFamily:'monospace'}}>0=∞</span>
-        </div>
-        <button type="button" onClick={handleCreateScheduledPayment}
-          style={{width:'100%', padding:'10px', fontSize:'0.75rem', background:'#0d2a0d', border:'1px solid #2a2a2a', color:'#00ff41', cursor:'pointer', fontFamily:'monospace', fontWeight:'bold', borderRadius:'10px'}}>
-          📅 CREATE SCHEDULE
-        </button>
-      </div>
-    )}
-  </div>
+  <PresignedScheduleSection
+    showSchedule={showSchedule}
+    setShowSchedule={setShowSchedule}
+    presignedScheduleRows={presignedScheduleRows}
+    presignedScheduleLoading={presignedScheduleLoading}
+    presignedScheduleStatus={presignedScheduleStatus}
+    addPresignedScheduleRow={addPresignedScheduleRow}
+    removePresignedScheduleRow={removePresignedScheduleRow}
+    updatePresignedScheduleRow={updatePresignedScheduleRow}
+    handleReserveAndSignAllPayments={handleReserveAndSignAllPayments}
+    walletAddress={walletAddress}
+    backendApiUrl={backendApiUrl}
+  />
   )}
 
   {zbankMode === 'anonymous' && zbTxDigest && (
