@@ -460,12 +460,27 @@ export function GovernancePanel() {
 
             {partiesData.length > 0 && (
               <>
-                <div style={sectionTitleStyle}>PARTY APPROVAL</div>
+                <div style={sectionTitleStyle}>PARTY SUPPORT</div>
                 <GovGlassCard style={{ padding: 12 }}>
-                  {filterGovernanceParties(partiesData).map((party) => {
-                    const rating = Number(party.approval_rating ?? party.poll_pct ?? 0);
-                    const partyColor = getPartyColor(String(party.party_id || party.name || ""));
-                    return (
+                  {(() => {
+                    const consensusMembers =
+                      Number(partiesData.find((p) => p.party_id === "consensus")?.members_count ?? 0);
+                    const reformMembers =
+                      Number(partiesData.find((p) => p.party_id === "reform")?.members_count ?? 0);
+                    const total = consensusMembers + reformMembers;
+                    const consensusPct = total > 0 ? Math.round((consensusMembers / total) * 100) : 50;
+                    const reformPct = total > 0 ? 100 - consensusPct : 50;
+
+                    return filterGovernanceParties(partiesData).map((party) => {
+                      const partyId = String(party.party_id || "");
+                      const rating =
+                        partyId === "consensus"
+                          ? consensusPct
+                          : partyId === "reform"
+                            ? reformPct
+                            : 0;
+                      const partyColor = getPartyColor(String(party.party_id || party.name || ""));
+                      return (
                       <div key={String(party.party_id)} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
                         <div
                           style={{
@@ -510,7 +525,8 @@ export function GovernancePanel() {
                         </div>
                       </div>
                     );
-                  })}
+                    });
+                  })()}
                 </GovGlassCard>
               </>
             )}
