@@ -11065,11 +11065,12 @@ export default function Home() {
   }, [zionbetMarkets]);
 
   useEffect(() => {
+    if (activeTab !== "zionbet") return;
     const interval = window.setInterval(() => {
       void loadZionBetMarkets();
     }, 60000);
     return () => clearInterval(interval);
-  }, [loadZionBetMarkets]);
+  }, [activeTab, loadZionBetMarkets]);
 
   useEffect(() => {
     const selectedId = zionBetSelectedMarket?.id;

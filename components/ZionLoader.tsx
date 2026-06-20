@@ -28,6 +28,7 @@ export function ZionLoader() {
         loop
         muted
         playsInline
+        preload="metadata"
         style={{
           width: "100%",
           height: "100%",
