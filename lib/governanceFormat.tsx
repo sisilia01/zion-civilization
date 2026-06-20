@@ -142,18 +142,24 @@ const ACTION_LABELS: Record<string, string> = {
   do_nothing: "Monitoring situation — no action taken this cycle",
 };
 
+const API_ERROR_LABEL = "Awaiting next decision cycle";
+
 export function humanizeEventText(text: string): string {
   const trimmed = text.trim();
-  const label = ACTION_LABELS.do_nothing;
+  const doNothingLabel = ACTION_LABELS.do_nothing;
 
-  if (trimmed === "do_nothing") return label;
+  if (trimmed === "do_nothing") return doNothingLabel;
 
   if (/^(?:\[[A-Z]+\]\s*)?[🏛🏦🚔💰💀🏢]\uFE0F?\s*do_nothing$/u.test(trimmed)) {
-    return trimmed.replace(/\bdo_nothing\b$/, label);
+    return trimmed.replace(/\bdo_nothing\b$/, doNothingLabel);
   }
 
   if (/\bAction:\s*do_nothing\b/i.test(trimmed)) {
-    return trimmed.replace(/\bAction:\s*do_nothing\b/i, `Action: ${label}`);
+    return trimmed.replace(/\bAction:\s*do_nothing\b/i, `Action: ${doNothingLabel}`);
+  }
+
+  if (/API error\s*$/i.test(trimmed)) {
+    return trimmed.replace(/API error\s*$/i, API_ERROR_LABEL);
   }
 
   return text;

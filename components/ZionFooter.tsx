@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const GRID = 40;
 const ATTRACT_RADIUS = 90;
@@ -360,7 +360,25 @@ function FooterListItem({ children }: { children: ReactNode }) {
 const DEEPSURGE_URL =
   "https://deepsurge.xyz/projects/1399d32e-7bca-4487-a444-2f8b06fec089";
 
+const WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+
 export default function ZionFooter() {
+  const [latestBlobId, setLatestBlobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/walrus/blobs")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const id = Array.isArray(data) ? data[0]?.blob_id ?? null : null;
+        setLatestBlobId(typeof id === "string" && id.length > 0 ? id : null);
+      })
+      .catch(() => {});
+  }, []);
+
+  const walrusHref = latestBlobId
+    ? `${WALRUS_AGGREGATOR}/v1/blobs/${latestBlobId}`
+    : WALRUS_AGGREGATOR;
+
   return (
     <footer
       aria-label="ZION Civilization footer"
@@ -425,11 +443,7 @@ export default function ZionFooter() {
               />
             </FooterListItem>
             <FooterListItem>
-              <FooterLink
-                href="https://aggregator.walrus-testnet.walrus.space"
-                label="Walrus Aggregator"
-                external
-              />
+              <FooterLink href={walrusHref} label="Walrus Aggregator" external />
             </FooterListItem>
             <FooterListItem>
               <FooterLink href={DEEPSURGE_URL} label="DeepSurge" external />
