@@ -113,6 +113,7 @@ import {
   filterAndDedupeActivityLog,
   filterGovernanceBranchLog,
 } from "@/lib/governanceActivityLog";
+import { cleanActivityDescription } from "@/lib/governanceFormat";
 
 const ParticleField = dynamic(
   () => import("@/components/ParticleField").then((m) => m.ParticleField),
@@ -1313,31 +1314,6 @@ function parseApiStatsResponse(raw: unknown): Stats {
     gini_coefficient: Number(s.gini_coefficient ?? 0),
     unemployment_rate: Number(s.unemployment_rate ?? 0),
   };
-}
-
-/** Strip AI model tags from ECO-POL activity log descriptions. */
-function cleanActivityDescription(desc: string): string {
-  return desc
-    .replace(/\[GPT-PRESIDENT\]/g, "🏛")
-    .replace(/\[DEEPSEEK-SENATE\]/g, "🏦")
-    .replace(/\[GEMINI-SHERIFF\]/g, "🚔")
-    .replace(/\[QWEN-ZRS\]/g, "💰")
-    .replace(/\[LLAMA-GANGS\]/g, "💀")
-    .replace(/\[PHI-CORPS\]/g, "🏢")
-    .replace(/\(openai\/gpt-4o-mini\)/g, "")
-    .replace(/\(deepseek\/deepseek-chat-v3-0324\)/g, "")
-    .replace(/\(google\/gemini-3\.1-flash-lite\)/g, "")
-    .replace(/\(qwen\/qwen-2\.5-7b-instruct\)/g, "")
-    .replace(/\(meta-llama\/llama-3\.1-8b-instruct\)/g, "")
-    .replace(/\(microsoft\/phi-4-mini-instruct\)/g, "")
-    .replace(/President AI \([^)]+\):/g, "🏛")
-    .replace(/Senate AI \([^)]+\):/g, "🏦")
-    .replace(/Sheriff AI \([^)]+\):/g, "🚔")
-    .replace(/ZRS AI \([^)]+\):/g, "💰")
-    .replace(/Gang AI \([^)]+\):/g, "💀")
-    .replace(/Corp AI \([^)]+\):/g, "🏢")
-    .replace(/\| Outcome:.*$/g, "")
-    .trim();
 }
 
 function formatEventTime(ts: string): string {

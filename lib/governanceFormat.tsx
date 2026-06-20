@@ -138,8 +138,29 @@ export function ecoFormatZionShort(n: number) {
   return Math.round(n).toLocaleString("en-US");
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  do_nothing: "Monitoring situation — no action taken this cycle",
+};
+
+export function humanizeEventText(text: string): string {
+  const trimmed = text.trim();
+  const label = ACTION_LABELS.do_nothing;
+
+  if (trimmed === "do_nothing") return label;
+
+  if (/^(?:\[[A-Z]+\]\s*)?[🏛🏦🚔💰💀🏢]\uFE0F?\s*do_nothing$/u.test(trimmed)) {
+    return trimmed.replace(/\bdo_nothing\b$/, label);
+  }
+
+  if (/\bAction:\s*do_nothing\b/i.test(trimmed)) {
+    return trimmed.replace(/\bAction:\s*do_nothing\b/i, `Action: ${label}`);
+  }
+
+  return text;
+}
+
 export function cleanActivityDescription(desc: string): string {
-  return desc
+  const cleaned = desc
     .replace(/\[GPT-PRESIDENT\]/g, "🏛")
     .replace(/\[DEEPSEEK-SENATE\]/g, "🏦")
     .replace(/\[GEMINI-SHERIFF\]/g, "🚔")
@@ -160,6 +181,8 @@ export function cleanActivityDescription(desc: string): string {
     .replace(/Corp AI \([^)]+\):/g, "🏢")
     .replace(/\| Outcome:.*$/g, "")
     .trim();
+
+  return humanizeEventText(cleaned);
 }
 
 export function formatEventTime(ts: string): string {
