@@ -43,6 +43,7 @@ import { filterAndDedupeActivityLog, filterGovernanceBranchLog } from "@/lib/gov
 import { cleanActivityDescription } from "@/lib/governanceFormat";
 import { parseWireResponse, type WireNewsItem } from "@/lib/wire-news";
 import { formatTimeUS } from "@/lib/formatDateTime";
+import { ZionBetProfileDropdown } from "@/components/zion/ZionBetProfileDropdown";
 
 const ParticleField = dynamic(
   () => import("@/components/ParticleField").then((m) => m.ParticleField),
@@ -4779,15 +4780,6 @@ function zionbetFormatStakedLabel(stats: ZionBetWalletStats | null): string {
   return parts.join(" + ");
 }
 
-const ZION_ROLE_DEFS: { id: string; label: string }[] = [
-  { id: "night_wolf", label: "NIGHT WOLF" },
-  { id: "fire_fox", label: "FIRE FOX" },
-  { id: "void_dragon", label: "VOID DRAGON" },
-  { id: "storm_hawk", label: "STORM HAWK" },
-  { id: "crystal_mind", label: "CRYSTAL MIND" },
-  { id: "shadow_ninja", label: "SHADOW NINJA" },
-];
-
 function zionProfileStorageKey(wallet: string): string {
   return `zion_profile_${wallet.trim().toLowerCase()}`;
 }
@@ -5535,346 +5527,6 @@ function zionbetMarketFromBet(
     seed_yes_cents: yes,
     end_date: bet.end_date ?? null,
   };
-}
-
-function ZionRoleSvg({ roleId }: { roleId: string }) {
-  const cyan = "#00b4d8";
-  const purple = "#7b2fff";
-  const bg = "#0a0a1a";
-  const common = { width: 40, height: 40, viewBox: "0 0 40 40", fill: "none" as const };
-
-  switch (roleId) {
-    case "night_wolf":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 28 L14 14 L20 22 L26 14 L32 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
-          <path d="M12 18 L10 10 M28 18 L30 10" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
-          <circle cx="16" cy="22" r="2" fill={cyan} />
-          <circle cx="24" cy="22" r="2" fill={cyan} />
-          <path d="M18 26 Q20 28 22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "fire_fox":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M10 26 Q14 18 20 16 Q26 14 28 20 Q30 26 24 28 Q20 30 14 28 Z" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
-          <path d="M28 20 Q34 14 32 26 Q30 32 24 28" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
-          <circle cx="22" cy="22" r="1.5" fill={cyan} />
-          <path d="M24 24 L26 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "void_dragon":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 30 Q12 10 20 14 Q28 10 32 30" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.15)" />
-          <path d="M14 20 L20 16 L26 20 L22 24 Z" stroke={cyan} strokeWidth="1" fill="rgba(0,180,216,0.12)" />
-          <path d="M10 26 L6 22 M30 26 L34 22" stroke={purple} strokeWidth="1" strokeLinecap="round" />
-          <circle cx="20" cy="19" r="1.5" fill={cyan} />
-        </svg>
-      );
-    case "storm_hawk":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M8 22 L20 12 L32 22 L26 22 L30 30 L20 24 L10 30 L14 22 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.1)" />
-          <path d="M18 8 L20 14 M24 6 L22 12" stroke={cyan} strokeWidth="1.2" strokeLinecap="round" />
-          <path d="M6 16 L10 18 L8 20" stroke={purple} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "crystal_mind":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <path d="M20 8 L28 16 L24 32 L16 32 L12 16 Z" stroke={cyan} strokeWidth="1.2" fill="rgba(0,180,216,0.08)" />
-          <path d="M20 8 L20 32 M12 16 L28 16 M16 32 L24 16 M24 32 L16 16" stroke={cyan} strokeWidth="0.6" opacity="0.5" />
-          <circle cx="17" cy="20" r="1.2" fill={cyan} />
-          <circle cx="23" cy="20" r="1.2" fill={cyan} />
-          <path d="M18 26 L22 26" stroke={cyan} strokeWidth="0.8" strokeLinecap="round" />
-        </svg>
-      );
-    case "shadow_ninja":
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-          <ellipse cx="20" cy="30" rx="10" ry="3" fill="rgba(123,47,255,0.2)" />
-          <path d="M20 10 Q26 14 24 22 Q22 28 20 28 Q18 28 16 22 Q14 14 20 10" stroke={purple} strokeWidth="1.2" fill="rgba(123,47,255,0.12)" />
-          <path d="M12 18 Q8 20 10 24 M28 18 Q32 20 30 24" stroke={purple} strokeWidth="1" strokeLinecap="round" opacity="0.7" />
-          <path d="M16 20 L24 20" stroke={cyan} strokeWidth="0.8" opacity="0.4" />
-        </svg>
-      );
-    default:
-      return (
-        <svg {...common}>
-          <rect width="40" height="40" rx="4" fill={bg} />
-        </svg>
-      );
-  }
-}
-
-function ZionRoleBadge({ roleId, earned, label }: { roleId: string; earned: boolean; label: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      style={{ position: "relative", width: 40, height: 40, flexShrink: 0 }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 4,
-          overflow: "hidden",
-          opacity: earned ? 1 : 0.2,
-          filter: earned ? "none" : "grayscale(1)",
-          boxShadow: earned ? "0 0 10px rgba(0, 180, 216, 0.45)" : "none",
-          border: earned ? "1px solid rgba(0, 180, 216, 0.35)" : "1px solid rgba(255,255,255,0.06)",
-          transition: "opacity 0.2s, box-shadow 0.2s",
-        }}
-      >
-        <ZionRoleSvg roleId={roleId} />
-      </div>
-      {!earned ? (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 2,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 10,
-            height: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <rect x="2" y="4.5" width="6" height="4.5" rx="0.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
-            <path d="M3.5 4.5 V3.5 C3.5 2.5 4.5 2 5 2 C5.5 2 6.5 2.5 6.5 3.5 V4.5" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
-          </svg>
-        </div>
-      ) : null}
-      {hovered ? (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 6px)",
-            left: "50%",
-            transform: "translateX(-50%)",
-            whiteSpace: "nowrap",
-            background: "rgba(0, 8, 20, 0.95)",
-            border: "1px solid rgba(0, 180, 216, 0.25)",
-            borderRadius: 2,
-            padding: "3px 8px",
-            fontSize: "0.62rem",
-            fontFamily: "'IBM Plex Mono', monospace",
-            color: earned ? "#00b4d8" : "rgba(255,255,255,0.45)",
-            letterSpacing: "0.06em",
-            pointerEvents: "none",
-            zIndex: 5,
-          }}
-        >
-          {label}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ZionBetProfileDropdown({
-  walletAddress,
-  profile,
-  stats,
-  onRefreshAchievements,
-  onOpenPortfolio,
-  onOpenMyBets,
-  onLeaderboard,
-  onDisconnect,
-  onClose,
-}: {
-  walletAddress: string;
-  profile: ZionProfile;
-  stats: ZionBetWalletStats | null;
-  onRefreshAchievements: () => void;
-  onOpenPortfolio: () => void;
-  onOpenMyBets: () => void;
-  onLeaderboard: () => void;
-  onDisconnect: () => void;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    onRefreshAchievements();
-  }, [onRefreshAchievements]);
-
-  const totalBets = stats?.total_bets ?? 0;
-  const winRate = stats?.win_rate ?? 0;
-  const profit = stats?.net_pnl ?? stats?.total_profit ?? 0;
-  const earnedRoles = new Set(profile.achievements ?? []);
-
-  const mono: CSSProperties = {
-    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-    letterSpacing: "0.02em",
-  };
-
-  const menuBtn: CSSProperties = {
-    width: "100%",
-    background: "transparent",
-    border: "none",
-    color: "rgba(255,255,255,0.85)",
-    padding: "10px 16px",
-    cursor: "pointer",
-    fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
-    fontSize: "0.72rem",
-    letterSpacing: "0.08em",
-    textAlign: "left",
-    textTransform: "uppercase",
-    transition: "background 0.15s, color 0.15s",
-  };
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        right: 0,
-        top: "40px",
-        width: "min(300px, 92vw)",
-        background: "rgba(0, 8, 20, 0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(0, 180, 216, 0.2)",
-        borderRadius: "4px",
-        zIndex: 210,
-        boxShadow: "0 12px 40px rgba(0, 0, 0, 0.5)",
-        overflow: "visible",
-        color: "#fff",
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0, 180, 216, 0.12)" }}>
-        <div
-          style={{
-            ...mono,
-            fontSize: "0.78rem",
-            color: "rgba(255,255,255,0.9)",
-            wordBreak: "break-all",
-          }}
-        >
-          {zionbetWalletTruncated(walletAddress)}
-        </div>
-        <div
-          style={{
-            ...mono,
-            marginTop: 10,
-            fontSize: "0.68rem",
-            color: "rgba(255,255,255,0.55)",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: "4px 0",
-          }}
-        >
-          <span>
-            BETS <span style={{ color: "#fff" }}>{totalBets}</span>
-          </span>
-          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
-          <span>
-            WIN <span style={{ color: "#fff" }}>{Number(winRate).toFixed(1)}%</span>
-          </span>
-          <span style={{ margin: "0 6px", opacity: 0.35 }}>·</span>
-          <span>
-            P&amp;L{" "}
-            <span style={{ color: profit >= 0 ? ZB_VISTA_YES : ZB_VISTA_NO }}>
-              {profit >= 0 ? "+" : ""}
-              {profit.toFixed(2)} SUI
-            </span>
-          </span>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "space-between" }}>
-          {ZION_ROLE_DEFS.map((role) => (
-            <ZionRoleBadge
-              key={role.id}
-              roleId={role.id}
-              label={role.label}
-              earned={earnedRoles.has(role.id)}
-            />
-          ))}
-        </div>
-      </div>
-      <div style={{ padding: "4px 0" }}>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onOpenPortfolio();
-            onClose();
-          }}
-        >
-          My Portfolio
-        </button>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onOpenMyBets();
-            onClose();
-          }}
-        >
-          My Bets
-        </button>
-        <button
-          type="button"
-          style={menuBtn}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(0, 180, 216, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onLeaderboard();
-            onClose();
-          }}
-        >
-          Leaderboard
-        </button>
-        <button
-          type="button"
-          style={{
-            ...menuBtn,
-            color: "rgba(255, 120, 120, 0.9)",
-            borderTop: "1px solid rgba(0, 180, 216, 0.1)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(255, 80, 80, 0.08)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-          onClick={() => {
-            onDisconnect();
-            onClose();
-          }}
-        >
-          Disconnect
-        </button>
-      </div>
-    </div>
-  );
 }
 
 type ZionBetMyBetsTab = "positions" | "history";
@@ -9563,6 +9215,7 @@ export default function Home() {
   } = useHeaderStats();
   const account = useCurrentAccount();
   const walletAddress = account?.address ?? "";
+  const walletMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const wallets = useWallets();
   const { mutate: connectWallet } = useConnectWallet();
   const { mutate: disconnect } = useDisconnectWallet();
@@ -14216,6 +13869,7 @@ export default function Home() {
     return (
       <div style={{ position: "relative" }}>
         <button
+          ref={walletMenuAnchorRef}
           type="button"
           onClick={(e) => {
             e.stopPropagation();
@@ -14241,6 +13895,7 @@ export default function Home() {
         </button>
         {showWalletMenu ? (
           <ZionBetProfileDropdown
+            anchorRef={walletMenuAnchorRef}
             walletAddress={w}
             profile={zionProfile}
             stats={zionBetStats}
