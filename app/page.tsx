@@ -41,6 +41,7 @@ import { computeProsperity } from "@/lib/computeProsperity";
 import { useHeaderStats } from "@/hooks/useHeaderStats";
 import { filterAndDedupeActivityLog, filterGovernanceBranchLog } from "@/lib/governanceActivityLog";
 import { parseWireResponse, type WireNewsItem } from "@/lib/wire-news";
+import { formatTimeUS } from "@/lib/formatDateTime";
 
 const ParticleField = dynamic(
   () => import("@/components/ParticleField").then((m) => m.ParticleField),
@@ -8660,7 +8661,7 @@ function ZionBetMarketDetail({
         const rows = pairs
           .map(([timestamp, price]) => {
             const d = new Date(timestamp);
-            const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+            const time = formatTimeUS(d);
             const p = typeof price === "number" ? price : NaN;
             return { time, price: p };
           })
@@ -15554,7 +15555,7 @@ export default function Home() {
                           width: "80px",
                         }}
                       >
-                        {new Date(t.closed_at || t.opened_at).toLocaleTimeString()}
+                        {formatTimeUS(new Date(t.closed_at || t.opened_at))}
                       </div>
                       <div style={{ color: "#777", fontSize: "0.72rem", fontFamily: "monospace", flex: 1 }}>
                         {t.agent_name}

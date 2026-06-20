@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { parseZionTokens, prepareGlyphSvgs } from "../zionTransliterate";
+import { formatDateTimeUS } from "@/lib/formatDateTime";
 
 const STORAGE_KEY = "zlab_decoder_password";
 const CHAR_MS = 18;
@@ -186,7 +187,7 @@ function MessageCard({
               marginBottom: "10px",
             }}
           >
-            AGENT #{message.from_agent} · {new Date(message.created_at).toLocaleString()}
+            AGENT #{message.from_agent} · {formatDateTimeUS(message.created_at)}
           </div>
           <div
             style={{

@@ -16,6 +16,7 @@ import {
   STEALTH_FILE_LARGE_WARN_BYTES,
   STEALTH_FILE_MAX_BYTES,
 } from "@/lib/stealth-file-policy";
+import { formatTimeUS } from "@/lib/formatDateTime";
 
 const DEFAULT_GEAR_COLORS = ["#00ff41", "#00ffff", "#ff00ff", "#ff4400", "#ffff00", "#ff0088"];
 
@@ -1837,7 +1838,7 @@ export function Privacy() {
                   marginBottom: '12px',
                 }}>
                 {firstPendingNote?.created_at
-                  ? new Date(firstPendingNote.created_at).toLocaleTimeString()
+                  ? formatTimeUS(firstPendingNote.created_at)
                   : ''}
                 {' · '}
                 {pendingNotes.length} notes

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { formatTimeUS } from "@/lib/formatDateTime";
 
 export const CONSENSUS_PARTY_COLOR = "#ef4444";
 export const REFORM_PARTY_COLOR = "#3b82f6";
@@ -166,7 +167,7 @@ export function formatEventTime(ts: string): string {
   try {
     const d = new Date(ts.includes("T") ? ts : `${ts.replace(" ", "T")}Z`);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return formatTimeUS(d);
   } catch {
     return "";
   }

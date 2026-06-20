@@ -29,6 +29,7 @@ import {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { suiClient } from "@/lib/deepbook";
+import { formatTimeUS } from "@/lib/formatDateTime";
 import {
   PRESIGNED_MAX_ROWS,
   buildPresignedTransferTransaction,
@@ -8302,7 +8303,7 @@ function ZionBetMarketDetail({
         const rows = pairs
           .map(([timestamp, price]) => {
             const d = new Date(timestamp);
-            const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+            const time = formatTimeUS(d);
             const p = typeof price === "number" ? price : NaN;
             return { time, price: p };
           })
@@ -16362,7 +16363,7 @@ export function ZionHome({
                           width: "80px",
                         }}
                       >
-                        {new Date(t.closed_at || t.opened_at).toLocaleTimeString()}
+                        {formatTimeUS(new Date(t.closed_at || t.opened_at))}
                       </div>
                       <div style={{ color: "#777", fontSize: "0.72rem", fontFamily: "monospace", flex: 1 }}>
                         {t.agent_name}

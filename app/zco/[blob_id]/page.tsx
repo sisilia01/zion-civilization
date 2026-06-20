@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { formatDateTimeUS } from "@/lib/formatDateTime";
 
 const WALRUS_AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
 
@@ -191,7 +192,7 @@ export default function ZCOProofPage() {
                     {
                       label: "TIMESTAMP",
                       value: tradeProof.timestamp
-                        ? new Date(String(tradeProof.timestamp)).toLocaleString()
+                        ? formatDateTimeUS(String(tradeProof.timestamp))
                         : "—",
                     },
                   ].map((item) => (

@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { EnglishEntry, GlyphMap, ResearchStats, Stats, TopBook, ZionEntry } from "./types";
+import type { EnglishEntry, GlyphMap, ResearchStats, Stats, TopBook, TopBooksResponse, ZionEntry } from "./types";
 import {
   buildTransliterationMaps,
   prepareGlyphSvgs,
@@ -372,19 +372,45 @@ function GlyphLoadingIndicator() {
 }
 
 
+function formatLastUpdated(isoOrMs: string | number | Date): string {
+  const d = isoOrMs instanceof Date ? isoOrMs : new Date(isoOrMs);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+
 function TopBooksPanel() {
   const [books, setBooks] = useState<TopBook[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [animateBars, setAnimateBars] = useState(false);
 
   useEffect(() => {
     fetch("/api/lab/top-books", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: TopBook[]) => {
-        setBooks(Array.isArray(data) ? data : []);
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: TopBooksResponse | TopBook[] | null) => {
+        if (Array.isArray(data)) {
+          setBooks(data);
+          setLastUpdated(new Date().toISOString());
+        } else if (data && Array.isArray(data.books)) {
+          setBooks(data.books);
+          setLastUpdated(data.updated_at ?? new Date().toISOString());
+        } else {
+          setBooks([]);
+          setLastUpdated(null);
+        }
         requestAnimationFrame(() => setAnimateBars(true));
       })
-      .catch(() => setBooks([]))
+      .catch(() => {
+        setBooks([]);
+        setLastUpdated(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -392,7 +418,36 @@ function TopBooksPanel() {
 
   return (
     <GlassCard className={glassCardStyles.glassCardLab} style={{ ...tableShellStyle, padding: 0 }}>
-      <div style={tableHeadStyle}>MOST-STUDIED ARCHIVES</div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "12px 14px",
+          borderBottom: "1px solid #1e3a5f",
+          background: "rgba(0, 180, 216, 0.06)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: mono,
+            fontSize: "10px",
+            letterSpacing: "0.12em",
+            color: "#00b4d8",
+          }}
+        >
+          MOST-STUDIED ARCHIVES
+        </div>
+        <div
+          style={{
+            fontSize: "10px",
+            color: "rgba(255,255,255,0.35)",
+            fontFamily: "monospace",
+          }}
+        >
+          {lastUpdated ? `Last updated: ${formatLastUpdated(lastUpdated)}` : ""}
+        </div>
+      </div>
       <div style={{ ...screenStyle, padding: "10px 12px 8px", height: "auto", minHeight: "240px" }}>
         {loading ? (
           <div style={{ color: "#64748b", fontSize: "10px", fontFamily: mono }}>Loading archives…</div>

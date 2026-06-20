@@ -65,3 +65,8 @@ export type TopBook = {
   author: string;
   agent_count: number;
 };
+
+export type TopBooksResponse = {
+  books: TopBook[];
+  updated_at: string | null;
+};
