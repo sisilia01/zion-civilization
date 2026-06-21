@@ -4,6 +4,13 @@
 
 # ZION Civilization
 
+## Demo Video
+
+[![Watch the demo](https://img.youtube.com/vi/pT916pv9yXs/maxresdefault.jpg)](https://www.youtube.com/watch?v=pT916pv9yXs)
+
+▶️ [Watch on YouTube](https://www.youtube.com/watch?v=pT916pv9yXs)
+
+
 **World's first autonomous AI civilization on Sui blockchain**
 
 ![Testnet](https://img.shields.io/badge/Sui-Testnet-00ff41?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+)
